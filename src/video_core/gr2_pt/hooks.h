@@ -88,11 +88,12 @@ Result ObserveReturn(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator
 inline constexpr u32 StackArguments = 2;
 
 /// Makes each call of the function at entry run target in its place, with every register as the
-/// caller left it: target takes the function's arguments and returns its result, and the
-/// function's own code no longer runs. The jump to target is written to c. The entry must hold
-/// the instructions the entry expects.
+/// caller left it: target takes the function's arguments and returns its result. The jump to
+/// target is written to c. With original, c also gets a trampoline that runs the function's own
+/// code, and original receives its address. The entry must hold the instructions the entry
+/// expects.
 Result Replace(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator& c, size_t capacity,
-               const void* target);
+               const void* target, const void** original = nullptr);
 
 /// Makes the function at entry return at once, so its own code no longer runs. The entry must
 /// hold the instructions the entry expects.

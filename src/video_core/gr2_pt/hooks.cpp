@@ -162,13 +162,20 @@ Result ObserveReturn(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator
 }
 
 Result Replace(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator& c, size_t capacity,
-               const void* target) {
+               const void* target, const void** original) {
     u8* const site = Expected(module_base, entry);
     if (site == nullptr || entry.size < JmpSize) {
         return Result::Mismatch;
     }
     if (capacity - c.getSize() < MaxStubBytes) {
         return Result::NoRoom;
+    }
+    if (original != nullptr) {
+        *original = c.getCurr();
+        for (u32 i = 0; i < entry.size; i++) {
+            c.db(site[i]);
+        }
+        c.jmp(site + entry.size);
     }
     // jmp [rip]: the target's address follows the instruction.
     const u8* stub = c.getCurr();
