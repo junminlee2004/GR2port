@@ -11,6 +11,8 @@
 #include "common/memory_patcher.h"
 #include "core/libraries/error_codes.h"
 #include "core/memory.h"
+#include "video_core/gr2_pt/caster_batch.h"
+#include "video_core/gr2_pt/caster_renderer.h"
 #include "video_core/gr2_pt/gr2_pt.h"
 #include "video_core/gr2_pt/marker.h"
 #include "video_core/gr2_pt/pass_timing.h"
@@ -43,8 +45,9 @@ void Install(VAddr module_base) {
         return;
     }
     Xbyak::CodeGenerator c(StubAreaSize, area);
-    if (ShadowPass::Install(module_base, c, StubAreaSize)) {
-        LOG_INFO(Render_Vulkan, "GR2 PT: shadow caster passes are marked ({} stub bytes)",
+    if (ShadowPass::Install(module_base, c, StubAreaSize) &&
+        CasterBatch::Install(module_base, c, StubAreaSize)) {
+        LOG_INFO(Render_Vulkan, "GR2 PT: shadow caster passes are batched ({} stub bytes)",
                  c.getSize());
     }
 }
@@ -57,14 +60,46 @@ void OnMarker(Vulkan::Rasterizer& rasterizer, const u32* data, u32 dwords) {
     std::memcpy(&words, data + 1, sizeof(words));
     switch (words.kind) {
     case Marker::Kind::PassBegin:
+        CasterRenderer::Prepare(rasterizer);
+        PassTiming::OnMarker(rasterizer, words);
+        break;
     case Marker::Kind::PassEnd:
         PassTiming::OnMarker(rasterizer, words);
+        break;
+    case Marker::Kind::CasterBatch:
+        CasterRenderer::OnBatch(rasterizer, words);
+        break;
+    case Marker::Kind::CasterSnapshot:
+        CasterRenderer::OnSnapshot(rasterizer, words);
         break;
     }
 }
 
 const Vulkan::Instance& RasterizerAccess::Instance(const Vulkan::Rasterizer& rasterizer) {
     return rasterizer.instance;
+}
+
+const AmdGpu::Liverpool& RasterizerAccess::Gpu(const Vulkan::Rasterizer& rasterizer) {
+    return *rasterizer.liverpool;
+}
+
+VideoCore::BufferCache& RasterizerAccess::Buffers(Vulkan::Rasterizer& rasterizer) {
+    return rasterizer.buffer_cache;
+}
+
+VideoCore::TextureCache& RasterizerAccess::Textures(Vulkan::Rasterizer& rasterizer) {
+    return rasterizer.texture_cache;
+}
+
+Vulkan::Runtime& RasterizerAccess::Barriers(Vulkan::Rasterizer& rasterizer) {
+    return rasterizer.runtime;
+}
+
+void RasterizerAccess::UpdatePassState(const Vulkan::Rasterizer& rasterizer) {
+    rasterizer.UpdateViewportScissorState();
+    rasterizer.UpdateDepthStencilState();
+    rasterizer.UpdatePrimitiveState(true);
+    rasterizer.UpdateRasterizationState();
 }
 
 } // namespace Gr2Pt

@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "common/logging/log.h"
+#include "video_core/gr2_pt/caster_batch.h"
 #include "video_core/gr2_pt/hooks.h"
 #include "video_core/gr2_pt/marker.h"
 #include "video_core/gr2_pt/shadow_pass.h"
@@ -53,6 +54,7 @@ void PS4_SYSV_ABI OnSubmit(u32, const Hooks::Registers* registers, u64) {
     if (cascade == 0) {
         ++g_draw_thread.frame;
     }
+    CasterBatch::Begin(cascade, g_draw_thread.frame);
     g_draw_thread.draws = Load<u32>(Marker::Context() + ContextDraws);
     Marker::Write({Marker::Kind::PassBegin, FirstPass + cascade, g_draw_thread.frame, 0, 0});
     g_draw_thread.start = std::chrono::steady_clock::now();
@@ -62,6 +64,7 @@ void PS4_SYSV_ABI OnSubmitReturn(u32, const Hooks::Arguments* arguments, u64) {
     if (static_cast<u32>(arguments->rsi) != CasterCategory) {
         return;
     }
+    CasterBatch::End();
     const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                         std::chrono::steady_clock::now() - g_draw_thread.start)
                         .count();

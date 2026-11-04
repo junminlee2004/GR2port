@@ -5,9 +5,19 @@
 
 #include "common/types.h"
 
+namespace AmdGpu {
+struct Liverpool;
+}
+
+namespace VideoCore {
+class BufferCache;
+class TextureCache;
+} // namespace VideoCore
+
 namespace Vulkan {
 class Instance;
 class Rasterizer;
+class Runtime;
 } // namespace Vulkan
 
 // Passes of Gravity Rush 2's frame graph drawn by renderer code from the game's scene data, in
@@ -26,6 +36,13 @@ void OnMarker(Vulkan::Rasterizer& rasterizer, const u32* data, u32 dwords);
 /// The rasterizer state the renderer reads.
 struct RasterizerAccess {
     static const Vulkan::Instance& Instance(const Vulkan::Rasterizer& rasterizer);
+    static const AmdGpu::Liverpool& Gpu(const Vulkan::Rasterizer& rasterizer);
+    static VideoCore::BufferCache& Buffers(Vulkan::Rasterizer& rasterizer);
+    static VideoCore::TextureCache& Textures(Vulkan::Rasterizer& rasterizer);
+    static Vulkan::Runtime& Barriers(Vulkan::Rasterizer& rasterizer);
+    /// Sets the scheduler's dynamic state from the registers as a draw does, apart from the
+    /// color blending state.
+    static void UpdatePassState(const Vulkan::Rasterizer& rasterizer);
 };
 
 } // namespace Gr2Pt
