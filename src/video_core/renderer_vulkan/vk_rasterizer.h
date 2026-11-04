@@ -22,6 +22,10 @@ namespace Core {
 class MemoryManager;
 }
 
+namespace Gr2Pt {
+struct RasterizerAccess;
+}
+
 namespace Vulkan {
 
 // The assert body, outlined for the bind paths.
@@ -434,6 +438,7 @@ private:
     u64 filter_true_stamp_{};
 
     friend class VideoCore::BufferCache;
+    friend struct Gr2Pt::RasterizerAccess;
 
     const Instance& instance;
     Scheduler& scheduler;

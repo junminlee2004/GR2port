@@ -19,6 +19,7 @@
 #include "video_core/amdgpu/pm4_cmds.h"
 #include "video_core/buffer_cache/region_manager.h"
 #include "video_core/buffer_cache/stream_copy_lane.h"
+#include "video_core/gr2_pt/gr2_pt.h"
 #include "video_core/renderdoc.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
 
@@ -807,6 +808,9 @@ std::span<const u32> Liverpool::RunGraphicsPackets(std::span<const u32> dcb, uin
                 }
                 break;
             }
+            case Gr2Pt::MarkerPayload:
+                Gr2Pt::OnMarker(*rasterizer, nop->data_block, nop->header.NumWords());
+                break;
             default:
                 break;
             }
