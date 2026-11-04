@@ -6,6 +6,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/caster_batch.h
     ${CMAKE_CURRENT_LIST_DIR}/caster_renderer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/caster_renderer.h
+    ${CMAKE_CURRENT_LIST_DIR}/cpu_writes.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/cpu_writes.h
     ${CMAKE_CURRENT_LIST_DIR}/gr2_pt.cpp
     ${CMAKE_CURRENT_LIST_DIR}/gr2_pt.h
     ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp

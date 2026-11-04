@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <atomic>
 #include <bit>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <deque>
@@ -20,8 +21,10 @@
 #include "core/memory.h"
 #include "video_core/amdgpu/liverpool.h"
 #include "video_core/buffer_cache/buffer_cache.h"
+#include "video_core/buffer_cache/region_definitions.h"
 #include "video_core/gr2_pt/caster_batch.h"
 #include "video_core/gr2_pt/caster_renderer.h"
+#include "video_core/gr2_pt/cpu_writes.h"
 #include "video_core/gr2_pt/gr2_pt.h"
 #include "video_core/gr2_pt/shaders/caster_skinned_vert.h"
 #include "video_core/gr2_pt/shaders/caster_static_vert.h"
@@ -46,6 +49,8 @@ constexpr u32 ReportFrames = 600;
 constexpr u32 MatrixBytes = 64;
 constexpr u32 BoneBytes = 48;
 constexpr u64 MatrixAlignment = 16;
+// Larger ranges are resolved again by each batch.
+constexpr u64 MaxKeptBytes = 64_MB;
 
 // Push constant flags, as the vertex programs read them.
 constexpr u32 FlagDepthMinusOneToOne = 1;
@@ -111,6 +116,8 @@ struct Obtained {
     const VideoCore::Buffer* buffer;
     u64 offset;
     u32 size;
+    // The last batch that read the range.
+    u64 batch;
 };
 
 struct Read {
@@ -140,12 +147,24 @@ struct Stats {
     u64 fallbacks;
     u64 obtains;
     u64 flushes;
-    u64 restarts;
+    // Rendering began again with the scope closed, with the game's clear as the only difference
+    // from the open scope, or with another difference.
+    u64 restarts_closed;
+    u64 restarts_cleared;
+    u64 restarts_other;
     u64 clears;
     u64 ring_bytes;
     u64 ring_waits;
     u64 gpu_matrices;
     u64 misaligned;
+    u64 dropped;
+    // Command processor time of the batches by step.
+    u64 resolve_ns;
+    u64 target_ns;
+    u64 barrier_ns;
+    u64 begin_ns;
+    u64 record_ns;
+    u64 finish_ns;
 };
 
 enum class DepthKind {
@@ -196,7 +215,13 @@ struct State {
     u64 batch_position;
     // The position of each batch's data and the tick that reads it.
     std::deque<std::pair<u64, u64>> fences;
-    tsl::robin_map<VAddr, Obtained> buffers;
+    // The guest ranges resolved to the buffer cache's copies, kept until the CPU writes them, and
+    // the ranges in each watched block.
+    tsl::robin_map<VAddr, Obtained> ranges;
+    tsl::robin_map<u64, std::vector<VAddr>> blocks;
+    std::vector<CpuWrites::Range> writes;
+    std::vector<VAddr> dropped;
+    u64 batch;
     tsl::robin_map<VAddr, u64> matrices;
     std::vector<Read> reads;
     std::vector<Resolved> resolved;
@@ -427,16 +452,110 @@ u64 Allocate(Vulkan::Scheduler& scheduler, u64 bytes) {
     return begin;
 }
 
+u64 LastBlock(VAddr address, u32 size) {
+    return (address + std::max<u32>(size, 1) - 1) >> CpuWrites::BlockBits;
+}
+
+void Index(VAddr address, u32 size) {
+    for (u64 block = address >> CpuWrites::BlockBits; block <= LastBlock(address, size); ++block) {
+        g_state.blocks[block].push_back(address);
+    }
+}
+
+void Unindex(VAddr address, u32 size) {
+    for (u64 block = address >> CpuWrites::BlockBits; block <= LastBlock(address, size); ++block) {
+        const auto it = g_state.blocks.find(block);
+        if (it == g_state.blocks.end()) {
+            continue;
+        }
+        std::vector<VAddr>& kept = it.value();
+        if (const auto found = std::ranges::find(kept, address); found != kept.end()) {
+            *found = kept.back();
+            kept.pop_back();
+        }
+        if (kept.empty()) {
+            g_state.blocks.erase(it);
+        }
+    }
+}
+
+void Drop(VAddr address) {
+    const auto it = g_state.ranges.find(address);
+    if (it == g_state.ranges.end()) {
+        return;
+    }
+    const u32 size = it->second.size;
+    g_state.ranges.erase(it);
+    Unindex(address, size);
+    ++g_state.stats.dropped;
+}
+
+/// Drops the kept ranges on the pages the CPU wrote. A reported write unprotects its whole page,
+/// so later writes to the page go unreported until the page is uploaded again.
+void Forget() {
+    CpuWrites::Take(g_state.writes);
+    for (const CpuWrites::Range& write : g_state.writes) {
+        const VAddr begin = Common::AlignDown(write.begin, VideoCore::BYTES_PER_PAGE);
+        const VAddr end = Common::AlignUp(write.end, VideoCore::BYTES_PER_PAGE);
+        const auto overlaps = [begin, end](VAddr address, const Obtained& o) {
+            return address < end && begin < address + std::max<u32>(o.size, 1);
+        };
+        const u64 first = begin >> CpuWrites::BlockBits;
+        const u64 last = (end - 1) >> CpuWrites::BlockBits;
+        g_state.dropped.clear();
+        if (last - first >= g_state.blocks.size()) {
+            for (const auto& [address, o] : g_state.ranges) {
+                if (overlaps(address, o)) {
+                    g_state.dropped.push_back(address);
+                }
+            }
+        } else {
+            for (u64 block = first; block <= last; ++block) {
+                const auto it = g_state.blocks.find(block);
+                if (it == g_state.blocks.end()) {
+                    continue;
+                }
+                for (const VAddr address : it->second) {
+                    const auto kept = g_state.ranges.find(address);
+                    if (kept != g_state.ranges.end() && overlaps(address, kept->second)) {
+                        g_state.dropped.push_back(address);
+                    }
+                }
+            }
+        }
+        for (const VAddr address : g_state.dropped) {
+            Drop(address);
+        }
+    }
+}
+
+/// The buffer cache's copy of [address, address + size), resolved once and kept until the CPU
+/// writes its pages. Each batch reads a range once.
 std::pair<const VideoCore::Buffer*, u64> Obtain(VideoCore::BufferCache& buffers, VAddr address,
                                                 u32 size) {
-    auto [it, inserted] = g_state.buffers.try_emplace(address);
-    Obtained& o = it.value();
-    if (inserted || o.size < size) {
+    if (size > MaxKeptBytes) {
         const auto [buffer, offset] =
             buffers.ObtainBuffer(address, size, VideoCore::ObtainBufferFlags::IgnoreStreamBuffer);
-        o = {buffer, offset, size};
         g_state.reads.push_back({buffer, offset, offset + size});
         ++g_state.stats.obtains;
+        return {buffer, offset};
+    }
+    auto [it, inserted] = g_state.ranges.try_emplace(address);
+    Obtained& o = it.value();
+    if (inserted || o.size < size) {
+        if (!inserted) {
+            Unindex(address, o.size);
+        }
+        CpuWrites::Watch(address, std::max<u32>(size, 1));
+        const auto [buffer, offset] =
+            buffers.ObtainBuffer(address, size, VideoCore::ObtainBufferFlags::IgnoreStreamBuffer);
+        o = {buffer, offset, size, 0};
+        Index(address, size);
+        ++g_state.stats.obtains;
+    }
+    if (o.batch != g_state.batch) {
+        o.batch = g_state.batch;
+        g_state.reads.push_back({o.buffer, o.offset, o.offset + o.size});
     }
     return {o.buffer, o.offset};
 }
@@ -478,7 +597,8 @@ u64 Matrix(VideoCore::BufferCache& buffers, VAddr address, u32 bytes, u8* data, 
 /// cull mode and index buffer, and sets base to the ring offset of the draws.
 bool Resolve(Vulkan::Rasterizer& rasterizer, u32 first, u32 count, u64& base) {
     VideoCore::BufferCache& buffers = RasterizerAccess::Buffers(rasterizer);
-    g_state.buffers.clear();
+    ++g_state.batch;
+    Forget();
     g_state.matrices.clear();
     g_state.reads.clear();
     g_state.groups.clear();
@@ -564,6 +684,24 @@ bool Resolve(Vulkan::Rasterizer& rasterizer, u32 first, u32 count, u64& base) {
     return true;
 }
 
+/// Sorts the batch's reads and merges the ones that overlap or touch.
+void MergeReads() {
+    auto& reads = g_state.reads;
+    std::ranges::sort(reads, [](const Read& a, const Read& b) {
+        return a.buffer != b.buffer ? a.buffer < b.buffer : a.begin < b.begin;
+    });
+    size_t merged = 0;
+    for (size_t i = 1; i < reads.size(); i++) {
+        Read& last = reads[merged];
+        if (reads[i].buffer == last.buffer && reads[i].begin <= last.end) {
+            last.end = std::max(last.end, reads[i].end);
+        } else {
+            reads[++merged] = reads[i];
+        }
+    }
+    reads.resize(reads.empty() ? 0 : merged + 1);
+}
+
 bool NeedsBarrier(Vulkan::Runtime& runtime) {
     for (const Read& r : g_state.reads) {
         if (runtime.IsBufferAccessed(r.buffer, r.begin, r.end - r.begin)) {
@@ -574,28 +712,36 @@ bool NeedsBarrier(Vulkan::Runtime& runtime) {
 }
 
 void AccessReads(Vulkan::Runtime& runtime) {
-    auto& reads = g_state.reads;
-    std::ranges::sort(reads, [](const Read& a, const Read& b) {
-        return a.buffer != b.buffer ? a.buffer < b.buffer : a.begin < b.begin;
-    });
-    const auto access = [&runtime](const Read& r) {
+    for (const Read& r : g_state.reads) {
         runtime.AccessBuffer(r.buffer, r.begin, r.end - r.begin,
                              vk::PipelineStageFlagBits2::eVertexInput |
                                  vk::PipelineStageFlagBits2::eVertexShader,
                              vk::AccessFlagBits2::eIndexRead | vk::AccessFlagBits2::eShaderRead);
-    };
-    Read merged = reads.empty() ? Read{} : reads.front();
-    for (const Read& r : reads) {
-        if (r.buffer == merged.buffer && r.begin <= merged.end) {
-            merged.end = std::max(merged.end, r.end);
-            continue;
-        }
-        access(merged);
-        merged = r;
     }
-    if (!reads.empty()) {
-        access(merged);
+}
+
+void CountRestart(const Vulkan::Scheduler& scheduler, const Vulkan::RenderState& state) {
+    Stats& stats = g_state.stats;
+    if (!scheduler.IsRendering()) {
+        ++stats.restarts_closed;
+        return;
     }
+    Vulkan::RenderState open = scheduler.GetRenderState();
+    if (open == state) {
+        return;
+    }
+    auto& attachment = open.depth_stencil_attachment;
+    attachment.clear_value = {};
+    attachment.depth_clear = false;
+    attachment.stencil_clear = false;
+    ++(open == state ? stats.restarts_cleared : stats.restarts_other);
+}
+
+u64 Nanoseconds(std::chrono::steady_clock::time_point& since) {
+    const auto now = std::chrono::steady_clock::now();
+    const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now - since).count();
+    since = now;
+    return static_cast<u64>(ns);
 }
 
 void RecordDraws(Vulkan::Scheduler& scheduler, const Pipelines& pipelines, u64 base, u32 count,
@@ -817,17 +963,26 @@ void Report() {
     Stats& s = g_state.stats;
     const CasterBatch::Counters counters = CasterBatch::Drain();
     const double frames = s.frames ? s.frames : 1;
-    LOG_INFO(
-        Render_Vulkan,
-        "GR2 PT casters per frame over {} frames: {:.0f} drawn in {:.1f} indirect draws, "
-        "{:.1f} drawn by the game's callback ({:.1f} unsupported, {:.1f} with the ring "
-        "full), {:.0f} buffers obtained, {:.2f} barrier flushes, {:.2f} rendering "
-        "restarts, {:.2f} clears, {:.0f} KB of draw data, {:.2f} ring waits, {:.1f} GPU-written "
-        "and {:.1f} misaligned matrices",
-        s.frames, s.records / frames, s.groups / frames, s.fallbacks / frames,
-        counters.unsupported / frames, counters.ring_full / frames, s.obtains / frames,
-        s.flushes / frames, s.restarts / frames, s.clears / frames, s.ring_bytes / frames / 1024.0,
-        s.ring_waits / frames, s.gpu_matrices / frames, s.misaligned / frames);
+    LOG_INFO(Render_Vulkan,
+             "GR2 PT casters per frame over {} frames: {:.0f} drawn in {:.1f} indirect draws, "
+             "{:.1f} drawn by the game's callback ({:.1f} unsupported, {:.1f} with the ring "
+             "full), {:.1f} ranges obtained, {:.1f} dropped, {} kept, {:.2f} barrier flushes, "
+             "rendering restarts {:.2f} closed, {:.2f} after the game's clear, {:.2f} other, "
+             "{:.2f} clears, {:.0f} KB of draw data, {:.2f} ring waits, {:.1f} GPU-written and "
+             "{:.1f} misaligned matrices",
+             s.frames, s.records / frames, s.groups / frames, s.fallbacks / frames,
+             counters.unsupported / frames, counters.ring_full / frames, s.obtains / frames,
+             s.dropped / frames, g_state.ranges.size(), s.flushes / frames,
+             s.restarts_closed / frames, s.restarts_cleared / frames, s.restarts_other / frames,
+             s.clears / frames, s.ring_bytes / frames / 1024.0, s.ring_waits / frames,
+             s.gpu_matrices / frames, s.misaligned / frames);
+    const double ms = frames * 1e6;
+    LOG_INFO(Render_Vulkan,
+             "GR2 PT caster batches per frame: {:.3f} ms resolving, {:.3f} ms finding the target, "
+             "{:.3f} ms on barriers, {:.3f} ms beginning rendering, {:.3f} ms recording, {:.3f} "
+             "ms finishing",
+             s.resolve_ns / ms, s.target_ns / ms, s.barrier_ns / ms, s.begin_ns / ms,
+             s.record_ns / ms, s.finish_ns / ms);
     s = {};
 }
 
@@ -950,9 +1105,11 @@ void OnBatch(Vulkan::Rasterizer& rasterizer, const Marker::Words& words) {
         CasterBatch::Release(first + count);
         return;
     }
+    auto time = std::chrono::steady_clock::now();
     u64 base;
     const bool resolved = Resolve(rasterizer, first, count, base);
     CasterBatch::Release(first + count);
+    stats.resolve_ns += Nanoseconds(time);
     if (!resolved) {
         Fail("a batch is larger than a quarter of the draw data ring");
         return;
@@ -971,7 +1128,9 @@ void OnBatch(Vulkan::Rasterizer& rasterizer, const Marker::Words& words) {
     Vulkan::Scheduler& scheduler = rasterizer.GetScheduler();
     Vulkan::Runtime& runtime = RasterizerAccess::Barriers(rasterizer);
     stats.records += count;
+    stats.target_ns += Nanoseconds(time);
 
+    MergeReads();
     bool needs_barrier = NeedsBarrier(runtime);
     Vulkan::RenderState state = target.state;
     Compare& c = g_state.compare;
@@ -995,11 +1154,14 @@ void OnBatch(Vulkan::Rasterizer& rasterizer, const Marker::Words& words) {
         runtime.FlushBarriers();
         ++stats.flushes;
     }
-    stats.restarts += !scheduler.IsRendering() || !(scheduler.GetRenderState() == state);
+    stats.barrier_ns += Nanoseconds(time);
+    CountRestart(scheduler, state);
     scheduler.BeginRendering(state);
     RasterizerAccess::UpdatePassState(rasterizer);
     scheduler.GetDynamicState().Commit(instance, scheduler);
+    stats.begin_ns += Nanoseconds(time);
     RecordDraws(scheduler, *pipelines, base, count, target.flags);
+    stats.record_ns += Nanoseconds(time);
     AccessReads(runtime);
     g_state.fences.emplace_back(g_state.batch_position, scheduler.CurrentTick());
 
@@ -1046,6 +1208,7 @@ void OnBatch(Vulkan::Rasterizer& rasterizer, const Marker::Words& words) {
         VideoCore::Skipcache::Framework::Instance().InvalidateAll();
     }
     Restore(scheduler);
+    stats.finish_ns += Nanoseconds(time);
 }
 
 } // namespace Gr2Pt::CasterRenderer

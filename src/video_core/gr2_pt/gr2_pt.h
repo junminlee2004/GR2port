@@ -33,6 +33,10 @@ void Install(VAddr module_base);
 /// Runs a marker packet on the command processor's thread; data starts at the payload type.
 void OnMarker(Vulkan::Rasterizer& rasterizer, const u32* data, u32 dwords);
 
+/// The CPU wrote [address, address + size) after its pages were uploaded, or the buffer cache
+/// dropped or moved the range. Any thread.
+void OnCpuWrite(VAddr address, u64 size);
+
 /// The rasterizer state the renderer reads.
 struct RasterizerAccess {
     static const Vulkan::Instance& Instance(const Vulkan::Rasterizer& rasterizer);
