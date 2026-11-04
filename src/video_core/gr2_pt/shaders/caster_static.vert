@@ -7,6 +7,6 @@
 #include "caster_common.glsl"
 
 void main() {
-    Draw d = pc.draws.draws[gl_DrawIDARB];
+    Draw d = CurrentDraw();
     gl_Position = Clip(d, Position(d));
 }

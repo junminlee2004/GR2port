@@ -80,6 +80,7 @@ static_assert(sizeof(Draw) == 64);
 
 struct Constants {
     u64 draws;
+    u64 slots;
     u32 flags;
     u32 padding;
 };
@@ -127,9 +128,17 @@ struct Read {
 };
 
 struct Resolved {
-    Draw draw;
     vk::DrawIndexedIndirectCommand command;
     u32 group;
+};
+
+// The last range a resolve step obtained: consecutive casters are often draws of one mesh and
+// share its streams and indices.
+struct Recent {
+    VAddr address = ~VAddr{0};
+    u32 size = 0;
+    const VideoCore::Buffer* buffer = nullptr;
+    u64 offset = 0;
 };
 
 struct Group {
@@ -158,6 +167,7 @@ struct Stats {
     u64 gpu_matrices;
     u64 misaligned;
     u64 dropped;
+    u64 reads;
     // Command processor time of the batches by step.
     u64 resolve_ns;
     u64 target_ns;
@@ -560,8 +570,17 @@ std::pair<const VideoCore::Buffer*, u64> Obtain(VideoCore::BufferCache& buffers,
     return {o.buffer, o.offset};
 }
 
-u64 Stream(VideoCore::BufferCache& buffers, const AmdGpu::Buffer& stream) {
-    const auto [buffer, offset] = Obtain(buffers, stream.base_address, stream.GetSize());
+std::pair<const VideoCore::Buffer*, u64> Obtain(VideoCore::BufferCache& buffers, Recent& recent,
+                                                VAddr address, u32 size) {
+    if (address != recent.address || size > recent.size) {
+        const auto [buffer, offset] = Obtain(buffers, address, size);
+        recent = {address, size, buffer, offset};
+    }
+    return {recent.buffer, recent.offset};
+}
+
+u64 Stream(VideoCore::BufferCache& buffers, Recent& recent, const AmdGpu::Buffer& stream) {
+    const auto [buffer, offset] = Obtain(buffers, recent, stream.base_address, stream.GetSize());
     return buffer->BufferDeviceAddress() + offset;
 }
 
@@ -593,10 +612,12 @@ u64 Matrix(VideoCore::BufferCache& buffers, VAddr address, u32 bytes, u8* data, 
     return device;
 }
 
-/// Turns the batch's records into draws and indirect commands in the ring, grouped by pipeline,
-/// cull mode and index buffer, and sets base to the ring offset of the draws.
+/// Turns the batch's records into draws in the ring, in record order, and indirect commands with
+/// the slots of their draws, grouped by pipeline, cull mode and index buffer. Sets base to the
+/// ring offset of the draws.
 bool Resolve(Vulkan::Rasterizer& rasterizer, u32 first, u32 count, u64& base) {
     VideoCore::BufferCache& buffers = RasterizerAccess::Buffers(rasterizer);
+    const Record* const records = CasterBatch::Ring();
     ++g_state.batch;
     Forget();
     g_state.matrices.clear();
@@ -606,9 +627,11 @@ bool Resolve(Vulkan::Rasterizer& rasterizer, u32 first, u32 count, u64& base) {
 
     u64 palette_bytes = 0;
     for (u32 i = 0; i < count; i++) {
-        palette_bytes += u64{CasterBatch::Get(first + i).bones} * BoneBytes + MatrixAlignment;
+        const u16 bones = records[(first + i) % CasterBatch::RingRecords].bones;
+        palette_bytes += u64{bones} * BoneBytes + MatrixAlignment;
     }
-    const u64 commands_offset = u64{count} * sizeof(Draw);
+    const u64 slots_offset = u64{count} * sizeof(Draw);
+    const u64 commands_offset = slots_offset + u64{count} * sizeof(u32);
     const u64 matrices_offset = Common::AlignUp(
         commands_offset + u64{count} * sizeof(vk::DrawIndexedIndirectCommand), MatrixAlignment);
     const u64 bytes =
@@ -621,27 +644,47 @@ bool Resolve(Vulkan::Rasterizer& rasterizer, u32 first, u32 count, u64& base) {
     u8* const data = g_state.ring->mapped_data.data() + base;
     const u64 data_address = g_state.ring_address + base;
     u64 cursor = matrices_offset;
+    auto* const draws = reinterpret_cast<Draw*>(data);
+    // Consecutive casters often share their matrices: a model's meshes share its world matrix
+    // and a pass's casters its view-projection matrix.
+    VAddr world = 0;
+    VAddr view_projection = 0;
+    u64 world_device = 0;
+    u64 view_projection_device = 0;
+    Recent positions;
+    Recent weights;
+    Recent bone_indices;
+    Recent index_ranges;
 
     for (u32 i = 0; i < count; i++) {
-        const Record& r = CasterBatch::Get(first + i);
+        const Record& r = records[(first + i) % CasterBatch::RingRecords];
         Resolved& out = g_state.resolved[i];
-        Draw& d = out.draw;
-        d = {};
-        d.positions = Stream(buffers, r.positions);
+        Draw d{};
+        d.positions = Stream(buffers, positions, r.positions);
         d.position_stride = static_cast<u32>(r.positions.stride);
-        d.world = Matrix(buffers, r.world, MatrixBytes, data, cursor, data_address);
-        d.view_projection =
-            Matrix(buffers, r.view_projection, MatrixBytes, data, cursor, data_address);
+        if (r.world != world || world_device == 0) {
+            world = r.world;
+            world_device = Matrix(buffers, r.world, MatrixBytes, data, cursor, data_address);
+        }
+        d.world = world_device;
+        if (r.view_projection != view_projection || view_projection_device == 0) {
+            view_projection = r.view_projection;
+            view_projection_device =
+                Matrix(buffers, r.view_projection, MatrixBytes, data, cursor, data_address);
+        }
+        d.view_projection = view_projection_device;
         if (r.bones != 0) {
-            d.weights = Stream(buffers, r.weights);
+            d.weights = Stream(buffers, weights, r.weights);
             d.weight_stride = static_cast<u32>(r.weights.stride);
-            d.bone_indices = Stream(buffers, r.bone_indices);
+            d.bone_indices = Stream(buffers, bone_indices, r.bone_indices);
             d.bone_stride = static_cast<u32>(r.bone_indices.stride);
             d.palette =
                 Matrix(buffers, r.palette, u32{r.bones} * BoneBytes, data, cursor, data_address);
             d.bones = r.bones;
         }
-        const auto [indices, index_offset] = Obtain(buffers, r.indices, r.index_bytes);
+        draws[i] = d;
+        const auto [indices, index_offset] =
+            Obtain(buffers, index_ranges, r.indices, r.index_bytes);
         const u32 index_size = (r.flags & CasterBatch::Index32) ? 4 : 2;
         out.command = {
             .indexCount = r.count,
@@ -669,13 +712,14 @@ bool Resolve(Vulkan::Rasterizer& rasterizer, u32 first, u32 count, u64& base) {
         slot += g.count;
         g.count = 0;
     }
-    auto* const draws = reinterpret_cast<Draw*>(data);
+    auto* const slots = reinterpret_cast<u32*>(data + slots_offset);
     auto* const commands =
         reinterpret_cast<vk::DrawIndexedIndirectCommand*>(data + commands_offset);
-    for (const Resolved& r : g_state.resolved) {
+    for (u32 i = 0; i < count; i++) {
+        const Resolved& r = g_state.resolved[i];
         Group& g = g_state.groups[r.group];
         const u32 s = g.first + g.count++;
-        draws[s] = r.draw;
+        slots[s] = i;
         commands[s] = r.command;
     }
     if (!g_state.ring->is_coherent) {
@@ -748,7 +792,8 @@ void RecordDraws(Vulkan::Scheduler& scheduler, const Pipelines& pipelines, u64 b
                  u32 flags) {
     const auto cmdbuf = scheduler.CommandBuffer();
     const vk::Buffer ring = g_state.ring->Handle();
-    const u64 commands = base + u64{count} * sizeof(Draw);
+    const u64 slots = base + u64{count} * sizeof(Draw);
+    const u64 commands = slots + u64{count} * sizeof(u32);
     vk::Pipeline bound{};
     for (const Group& g : g_state.groups) {
         const vk::Pipeline pipeline =
@@ -763,7 +808,8 @@ void RecordDraws(Vulkan::Scheduler& scheduler, const Pipelines& pipelines, u64 b
                                (g.flags & CasterBatch::Index32) ? vk::IndexType::eUint32
                                                                 : vk::IndexType::eUint16);
         const Constants constants{
-            .draws = g_state.ring_address + base + u64{g.first} * sizeof(Draw),
+            .draws = g_state.ring_address + base,
+            .slots = g_state.ring_address + slots + u64{g.first} * sizeof(u32),
             .flags = flags,
         };
         cmdbuf.pushConstants(g_state.layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(constants),
@@ -966,13 +1012,14 @@ void Report() {
     LOG_INFO(Render_Vulkan,
              "GR2 PT casters per frame over {} frames: {:.0f} drawn in {:.1f} indirect draws, "
              "{:.1f} drawn by the game's callback ({:.1f} unsupported, {:.1f} with the ring "
-             "full), {:.1f} ranges obtained, {:.1f} dropped, {} kept, {:.2f} barrier flushes, "
-             "rendering restarts {:.2f} closed, {:.2f} after the game's clear, {:.2f} other, "
+             "full), {:.1f} ranges obtained, {:.1f} dropped, {} kept, {:.0f} merged reads, "
+             "{:.2f} barrier flushes, rendering restarts {:.2f} closed, {:.2f} after the game's "
+             "clear, {:.2f} other, "
              "{:.2f} clears, {:.0f} KB of draw data, {:.2f} ring waits, {:.1f} GPU-written and "
              "{:.1f} misaligned matrices",
              s.frames, s.records / frames, s.groups / frames, s.fallbacks / frames,
              counters.unsupported / frames, counters.ring_full / frames, s.obtains / frames,
-             s.dropped / frames, g_state.ranges.size(), s.flushes / frames,
+             s.dropped / frames, g_state.ranges.size(), s.reads / frames, s.flushes / frames,
              s.restarts_closed / frames, s.restarts_cleared / frames, s.restarts_other / frames,
              s.clears / frames, s.ring_bytes / frames / 1024.0, s.ring_waits / frames,
              s.gpu_matrices / frames, s.misaligned / frames);
@@ -1131,6 +1178,7 @@ void OnBatch(Vulkan::Rasterizer& rasterizer, const Marker::Words& words) {
     stats.target_ns += Nanoseconds(time);
 
     MergeReads();
+    stats.reads += g_state.reads.size();
     bool needs_barrier = NeedsBarrier(runtime);
     Vulkan::RenderState state = target.state;
     Compare& c = g_state.compare;

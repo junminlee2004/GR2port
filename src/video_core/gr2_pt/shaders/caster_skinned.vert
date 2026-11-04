@@ -13,7 +13,7 @@ vec4 BoneRow(Draw d, int bone, uint r) {
 }
 
 void main() {
-    Draw d = pc.draws.draws[gl_DrawIDARB];
+    Draw d = CurrentDraw();
     const vec3 p = Position(d);
     Words weight_words = Vertex(d.weights, d.weight_stride);
     const vec2 w01 = unpackHalf2x16(weight_words.words[0]);

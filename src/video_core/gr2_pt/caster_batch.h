@@ -58,8 +58,11 @@ void End();
 void Enable();
 void Disable();
 
-/// The command processor's thread: a batch's record, and the end of the records it has drawn.
-const Record& Get(u32 index);
+inline constexpr u32 RingRecords = 1u << 15;
+
+/// The command processor's thread: the record ring, which holds a batch's records at their
+/// indices modulo RingRecords, and the end of the records it has drawn.
+const Record* Ring();
 void Release(u32 end);
 
 Counters Drain();

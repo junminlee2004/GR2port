@@ -35,9 +35,15 @@ layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer Dra
     Draw draws[];
 };
 
-// Draws points at the first draw of the indirect draw call.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Slots {
+    uint slots[];
+};
+
+// Draws points at the batch's draws in record order, and slots at the index of the draw of each
+// draw of the indirect draw call.
 layout(push_constant, std430) uniform Constants {
     Draws draws;
+    Slots slots;
     uint flags;
 } pc;
 
@@ -47,6 +53,10 @@ const uint FlagDepthMinusOneToOne = 1u;
 out gl_PerVertex {
     vec4 gl_Position;
 };
+
+Draw CurrentDraw() {
+    return pc.draws.draws[pc.slots.slots[gl_DrawIDARB]];
+}
 
 Words Vertex(Words stream, uint stride) {
     return Words(uint64_t(stream) + uint64_t(uint(gl_VertexIndex)) * stride);

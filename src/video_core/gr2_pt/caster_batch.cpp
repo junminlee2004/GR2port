@@ -74,8 +74,6 @@ constexpr u32 SelectW = 7;
 // The context's count of issued draws, which DrawIndexed FUN_016173f0 increments.
 constexpr u64 ContextDraws = 0xcec8;
 
-constexpr u32 RingRecords = 1u << 15;
-
 using ItemCallback = u32* PS4_SYSV_ABI (*)(u32* out, VAddr item, VAddr view);
 
 // Written only by the game's draw thread.
@@ -323,8 +321,8 @@ void Disable() {
     g_enabled.store(false, std::memory_order_relaxed);
 }
 
-const Record& Get(u32 index) {
-    return g_ring[index % RingRecords];
+const Record* Ring() {
+    return g_ring.data();
 }
 
 void Release(u32 end) {
