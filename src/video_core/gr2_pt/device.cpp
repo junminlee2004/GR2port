@@ -1,0 +1,149 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include <array>
+#include <optional>
+
+#include <SDL3/SDL_vulkan.h>
+
+#include "common/logging/log.h"
+#include "video_core/gr2_pt/device.h"
+
+namespace Gr2Pt {
+
+namespace {
+
+constexpr u32 ApiVersion = VK_API_VERSION_1_3;
+
+bool CreateInstance(Device& d) {
+    const auto get_proc =
+        reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr());
+    if (get_proc == nullptr) {
+        LOG_ERROR(Render_Vulkan, "GR2 PT: no Vulkan loader: {}", SDL_GetError());
+        return false;
+    }
+    d.dispatch.init(get_proc);
+    Uint32 count = 0;
+    const char* const* extensions = SDL_Vulkan_GetInstanceExtensions(&count);
+    if (extensions == nullptr) {
+        LOG_ERROR(Render_Vulkan, "GR2 PT: no surface extensions: {}", SDL_GetError());
+        return false;
+    }
+    const vk::ApplicationInfo application{
+        .pApplicationName = "GR2 PT",
+        .apiVersion = ApiVersion,
+    };
+    const vk::InstanceCreateInfo info{
+        .pApplicationInfo = &application,
+        .enabledExtensionCount = count,
+        .ppEnabledExtensionNames = extensions,
+    };
+    const auto [result, instance] = vk::createInstance(info, nullptr, d.dispatch);
+    if (result != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan, "GR2 PT: no Vulkan instance: {}", vk::to_string(result));
+        return false;
+    }
+    d.instance = instance;
+    d.dispatch.init(instance);
+    return true;
+}
+
+std::optional<u32> PresentFamily(const Device& d, vk::PhysicalDevice gpu) {
+    const auto families = gpu.getQueueFamilyProperties(d.dispatch);
+    for (u32 i = 0; i < families.size(); i++) {
+        if (!(families[i].queueFlags & vk::QueueFlagBits::eGraphics)) {
+            continue;
+        }
+        const auto [result, present] = gpu.getSurfaceSupportKHR(i, d.surface, d.dispatch);
+        if (result == vk::Result::eSuccess && present) {
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
+bool PickGpu(Device& d) {
+    const auto [result, gpus] = d.instance.enumeratePhysicalDevices(d.dispatch);
+    if (result != vk::Result::eSuccess) {
+        return false;
+    }
+    bool found = false;
+    for (const vk::PhysicalDevice gpu : gpus) {
+        const auto properties = gpu.getProperties(d.dispatch);
+        const std::optional<u32> family = PresentFamily(d, gpu);
+        if (properties.apiVersion < ApiVersion || !family) {
+            continue;
+        }
+        const bool discrete = properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu;
+        if (!found || discrete) {
+            d.gpu = gpu;
+            d.queue_family = *family;
+            found = true;
+        }
+        if (discrete) {
+            break;
+        }
+    }
+    return found;
+}
+
+} // namespace
+
+bool CreateDevice(SDL_Window* window, Device& d) {
+    if (!CreateInstance(d)) {
+        return false;
+    }
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
+    if (!SDL_Vulkan_CreateSurface(window, d.instance, nullptr, &surface)) {
+        LOG_ERROR(Render_Vulkan, "GR2 PT: no surface: {}", SDL_GetError());
+        return false;
+    }
+    d.surface = surface;
+    if (!PickGpu(d)) {
+        LOG_ERROR(Render_Vulkan, "GR2 PT: no Vulkan 1.3 GPU presents to the window");
+        return false;
+    }
+
+    vk::PhysicalDeviceVulkan13Features features13{
+        .synchronization2 = true,
+        .dynamicRendering = true,
+    };
+    vk::PhysicalDeviceVulkan12Features features12{
+        .pNext = &features13,
+        .timelineSemaphore = true,
+        .bufferDeviceAddress = true,
+    };
+    const float priority = 1.0f;
+    const vk::DeviceQueueCreateInfo queue_info{
+        .queueFamilyIndex = d.queue_family,
+        .queueCount = 1,
+        .pQueuePriorities = &priority,
+    };
+    const std::array extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    const vk::DeviceCreateInfo info{
+        .pNext = &features12,
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &queue_info,
+        .enabledExtensionCount = static_cast<u32>(extensions.size()),
+        .ppEnabledExtensionNames = extensions.data(),
+    };
+    const auto [result, device] = d.gpu.createDevice(info, nullptr, d.dispatch);
+    if (result != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan, "GR2 PT: no device: {}", vk::to_string(result));
+        return false;
+    }
+    d.device = device;
+    d.dispatch.init(device);
+    d.queue = device.getQueue(d.queue_family, 0, d.dispatch);
+
+    const auto properties = d.gpu.getProperties(d.dispatch);
+    const auto families = d.gpu.getQueueFamilyProperties(d.dispatch);
+    if (families[d.queue_family].timestampValidBits != 0) {
+        d.timestamp_period = properties.limits.timestampPeriod;
+    }
+    LOG_INFO(Render_Vulkan, "GR2 PT: renderer device {} (queue family {})",
+             properties.deviceName.data(), d.queue_family);
+    return true;
+}
+
+} // namespace Gr2Pt
