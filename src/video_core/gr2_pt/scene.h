@@ -21,6 +21,8 @@ inline constexpr u32 CasterLists = 4;
 inline constexpr u32 MaxPaletteRows = 1u << 16;
 /// The game's item categories.
 inline constexpr u32 ItemCategories = 37;
+/// Deformed instances the renderer skins per packet.
+inline constexpr u32 MaxSkinJobs = 256;
 
 /// The start of each packet.
 struct Header {
@@ -35,14 +37,24 @@ struct Header {
     u32 capture_ns;
     /// Draws whose colour texture is not converted.
     u32 untextured;
-    /// Draws of skinned meshes, and palette rows written.
+    /// Draws of skinned meshes; draws of items whose vertices the game's compute deforms each
+    /// frame, from the renderer's copies; deformed items whose copy is not ready; palette rows
+    /// written.
     u32 skinned;
+    u32 deformed;
+    u32 deformed_waiting;
     u32 palette_rows;
+    /// Skin jobs written, the workgroups of the largest, and Skin records not written.
+    u32 skin_jobs;
+    u32 skin_groups;
+    u32 dropped_skins;
     /// Shadow casters written, of them skinned ones; casters with no drawable mesh or palette, or
     /// past MaxCasters.
     u32 casters;
     u32 skinned_casters;
     u32 dropped_casters;
+    /// Casters drawn from deformed copies.
+    u32 deformed_casters;
     /// The commands of each cascade's lists, and the indices of each cascade.
     u32 caster_commands[Cascades][CasterLists];
     u32 caster_indices[Cascades];
@@ -118,6 +130,24 @@ struct Caster {
 };
 static_assert(sizeof(Caster) == 128);
 
+/// A deformed instance the renderer skins as the game's Skin deformer does: from its shape's
+/// vertex data at source into the renderer's copy at destination, both of stride bytes a vertex
+/// with the position as RGB32 FLOAT at 0. The skin stream and palette are as Draw's.
+struct SkinJob {
+    u64 source;
+    u64 destination;
+    u64 skin;
+    u64 palette;
+    u32 bones;
+    u32 vertices;
+    u32 stride;
+    /// The byte offsets of the packed normal and of the RGBA16 FLOAT tangent; 0 for none.
+    u32 normal;
+    u32 tangent;
+    u32 padding[3];
+};
+static_assert(sizeof(SkinJob) == 64);
+
 /// The indirect command of a draw, at the same index as the draw. A caster's command gives the
 /// caster's index as its first instance.
 struct Command {
@@ -138,8 +168,9 @@ inline constexpr u64 CasterCommandsOffset = CastersOffset + MaxCasters * sizeof(
 /// MaxPaletteRows rows of 16 bytes.
 inline constexpr u64 PalettesOffset =
     CasterCommandsOffset + Cascades * CasterLists * MaxCasters * sizeof(Command);
-inline constexpr u64 PacketBytes = PalettesOffset + MaxPaletteRows * 16;
+inline constexpr u64 SkinJobsOffset = PalettesOffset + MaxPaletteRows * 16;
+inline constexpr u64 PacketBytes = SkinJobsOffset + MaxSkinJobs * sizeof(SkinJob);
 static_assert(ShadowsOffset + sizeof(Shadows) <= DrawsOffset && CastersOffset % 16 == 0 &&
-              PalettesOffset % 16 == 0);
+              PalettesOffset % 16 == 0 && SkinJobsOffset % 16 == 0);
 
 } // namespace Gr2Pt::Scene

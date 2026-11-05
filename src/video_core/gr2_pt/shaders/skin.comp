@@ -1,0 +1,107 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's Skin deformer (compute program 0x1c1f9c4): each thread skins a vertex of a deformed
+// instance from its shape's vertex data into the renderer's copy, in the same layout. The
+// workgroup's y is the job.
+
+#version 460
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+
+layout(local_size_x = 64) in;
+
+// Laid out as Scene::SkinJob: 64 bytes.
+struct SkinJob {
+    uint64_t source;
+    uint64_t destination;
+    uint64_t skin;
+    uint64_t palette;
+    uint bones;
+    uint vertices;
+    uint stride;
+    uint normal;
+    uint tangent;
+    uint padding[3];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer SkinJobs {
+    SkinJob jobs[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer Destination {
+    uint words[];
+};
+
+layout(push_constant) uniform Push {
+    uint64_t jobs;
+};
+
+// A row of the blended matrix, in the order of operations of the game's program.
+vec4 BlendRow(Rows rows, uint bones, uvec4 b, vec4 w, uint r) {
+    return ((BoneRow(rows, bones, int(b.x), r) * w.x + BoneRow(rows, bones, int(b.y), r) * w.y) +
+            BoneRow(rows, bones, int(b.z), r) * w.z) +
+           BoneRow(rows, bones, int(b.w), r) * w.w;
+}
+
+// The game's packed normal: three unsigned components in the exponent and upper mantissa bits of
+// a half float, 11, 11 and 10 bits, holding n * 0.5 + 0.5.
+vec3 UnpackNormal(uint word) {
+    const vec3 halves = vec3(unpackHalf2x16((word << 4) & 0x7ff0u).x,
+                             unpackHalf2x16((word >> 7) & 0x7ff0u).x,
+                             unpackHalf2x16((word >> 17) & 0x7fe0u).x);
+    return halves * 2.0 - 1.0;
+}
+
+uint PackNormal(vec3 n) {
+    const vec3 c = max(n * 0.5 + 0.5, vec3(0.0));
+    const uint x = packHalf2x16(vec2(c.x, 0.0));
+    const uint y = packHalf2x16(vec2(c.y, 0.0));
+    const uint z = packHalf2x16(vec2(c.z, 0.0));
+    return bitfieldExtract(x, 4, 11) | ((y << 7) & 0x3ff800u) | ((z << 17) & 0xffc00000u);
+}
+
+void main() {
+    const SkinJob job = SkinJobs(jobs).jobs[gl_WorkGroupID.y];
+    const uint v = gl_GlobalInvocationID.x;
+    if (v >= job.vertices) {
+        return;
+    }
+    const uint base = v * job.stride;
+    Words source = Words(job.source + base);
+    Destination destination = Destination(job.destination + base);
+    Words skin = Words(job.skin + uint64_t(v) * 16u);
+    const vec4 w = vec4(unpackHalf2x16(skin.words[0]), unpackHalf2x16(skin.words[1]));
+    const uvec4 b = uvec4(skin.words[2] & 0xffffu, skin.words[2] >> 16, skin.words[3] & 0xffffu,
+                          skin.words[3] >> 16);
+    Rows rows = Rows(job.palette);
+    const vec4 r0 = BlendRow(rows, job.bones, b, w, 0u);
+    const vec4 r1 = BlendRow(rows, job.bones, b, w, 1u);
+    const vec4 r2 = BlendRow(rows, job.bones, b, w, 2u);
+    const vec3 p = uintBitsToFloat(uvec3(source.words[0], source.words[1], source.words[2]));
+    destination.words[0] = floatBitsToUint(((r0.w + r0.x * p.x) + r0.y * p.y) + r0.z * p.z);
+    destination.words[1] = floatBitsToUint(((r1.w + r1.x * p.x) + r1.y * p.y) + r1.z * p.z);
+    destination.words[2] = floatBitsToUint(((r2.w + r2.x * p.x) + r2.y * p.y) + r2.z * p.z);
+    // Normals and tangents turn by the rows scaled to unit length, translation included, as the
+    // game's program does.
+    const vec3 n0 = r0.xyz * inversesqrt(dot(r0, r0));
+    const vec3 n1 = r1.xyz * inversesqrt(dot(r1, r1));
+    const vec3 n2 = r2.xyz * inversesqrt(dot(r2, r2));
+    if (job.normal != 0u) {
+        const vec3 n = UnpackNormal(source.words[job.normal / 4u]);
+        const vec3 turned = vec3(dot(n0, n), dot(n1, n), dot(n2, n));
+        destination.words[job.normal / 4u] = PackNormal(turned * inversesqrt(dot(turned, turned)));
+    }
+    if (job.tangent != 0u) {
+        const uint t01 = source.words[job.tangent / 4u];
+        const uint t23 = source.words[job.tangent / 4u + 1u];
+        const vec3 t = vec3(unpackHalf2x16(t01), unpackHalf2x16(t23).x);
+        vec3 turned = vec3(dot(n0, t), dot(n1, t), dot(n2, t));
+        turned *= inversesqrt(dot(turned, turned));
+        destination.words[job.tangent / 4u] = packHalf2x16(turned.xy);
+        destination.words[job.tangent / 4u + 1u] =
+            (packHalf2x16(vec2(turned.z, 0.0)) & 0xffffu) | (t23 & 0xffff0000u);
+    }
+}

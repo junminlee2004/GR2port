@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include "video_core/gr2_pt/capture.h"
+#include "video_core/gr2_pt/deformers.h"
 #include "video_core/gr2_pt/meshes.h"
 #include "video_core/gr2_pt/scene.h"
 #include "video_core/gr2_pt/scene_ring.h"
@@ -26,6 +27,25 @@ constexpr u64 ViewKeys = 0xb70;
 constexpr u64 ViewCategoryCount = 0xecc;
 constexpr u64 ViewCategoryFirst = 0xe34;
 constexpr u64 ViewBatchList = 0xb80;
+// View: the deformer records, in 0x40-byte slots from *(view + 0xbb8), the list of their slot
+// indices at *(view + 0xbd0), and the list's range of each deformer kind as u16s from +0xfb0.
+constexpr u64 ViewDeformers = 0xbb8;
+constexpr u64 ViewDeformerList = 0xbd0;
+constexpr u64 ViewDeformerRanges = 0xfb0;
+constexpr u32 KindSkin = 0;
+// Skin record: the instance's vertex buffer object +0x10, the skin vertex buffer object +0x18,
+// the shape's vertex buffer object +0x20, palette +0x28, bone count +0x30, shape +0x38 and
+// constants +0x40 {vertices, stride, normal offset, tangent offset}.
+constexpr u64 SkinOutput = 0x10;
+constexpr u64 SkinStream = 0x18;
+constexpr u64 SkinSource = 0x20;
+constexpr u64 SkinPalette = 0x28;
+constexpr u64 SkinBones = 0x30;
+constexpr u64 SkinShape = 0x38;
+constexpr u64 SkinConstants = 0x40;
+// The game's Skin program reads and writes positions as RGB32 FLOAT at offset 0.
+constexpr u32 SkinPosition = 3u << 8;
+constexpr u32 SkinGroupSize = 64;
 // View: V +0x20, inverse(V) +0x60, the cascade records from +0x400 every 0x110 ({valid, split,
 // depth bias constant, depth bias slope} and the cascade VP at +0x90), and the casters'
 // view-projection tables from +0x748 (a pointer per table and cascade).
@@ -118,14 +138,15 @@ T Load(VAddr address) {
 // the writer only stores to it, and counts in its own members.
 class Writer {
 public:
-    /// packet is at address on the GPU.
-    Writer(u8* packet, u64 address)
-        : draws{reinterpret_cast<Scene::Draw*>(packet + Scene::DrawsOffset)},
+    /// packet is at address on the GPU; frame is the capture's.
+    Writer(u8* packet, u64 address, u64 frame)
+        : frame{frame}, draws{reinterpret_cast<Scene::Draw*>(packet + Scene::DrawsOffset)},
           commands{reinterpret_cast<Scene::Command*>(packet + Scene::CommandsOffset)},
           casters{reinterpret_cast<Scene::Caster*>(packet + Scene::CastersOffset)},
           caster_commands{reinterpret_cast<Scene::Command*>(packet + Scene::CasterCommandsOffset)},
           palettes{packet + Scene::PalettesOffset},
-          palettes_address{address + Scene::PalettesOffset} {}
+          palettes_address{address + Scene::PalettesOffset},
+          skin_jobs{reinterpret_cast<Scene::SkinJob*>(packet + Scene::SkinJobsOffset)} {}
 
     void SetCascades(u32 mask) {
         header.cascades = mask;
@@ -146,7 +167,6 @@ public:
         const VAddr constants = Load<VAddr>(item + category.constants);
         const VAddr shape = index_buffer - ShapeIndexBuffer;
         if (submesh == 0 || index_buffer == 0 || constants == 0 ||
-            Load<VAddr>(item + ItemVertexBuffer) != shape + ShapeVertexBuffer ||
             Load<u16>(submesh + SubmeshRanges) == 0 || header.draws == Scene::MaxDraws) {
             header.dropped++;
             return;
@@ -160,7 +180,21 @@ public:
             Load<u32>(submesh + SubmeshFirstIndex) + Load<u32>(submesh + SubmeshRange);
         const u32 count = Load<u32>(submesh + SubmeshRange + 4);
         Skin skin;
-        if (u64{first} + count > mesh->indices || !ReadSkin(item, shape, *mesh, skin)) {
+        u64 vertices = mesh->vertices;
+        if (u64{first} + count > mesh->indices) {
+            header.dropped++;
+            return;
+        }
+        const VAddr vertex_buffer = Load<VAddr>(item + ItemVertexBuffer);
+        if (vertex_buffer != shape + ShapeVertexBuffer) {
+            // The game's compute has deformed the vertices; the renderer's copy holds its own.
+            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame);
+            if (vertices == 0) {
+                header.deformed_waiting++;
+                return;
+            }
+            header.deformed++;
+        } else if (!ReadSkin(item, shape, *mesh, skin)) {
             header.dropped++;
             return;
         }
@@ -192,7 +226,7 @@ public:
         std::memcpy(draw.world_view, reinterpret_cast<const void*>(constants), 2 * MatrixBytes);
         std::memcpy(draw.color_scale, color_scale, sizeof(draw.color_scale));
         std::memcpy(draw.texcoord_transform, texcoord_transform, sizeof(draw.texcoord_transform));
-        draw.vertices = mesh->vertices;
+        draw.vertices = vertices;
         draw.stride = mesh->stride;
         draw.position = mesh->position;
         draw.texcoord = mesh->texcoord;
@@ -222,7 +256,6 @@ public:
         const VAddr range = Load<VAddr>(item + category.range);
         const VAddr shape = index_buffer - ShapeIndexBuffer;
         if (submesh == 0 || index_buffer == 0 || world == 0 ||
-            Load<VAddr>(item + ItemVertexBuffer) != shape + ShapeVertexBuffer ||
             header.casters == Scene::MaxCasters) {
             header.dropped_casters++;
             return;
@@ -246,7 +279,16 @@ public:
             return;
         }
         Skin skin;
-        if (!ReadSkin(item, shape, *mesh, skin)) {
+        u64 vertices = mesh->vertices;
+        const VAddr vertex_buffer = Load<VAddr>(item + ItemVertexBuffer);
+        if (vertex_buffer != shape + ShapeVertexBuffer) {
+            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame);
+            if (vertices == 0) {
+                header.dropped_casters++;
+                return;
+            }
+            header.deformed_casters++;
+        } else if (!ReadSkin(item, shape, *mesh, skin)) {
             header.dropped_casters++;
             return;
         }
@@ -269,7 +311,7 @@ public:
         const u32 i = header.casters++;
         Scene::Caster& caster = casters[i];
         std::memcpy(caster.world, reinterpret_cast<const void*>(world), MatrixBytes);
-        caster.vertices = mesh->vertices;
+        caster.vertices = vertices;
         caster.stride = mesh->stride;
         caster.position = mesh->position;
         caster.table = table;
@@ -293,6 +335,50 @@ public:
                 .first_instance = i,
             };
         }
+    }
+
+    // A Skin deformer record: the renderer skins the instance's copy as the game's Skin program
+    // skins the instance.
+    void AddSkin(VAddr record) {
+        const VAddr vertex_buffer = Load<VAddr>(record + SkinOutput);
+        const VAddr shape = Load<VAddr>(record + SkinShape);
+        const VAddr constants = Load<VAddr>(record + SkinConstants);
+        const VAddr palette = Load<VAddr>(record + SkinPalette);
+        const u32 bones = Load<u32>(record + SkinBones);
+        if (vertex_buffer == 0 || shape == 0 || constants == 0 || palette == 0 || bones == 0 ||
+            Load<VAddr>(record + SkinSource) != shape + ShapeVertexBuffer ||
+            header.skin_jobs == Scene::MaxSkinJobs) {
+            header.dropped_skins++;
+            return;
+        }
+        const Meshes::Mesh* mesh = Meshes::Get(shape);
+        const auto [vertices, stride, normal, tangent] = Load<std::array<u32, 4>>(constants);
+        if (mesh == nullptr || mesh->skin == 0 || mesh->position != SkinPosition ||
+            Load<VAddr>(record + SkinStream) != Load<VAddr>(shape + ShapeSkin) + SkinVertexBuffer ||
+            stride != mesh->stride || u64{vertices} * stride > mesh->vertex_bytes ||
+            normal % 4 != 0 || tangent % 4 != 0 || normal + 4 > stride || tangent + 8 > stride) {
+            header.dropped_skins++;
+            return;
+        }
+        const u64 output = Deformers::Get(vertex_buffer, shape, *mesh, frame);
+        u64 palette_address = 0;
+        if (output == 0 || !CopyPalette(palette, bones, palette_address)) {
+            header.dropped_skins++;
+            return;
+        }
+        skin_jobs[header.skin_jobs++] = {
+            .source = mesh->vertices,
+            .destination = output,
+            .skin = mesh->skin,
+            .palette = palette_address,
+            .bones = bones,
+            .vertices = vertices,
+            .stride = stride,
+            .normal = normal,
+            .tangent = tangent,
+        };
+        header.skin_groups =
+            std::max(header.skin_groups, (vertices + SkinGroupSize - 1) / SkinGroupSize);
     }
 
 private:
@@ -343,12 +429,14 @@ private:
     }
 
     Scene::Header header{};
+    u64 frame;
     Scene::Draw* draws;
     Scene::Command* commands;
     Scene::Caster* casters;
     Scene::Command* caster_commands;
     u8* palettes;
     u64 palettes_address;
+    Scene::SkinJob* skin_jobs;
     VAddr last_palette = 0;
     u32 last_bones = 0;
     u64 last_address = 0;
@@ -437,8 +525,16 @@ void OnFrame(VAddr view) {
     if (packet == nullptr) {
         return;
     }
-    Writer writer{packet, SceneRing::Address(packet)};
+    Writer writer{packet, SceneRing::Address(packet), frame};
     WriteShadows(view, packet, writer);
+    const VAddr records = Load<VAddr>(view + ViewDeformers);
+    const VAddr list = Load<VAddr>(view + ViewDeformerList);
+    if (records != 0 && list != 0) {
+        const u32 end = Load<u16>(view + ViewDeformerRanges + (KindSkin + 1) * 2);
+        for (u32 e = Load<u16>(view + ViewDeformerRanges + KindSkin * 2); e < end; e++) {
+            writer.AddSkin(records + (static_cast<u64>(Load<u32>(list + e * 4) & 0xffff) << 6));
+        }
+    }
     const VAddr items = Load<VAddr>(view + ViewItems);
     const VAddr keys = Load<VAddr>(view + ViewKeys);
     const s32 key_count = Load<s32>(view + ViewKeyCount);

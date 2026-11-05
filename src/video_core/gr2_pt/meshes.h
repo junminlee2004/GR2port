@@ -32,6 +32,8 @@ struct Mesh {
     u32 first_index = 0;
     u32 indices = 0;
     u32 stride = 0;
+    /// The bytes of vertex data, without the skin stream.
+    u32 vertex_bytes = 0;
     /// The position element: byte offset in the low 8 bits, format index above.
     u32 position = 0;
     /// The texture coordinate element, encoded as position; format 0 when the shape has none.
@@ -57,6 +59,10 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed);
 
 /// The buffer holding every mesh's 16-bit indices.
 vk::Buffer IndexBuffer();
+
+/// Render thread: records a copy of a ready mesh's vertex data, without the skin stream, to
+/// destination at offset.
+void CopyVertices(vk::CommandBuffer cmd, const Mesh& mesh, vk::Buffer destination, u64 offset);
 
 struct Stats {
     u32 meshes;

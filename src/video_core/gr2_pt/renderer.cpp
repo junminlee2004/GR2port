@@ -20,6 +20,7 @@
 #include "common/stb.h"
 #include "common/thread.h"
 #include "video_core/gr2_pt/capture.h"
+#include "video_core/gr2_pt/deformers.h"
 #include "video_core/gr2_pt/device.h"
 #include "video_core/gr2_pt/memory.h"
 #include "video_core/gr2_pt/meshes.h"
@@ -39,10 +40,13 @@ namespace Gr2Pt::Renderer {
 namespace {
 
 constexpr u32 FramesInFlight = 2;
-// GPU timestamps per frame: the start, after the uploads, after each cascade and the end.
-constexpr u32 Timestamps = 3 + Scene::Cascades;
-// GPU intervals per frame: the whole frame, each cascade and the main view.
-constexpr u32 Intervals = 2 + Scene::Cascades;
+// GPU timestamps per frame: the start, after the uploads, after the deformers, after each cascade
+// and the end.
+constexpr u32 Timestamps = 4 + Scene::Cascades;
+// GPU intervals per frame: the whole frame, the deformers, each cascade and the main view.
+constexpr u32 Intervals = 3 + Scene::Cascades;
+constexpr u32 DeformerInterval = 1;
+constexpr u32 FirstCascadeInterval = 2;
 constexpr u32 MainInterval = Intervals - 1;
 constexpr u32 ReportFrames = 600;
 constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
@@ -86,11 +90,16 @@ struct Stats {
     u64 capture_ns = 0;
     u64 untextured = 0;
     u64 skinned = 0;
+    u64 deformed = 0;
+    u64 deformed_waiting = 0;
+    u64 skin_jobs = 0;
+    u64 dropped_skins = 0;
     u64 palette_rows = 0;
     std::array<u64, Scene::ItemCategories> category_items{};
     u64 casters = 0;
     u64 skinned_casters = 0;
     u64 dropped_casters = 0;
+    u64 deformed_casters = 0;
     u64 caster_draws = 0;
     u64 alpha_casters = 0;
     u64 indices = 0;
@@ -196,7 +205,8 @@ bool Thread::Init() {
                                           vk::BufferUsageFlagBits::eIndirectBuffer,
                                       Placement::Upload);
     if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
-        !Textures::Start(d, *memory) || !Shadows::Start(d, *memory)) {
+        !Textures::Start(d, *memory) || !Shadows::Start(d, *memory) ||
+        !Deformers::Start(d, *memory)) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -410,12 +420,13 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, timestamps,
                             Timestamps * slot_index, dl);
     }
-    memory->Refresh(frame);
-    Meshes::Update(cmd, frame, frame - FramesInFlight);
-    Textures::Update(cmd, frame, frame - FramesInFlight);
     // One read of the header: the packet is write-combined.
     Scene::Header header;
     std::memcpy(&header, packet.data, sizeof(header));
+    memory->Refresh(frame);
+    Meshes::Update(cmd, frame, frame - FramesInFlight);
+    Textures::Update(cmd, frame, frame - FramesInFlight);
+    Deformers::Update(cmd, frame, frame - FramesInFlight, header.frame);
     LogScene(header, packet);
     const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices;
     stats.refused += header.indices > MaxFrameIndices;
@@ -425,12 +436,19 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                             Timestamps * slot_index + 1, dl);
     }
     if (drawn) {
+        Deformers::Record(cmd, header, packet.address);
+    }
+    if (timestamps) {
+        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
+                            Timestamps * slot_index + 2, dl);
+    }
+    if (drawn) {
         Shadows::Record(cmd, header, packet.address, scene_ring.buffer, offset, timestamps,
-                        Timestamps * slot_index + 2);
+                        Timestamps * slot_index + 3);
     } else if (timestamps) {
         for (u32 c = 0; c < Scene::Cascades; c++) {
             cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
-                                Timestamps * slot_index + 2 + c, dl);
+                                Timestamps * slot_index + 3 + c, dl);
         }
     }
 
@@ -513,6 +531,10 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.capture_ns += header.capture_ns;
     stats.untextured += header.untextured;
     stats.skinned += header.skinned;
+    stats.deformed += header.deformed;
+    stats.deformed_waiting += header.deformed_waiting;
+    stats.skin_jobs += header.skin_jobs;
+    stats.dropped_skins += header.dropped_skins;
     stats.palette_rows += header.palette_rows;
     for (u32 c = 0; c < Scene::ItemCategories; c++) {
         stats.category_items[c] += header.category_items[c];
@@ -522,6 +544,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.casters += header.casters;
     stats.skinned_casters += header.skinned_casters;
     stats.dropped_casters += header.dropped_casters;
+    stats.deformed_casters += header.deformed_casters;
     for (u32 c = 0; c < Scene::Cascades; c++) {
         for (const u32 commands : header.caster_commands[c]) {
             stats.caster_draws += commands;
@@ -625,27 +648,34 @@ void Thread::Report() {
     const double gpu_ms = stats.gpu_ms[0] / timed;
     const Meshes::Stats meshes = Meshes::TakeStats();
     const Textures::Stats textures = Textures::TakeStats();
+    const Deformers::Stats deformers = Deformers::TakeStats();
     const Memory::Budget budget = memory->DeviceBudget();
     LOG_INFO(Render_Vulkan,
              "GR2 PT renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, {} game frames "
              "skipped, per frame {:.3f} ms of render thread work, {:.3f} ms waiting for a "
-             "frame slot and a swapchain image, {:.3f} ms on the GPU (cascades {:.3f} {:.3f} "
-             "{:.3f}, main view {:.3f}; shortest {:.3f}, cascades {:.3f} {:.3f} {:.3f}, main "
-             "view {:.3f})",
+             "frame slot and a swapchain image, {:.3f} ms on the GPU (deformers {:.3f}, cascades "
+             "{:.3f} {:.3f} {:.3f}, main view {:.3f}; shortest {:.3f}, deformers {:.3f}, cascades "
+             "{:.3f} {:.3f} {:.3f}, main view {:.3f})",
              game_fps, stats.frames, seconds, skipped - stats.skipped, stats.work_ms / frames,
-             stats.wait_ms / frames, gpu_ms, stats.gpu_ms[1] / timed, stats.gpu_ms[2] / timed,
-             stats.gpu_ms[3] / timed, stats.gpu_ms[MainInterval] / timed, stats.gpu_min_ms[0],
-             stats.gpu_min_ms[1], stats.gpu_min_ms[2], stats.gpu_min_ms[3],
-             stats.gpu_min_ms[MainInterval]);
+             stats.wait_ms / frames, gpu_ms, stats.gpu_ms[DeformerInterval] / timed,
+             stats.gpu_ms[FirstCascadeInterval] / timed,
+             stats.gpu_ms[FirstCascadeInterval + 1] / timed,
+             stats.gpu_ms[FirstCascadeInterval + 2] / timed, stats.gpu_ms[MainInterval] / timed,
+             stats.gpu_min_ms[0], stats.gpu_min_ms[DeformerInterval],
+             stats.gpu_min_ms[FirstCascadeInterval], stats.gpu_min_ms[FirstCascadeInterval + 1],
+             stats.gpu_min_ms[FirstCascadeInterval + 2], stats.gpu_min_ms[MainInterval]);
     LOG_INFO(Render_Vulkan,
-             "GR2 PT scene: per frame {:.0f} draws ({:.0f} skinned, {:.1f} KB of palettes), "
-             "{:.0f} items not drawn, {:.0f} indices (largest draw {}), {:.3f} ms of capture on "
-             "the game's draw thread, {} frames not drawn for too many indices; {} meshes ({} "
-             "skinned) in {:.1f} MB, {} waiting, {:.1f} MB uploaded, {} not drawable ({} with "
-             "indices past their vertices), {} missed unloads, {} lost handles",
+             "GR2 PT scene: per frame {:.0f} draws ({:.0f} skinned, {:.0f} deformed, {:.1f} KB "
+             "of palettes), {:.0f} items not drawn and {:.0f} deformed ones waiting for their "
+             "copy, {:.0f} indices (largest draw {}), {:.3f} ms of capture on the game's draw "
+             "thread, {} frames not drawn for too many indices; {} meshes ({} skinned) in {:.1f} "
+             "MB, {} waiting, {:.1f} MB uploaded, {} not drawable ({} with indices past their "
+             "vertices), {} missed unloads, {} lost handles",
              static_cast<double>(stats.draws) / frames, static_cast<double>(stats.skinned) / frames,
+             static_cast<double>(stats.deformed) / frames,
              static_cast<double>(stats.palette_rows) * 16 / 1024 / frames,
              static_cast<double>(stats.dropped) / frames,
+             static_cast<double>(stats.deformed_waiting) / frames,
              static_cast<double>(stats.indices) / frames, stats.max_indices,
              static_cast<double>(stats.capture_ns) * 1e-6 / frames, stats.refused, meshes.meshes,
              meshes.skinned, static_cast<double>(meshes.resident_bytes) / (1 << 20), meshes.pending,
@@ -663,10 +693,12 @@ void Thread::Report() {
              textures.unsupported, textures.too_large, textures.failed, textures.missed_destroys,
              meshes.no_texcoord);
     LOG_INFO(Render_Vulkan,
-             "GR2 PT shadows: per frame {:.0f} casters ({:.0f} skinned) in {:.0f} cascade draws "
-             "({:.0f} alpha-tested) of {:.0f} {:.0f} {:.0f} indices; {:.0f} not drawn",
+             "GR2 PT shadows: per frame {:.0f} casters ({:.0f} skinned, {:.0f} deformed) in {:.0f} "
+             "cascade draws ({:.0f} alpha-tested) of {:.0f} {:.0f} {:.0f} indices; {:.0f} not "
+             "drawn",
              static_cast<double>(stats.casters) / frames,
              static_cast<double>(stats.skinned_casters) / frames,
+             static_cast<double>(stats.deformed_casters) / frames,
              static_cast<double>(stats.caster_draws) / frames,
              static_cast<double>(stats.alpha_casters) / frames,
              static_cast<double>(stats.caster_indices[0]) / frames,
@@ -681,6 +713,14 @@ void Thread::Report() {
         }
     }
     LOG_INFO(Render_Vulkan, "GR2 PT categories: items per frame{}", categories);
+    LOG_INFO(Render_Vulkan,
+             "GR2 PT deformers: per frame {:.1f} skin jobs, {:.1f} Skin records not run; {} "
+             "instance copies in {:.2f} MB, {} waiting, {} with a layout not their shape's, {} "
+             "freed unused",
+             static_cast<double>(stats.skin_jobs) / frames,
+             static_cast<double>(stats.dropped_skins) / frames, deformers.instances,
+             static_cast<double>(deformers.resident_bytes) / (1 << 20), deformers.pending,
+             deformers.unsupported, deformers.retired);
     LOG_INFO(Render_Vulkan,
              "GR2 PT memory: device-local {} MB of a {} MB budget used by the process, {} MB by "
              "the renderer",

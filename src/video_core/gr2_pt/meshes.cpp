@@ -360,6 +360,12 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     return true;
 }
 
+void CopyVertices(vk::CommandBuffer cmd, const Mesh& mesh, vk::Buffer destination, u64 offset) {
+    const Resident& resident = g_resident[&mesh - g_meshes.data()];
+    const vk::BufferCopy copy{.dstOffset = offset, .size = mesh.vertex_bytes};
+    cmd.copyBuffer(resident.vertices.buffer, destination, copy, g_device->dispatch);
+}
+
 const Mesh* Get(VAddr shape) {
     const u32 handle = Load<u32>(shape + ShapeHandle);
     if (handle >= Capacity) {
@@ -427,6 +433,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             };
             Buffer vertices = g_memory->CreateBuffer(vertex_region,
                                                      vk::BufferUsageFlagBits::eStorageBuffer |
+                                                         vk::BufferUsageFlagBits::eTransferSrc |
                                                          vk::BufferUsageFlagBits::eTransferDst,
                                                      Placement::Device);
             if (staging.buffer.mapped == nullptr || !vertices.buffer) {
@@ -480,6 +487,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             mesh.first_index = first_index;
             mesh.indices = source.index_bytes / 2;
             mesh.stride = source.stride;
+            mesh.vertex_bytes = source.vertex_bytes;
             mesh.position = source.position;
             mesh.texcoord = source.texcoord;
             mesh.skin = source.skin != 0 ? vertices.address + skin_offset : 0;

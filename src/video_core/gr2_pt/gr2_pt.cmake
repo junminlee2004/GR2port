@@ -4,6 +4,8 @@
 target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/capture.cpp
     ${CMAKE_CURRENT_LIST_DIR}/capture.h
+    ${CMAKE_CURRENT_LIST_DIR}/deformers.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/deformers.h
     ${CMAKE_CURRENT_LIST_DIR}/device.cpp
     ${CMAKE_CURRENT_LIST_DIR}/device.h
     ${CMAKE_CURRENT_LIST_DIR}/gr2_pt.cpp
@@ -66,6 +68,7 @@ gr2_pt_add_shader(mesh.frag mesh_frag)
 gr2_pt_add_shader(shadow.vert shadow_vert)
 gr2_pt_add_shader(shadow_alpha.vert shadow_alpha_vert)
 gr2_pt_add_shader(shadow_alpha.frag shadow_alpha_frag)
+gr2_pt_add_shader(skin.comp skin_comp)
 add_custom_target(gr2_pt_shaders DEPENDS ${GR2_PT_SHADER_HEADERS})
 target_include_directories(shadps4 PRIVATE ${GR2_PT_SHADER_INCLUDE})
 add_dependencies(shadps4 gr2_pt_shaders)
