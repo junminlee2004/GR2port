@@ -317,6 +317,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         cmd.resetQueryPool(timestamps, 2 * slot_index, 2, dl);
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, timestamps, 2 * slot_index, dl);
     }
+    memory->Refresh(frame);
     Meshes::Update(cmd, frame, frame - FramesInFlight);
 
     const vk::Image image = swapchain->Image(index);
@@ -492,6 +493,7 @@ void Thread::Report() {
     const double frames = std::max(stats.frames, 1u);
     const double gpu_ms = stats.timed != 0 ? stats.gpu_ms / stats.timed : 0.0;
     const Meshes::Stats meshes = Meshes::TakeStats();
+    const Memory::Budget budget = memory->DeviceBudget();
     LOG_INFO(Render_Vulkan,
              "GR2 PT renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, {} game frames "
              "skipped, per frame {:.3f} ms of render thread work, {:.3f} ms waiting for a "
@@ -510,6 +512,10 @@ void Thread::Report() {
              static_cast<double>(meshes.resident_bytes) / (1 << 20), meshes.pending,
              static_cast<double>(meshes.uploaded_bytes) / (1 << 20), meshes.skipped,
              meshes.bad_indices, meshes.missed_unloads, meshes.lost_handles);
+    LOG_INFO(Render_Vulkan,
+             "GR2 PT memory: device-local {} MB of a {} MB budget used by the process, {} MB by "
+             "the renderer",
+             budget.usage >> 20, budget.budget >> 20, budget.own >> 20);
     Window::SetTitle(fmt::format("GR2 PT | game {:.0f} fps | render thread {:.2f} ms | GPU "
                                  "{:.2f} ms",
                                  game_fps, stats.work_ms / frames, gpu_ms));

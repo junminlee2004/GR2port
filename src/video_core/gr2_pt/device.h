@@ -22,6 +22,8 @@ struct Device {
     u32 queue_family = 0;
     /// Nanoseconds per timestamp tick, or 0 when the queue has no timestamps.
     double timestamp_period = 0.0;
+    /// The device reports the process's memory use and budget (VK_EXT_memory_budget).
+    bool memory_budget = false;
 };
 
 /// Creates the instance, a surface for window, and a device on the first discrete GPU (else the

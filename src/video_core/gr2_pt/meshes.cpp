@@ -339,9 +339,14 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                 continue;
             }
             const u64 bytes = u64{source.vertex_bytes} + source.index_bytes;
+            if (!g_memory->Reserve(source.vertex_bytes)) {
+                FreeIndices(first_index, source.index_bytes / 2);
+                g_pending.push_front(handle);
+                break;
+            }
             Staging staging{
                 .buffer = g_memory->CreateBuffer(bytes, vk::BufferUsageFlagBits::eTransferSrc,
-                                                 Placement::Upload),
+                                                 Placement::Staging),
                 .frame = frame,
             };
             Buffer vertices = g_memory->CreateBuffer(source.vertex_bytes,

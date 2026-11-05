@@ -5,6 +5,8 @@
 #include <array>
 #include <cstring>
 #include <optional>
+#include <string_view>
+#include <vector>
 
 #include <SDL3/SDL_vulkan.h>
 
@@ -147,7 +149,16 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         .queueCount = 1,
         .pQueuePriorities = &priority,
     };
-    const std::array extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    std::vector<const char*> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    const auto [extensions_result, available] =
+        d.gpu.enumerateDeviceExtensionProperties(nullptr, d.dispatch);
+    for (const vk::ExtensionProperties& extension : available) {
+        if (std::string_view{extension.extensionName.data()} ==
+            VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) {
+            d.memory_budget = true;
+            extensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+        }
+    }
     const vk::DeviceCreateInfo info{
         .pNext = &features,
         .queueCreateInfoCount = 1,
