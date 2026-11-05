@@ -43,7 +43,10 @@ struct Stats {
     u64 skipped = 0;
     u32 frames = 0;
     u32 timed = 0;
-    double cpu_ms = 0.0;
+    // Render thread time spent recording and submitting, and spent waiting for a frame slot
+    // and a swapchain image.
+    double work_ms = 0.0;
+    double wait_ms = 0.0;
     double gpu_ms = 0.0;
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 };
@@ -216,7 +219,9 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     }
     const u32 slot_index = next;
     Slot& slot = slots[slot_index];
+    const auto wait_start = std::chrono::steady_clock::now();
     (void)d.device.waitForFences(slot.done, true, UINT64_MAX, dl);
+    const auto wait_end = std::chrono::steady_clock::now();
     ReadTimes(slot_index);
     if (slot.scene != SceneRing::Slots) {
         SceneRing::Release(slot.scene);
@@ -224,7 +229,10 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     }
 
     u32 index = 0;
-    if (!swapchain->Acquire(slot.acquired, index)) {
+    const auto acquire_start = std::chrono::steady_clock::now();
+    const bool acquired = swapchain->Acquire(slot.acquired, index);
+    const auto acquire_end = std::chrono::steady_clock::now();
+    if (!acquired) {
         needs_swapchain = true;
         SceneRing::Release(packet.slot);
         return;
@@ -258,8 +266,11 @@ void Thread::Frame(const SceneRing::Packet& packet) {
         return;
     }
     next = (next + 1) % FramesInFlight;
-    stats.cpu_ms +=
-        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    using Ms = std::chrono::duration<double, std::milli>;
+    const double waited =
+        Ms(wait_end - wait_start).count() + Ms(acquire_end - acquire_start).count();
+    stats.wait_ms += waited;
+    stats.work_ms += Ms(std::chrono::steady_clock::now() - start).count() - waited;
     stats.frames++;
     if (!swapchain->Present(index)) {
         needs_swapchain = true;
@@ -276,12 +287,13 @@ void Thread::Report() {
     const double gpu_ms = stats.timed != 0 ? stats.gpu_ms / stats.timed : 0.0;
     LOG_INFO(Render_Vulkan,
              "GR2 PT renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, {} game frames "
-             "skipped, per frame {:.3f} ms on the render thread, {:.3f} ms on the GPU",
-             game_fps, stats.frames, seconds, skipped - stats.skipped, stats.cpu_ms / frames,
-             gpu_ms);
+             "skipped, per frame {:.3f} ms of render thread work, {:.3f} ms waiting for a "
+             "frame slot and a swapchain image, {:.3f} ms on the GPU",
+             game_fps, stats.frames, seconds, skipped - stats.skipped, stats.work_ms / frames,
+             stats.wait_ms / frames, gpu_ms);
     Window::SetTitle(fmt::format("GR2 PT | game {:.0f} fps | render thread {:.2f} ms | GPU "
                                  "{:.2f} ms",
-                                 game_fps, stats.cpu_ms / frames, gpu_ms));
+                                 game_fps, stats.work_ms / frames, gpu_ms));
     stats = {.game_frames = game_frames, .skipped = skipped, .start = now};
 }
 
