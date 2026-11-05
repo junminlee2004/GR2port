@@ -36,6 +36,9 @@ struct Mesh {
     u32 position = 0;
     /// The texture coordinate element, encoded as position; format 0 when the shape has none.
     u32 texcoord = 0;
+    /// The device address of the skin stream (four RGBA16 FLOAT weights, then four RGBA16 SINT
+    /// bone indices, 16 bytes a vertex), 0 when the shape is not skinned.
+    u64 skin = 0;
 };
 
 /// Installs the hooks on the builder and on the model unload.
@@ -57,6 +60,8 @@ vk::Buffer IndexBuffer();
 
 struct Stats {
     u32 meshes;
+    /// Of those, skinned meshes.
+    u32 skinned;
     u32 pending;
     /// Shapes the shaders cannot draw, or with no room.
     u32 skipped;

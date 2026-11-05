@@ -21,8 +21,13 @@ void main() {
     Draws draws = scene_draws;
     const uint64_t vertices = draws.draws[gl_DrawID].vertices;
     const uint stride = draws.draws[gl_DrawID].stride;
-    const vec4 position =
-        vec4(LoadPosition(vertices, stride, draws.draws[gl_DrawID].position), 1.0);
+    vec3 model = LoadPosition(vertices, stride, draws.draws[gl_DrawID].position);
+    const uint bones = draws.draws[gl_DrawID].bones;
+    if (bones != 0u) {
+        model = SkinPosition(model, draws.draws[gl_DrawID].skin, draws.draws[gl_DrawID].palette,
+                             bones);
+    }
+    const vec4 position = vec4(model, 1.0);
     view_position = (draws.draws[gl_DrawID].world_view * position).xyz;
     vec4 clip = draws.draws[gl_DrawID].world_view_projection * position;
     // OpenGL depth, -w near to w far, to reverse depth, 1 near to 0 far.

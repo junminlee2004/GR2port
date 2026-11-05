@@ -54,6 +54,10 @@ u8* Begin() {
     return nullptr;
 }
 
+u64 Address(const u8* data) {
+    return g_address + static_cast<u64>(data - g_cpu.load(std::memory_order_relaxed));
+}
+
 void Publish(u64 frame) {
     Slot& slot = g_slots[g_writing];
     slot.frame.store(frame, std::memory_order_relaxed);

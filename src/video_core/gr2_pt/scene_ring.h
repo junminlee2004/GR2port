@@ -11,7 +11,7 @@
 namespace Gr2Pt::SceneRing {
 
 inline constexpr u32 Slots = 4;
-inline constexpr u64 SlotBytes = 8_MB;
+inline constexpr u64 SlotBytes = 10_MB;
 
 /// Hands the ring's memory to the draw thread: base holds Slots slots of SlotBytes, mapped at
 /// cpu and at address on the GPU.
@@ -19,6 +19,9 @@ void Attach(u8* cpu, u64 address);
 
 /// Draw thread: a free slot to write this frame's scene into, or null.
 u8* Begin();
+
+/// Draw thread: the GPU address of data in the slot Begin returned.
+u64 Address(const u8* data);
 
 /// Draw thread: the slot Begin returned holds frame's scene.
 void Publish(u64 frame);

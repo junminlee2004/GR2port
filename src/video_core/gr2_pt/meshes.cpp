@@ -7,7 +7,10 @@
 #include <deque>
 #include <map>
 #include <mutex>
+#include <string>
 #include <vector>
+
+#include <fmt/format.h>
 
 #include "common/logging/log.h"
 #include "video_core/gr2_pt/hooks.h"
@@ -29,12 +32,17 @@ constexpr u64 ModelBlock = 0xb0;
 constexpr u64 ModelShapeCount = 0xb8;
 constexpr u64 ModelShapeOffset = 0xbc;
 constexpr u64 ShapeEntrySize = 0x50;
-// Shape: SObj kind at +0xa, vertex buffer object at +0x60, index buffer object at +0x188.
+// Shape: SObj kind at +0xa, vertex buffer object at +0x60, index buffer object at +0x188, skin
+// object at +0x1a8.
 constexpr u64 ShapeKind = 0xa;
 constexpr u16 KindShape = 6;
 constexpr u64 ShapeVertexBuffer = 0x60;
 constexpr u64 ShapeHandle = 0x184;
 constexpr u64 ShapeIndexBuffer = 0x188;
+constexpr u64 ShapeSkin = 0x1a8;
+// Skin object: the vertex buffer object of the skin stream at +0x68.
+constexpr u64 SkinVertexBuffer = 0x68;
+constexpr u32 SkinStride = 16;
 // Vertex buffer object: MemBlock* at +0, stride +0x18, element count +0x1c, vertex count +0x20,
 // element of each semantic at +0x24, elements {format, stride, offset, semantic} at +0x34.
 constexpr u64 VertexStride = 0x18;
@@ -59,6 +67,7 @@ constexpr bool TexcoordFormat(u32 format) {
 
 constexpr u64 UploadBudget = 64_MB;
 constexpr u32 LoggedUploads = 8;
+constexpr u32 LoggedSkins = 4;
 constexpr u64 IndexCapacity = 64ull << 20;
 
 template <typename T>
@@ -82,6 +91,7 @@ struct Resident {
     Buffer vertices;
     u32 first_index = 0;
     u32 indices = 0;
+    bool skinned = false;
 };
 struct Retiring {
     u32 handle;
@@ -211,7 +221,27 @@ struct Source {
     u32 stride;
     u32 position;
     u32 texcoord;
+    VAddr skin = 0;
+    u32 skin_bytes = 0;
 };
+
+// Logs the elements of the first skin streams.
+void LogSkin(VAddr shape, VAddr vb) {
+    static u32 logged = 0;
+    if (logged == LoggedSkins) {
+        return;
+    }
+    logged++;
+    std::string elements;
+    const u32 count = std::min<u32>(Load<u16>(vb + VertexElements), 4);
+    for (u32 i = 0; i < count; i++) {
+        const VAddr info = vb + VertexElementInfo + 4 * i;
+        elements += fmt::format(" (format {} offset {} semantic {})", Load<u8>(info),
+                                Load<u8>(info + 2), Load<u8>(info + 3));
+    }
+    LOG_INFO(Render_Vulkan, "GR2 PT: skin of mesh {:#x}: stride {},{}", shape,
+             Load<u16>(vb + VertexStride), elements);
+}
 
 // The texture coordinates: the two-component element of the lowest semantic after the position.
 // Semantics follow each shader's inputs, so texture coordinates have no fixed one.
@@ -257,6 +287,20 @@ bool ReadShape(VAddr shape, Source& source) {
         .position = offset | format << 8,
         .texcoord = ReadTexcoord(vb),
     };
+    const VAddr skin = Load<VAddr>(shape + ShapeSkin);
+    if (skin != 0) {
+        const VAddr skin_vb = skin + SkinVertexBuffer;
+        const VAddr skin_block = Load<VAddr>(skin_vb);
+        LogSkin(shape, skin_vb);
+        if (skin_block == 0 || Load<u16>(skin_vb + VertexStride) != SkinStride) {
+            return false;
+        }
+        source.skin = Load<VAddr>(skin_block);
+        source.skin_bytes = Load<u32>(skin_block + BlockSize);
+        if (source.skin == 0) {
+            return false;
+        }
+    }
     return source.vertices != 0 && source.indices != 0 && source.vertex_bytes != 0 &&
            source.index_bytes >= 2 && PositionFormat(format) && source.stride % 4 == 0 &&
            offset % 4 == 0;
@@ -283,6 +327,7 @@ void Retire(u64 frame, u64 completed) {
             g_memory->Destroy(resident.vertices);
             FreeIndices(resident.first_index, resident.indices);
             g_stats.meshes--;
+            g_stats.skinned -= resident.skinned;
         }
         resident = {};
         std::scoped_lock lock{g_mutex};
@@ -365,8 +410,12 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                 g_stats.skipped++;
                 continue;
             }
-            const u64 bytes = u64{source.vertex_bytes} + source.index_bytes;
-            if (!g_memory->Reserve(source.vertex_bytes)) {
+            // The skin stream follows the vertex data in the mesh's buffer.
+            const u32 skin_offset = (source.vertex_bytes + 15) & ~15u;
+            const u32 vertex_region =
+                source.skin != 0 ? skin_offset + source.skin_bytes : source.vertex_bytes;
+            const u64 bytes = u64{vertex_region} + source.index_bytes;
+            if (!g_memory->Reserve(vertex_region)) {
                 FreeIndices(first_index, source.index_bytes / 2);
                 g_pending.push_front(handle);
                 break;
@@ -376,7 +425,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                                                  Placement::Staging),
                 .frame = frame,
             };
-            Buffer vertices = g_memory->CreateBuffer(source.vertex_bytes,
+            Buffer vertices = g_memory->CreateBuffer(vertex_region,
                                                      vk::BufferUsageFlagBits::eStorageBuffer |
                                                          vk::BufferUsageFlagBits::eTransferDst,
                                                      Placement::Device);
@@ -389,7 +438,11 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             }
             std::memcpy(staging.buffer.mapped, reinterpret_cast<const void*>(source.vertices),
                         source.vertex_bytes);
-            std::memcpy(staging.buffer.mapped + source.vertex_bytes,
+            if (source.skin != 0) {
+                std::memcpy(staging.buffer.mapped + skin_offset,
+                            reinterpret_cast<const void*>(source.skin), source.skin_bytes);
+            }
+            std::memcpy(staging.buffer.mapped + vertex_region,
                         reinterpret_cast<const void*>(source.indices), source.index_bytes);
             // Every index must name a vertex inside the copied vertex data. The game's copy is
             // read, as the staging memory is write-combined.
@@ -405,7 +458,8 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                          shape, vertex_count, source.stride, source.position >> 8,
                          source.position & 0xff, source.index_bytes / 2, max_index);
             }
-            if (source.stride == 0 || max_index >= vertex_count) {
+            if (source.stride == 0 || max_index >= vertex_count ||
+                (source.skin != 0 && max_index >= source.skin_bytes / SkinStride)) {
                 FreeIndices(first_index, source.index_bytes / 2);
                 g_memory->Destroy(staging.buffer);
                 g_memory->Destroy(vertices);
@@ -413,10 +467,10 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                 g_stats.bad_indices++;
                 continue;
             }
-            const vk::BufferCopy vertex_copy{.size = source.vertex_bytes};
+            const vk::BufferCopy vertex_copy{.size = vertex_region};
             cmd.copyBuffer(staging.buffer.buffer, vertices.buffer, vertex_copy, g_device->dispatch);
             const vk::BufferCopy index_copy{
-                .srcOffset = source.vertex_bytes,
+                .srcOffset = vertex_region,
                 .dstOffset = 2ull * first_index,
                 .size = source.index_bytes & ~1u,
             };
@@ -428,11 +482,14 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             mesh.stride = source.stride;
             mesh.position = source.position;
             mesh.texcoord = source.texcoord;
+            mesh.skin = source.skin != 0 ? vertices.address + skin_offset : 0;
             g_stats.no_texcoord += source.texcoord == 0;
+            g_stats.skinned += source.skin != 0;
             g_resident[handle] = {
                 .vertices = vertices,
                 .first_index = first_index,
                 .indices = source.index_bytes / 2,
+                .skinned = source.skin != 0,
             };
             g_staging.push_back(staging);
             g_stats.meshes++;

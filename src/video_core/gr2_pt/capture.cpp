@@ -42,12 +42,11 @@ constexpr u64 ViewCasterTables = 0x748;
 constexpr u64 ViewKeyLight = 0x7b0;
 constexpr u64 CasterTableBytes = 0x18;
 // Shadow caster items: flags +4 (0x08 culls back faces, 0x10 and 0x20 pick a view-projection
-// table), cascade mask +5, skin matrix count +6, world matrix +0x30. Alpha-tested casters hold
-// pixel constants {alpha reference or -1, fade or -1} and a colour texture object. Each category
-// keeps an index range that overrides the submesh's.
+// table), cascade mask +5, world matrix +0x30. Alpha-tested casters hold pixel constants {alpha
+// reference or -1, fade or -1} and a colour texture object. Each category keeps an index range
+// that overrides the submesh's.
 constexpr u64 CasterFlags = 0x4;
 constexpr u64 CasterMask = 0x5;
-constexpr u64 CasterSkinCount = 0x6;
 constexpr u64 CasterWorld = 0x30;
 // A field a category does not have.
 constexpr u64 None = ~0ull;
@@ -61,14 +60,20 @@ constexpr std::array<CasterCategory, 2> CasterCategories{{
     {0, 0x38, None, None}, // FUN_0141c510
     {2, 0x48, 0x38, 0x40}, // FUN_0141c9b0: alpha-tested
 }};
-// Item: submesh +0x08, vertex buffer object +0x10, skin vertex buffer object +0x18, index
-// buffer object +0x20 (at shape + 0x188).
+// Item: bone count +0x06, submesh +0x08, vertex buffer object +0x10 (the shape's, or a deformed
+// copy the game's compute writes each frame), skin vertex buffer object +0x18 (in the shape's
+// skin object), index buffer object +0x20 (at shape + 0x188), bone palette +0x28 (3x4 matrices).
+constexpr u64 ItemBones = 0x06;
 constexpr u64 ItemSubmesh = 0x08;
 constexpr u64 ItemVertexBuffer = 0x10;
 constexpr u64 ItemSkin = 0x18;
 constexpr u64 ItemIndexBuffer = 0x20;
+constexpr u64 ItemPalette = 0x28;
 constexpr u64 ShapeVertexBuffer = 0x60;
 constexpr u64 ShapeIndexBuffer = 0x188;
+constexpr u64 ShapeSkin = 0x1a8;
+constexpr u64 SkinVertexBuffer = 0x68;
+constexpr u64 BoneBytes = 48;
 // Submesh: first index in the shape's indices +0x20, range count +0x1e, first range +0x40.
 constexpr u64 SubmeshFirstIndex = 0x20;
 constexpr u64 SubmeshRanges = 0x1e;
@@ -113,12 +118,14 @@ T Load(VAddr address) {
 // the writer only stores to it, and counts in its own members.
 class Writer {
 public:
-    explicit Writer(u8* packet)
+    /// packet is at address on the GPU.
+    Writer(u8* packet, u64 address)
         : draws{reinterpret_cast<Scene::Draw*>(packet + Scene::DrawsOffset)},
           commands{reinterpret_cast<Scene::Command*>(packet + Scene::CommandsOffset)},
           casters{reinterpret_cast<Scene::Caster*>(packet + Scene::CastersOffset)},
-          caster_commands{reinterpret_cast<Scene::Command*>(packet + Scene::CasterCommandsOffset)} {
-    }
+          caster_commands{reinterpret_cast<Scene::Command*>(packet + Scene::CasterCommandsOffset)},
+          palettes{packet + Scene::PalettesOffset},
+          palettes_address{address + Scene::PalettesOffset} {}
 
     void SetCascades(u32 mask) {
         header.cascades = mask;
@@ -139,7 +146,6 @@ public:
         const VAddr constants = Load<VAddr>(item + category.constants);
         const VAddr shape = index_buffer - ShapeIndexBuffer;
         if (submesh == 0 || index_buffer == 0 || constants == 0 ||
-            Load<VAddr>(item + ItemSkin) != 0 ||
             Load<VAddr>(item + ItemVertexBuffer) != shape + ShapeVertexBuffer ||
             Load<u16>(submesh + SubmeshRanges) == 0 || header.draws == Scene::MaxDraws) {
             header.dropped++;
@@ -153,11 +159,13 @@ public:
         const u32 first =
             Load<u32>(submesh + SubmeshFirstIndex) + Load<u32>(submesh + SubmeshRange);
         const u32 count = Load<u32>(submesh + SubmeshRange + 4);
-        if (u64{first} + count > mesh->indices) {
+        Skin skin;
+        if (u64{first} + count > mesh->indices || !ReadSkin(item, shape, *mesh, skin)) {
             header.dropped++;
             return;
         }
         header.indices += count;
+        header.skinned += skin.bones != 0;
         header.max_indices = std::max(header.max_indices, count);
         u32 texture = 0;
         if (category.texture != None) {
@@ -189,6 +197,9 @@ public:
         draw.position = mesh->position;
         draw.texcoord = mesh->texcoord;
         draw.texture = texture;
+        draw.skin = skin.stream;
+        draw.palette = skin.palette;
+        draw.bones = skin.bones;
         commands[i] = {
             .index_count = count,
             .instance_count = 1,
@@ -203,10 +214,6 @@ public:
     void AddCaster(VAddr item, const CasterCategory& category) {
         const u32 mask = Load<u8>(item + CasterMask) & header.cascades;
         if (mask == 0) {
-            return;
-        }
-        if (Load<u16>(item + CasterSkinCount) != 0) {
-            header.skinned_casters++;
             return;
         }
         const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
@@ -238,6 +245,12 @@ public:
             header.dropped_casters++;
             return;
         }
+        Skin skin;
+        if (!ReadSkin(item, shape, *mesh, skin)) {
+            header.dropped_casters++;
+            return;
+        }
+        header.skinned_casters += skin.bones != 0;
         const u8 flags = Load<u8>(item + CasterFlags);
         const u32 table = (flags & 0x10) != 0 ? 1 : (flags & 0x20) != 0 ? 2 : 0;
         // A reference below 0 passes every texel: the caster is opaque.
@@ -263,6 +276,9 @@ public:
         caster.texture = texture;
         caster.texcoord = mesh->texcoord;
         caster.alpha_reference = alpha_reference;
+        caster.skin = skin.stream;
+        caster.palette = skin.palette;
+        caster.bones = skin.bones;
         for (u32 c = 0; c < Scene::Cascades; c++) {
             if ((mask >> c & 1) == 0) {
                 continue;
@@ -280,11 +296,62 @@ public:
     }
 
 private:
+    struct Skin {
+        u64 stream = 0;
+        u64 palette = 0;
+        u32 bones = 0;
+    };
+
+    // Copies a palette into the packet once for each run of users that share it.
+    bool CopyPalette(VAddr palette, u32 bones, u64& address) {
+        if (palette != last_palette || bones != last_bones) {
+            const u32 rows = bones * 3;
+            if (header.palette_rows + rows > Scene::MaxPaletteRows) {
+                return false;
+            }
+            std::memcpy(palettes + u64{header.palette_rows} * 16,
+                        reinterpret_cast<const void*>(palette), bones * BoneBytes);
+            last_palette = palette;
+            last_bones = bones;
+            last_address = palettes_address + u64{header.palette_rows} * 16;
+            header.palette_rows += rows;
+        }
+        address = last_address;
+        return true;
+    }
+
+    // The skin of an item whose shape is skinned, with the item's palette in the packet. False
+    // when the item cannot be drawn.
+    bool ReadSkin(VAddr item, VAddr shape, const Meshes::Mesh& mesh, Skin& skin) {
+        const VAddr stream = Load<VAddr>(item + ItemSkin);
+        if (mesh.skin == 0 && stream == 0) {
+            skin = {};
+            return true;
+        }
+        const u32 bones = Load<u16>(item + ItemBones);
+        const VAddr palette = Load<VAddr>(item + ItemPalette);
+        if (mesh.skin == 0 || stream != Load<VAddr>(shape + ShapeSkin) + SkinVertexBuffer ||
+            bones == 0 || palette == 0) {
+            return false;
+        }
+        u64 address = 0;
+        if (!CopyPalette(palette, bones, address)) {
+            return false;
+        }
+        skin = {.stream = mesh.skin, .palette = address, .bones = bones};
+        return true;
+    }
+
     Scene::Header header{};
     Scene::Draw* draws;
     Scene::Command* commands;
     Scene::Caster* casters;
     Scene::Command* caster_commands;
+    u8* palettes;
+    u64 palettes_address;
+    VAddr last_palette = 0;
+    u32 last_bones = 0;
+    u64 last_address = 0;
 };
 
 // Items are scattered through the pool and point at scattered objects. The loops prefetch the
@@ -370,7 +437,7 @@ void OnFrame(VAddr view) {
     if (packet == nullptr) {
         return;
     }
-    Writer writer{packet};
+    Writer writer{packet, SceneRing::Address(packet)};
     WriteShadows(view, packet, writer);
     const VAddr items = Load<VAddr>(view + ViewItems);
     const VAddr keys = Load<VAddr>(view + ViewKeys);

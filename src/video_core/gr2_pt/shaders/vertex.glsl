@@ -22,6 +22,29 @@ vec3 LoadPosition(uint64_t vertices, uint stride, uint position) {
     return uintBitsToFloat(uvec3(words.words[0], words.words[1], words.words[2]));
 }
 
+// A skinned position: the blend of four bones by their weights, in the order of operations of the
+// game's vertex programs. The skin stream holds four RGBA16 FLOAT weights, then four RGBA16 SINT
+// bone indices.
+vec3 SkinPosition(vec3 p, uint64_t skin, uint64_t palette, uint bones) {
+    Words words = Words(skin + uint64_t(gl_VertexIndex) * 16u);
+    const vec2 w01 = unpackHalf2x16(words.words[0]);
+    const vec2 w23 = unpackHalf2x16(words.words[1]);
+    const int b0 = bitfieldExtract(int(words.words[2]), 0, 16);
+    const int b1 = bitfieldExtract(int(words.words[2]), 16, 16);
+    const int b2 = bitfieldExtract(int(words.words[3]), 0, 16);
+    const int b3 = bitfieldExtract(int(words.words[3]), 16, 16);
+    Rows rows = Rows(palette);
+    vec3 skinned;
+    for (uint r = 0u; r < 3u; r++) {
+        const vec4 row =
+            ((BoneRow(rows, bones, b0, r) * w01.x + BoneRow(rows, bones, b1, r) * w01.y) +
+             BoneRow(rows, bones, b2, r) * w23.x) +
+            BoneRow(rows, bones, b3, r) * w23.y;
+        skinned[r] = ((row.w + row.x * p.x) + row.y * p.y) + row.z * p.z;
+    }
+    return skinned;
+}
+
 vec2 LoadTexcoord(uint64_t vertices, uint stride, uint element) {
     const uint format = element >> 8;
     if (format == 0u) {

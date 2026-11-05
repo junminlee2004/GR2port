@@ -17,6 +17,9 @@ struct Draw {
     uint position;
     uint texcoord;
     uint texture;
+    uint64_t skin;
+    uint64_t palette;
+    uint bones;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Draws {
@@ -27,6 +30,17 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Wor
     uint words[];
 };
 
+// A bone palette: three rows of a 3x4 matrix per bone.
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Rows {
+    vec4 rows[];
+};
+
+// Row r of a bone. A bone past the palette reads zeros, as the game's buffer loads past its records
+// do.
+vec4 BoneRow(Rows palette, uint bones, int bone, uint r) {
+    return uint(bone) < bones ? palette.rows[uint(bone) * 3u + r] : vec4(0.0);
+}
+
 struct Caster {
     mat4 world;
     uint64_t vertices;
@@ -36,6 +50,9 @@ struct Caster {
     uint texture;
     uint texcoord;
     float alpha_reference;
+    uint64_t skin;
+    uint64_t palette;
+    uint bones;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Casters {

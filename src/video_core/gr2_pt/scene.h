@@ -17,6 +17,8 @@ inline constexpr u32 CasterTables = 3;
 /// The command lists of each cascade: opaque casters that cull back faces and that cull nothing,
 /// then alpha-tested casters in the same order.
 inline constexpr u32 CasterLists = 4;
+/// Bone palette rows per packet: each bone is three rows of a 3x4 matrix.
+inline constexpr u32 MaxPaletteRows = 1u << 16;
 
 /// The start of each packet.
 struct Header {
@@ -25,13 +27,16 @@ struct Header {
     u64 indices;
     u32 max_indices;
     u32 draws;
-    /// Items with no drawable mesh, or past MaxDraws.
+    /// Items with no drawable mesh or palette, or past MaxDraws.
     u32 dropped;
     /// The capture's time on the game's draw thread.
     u32 capture_ns;
     /// Draws whose colour texture is not converted.
     u32 untextured;
-    /// Shadow casters written; skinned casters, not drawn yet; casters with no drawable mesh or
+    /// Draws of skinned meshes, and palette rows written.
+    u32 skinned;
+    u32 palette_rows;
+    /// Shadow casters written, of them skinned ones; casters with no drawable mesh or palette, or
     /// past MaxCasters.
     u32 casters;
     u32 skinned_casters;
@@ -78,9 +83,15 @@ struct Draw {
     u32 texcoord;
     /// The colour texture's handle; 0 is white.
     u32 texture;
-    u32 padding[2];
+    /// Skinned meshes: the device addresses of the skin stream (four RGBA16 FLOAT weights, then
+    /// four RGBA16 SINT bone indices, 16 bytes a vertex) and of the palette, and the palette's
+    /// bone count. bones is 0 for meshes that are not skinned.
+    u64 skin;
+    u64 palette;
+    u32 bones;
+    u32 padding;
 };
-static_assert(sizeof(Draw) == 192);
+static_assert(sizeof(Draw) == 208);
 
 /// A static shadow caster, read by the vertex shader at gl_InstanceIndex.
 struct Caster {
@@ -95,8 +106,13 @@ struct Caster {
     u32 texture;
     u32 texcoord;
     float alpha_reference;
+    /// Skinned casters: as Draw's.
+    u64 skin;
+    u64 palette;
+    u32 bones;
+    u32 padding[3];
 };
-static_assert(sizeof(Caster) == 96);
+static_assert(sizeof(Caster) == 128);
 
 /// The indirect command of a draw, at the same index as the draw. A caster's command gives the
 /// caster's index as its first instance.
@@ -115,8 +131,11 @@ inline constexpr u64 CommandsOffset = DrawsOffset + MaxDraws * sizeof(Draw);
 inline constexpr u64 CastersOffset = CommandsOffset + MaxDraws * sizeof(Command);
 /// MaxCasters commands per cascade and list, at (cascade * CasterLists + list) * MaxCasters.
 inline constexpr u64 CasterCommandsOffset = CastersOffset + MaxCasters * sizeof(Caster);
-inline constexpr u64 PacketBytes =
+/// MaxPaletteRows rows of 16 bytes.
+inline constexpr u64 PalettesOffset =
     CasterCommandsOffset + Cascades * CasterLists * MaxCasters * sizeof(Command);
-static_assert(ShadowsOffset + sizeof(Shadows) <= DrawsOffset && CastersOffset % 16 == 0);
+inline constexpr u64 PacketBytes = PalettesOffset + MaxPaletteRows * 16;
+static_assert(ShadowsOffset + sizeof(Shadows) <= DrawsOffset && CastersOffset % 16 == 0 &&
+              PalettesOffset % 16 == 0);
 
 } // namespace Gr2Pt::Scene

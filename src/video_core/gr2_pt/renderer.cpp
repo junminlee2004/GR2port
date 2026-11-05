@@ -84,6 +84,8 @@ struct Stats {
     u64 dropped = 0;
     u64 capture_ns = 0;
     u64 untextured = 0;
+    u64 skinned = 0;
+    u64 palette_rows = 0;
     u64 casters = 0;
     u64 skinned_casters = 0;
     u64 dropped_casters = 0;
@@ -508,6 +510,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.dropped += header.dropped;
     stats.capture_ns += header.capture_ns;
     stats.untextured += header.untextured;
+    stats.skinned += header.skinned;
+    stats.palette_rows += header.palette_rows;
     stats.indices += header.indices;
     stats.max_indices = std::max(stats.max_indices, header.max_indices);
     stats.casters += header.casters;
@@ -629,15 +633,17 @@ void Thread::Report() {
              stats.gpu_min_ms[1], stats.gpu_min_ms[2], stats.gpu_min_ms[3],
              stats.gpu_min_ms[MainInterval]);
     LOG_INFO(Render_Vulkan,
-             "GR2 PT scene: per frame {:.0f} draws, {:.0f} items not drawn, {:.0f} indices "
-             "(largest draw {}), {:.3f} ms of capture on the game's draw thread, {} frames not "
-             "drawn for too many indices; {} meshes in {:.1f} MB, {} waiting, {:.1f} MB "
-             "uploaded, {} not drawable ({} with indices past their vertices), {} missed "
-             "unloads, {} lost handles",
-             static_cast<double>(stats.draws) / frames, static_cast<double>(stats.dropped) / frames,
+             "GR2 PT scene: per frame {:.0f} draws ({:.0f} skinned, {:.1f} KB of palettes), "
+             "{:.0f} items not drawn, {:.0f} indices (largest draw {}), {:.3f} ms of capture on "
+             "the game's draw thread, {} frames not drawn for too many indices; {} meshes ({} "
+             "skinned) in {:.1f} MB, {} waiting, {:.1f} MB uploaded, {} not drawable ({} with "
+             "indices past their vertices), {} missed unloads, {} lost handles",
+             static_cast<double>(stats.draws) / frames, static_cast<double>(stats.skinned) / frames,
+             static_cast<double>(stats.palette_rows) * 16 / 1024 / frames,
+             static_cast<double>(stats.dropped) / frames,
              static_cast<double>(stats.indices) / frames, stats.max_indices,
              static_cast<double>(stats.capture_ns) * 1e-6 / frames, stats.refused, meshes.meshes,
-             static_cast<double>(meshes.resident_bytes) / (1 << 20), meshes.pending,
+             meshes.skinned, static_cast<double>(meshes.resident_bytes) / (1 << 20), meshes.pending,
              static_cast<double>(meshes.uploaded_bytes) / (1 << 20), meshes.skipped,
              meshes.bad_indices, meshes.missed_unloads, meshes.lost_handles);
     LOG_INFO(Render_Vulkan,
@@ -652,16 +658,15 @@ void Thread::Report() {
              textures.unsupported, textures.too_large, textures.failed, textures.missed_destroys,
              meshes.no_texcoord);
     LOG_INFO(Render_Vulkan,
-             "GR2 PT shadows: per frame {:.0f} static casters in {:.0f} cascade draws ({:.0f} "
-             "alpha-tested) of {:.0f} {:.0f} {:.0f} indices; {:.0f} skinned casters and {:.0f} "
-             "others not drawn",
+             "GR2 PT shadows: per frame {:.0f} casters ({:.0f} skinned) in {:.0f} cascade draws "
+             "({:.0f} alpha-tested) of {:.0f} {:.0f} {:.0f} indices; {:.0f} not drawn",
              static_cast<double>(stats.casters) / frames,
+             static_cast<double>(stats.skinned_casters) / frames,
              static_cast<double>(stats.caster_draws) / frames,
              static_cast<double>(stats.alpha_casters) / frames,
              static_cast<double>(stats.caster_indices[0]) / frames,
              static_cast<double>(stats.caster_indices[1]) / frames,
              static_cast<double>(stats.caster_indices[2]) / frames,
-             static_cast<double>(stats.skinned_casters) / frames,
              static_cast<double>(stats.dropped_casters) / frames);
     LOG_INFO(Render_Vulkan,
              "GR2 PT memory: device-local {} MB of a {} MB budget used by the process, {} MB by "
