@@ -40,6 +40,9 @@ namespace {
 constexpr u32 FramesInFlight = 2;
 // GPU timestamps per frame: the start, after the uploads, after each cascade and the end.
 constexpr u32 Timestamps = 3 + Scene::Cascades;
+// GPU intervals per frame: the whole frame, each cascade and the main view.
+constexpr u32 Intervals = 2 + Scene::Cascades;
+constexpr u32 MainInterval = Intervals - 1;
 constexpr u32 ReportFrames = 600;
 constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
 // A frame with more indices than this is not drawn: its items are not what the capture expects.
@@ -68,9 +71,14 @@ struct Stats {
     // and a swapchain image.
     double work_ms = 0.0;
     double wait_ms = 0.0;
-    double gpu_ms = 0.0;
-    std::array<double, Scene::Cascades> cascade_ms{};
-    double main_ms = 0.0;
+    std::array<double, Intervals> gpu_ms{};
+    // The shortest of each interval. The GPU runs other processes' work, such as GR2fork's, in
+    // time slices, and an interval that spans a slice counts it.
+    std::array<double, Intervals> gpu_min_ms = [] {
+        std::array<double, Intervals> shortest;
+        shortest.fill(1e9);
+        return shortest;
+    }();
     std::array<u64, Scene::Cascades> caster_indices{};
     u64 draws = 0;
     u64 dropped = 0;
@@ -236,11 +244,11 @@ void Thread::ReadTimes(u32 slot_index) {
         vk::QueryResultFlagBits::e64, d.dispatch);
     if (result == vk::Result::eSuccess && std::ranges::is_sorted(ticks)) {
         const double ms = d.timestamp_period * 1e-6;
-        stats.gpu_ms += static_cast<double>(ticks[Timestamps - 1] - ticks[0]) * ms;
-        for (u32 c = 0; c < Scene::Cascades; c++) {
-            stats.cascade_ms[c] += static_cast<double>(ticks[2 + c] - ticks[1 + c]) * ms;
+        for (u32 i = 0; i < Intervals; i++) {
+            const u64 elapsed = i == 0 ? ticks[Timestamps - 1] - ticks[0] : ticks[i + 1] - ticks[i];
+            stats.gpu_ms[i] += static_cast<double>(elapsed) * ms;
+            stats.gpu_min_ms[i] = std::min(stats.gpu_min_ms[i], static_cast<double>(elapsed) * ms);
         }
-        stats.main_ms += static_cast<double>(ticks[Timestamps - 1] - ticks[Timestamps - 2]) * ms;
         stats.timed++;
     }
 }
@@ -605,7 +613,7 @@ void Thread::Report() {
     const double game_fps = static_cast<double>(game_frames - stats.game_frames) / seconds;
     const double frames = std::max(stats.frames, 1u);
     const double timed = std::max(stats.timed, 1u);
-    const double gpu_ms = stats.gpu_ms / timed;
+    const double gpu_ms = stats.gpu_ms[0] / timed;
     const Meshes::Stats meshes = Meshes::TakeStats();
     const Textures::Stats textures = Textures::TakeStats();
     const Memory::Budget budget = memory->DeviceBudget();
@@ -613,10 +621,13 @@ void Thread::Report() {
              "GR2 PT renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, {} game frames "
              "skipped, per frame {:.3f} ms of render thread work, {:.3f} ms waiting for a "
              "frame slot and a swapchain image, {:.3f} ms on the GPU (cascades {:.3f} {:.3f} "
-             "{:.3f}, main view {:.3f})",
+             "{:.3f}, main view {:.3f}; shortest {:.3f}, cascades {:.3f} {:.3f} {:.3f}, main "
+             "view {:.3f})",
              game_fps, stats.frames, seconds, skipped - stats.skipped, stats.work_ms / frames,
-             stats.wait_ms / frames, gpu_ms, stats.cascade_ms[0] / timed,
-             stats.cascade_ms[1] / timed, stats.cascade_ms[2] / timed, stats.main_ms / timed);
+             stats.wait_ms / frames, gpu_ms, stats.gpu_ms[1] / timed, stats.gpu_ms[2] / timed,
+             stats.gpu_ms[3] / timed, stats.gpu_ms[MainInterval] / timed, stats.gpu_min_ms[0],
+             stats.gpu_min_ms[1], stats.gpu_min_ms[2], stats.gpu_min_ms[3],
+             stats.gpu_min_ms[MainInterval]);
     LOG_INFO(Render_Vulkan,
              "GR2 PT scene: per frame {:.0f} draws, {:.0f} items not drawn, {:.0f} indices "
              "(largest draw {}), {:.3f} ms of capture on the game's draw thread, {} frames not "
