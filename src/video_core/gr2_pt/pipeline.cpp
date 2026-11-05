@@ -117,6 +117,40 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
     return result;
 }
 
+Pipeline CreateComputePipeline(const Device& d, std::span<const u32> code,
+                               u32 push_constant_bytes) {
+    const auto& dl = d.dispatch;
+    Pipeline result;
+    const vk::PushConstantRange push{
+        .stageFlags = vk::ShaderStageFlagBits::eCompute,
+        .size = push_constant_bytes,
+    };
+    const vk::PipelineLayoutCreateInfo layout_info{
+        .pushConstantRangeCount = push_constant_bytes != 0 ? 1u : 0u,
+        .pPushConstantRanges = &push,
+    };
+    result.layout = d.device.createPipelineLayout(layout_info, nullptr, dl).value;
+    const vk::ShaderModule module = CreateModule(d, code);
+    const vk::ComputePipelineCreateInfo info{
+        .stage =
+            {
+                .stage = vk::ShaderStageFlagBits::eCompute,
+                .module = module,
+                .pName = "main",
+            },
+        .layout = result.layout,
+    };
+    const auto [pipeline_result, pipeline] =
+        d.device.createComputePipeline(nullptr, info, nullptr, dl);
+    d.device.destroyShaderModule(module, nullptr, dl);
+    if (pipeline_result != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan, "GR2 PT: no compute pipeline: {}", vk::to_string(pipeline_result));
+        return result;
+    }
+    result.pipeline = pipeline;
+    return result;
+}
+
 void DestroyPipeline(const Device& d, Pipeline& pipeline) {
     d.device.destroyPipeline(pipeline.pipeline, nullptr, d.dispatch);
     d.device.destroyPipelineLayout(pipeline.layout, nullptr, d.dispatch);
