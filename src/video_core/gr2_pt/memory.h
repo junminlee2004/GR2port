@@ -25,6 +25,8 @@ struct Image {
     VmaAllocation allocation = nullptr;
     vk::Format format = vk::Format::eUndefined;
     vk::Extent2D extent;
+    /// The bytes of its memory.
+    u64 size = 0;
 };
 
 enum class Placement {
@@ -68,6 +70,10 @@ public:
     /// A 2D image with one mip level and a view of all of it.
     Image CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsageFlags usage,
                       vk::ImageAspectFlags aspect);
+    /// A sampled 2D image with levels mip levels, which copies fill, and a view of all of it
+    /// with mapping.
+    Image CreateTexture(vk::Format format, vk::Extent2D extent, u32 levels,
+                        vk::ComponentMapping mapping);
     void Destroy(Image& image);
 
 private:

@@ -23,6 +23,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/scene_ring.h
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.h
+    ${CMAKE_CURRENT_LIST_DIR}/textures.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/textures.h
     ${CMAKE_CURRENT_LIST_DIR}/window.cpp
     ${CMAKE_CURRENT_LIST_DIR}/window.h)
 

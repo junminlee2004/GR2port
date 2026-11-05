@@ -138,18 +138,56 @@ Image Memory::CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsage
     };
     Image image{.format = format, .extent = extent};
     VkImage handle = VK_NULL_HANDLE;
+    VmaAllocationInfo result{};
     if (vmaCreateImage(allocator, &image_info, &allocation_info, &handle, &image.allocation,
-                       nullptr) != VK_SUCCESS) {
+                       &result) != VK_SUCCESS) {
         LOG_ERROR(Render_Vulkan, "GR2 PT: no memory for a {}x{} {} image", extent.width,
                   extent.height, vk::to_string(format));
         return {};
     }
     image.image = handle;
+    image.size = result.size;
     const vk::ImageViewCreateInfo view_info{
         .image = image.image,
         .viewType = vk::ImageViewType::e2D,
         .format = format,
         .subresourceRange = {aspect, 0, 1, 0, 1},
+    };
+    image.view = d.device.createImageView(view_info, nullptr, d.dispatch).value;
+    return image;
+}
+
+Image Memory::CreateTexture(vk::Format format, vk::Extent2D extent, u32 levels,
+                            vk::ComponentMapping mapping) {
+    const VkImageCreateInfo image_info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = static_cast<VkFormat>(format),
+        .extent = {extent.width, extent.height, 1},
+        .mipLevels = levels,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    // Thousands of textures share the allocator's blocks.
+    const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    Image image{.format = format, .extent = extent};
+    VkImage handle = VK_NULL_HANDLE;
+    VmaAllocationInfo result{};
+    if (vmaCreateImage(allocator, &image_info, &allocation_info, &handle, &image.allocation,
+                       &result) != VK_SUCCESS) {
+        return {};
+    }
+    image.image = handle;
+    image.size = result.size;
+    const vk::ImageViewCreateInfo view_info{
+        .image = image.image,
+        .viewType = vk::ImageViewType::e2D,
+        .format = format,
+        .components = mapping,
+        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, levels, 0, 1},
     };
     image.view = d.device.createImageView(view_info, nullptr, d.dispatch).value;
     return image;

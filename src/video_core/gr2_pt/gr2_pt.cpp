@@ -15,6 +15,7 @@
 #include "video_core/gr2_pt/hooks.h"
 #include "video_core/gr2_pt/meshes.h"
 #include "video_core/gr2_pt/renderer.h"
+#include "video_core/gr2_pt/textures.h"
 
 namespace Gr2Pt {
 
@@ -56,7 +57,8 @@ void Install(VAddr module_base) {
         LOG_ERROR(Render_Vulkan, "GR2 PT: the frame graph's entry is not the expected code");
         return;
     }
-    if (!Meshes::Install(module_base, c, StubAreaSize)) {
+    if (!Meshes::Install(module_base, c, StubAreaSize) ||
+        !Textures::Install(module_base, c, StubAreaSize)) {
         return;
     }
     Renderer::Start();

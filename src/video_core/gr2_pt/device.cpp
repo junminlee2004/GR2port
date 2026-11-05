@@ -132,16 +132,27 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     };
     vk::PhysicalDeviceVulkan12Features features12{
         .pNext = &features13,
+        .storageBuffer8BitAccess = true,
+        .shaderSampledImageArrayNonUniformIndexing = true,
+        .descriptorBindingSampledImageUpdateAfterBind = true,
+        .descriptorBindingUpdateUnusedWhilePending = true,
+        .descriptorBindingPartiallyBound = true,
+        .runtimeDescriptorArray = true,
+        .scalarBlockLayout = true,
         .timelineSemaphore = true,
         .bufferDeviceAddress = true,
     };
     vk::PhysicalDeviceVulkan11Features features11{
         .pNext = &features12,
+        .storageBuffer16BitAccess = true,
         .shaderDrawParameters = true,
     };
     vk::PhysicalDeviceFeatures2 features{
         .pNext = &features11,
-        .features = {.multiDrawIndirect = true, .shaderInt64 = true},
+        .features = {.multiDrawIndirect = true,
+                     .samplerAnisotropy = true,
+                     .textureCompressionBC = true,
+                     .shaderInt64 = true},
     };
     const float priority = 1.0f;
     const vk::DeviceQueueCreateInfo queue_info{
@@ -149,7 +160,9 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         .queueCount = 1,
         .pQueuePriorities = &priority,
     };
-    std::vector<const char*> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    // Push descriptors bind the buffers of the texture detile shaders.
+    std::vector<const char*> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                                        VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME};
     const auto [extensions_result, available] =
         d.gpu.enumerateDeviceExtensionProperties(nullptr, d.dispatch);
     for (const vk::ExtensionProperties& extension : available) {

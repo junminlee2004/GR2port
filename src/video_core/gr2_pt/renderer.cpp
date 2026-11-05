@@ -27,6 +27,7 @@
 #include "video_core/gr2_pt/shaders/mesh_frag.h"
 #include "video_core/gr2_pt/shaders/mesh_vert.h"
 #include "video_core/gr2_pt/swapchain.h"
+#include "video_core/gr2_pt/textures.h"
 #include "video_core/gr2_pt/window.h"
 
 namespace Gr2Pt::Renderer {
@@ -165,7 +166,8 @@ bool Thread::Init() {
                                       vk::BufferUsageFlagBits::eStorageBuffer |
                                           vk::BufferUsageFlagBits::eIndirectBuffer,
                                       Placement::Upload);
-    if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory)) {
+    if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
+        !Textures::Start(d, *memory)) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -319,6 +321,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     }
     memory->Refresh(frame);
     Meshes::Update(cmd, frame, frame - FramesInFlight);
+    Textures::Update(cmd, frame, frame - FramesInFlight);
 
     const vk::Image image = swapchain->Image(index);
     Barrier(d, cmd, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
@@ -493,6 +496,7 @@ void Thread::Report() {
     const double frames = std::max(stats.frames, 1u);
     const double gpu_ms = stats.timed != 0 ? stats.gpu_ms / stats.timed : 0.0;
     const Meshes::Stats meshes = Meshes::TakeStats();
+    const Textures::Stats textures = Textures::TakeStats();
     const Memory::Budget budget = memory->DeviceBudget();
     LOG_INFO(Render_Vulkan,
              "GR2 PT renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, {} game frames "
@@ -512,6 +516,14 @@ void Thread::Report() {
              static_cast<double>(meshes.resident_bytes) / (1 << 20), meshes.pending,
              static_cast<double>(meshes.uploaded_bytes) / (1 << 20), meshes.skipped,
              meshes.bad_indices, meshes.missed_unloads, meshes.lost_handles);
+    LOG_INFO(Render_Vulkan,
+             "GR2 PT textures: {} textures in {:.1f} MB, {} waiting, {:.1f} MB uploaded of {:.1f} "
+             "MB of data; not converted: {} not a single 2D image, {} tiling or format, {} larger "
+             "than their data, {} no memory; {} missed destroys",
+             textures.textures, static_cast<double>(textures.resident_bytes) / (1 << 20),
+             textures.pending, static_cast<double>(textures.uploaded_bytes) / (1 << 20),
+             static_cast<double>(textures.uploaded_data_bytes) / (1 << 20), textures.not_2d,
+             textures.unsupported, textures.too_large, textures.failed, textures.missed_destroys);
     LOG_INFO(Render_Vulkan,
              "GR2 PT memory: device-local {} MB of a {} MB budget used by the process, {} MB by "
              "the renderer",
