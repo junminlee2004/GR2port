@@ -32,6 +32,8 @@ enum class Placement {
     Device,
     // Host-visible, coherent memory the CPU writes in order and the GPU reads.
     Upload,
+    // Host-cached memory the GPU writes and the CPU reads.
+    Readback,
 };
 
 /// The renderer's GPU memory, allocated with its own allocator on its own device.

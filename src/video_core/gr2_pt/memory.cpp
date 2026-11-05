@@ -41,6 +41,11 @@ Buffer Memory::CreateBuffer(u64 size, vk::BufferUsageFlags usage, Placement plac
         allocation_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
                                 VMA_ALLOCATION_CREATE_MAPPED_BIT;
         allocation_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    } else if (placement == Placement::Readback) {
+        allocation_info.flags =
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        allocation_info.requiredFlags =
+            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
     }
     Buffer buffer{.size = size};
     VkBuffer handle = VK_NULL_HANDLE;

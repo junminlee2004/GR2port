@@ -7,10 +7,14 @@
 #include <chrono>
 #include <memory>
 #include <thread>
+#include <vector>
 
 #include <fmt/format.h>
 
+#include "common/io_file.h"
 #include "common/logging/log.h"
+#include "common/path_util.h"
+#include "common/stb.h"
 #include "common/thread.h"
 #include "video_core/gr2_pt/capture.h"
 #include "video_core/gr2_pt/device.h"
@@ -45,6 +49,8 @@ struct Slot {
     // The scene ring slot the frame reads.
     u32 scene = SceneRing::Slots;
     bool timed = false;
+    // The frame's image is copied to the snapshot buffer.
+    bool snapshot = false;
 };
 
 struct Stats {
@@ -76,6 +82,8 @@ private:
     void Record(Slot& slot, u32 index, const SceneRing::Packet& packet);
     void ReadTimes(u32 slot_index);
     void LogScene(const SceneRing::Packet& packet);
+    void RecordSnapshot(vk::CommandBuffer cmd, vk::Image image);
+    void SaveSnapshot();
     void Report();
     bool Recreate();
 
@@ -94,6 +102,11 @@ private:
     u64 frame = FramesInFlight;
     bool logged_scene = false;
     bool logged_refusal = false;
+    // Each report saves the next frame to a PNG in the log folder.
+    Buffer snapshot;
+    vk::Extent2D snapshot_extent;
+    vk::Format snapshot_format = vk::Format::eUndefined;
+    bool snapshot_wanted = false;
     bool needs_swapchain = false;
     Stats stats;
 };
@@ -206,6 +219,67 @@ void Thread::ReadTimes(u32 slot_index) {
     }
 }
 
+void Thread::RecordSnapshot(vk::CommandBuffer cmd, vk::Image image) {
+    const vk::Extent2D extent = swapchain->Extent();
+    const u64 bytes = u64{extent.width} * extent.height * 4;
+    if (snapshot.size < bytes) {
+        memory->Destroy(snapshot);
+        snapshot =
+            memory->CreateBuffer(bytes, vk::BufferUsageFlagBits::eTransferDst, Placement::Readback);
+        if (snapshot.mapped == nullptr) {
+            return;
+        }
+    }
+    Barrier(d, cmd, image, vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eTransferSrcOptimal,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eCopy,
+            vk::AccessFlagBits2::eTransferRead);
+    const vk::BufferImageCopy region{
+        .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+        .imageExtent = {extent.width, extent.height, 1},
+    };
+    cmd.copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal, snapshot.buffer, region,
+                          d.dispatch);
+    Barrier(d, cmd, image, vk::ImageLayout::eTransferSrcOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal, vk::PipelineStageFlagBits2::eCopy,
+            vk::AccessFlagBits2::eTransferRead, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::AccessFlagBits2::eColorAttachmentWrite);
+    snapshot_extent = extent;
+    snapshot_format = swapchain->Format();
+}
+
+// Writes the snapshot as pt_frame.png in the log folder, off the render thread.
+void Thread::SaveSnapshot() {
+    const vk::Extent2D extent = snapshot_extent;
+    const bool bgra = snapshot_format == vk::Format::eB8G8R8A8Unorm ||
+                      snapshot_format == vk::Format::eB8G8R8A8Srgb;
+    std::vector<u8> pixels(snapshot.mapped,
+                           snapshot.mapped + u64{extent.width} * extent.height * 4);
+    std::thread([pixels = std::move(pixels), extent, bgra]() mutable {
+        for (size_t i = 0; i < pixels.size(); i += 4) {
+            if (bgra) {
+                std::swap(pixels[i], pixels[i + 2]);
+            }
+            pixels[i + 3] = 0xff;
+        }
+        std::vector<u8> png;
+        stbi_write_png_to_func(
+            [](void* context, void* data, int size) {
+                auto* out = static_cast<std::vector<u8>*>(context);
+                const auto* bytes = static_cast<const u8*>(data);
+                out->insert(out->end(), bytes, bytes + size);
+            },
+            &png, static_cast<int>(extent.width), static_cast<int>(extent.height), 4, pixels.data(),
+            static_cast<int>(extent.width * 4));
+        const auto path = Common::FS::GetUserPath(Common::FS::PathType::LogDir) / "pt_frame.png";
+        Common::FS::IOFile file{path, Common::FS::FileAccessMode::Create};
+        if (file.IsOpen()) {
+            file.WriteRaw<u8>(png.data(), png.size());
+        }
+    }).detach();
+}
+
 // Logs the first packet with draws, and the first one too large to draw.
 void Thread::LogScene(const SceneRing::Packet& packet) {
     const auto* header = reinterpret_cast<const Scene::Header*>(packet.data);
@@ -314,6 +388,11 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                                 sizeof(Scene::Command), dl);
     }
     cmd.endRendering(dl);
+    if (snapshot_wanted) {
+        snapshot_wanted = false;
+        RecordSnapshot(cmd, swapchain->Image(index));
+        slot.snapshot = snapshot.mapped != nullptr;
+    }
     stats.draws += header->draws;
     stats.dropped += header->dropped;
     stats.capture_ns += header->capture_ns;
@@ -345,6 +424,10 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     (void)d.device.waitForFences(slot.done, true, UINT64_MAX, dl);
     const auto wait_end = std::chrono::steady_clock::now();
     ReadTimes(slot_index);
+    if (slot.snapshot) {
+        slot.snapshot = false;
+        SaveSnapshot();
+    }
     if (slot.scene != SceneRing::Slots) {
         SceneRing::Release(slot.scene);
         slot.scene = SceneRing::Slots;
@@ -431,6 +514,7 @@ void Thread::Report() {
                                  "{:.2f} ms",
                                  game_fps, stats.work_ms / frames, gpu_ms));
     stats = {.game_frames = game_frames, .skipped = skipped, .start = now};
+    snapshot_wanted = true;
 }
 
 void Thread::Run() {
