@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
+#include <cstring>
 #include <optional>
 
 #include <SDL3/SDL_vulkan.h>
@@ -14,6 +16,18 @@ namespace Gr2Pt {
 namespace {
 
 constexpr u32 ApiVersion = VK_API_VERSION_1_3;
+constexpr const char* ValidationLayer = "VK_LAYER_KHRONOS_validation";
+
+// The validation layer checks the renderer's own instance whenever the loader finds it.
+bool HasValidation(const Device& d) {
+    const auto [result, layers] = vk::enumerateInstanceLayerProperties(d.dispatch);
+    if (result != vk::Result::eSuccess) {
+        return false;
+    }
+    return std::ranges::any_of(layers, [](const vk::LayerProperties& layer) {
+        return std::strcmp(layer.layerName, ValidationLayer) == 0;
+    });
+}
 
 bool CreateInstance(Device& d) {
     const auto get_proc =
@@ -33,8 +47,11 @@ bool CreateInstance(Device& d) {
         .pApplicationName = "GR2 PT",
         .apiVersion = ApiVersion,
     };
+    const bool validation = HasValidation(d);
     const vk::InstanceCreateInfo info{
         .pApplicationInfo = &application,
+        .enabledLayerCount = validation ? 1u : 0u,
+        .ppEnabledLayerNames = &ValidationLayer,
         .enabledExtensionCount = count,
         .ppEnabledExtensionNames = extensions,
     };
@@ -45,6 +62,9 @@ bool CreateInstance(Device& d) {
     }
     d.instance = instance;
     d.dispatch.init(instance);
+    if (validation) {
+        LOG_INFO(Render_Vulkan, "GR2 PT: the validation layer checks the renderer");
+    }
     return true;
 }
 
