@@ -12,6 +12,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/hooks.h
     ${CMAKE_CURRENT_LIST_DIR}/memory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/memory.h
+    ${CMAKE_CURRENT_LIST_DIR}/pipeline.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/pipeline.h
     ${CMAKE_CURRENT_LIST_DIR}/renderer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/renderer.h
     ${CMAKE_CURRENT_LIST_DIR}/scene.h
