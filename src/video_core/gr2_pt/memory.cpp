@@ -14,7 +14,7 @@ namespace Gr2Pt {
 namespace {
 
 // Device-local memory the renderer leaves free for the emulated GPU's renderer.
-constexpr u64 Headroom = 384_MB;
+constexpr u64 Headroom = 256_MB;
 // Small blocks keep the memory the allocator holds close to what the renderer uses.
 constexpr u64 BlockSize = 32_MB;
 
