@@ -11,16 +11,21 @@ namespace Gr2Pt {
 
 struct GraphicsPipelineInfo {
     std::span<const u32> vertex;
+    /// None for a depth-only pipeline.
     std::span<const u32> fragment;
+    /// Undefined for no colour attachment.
     vk::Format color = vk::Format::eUndefined;
     vk::Format depth = vk::Format::eUndefined;
     vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList;
     vk::CullModeFlags cull = vk::CullModeFlagBits::eNone;
-    /// Reverse depth: nearer is greater.
     bool depth_test = false;
+    /// Greater for reverse depth, where nearer is greater.
+    vk::CompareOp depth_compare = vk::CompareOp::eGreater;
+    /// The depth bias is enabled and set as dynamic state.
+    bool depth_bias = false;
     u32 push_constant_bytes = 0;
-    /// The pipeline's one descriptor set, or none.
-    vk::DescriptorSetLayout set_layout;
+    /// The pipeline's descriptor sets, in set order.
+    std::span<const vk::DescriptorSetLayout> set_layouts;
 };
 
 struct Pipeline {

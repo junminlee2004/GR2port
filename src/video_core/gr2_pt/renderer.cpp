@@ -191,6 +191,7 @@ bool Thread::Recreate() {
                                 vk::ImageUsageFlagBits::eDepthStencilAttachment,
                                 vk::ImageAspectFlagBits::eDepth);
     if (pipeline_format != swapchain->Format()) {
+        const std::array set_layouts{Textures::SetLayout()};
         DestroyPipeline(d, mesh_pipeline);
         mesh_pipeline = CreateGraphicsPipeline(d, {
                                                       .vertex = MESH_VERT,
@@ -199,7 +200,7 @@ bool Thread::Recreate() {
                                                       .depth = DepthFormat,
                                                       .depth_test = true,
                                                       .push_constant_bytes = sizeof(u64),
-                                                      .set_layout = Textures::SetLayout(),
+                                                      .set_layouts = set_layouts,
                                                   });
         pipeline_format = swapchain->Format();
     }
