@@ -287,6 +287,37 @@ private:
     Scene::Command* caster_commands;
 };
 
+// Items are scattered through the pool and point at scattered objects. The loops prefetch the
+// item Lookahead places ahead, and the objects of the item half as far ahead.
+constexpr s32 Lookahead = 8;
+
+void Prefetch(VAddr address) {
+    __builtin_prefetch(reinterpret_cast<const void*>(address));
+}
+
+// The submesh, the shape's handle (just before its index buffer object) and the matrices of an
+// item.
+void PrefetchObjects(VAddr item, u64 matrices) {
+    const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
+    Prefetch(submesh);
+    Prefetch(submesh + SubmeshRange);
+    Prefetch(Load<VAddr>(item + ItemIndexBuffer) - 4);
+    Prefetch(Load<VAddr>(item + matrices));
+}
+
+template <typename ItemAt, typename Visit>
+void ForEachItem(s32 count, u64 matrices, ItemAt item_at, Visit visit) {
+    for (s32 i = 0; i < count; i++) {
+        if (i + Lookahead < count) {
+            Prefetch(item_at(i + Lookahead));
+        }
+        if (i + Lookahead / 2 < count) {
+            PrefetchObjects(item_at(i + Lookahead / 2), matrices);
+        }
+        visit(item_at(i));
+    }
+}
+
 // Writes the cascades into the packet's shadow block and the header's cascade fields.
 void WriteShadows(VAddr view, u8* packet, Writer& writer) {
     auto* shadows = reinterpret_cast<Scene::Shadows*>(packet + Scene::ShadowsOffset);
@@ -344,32 +375,34 @@ void OnFrame(VAddr view) {
     const VAddr items = Load<VAddr>(view + ViewItems);
     const VAddr keys = Load<VAddr>(view + ViewKeys);
     const s32 key_count = Load<s32>(view + ViewKeyCount);
+    const auto keyed = [items, keys, key_count, view](u32 category) {
+        const s32 first = Load<s32>(view + ViewCategoryFirst + category * 4);
+        const VAddr key = keys + static_cast<s64>(first - key_count) * 4;
+        return [items, key](s32 i) {
+            return items + (static_cast<u64>(Load<u32>(key + i * 4) & 0x3fffff) << 6);
+        };
+    };
     for (const CasterCategory& category : CasterCategories) {
         const s32 count = Load<s32>(view + ViewCategoryCount + category.index * 4);
-        const s32 first = Load<s32>(view + ViewCategoryFirst + category.index * 4);
-        const VAddr key = keys + static_cast<s64>(first - key_count) * 4;
-        for (s32 i = 0; i < count; i++) {
-            const u32 index = Load<u32>(key + i * 4) & 0x3fffff;
-            writer.AddCaster(items + (static_cast<u64>(index) << 6), category);
-        }
+        ForEachItem(count, CasterWorld, keyed(category.index),
+                    [&](VAddr item) { writer.AddCaster(item, category); });
     }
     for (const Category& category : Categories) {
-        const s32 count = Load<s32>(view + ViewCategoryCount + category.index * 4);
-        const s32 first = Load<s32>(view + ViewCategoryFirst + category.index * 4);
-        const VAddr key = keys + static_cast<s64>(first - key_count) * 4;
-        for (s32 i = 0; i < count && i < static_cast<s32>(Scene::MaxDraws); i++) {
-            const u32 index = Load<u32>(key + i * 4) & 0x3fffff;
-            writer.Add(items + (static_cast<u64>(index) << 6), category);
-        }
+        const s32 count = std::min(Load<s32>(view + ViewCategoryCount + category.index * 4),
+                                   static_cast<s32>(Scene::MaxDraws));
+        ForEachItem(count, category.constants, keyed(category.index),
+                    [&](VAddr item) { writer.Add(item, category); });
     }
     const VAddr batch = Load<VAddr>(view + ViewBatchList);
     if (batch != 0) {
         const VAddr entries = Load<VAddr>(batch);
-        const s32 count = Load<s32>(batch + 8);
-        for (s32 i = 0; i < count && i < static_cast<s32>(Scene::MaxDraws); i++) {
-            const u32 index = Load<u32>(entries + i * 8 + 4);
-            writer.Add(items + static_cast<u32>(index << 6), Categories[0]);
-        }
+        const s32 count = std::min(Load<s32>(batch + 8), static_cast<s32>(Scene::MaxDraws));
+        ForEachItem(
+            count, Categories[0].constants,
+            [items, entries](s32 i) {
+                return items + static_cast<u32>(Load<u32>(entries + i * 8 + 4) << 6);
+            },
+            [&](VAddr item) { writer.Add(item, Categories[0]); });
     }
     Scene::Header header = writer.Header();
     header.frame = frame;
