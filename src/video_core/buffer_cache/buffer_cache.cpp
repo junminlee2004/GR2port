@@ -20,7 +20,6 @@
 #include "video_core/buffer_cache/readback_lane.h"
 #include "video_core/buffer_cache/region_definitions.h"
 #include "video_core/buffer_cache/stream_copy_lane.h"
-#include "video_core/gr2_pt/gr2_pt.h"
 #include "video_core/renderer_vulkan/vk_graphics_pipeline.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
@@ -180,7 +179,6 @@ void BufferCache::TickFrame() {
 }
 
 void BufferCache::InvalidateMemory(VAddr device_addr, u64 size, bool assume_locks) {
-    Gr2Pt::OnCpuWrite(device_addr, size);
     memory_tracker->InvalidateRegion(device_addr, size, [this, device_addr, size, assume_locks] {
         ReadMemory(device_addr, size, true, false, assume_locks);
     });
@@ -686,8 +684,6 @@ const Buffer* BufferCache::GetArena(u64 first_block, u64 last_block) {
     }
 
     LOG_WARNING(Render, "Migrating arena");
-    Gr2Pt::OnCpuWrite(first_page << ARENA_PAGE_BITS,
-                      (last_page - first_page + 1) << ARENA_PAGE_BITS);
 
     const u64 first_addr = first_arena ? first_arena->cpu_addr : (first_page << ARENA_PAGE_BITS);
     const u64 first_size = first_arena ? first_arena->size_bytes : ARENA_PAGE_SIZE;

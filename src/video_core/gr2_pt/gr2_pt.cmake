@@ -2,22 +2,10 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 target_sources(shadps4 PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/caster_batch.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/caster_batch.h
-    ${CMAKE_CURRENT_LIST_DIR}/caster_renderer.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/caster_renderer.h
-    ${CMAKE_CURRENT_LIST_DIR}/cpu_writes.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/cpu_writes.h
     ${CMAKE_CURRENT_LIST_DIR}/gr2_pt.cpp
     ${CMAKE_CURRENT_LIST_DIR}/gr2_pt.h
     ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/hooks.h
-    ${CMAKE_CURRENT_LIST_DIR}/marker.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/marker.h
-    ${CMAKE_CURRENT_LIST_DIR}/pass_timing.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/pass_timing.h
-    ${CMAKE_CURRENT_LIST_DIR}/shadow_pass.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/shadow_pass.h)
+    ${CMAKE_CURRENT_LIST_DIR}/hooks.h)
 
 # The renderer's shaders, compiled like the host shaders.
 if (TARGET glslang-standalone)
@@ -50,13 +38,6 @@ function(gr2_pt_add_shader FILENAME SHADER_NAME)
         VERBATIM)
     set(GR2_PT_SHADER_HEADERS ${GR2_PT_SHADER_HEADERS} ${HEADER_FILE} PARENT_SCOPE)
 endfunction()
-gr2_pt_add_shader(caster_static.vert caster_static_vert)
-gr2_pt_add_shader(caster_skinned.vert caster_skinned_vert)
-add_custom_target(gr2_pt_shaders
-    DEPENDS ${GR2_PT_SHADER_HEADERS}
-    SOURCES
-        ${GR2_PT_DIR}/shaders/caster_common.glsl
-        ${GR2_PT_DIR}/shaders/caster_skinned.vert
-        ${GR2_PT_DIR}/shaders/caster_static.vert)
+add_custom_target(gr2_pt_shaders DEPENDS ${GR2_PT_SHADER_HEADERS})
 target_include_directories(shadps4 PRIVATE ${GR2_PT_SHADER_INCLUDE})
 add_dependencies(shadps4 gr2_pt_shaders)
