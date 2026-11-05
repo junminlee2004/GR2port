@@ -67,6 +67,7 @@ struct Stats {
     u64 draws = 0;
     u64 dropped = 0;
     u64 capture_ns = 0;
+    u64 untextured = 0;
     u64 indices = 0;
     u32 max_indices = 0;
     u32 refused = 0;
@@ -198,6 +199,7 @@ bool Thread::Recreate() {
                                                       .depth = DepthFormat,
                                                       .depth_test = true,
                                                       .push_constant_bytes = sizeof(u64),
+                                                      .set_layout = Textures::SetLayout(),
                                                   });
         pipeline_format = swapchain->Format();
     }
@@ -383,6 +385,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         const u64 draws = packet.address + Scene::DrawsOffset;
         const u64 offset = u64{packet.slot} * SceneRing::SlotBytes;
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, mesh_pipeline.pipeline, dl);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mesh_pipeline.layout, 0,
+                               Textures::Set(), {}, dl);
         cmd.setViewport(0, viewport, dl);
         cmd.setScissor(0, scissor, dl);
         cmd.pushConstants(mesh_pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
@@ -400,6 +404,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.draws += header->draws;
     stats.dropped += header->dropped;
     stats.capture_ns += header->capture_ns;
+    stats.untextured += header->untextured;
     stats.indices += header->indices;
     stats.max_indices = std::max(stats.max_indices, header->max_indices);
 
@@ -517,13 +522,16 @@ void Thread::Report() {
              static_cast<double>(meshes.uploaded_bytes) / (1 << 20), meshes.skipped,
              meshes.bad_indices, meshes.missed_unloads, meshes.lost_handles);
     LOG_INFO(Render_Vulkan,
-             "GR2 PT textures: {} textures in {:.1f} MB, {} waiting, {:.1f} MB uploaded of {:.1f} "
-             "MB of data; not converted: {} not a single 2D image, {} tiling or format, {} larger "
-             "than their data, {} no memory; {} missed destroys",
-             textures.textures, static_cast<double>(textures.resident_bytes) / (1 << 20),
-             textures.pending, static_cast<double>(textures.uploaded_bytes) / (1 << 20),
+             "GR2 PT textures: per frame {:.0f} draws with a colour texture not converted; {} "
+             "textures in {:.1f} MB, {} waiting, {:.1f} MB uploaded of {:.1f} MB of data; not "
+             "converted: {} not a single 2D image, {} tiling or format, {} larger than their data, "
+             "{} no memory; {} missed destroys; {} meshes without texture coordinates",
+             static_cast<double>(stats.untextured) / frames, textures.textures,
+             static_cast<double>(textures.resident_bytes) / (1 << 20), textures.pending,
+             static_cast<double>(textures.uploaded_bytes) / (1 << 20),
              static_cast<double>(textures.uploaded_data_bytes) / (1 << 20), textures.not_2d,
-             textures.unsupported, textures.too_large, textures.failed, textures.missed_destroys);
+             textures.unsupported, textures.too_large, textures.failed, textures.missed_destroys,
+             meshes.no_texcoord);
     LOG_INFO(Render_Vulkan,
              "GR2 PT memory: device-local {} MB of a {} MB budget used by the process, {} MB by "
              "the renderer",

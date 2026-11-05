@@ -19,6 +19,8 @@ struct GraphicsPipelineInfo {
     /// Reverse depth: nearer is greater.
     bool depth_test = false;
     u32 push_constant_bytes = 0;
+    /// The pipeline's one descriptor set, or none.
+    vk::DescriptorSetLayout set_layout;
 };
 
 struct Pipeline {

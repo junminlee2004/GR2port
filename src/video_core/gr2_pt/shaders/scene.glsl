@@ -10,9 +10,13 @@
 struct Draw {
     mat4 world_view;
     mat4 world_view_projection;
+    vec4 color_scale;
+    vec4 texcoord_transform;
     uint64_t vertices;
     uint stride;
     uint position;
+    uint texcoord;
+    uint texture;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Draws {

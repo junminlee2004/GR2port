@@ -21,6 +21,9 @@ struct Header {
     u32 dropped;
     /// The capture's time on the game's draw thread.
     u32 capture_ns;
+    /// Draws whose colour texture is not converted.
+    u32 untextured;
+    u32 padding;
 };
 
 /// A draw of a mesh, read by the vertex shader at gl_DrawID. Matrices are the game's: row-major,
@@ -28,12 +31,21 @@ struct Header {
 struct Draw {
     float world_view[16];
     float world_view_projection[16];
+    /// The material's colour scale; the alpha is unused.
+    float color_scale[4];
+    /// Texture coordinates are xy + zw * the vertex's.
+    float texcoord_transform[4];
     u64 vertices;
     u32 stride;
     /// The position element: byte offset in the low 8 bits, format index above.
     u32 position;
+    /// The texture coordinate element, encoded as position; format 0 when there is none.
+    u32 texcoord;
+    /// The colour texture's handle; 0 is white.
+    u32 texture;
+    u32 padding[2];
 };
-static_assert(sizeof(Draw) == 144);
+static_assert(sizeof(Draw) == 192);
 
 /// The indirect command of a draw, at the same index as the draw.
 struct Command {

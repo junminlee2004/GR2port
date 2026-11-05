@@ -11,6 +11,7 @@
 #include "video_core/gr2_pt/meshes.h"
 #include "video_core/gr2_pt/scene.h"
 #include "video_core/gr2_pt/scene_ring.h"
+#include "video_core/gr2_pt/textures.h"
 
 namespace Gr2Pt::Capture {
 
@@ -37,22 +38,30 @@ constexpr u64 SubmeshFirstIndex = 0x20;
 constexpr u64 SubmeshRanges = 0x1e;
 constexpr u64 SubmeshRange = 0x40;
 
-// The opaque mesh categories and the item field that holds each one's vertex constants, which
-// start with WorldView and WorldViewProj.
+// The opaque mesh categories. Each item holds its vertex constants, which start with WorldView
+// and WorldViewProj, its colour texture object and its pixel constants; the pixel constants hold
+// the colour scale and the colour texture coordinate transform (offset xy, repeat zw).
+constexpr u64 None = ~0ull;
 struct Category {
     u32 index;
     u64 constants;
+    u64 texture;
+    u64 material;
+    u64 color_scale;
+    u64 texcoord_transform;
 };
 constexpr std::array<Category, 8> Categories{{
-    {15, 0x60}, // G2_BG_Main
-    {16, 0x38}, // BG layer
-    {17, 0x38}, // BG single
-    {19, 0x38}, // BG gem
-    {21, 0x38}, // BG interior
-    {22, 0x38}, // BG vein
-    {23, 0x30}, // Far
-    {8, 0x68},  // G2_CH_Main
+    {15, 0x60, 0x38, 0x68, 0x00, 0x20}, // G2_BG_Main
+    {16, 0x38, 0x48, 0x40, 0x80, 0x00}, // BG layer: the first of four layers
+    {17, 0x38, 0x48, 0x40, 0x00, None}, // BG single
+    {19, 0x38, 0x48, 0x40, 0x00, None}, // BG gem
+    {21, 0x38, 0x48, 0x40, 0x00, None}, // BG interior
+    {22, 0x38, 0x48, 0x40, 0x30, 0x00}, // BG vein
+    {23, 0x30, None, None, None, None}, // Far: untextured
+    {8, 0x68, 0x30, 0x70, 0xa0, None},  // G2_CH_Main: the colour texture is t1
 }};
+constexpr std::array<float, 4> NoScale{1.0f, 1.0f, 1.0f, 1.0f};
+constexpr std::array<float, 4> NoTransform{0.0f, 0.0f, 1.0f, 1.0f};
 constexpr u32 BatchedCategory = 15;
 constexpr u64 MatrixBytes = 64;
 
@@ -77,10 +86,10 @@ public:
         return header;
     }
 
-    void Add(VAddr item, u64 constants_field) {
+    void Add(VAddr item, const Category& category) {
         const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
         const VAddr index_buffer = Load<VAddr>(item + ItemIndexBuffer);
-        const VAddr constants = Load<VAddr>(item + constants_field);
+        const VAddr constants = Load<VAddr>(item + category.constants);
         const VAddr shape = index_buffer - ShapeIndexBuffer;
         if (submesh == 0 || index_buffer == 0 || constants == 0 ||
             Load<VAddr>(item + ItemSkin) != 0 ||
@@ -103,12 +112,36 @@ public:
         }
         header.indices += count;
         header.max_indices = std::max(header.max_indices, count);
+        u32 texture = 0;
+        if (category.texture != None) {
+            const VAddr object = Load<VAddr>(item + category.texture);
+            if (object != 0) {
+                texture = Textures::Get(object);
+                header.untextured += texture == 0;
+            }
+        }
+        const VAddr material =
+            category.material != None ? Load<VAddr>(item + category.material) : 0;
+        const void* color_scale = NoScale.data();
+        const void* texcoord_transform = NoTransform.data();
+        if (material != 0 && category.color_scale != None) {
+            color_scale = reinterpret_cast<const void*>(material + category.color_scale);
+        }
+        if (material != 0 && category.texcoord_transform != None) {
+            texcoord_transform =
+                reinterpret_cast<const void*>(material + category.texcoord_transform);
+        }
         const u32 i = header.draws++;
+        // The fields are written in order: the packet is write-combined.
         Scene::Draw& draw = draws[i];
         std::memcpy(draw.world_view, reinterpret_cast<const void*>(constants), 2 * MatrixBytes);
+        std::memcpy(draw.color_scale, color_scale, sizeof(draw.color_scale));
+        std::memcpy(draw.texcoord_transform, texcoord_transform, sizeof(draw.texcoord_transform));
         draw.vertices = mesh->vertices;
         draw.stride = mesh->stride;
         draw.position = mesh->position;
+        draw.texcoord = mesh->texcoord;
+        draw.texture = texture;
         commands[i] = {
             .index_count = count,
             .instance_count = 1,
@@ -144,7 +177,7 @@ void OnFrame(VAddr view) {
         const VAddr key = keys + static_cast<s64>(first - key_count) * 4;
         for (s32 i = 0; i < count && i < static_cast<s32>(Scene::MaxDraws); i++) {
             const u32 index = Load<u32>(key + i * 4) & 0x3fffff;
-            writer.Add(items + (static_cast<u64>(index) << 6), category.constants);
+            writer.Add(items + (static_cast<u64>(index) << 6), category);
         }
     }
     const VAddr batch = Load<VAddr>(view + ViewBatchList);
@@ -153,7 +186,7 @@ void OnFrame(VAddr view) {
         const s32 count = Load<s32>(batch + 8);
         for (s32 i = 0; i < count && i < static_cast<s32>(Scene::MaxDraws); i++) {
             const u32 index = Load<u32>(entries + i * 8 + 4);
-            writer.Add(items + static_cast<u32>(index << 6), Categories[0].constants);
+            writer.Add(items + static_cast<u32>(index << 6), Categories[0]);
         }
     }
     Scene::Header header = writer.Header();

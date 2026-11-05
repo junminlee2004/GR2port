@@ -34,6 +34,8 @@ struct Mesh {
     u32 stride = 0;
     /// The position element: byte offset in the low 8 bits, format index above.
     u32 position = 0;
+    /// The texture coordinate element, encoded as position; format 0 when the shape has none.
+    u32 texcoord = 0;
 };
 
 /// Installs the hooks on the builder and on the model unload.
@@ -65,6 +67,8 @@ struct Stats {
     u32 missed_unloads;
     /// Unloaded shapes whose handle field does not hold their handle.
     u32 lost_handles;
+    /// Shapes with no texture coordinates the shaders decode.
+    u32 no_texcoord;
     u64 uploaded_bytes;
     u64 resident_bytes;
 };

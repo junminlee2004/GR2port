@@ -28,6 +28,8 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
         .size = info.push_constant_bytes,
     };
     const vk::PipelineLayoutCreateInfo layout_info{
+        .setLayoutCount = info.set_layout ? 1u : 0u,
+        .pSetLayouts = &info.set_layout,
         .pushConstantRangeCount = info.push_constant_bytes != 0 ? 1u : 0u,
         .pPushConstantRanges = &push,
     };

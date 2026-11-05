@@ -52,6 +52,11 @@ constexpr bool PositionFormat(u32 format) {
     return format == 3 || format == 4 || format == 7;
 }
 
+// Texture coordinate formats the shaders decode: RG32 FLOAT, RG16 FLOAT, RG16 SINT.
+constexpr bool TexcoordFormat(u32 format) {
+    return format == 2 || format == 6 || format == 12;
+}
+
 constexpr u64 UploadBudget = 64_MB;
 constexpr u32 LoggedUploads = 8;
 constexpr u64 IndexCapacity = 64ull << 20;
@@ -205,7 +210,28 @@ struct Source {
     u32 index_bytes;
     u32 stride;
     u32 position;
+    u32 texcoord;
 };
+
+// The texture coordinates: the two-component element of the lowest semantic after the position.
+// Semantics follow each shader's inputs, so texture coordinates have no fixed one.
+u32 ReadTexcoord(VAddr vb) {
+    const u32 elements = std::min<u32>(Load<u16>(vb + VertexElements), 16);
+    u32 texcoord = 0;
+    u32 semantic = 16;
+    for (u32 i = 0; i < elements; i++) {
+        const VAddr info = vb + VertexElementInfo + 4 * i;
+        const u32 format = Load<u8>(info);
+        const u32 offset = Load<u8>(info + 2);
+        const u32 element_semantic = Load<u8>(info + 3);
+        if (element_semantic != SemanticPosition && element_semantic < semantic &&
+            TexcoordFormat(format) && offset % 4 == 0) {
+            texcoord = offset | format << 8;
+            semantic = element_semantic;
+        }
+    }
+    return texcoord;
+}
 
 // Reads a shape's streams; false when the shaders cannot draw it.
 bool ReadShape(VAddr shape, Source& source) {
@@ -229,6 +255,7 @@ bool ReadShape(VAddr shape, Source& source) {
         .index_bytes = Load<u32>(ib_block + BlockSize),
         .stride = Load<u16>(vb + VertexStride),
         .position = offset | format << 8,
+        .texcoord = ReadTexcoord(vb),
     };
     return source.vertices != 0 && source.indices != 0 && source.vertex_bytes != 0 &&
            source.index_bytes >= 2 && PositionFormat(format) && source.stride % 4 == 0 &&
@@ -400,6 +427,8 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             mesh.indices = source.index_bytes / 2;
             mesh.stride = source.stride;
             mesh.position = source.position;
+            mesh.texcoord = source.texcoord;
+            g_stats.no_texcoord += source.texcoord == 0;
             g_resident[handle] = {
                 .vertices = vertices,
                 .first_index = first_index,
