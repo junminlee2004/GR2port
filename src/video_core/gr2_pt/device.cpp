@@ -150,6 +150,7 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     vk::PhysicalDeviceFeatures2 features{
         .pNext = &features11,
         .features = {.multiDrawIndirect = true,
+                     .drawIndirectFirstInstance = true,
                      .samplerAnisotropy = true,
                      .textureCompressionBC = true,
                      .shaderInt64 = true},

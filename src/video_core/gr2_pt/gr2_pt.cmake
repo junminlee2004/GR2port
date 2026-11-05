@@ -21,6 +21,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/scene.h
     ${CMAKE_CURRENT_LIST_DIR}/scene_ring.cpp
     ${CMAKE_CURRENT_LIST_DIR}/scene_ring.h
+    ${CMAKE_CURRENT_LIST_DIR}/shadows.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/shadows.h
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.h
     ${CMAKE_CURRENT_LIST_DIR}/textures.cpp
@@ -61,6 +63,9 @@ function(gr2_pt_add_shader FILENAME SHADER_NAME)
 endfunction()
 gr2_pt_add_shader(mesh.vert mesh_vert)
 gr2_pt_add_shader(mesh.frag mesh_frag)
+gr2_pt_add_shader(shadow.vert shadow_vert)
+gr2_pt_add_shader(shadow_alpha.vert shadow_alpha_vert)
+gr2_pt_add_shader(shadow_alpha.frag shadow_alpha_frag)
 add_custom_target(gr2_pt_shaders DEPENDS ${GR2_PT_SHADER_HEADERS})
 target_include_directories(shadps4 PRIVATE ${GR2_PT_SHADER_INCLUDE})
 add_dependencies(shadps4 gr2_pt_shaders)

@@ -5,6 +5,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 
 #include "video_core/gr2_pt/capture.h"
@@ -25,6 +26,41 @@ constexpr u64 ViewKeys = 0xb70;
 constexpr u64 ViewCategoryCount = 0xecc;
 constexpr u64 ViewCategoryFirst = 0xe34;
 constexpr u64 ViewBatchList = 0xb80;
+// View: V +0x20, inverse(V) +0x60, the cascade records from +0x400 every 0x110 ({valid, split,
+// depth bias constant, depth bias slope} and the cascade VP at +0x90), and the casters'
+// view-projection tables from +0x748 (a pointer per table and cascade).
+constexpr u64 ViewMatrix = 0x20;
+constexpr u64 ViewInverse = 0x60;
+constexpr u64 ViewCascades = 0x400;
+constexpr u64 CascadeBytes = 0x110;
+constexpr u64 CascadeBiasConstant = 0x08;
+constexpr u64 CascadeBiasSlope = 0x0c;
+constexpr u64 CascadeViewProjection = 0x90;
+constexpr u64 ViewCasterTables = 0x748;
+// View: the key light's colour times intensity +0x7b0 and the view-space direction its light
+// travels in +0x7c0.
+constexpr u64 ViewKeyLight = 0x7b0;
+constexpr u64 CasterTableBytes = 0x18;
+// Shadow caster items: flags +4 (0x08 culls back faces, 0x10 and 0x20 pick a view-projection
+// table), cascade mask +5, skin matrix count +6, world matrix +0x30. Alpha-tested casters hold
+// pixel constants {alpha reference or -1, fade or -1} and a colour texture object. Each category
+// keeps an index range that overrides the submesh's.
+constexpr u64 CasterFlags = 0x4;
+constexpr u64 CasterMask = 0x5;
+constexpr u64 CasterSkinCount = 0x6;
+constexpr u64 CasterWorld = 0x30;
+// A field a category does not have.
+constexpr u64 None = ~0ull;
+struct CasterCategory {
+    u32 index;
+    u64 range;
+    u64 constants;
+    u64 texture;
+};
+constexpr std::array<CasterCategory, 2> CasterCategories{{
+    {0, 0x38, None, None}, // FUN_0141c510
+    {2, 0x48, 0x38, 0x40}, // FUN_0141c9b0: alpha-tested
+}};
 // Item: submesh +0x08, vertex buffer object +0x10, skin vertex buffer object +0x18, index
 // buffer object +0x20 (at shape + 0x188).
 constexpr u64 ItemSubmesh = 0x08;
@@ -41,7 +77,6 @@ constexpr u64 SubmeshRange = 0x40;
 // The opaque mesh categories. Each item holds its vertex constants, which start with WorldView
 // and WorldViewProj, its colour texture object and its pixel constants; the pixel constants hold
 // the colour scale and the colour texture coordinate transform (offset xy, repeat zw).
-constexpr u64 None = ~0ull;
 struct Category {
     u32 index;
     u64 constants;
@@ -80,7 +115,19 @@ class Writer {
 public:
     explicit Writer(u8* packet)
         : draws{reinterpret_cast<Scene::Draw*>(packet + Scene::DrawsOffset)},
-          commands{reinterpret_cast<Scene::Command*>(packet + Scene::CommandsOffset)} {}
+          commands{reinterpret_cast<Scene::Command*>(packet + Scene::CommandsOffset)},
+          casters{reinterpret_cast<Scene::Caster*>(packet + Scene::CastersOffset)},
+          caster_commands{reinterpret_cast<Scene::Command*>(packet + Scene::CasterCommandsOffset)} {
+    }
+
+    void SetCascades(u32 mask) {
+        header.cascades = mask;
+    }
+
+    void SetDepthBias(u32 cascade, float constant, float slope) {
+        header.depth_bias[cascade][0] = constant;
+        header.depth_bias[cascade][1] = slope;
+    }
 
     const Scene::Header& Header() const {
         return header;
@@ -151,11 +198,136 @@ public:
         };
     }
 
+    // The game draws a caster in each cascade its mask names, with the index range of the
+    // category's override when there is one.
+    void AddCaster(VAddr item, const CasterCategory& category) {
+        const u32 mask = Load<u8>(item + CasterMask) & header.cascades;
+        if (mask == 0) {
+            return;
+        }
+        if (Load<u16>(item + CasterSkinCount) != 0) {
+            header.skinned_casters++;
+            return;
+        }
+        const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
+        const VAddr index_buffer = Load<VAddr>(item + ItemIndexBuffer);
+        const VAddr world = Load<VAddr>(item + CasterWorld);
+        const VAddr range = Load<VAddr>(item + category.range);
+        const VAddr shape = index_buffer - ShapeIndexBuffer;
+        if (submesh == 0 || index_buffer == 0 || world == 0 ||
+            Load<VAddr>(item + ItemVertexBuffer) != shape + ShapeVertexBuffer ||
+            header.casters == Scene::MaxCasters) {
+            header.dropped_casters++;
+            return;
+        }
+        u32 first = 0;
+        u32 count = 0;
+        if (range == 0) {
+            if (Load<u16>(submesh + SubmeshRanges) == 0) {
+                return;
+            }
+            first = Load<u32>(submesh + SubmeshFirstIndex) + Load<u32>(submesh + SubmeshRange);
+            count = Load<u32>(submesh + SubmeshRange + 4);
+        } else {
+            first = Load<u32>(submesh + SubmeshFirstIndex);
+            count = Load<u32>(range + SubmeshRange) - (Load<u32>(submesh + SubmeshRange) + first) +
+                    Load<u32>(range + SubmeshRange + 4) + Load<u32>(range + SubmeshFirstIndex);
+        }
+        const Meshes::Mesh* mesh = Meshes::Get(shape);
+        if (mesh == nullptr || count == 0 || u64{first} + count > mesh->indices) {
+            header.dropped_casters++;
+            return;
+        }
+        const u8 flags = Load<u8>(item + CasterFlags);
+        const u32 table = (flags & 0x10) != 0 ? 1 : (flags & 0x20) != 0 ? 2 : 0;
+        // A reference below 0 passes every texel: the caster is opaque.
+        float alpha_reference = -1.0f;
+        u32 texture = 0;
+        if (category.constants != None && mesh->texcoord != 0) {
+            const VAddr constants = Load<VAddr>(item + category.constants);
+            const VAddr object = Load<VAddr>(item + category.texture);
+            if (constants != 0 && object != 0) {
+                alpha_reference = Load<float>(constants);
+                texture = Textures::Get(object);
+            }
+        }
+        const bool alpha_tested = alpha_reference >= 0.0f && texture != 0;
+        const u32 list = (alpha_tested ? 2 : 0) + ((flags & 0x08) != 0 ? 0 : 1);
+        const u32 i = header.casters++;
+        Scene::Caster& caster = casters[i];
+        std::memcpy(caster.world, reinterpret_cast<const void*>(world), MatrixBytes);
+        caster.vertices = mesh->vertices;
+        caster.stride = mesh->stride;
+        caster.position = mesh->position;
+        caster.table = table;
+        caster.texture = texture;
+        caster.texcoord = mesh->texcoord;
+        caster.alpha_reference = alpha_reference;
+        for (u32 c = 0; c < Scene::Cascades; c++) {
+            if ((mask >> c & 1) == 0) {
+                continue;
+            }
+            header.caster_indices[c] += count;
+            u32& n = header.caster_commands[c][list];
+            caster_commands[(c * Scene::CasterLists + list) * Scene::MaxCasters + n++] = {
+                .index_count = count,
+                .instance_count = 1,
+                .first_index = mesh->first_index + first,
+                .vertex_offset = 0,
+                .first_instance = i,
+            };
+        }
+    }
+
 private:
     Scene::Header header{};
     Scene::Draw* draws;
     Scene::Command* commands;
+    Scene::Caster* casters;
+    Scene::Command* caster_commands;
 };
+
+// Writes the cascades into the packet's shadow block and the header's cascade fields.
+void WriteShadows(VAddr view, u8* packet, Writer& writer) {
+    auto* shadows = reinterpret_cast<Scene::Shadows*>(packet + Scene::ShadowsOffset);
+    std::memcpy(shadows->inverse_view, reinterpret_cast<const void*>(view + ViewInverse),
+                MatrixBytes);
+    u32 mask = 0;
+    for (u32 c = 0; c < Scene::Cascades; c++) {
+        const VAddr cascade = view + ViewCascades + c * CascadeBytes;
+        mask |= (Load<u32>(cascade) != 0 ? 1u : 0u) << c;
+        writer.SetDepthBias(c, Load<float>(cascade + CascadeBiasConstant),
+                            Load<float>(cascade + CascadeBiasSlope));
+        for (u32 table = 0; table < Scene::CasterTables; table++) {
+            VAddr matrix = Load<VAddr>(view + ViewCasterTables + table * CasterTableBytes + c * 8);
+            if (matrix == 0) {
+                matrix = cascade + CascadeViewProjection;
+            }
+            std::memcpy(shadows->view_projection[c * Scene::CasterTables + table],
+                        reinterpret_cast<const void*>(matrix), MatrixBytes);
+        }
+    }
+    writer.SetCascades(mask);
+    // Clip depth grows away from the light, so the first cascade's depth row, negated, points
+    // toward it. Row-vector matrices: a direction d maps to d * M.
+    const auto vp = Load<std::array<float, 16>>(view + ViewCascades + CascadeViewProjection);
+    const auto v = Load<std::array<float, 16>>(view + ViewMatrix);
+    const std::array<float, 3> toward{-vp[2], -vp[6], -vp[10]};
+    std::array<float, 4> direction{};
+    for (u32 j = 0; j < 3; j++) {
+        direction[j] = toward[0] * v[j] + toward[1] * v[4 + j] + toward[2] * v[8 + j];
+    }
+    const float length = std::sqrt(direction[0] * direction[0] + direction[1] * direction[1] +
+                                   direction[2] * direction[2]);
+    if (length > 0.0f) {
+        for (u32 j = 0; j < 3; j++) {
+            direction[j] /= length;
+        }
+    }
+    std::memcpy(shadows->light_direction, direction.data(), sizeof(direction));
+    std::memcpy(shadows->key_light_color, reinterpret_cast<const void*>(view + ViewKeyLight),
+                sizeof(shadows->key_light_color) + sizeof(shadows->key_light_direction));
+}
 
 } // namespace
 
@@ -168,9 +340,19 @@ void OnFrame(VAddr view) {
         return;
     }
     Writer writer{packet};
+    WriteShadows(view, packet, writer);
     const VAddr items = Load<VAddr>(view + ViewItems);
     const VAddr keys = Load<VAddr>(view + ViewKeys);
     const s32 key_count = Load<s32>(view + ViewKeyCount);
+    for (const CasterCategory& category : CasterCategories) {
+        const s32 count = Load<s32>(view + ViewCategoryCount + category.index * 4);
+        const s32 first = Load<s32>(view + ViewCategoryFirst + category.index * 4);
+        const VAddr key = keys + static_cast<s64>(first - key_count) * 4;
+        for (s32 i = 0; i < count; i++) {
+            const u32 index = Load<u32>(key + i * 4) & 0x3fffff;
+            writer.AddCaster(items + (static_cast<u64>(index) << 6), category);
+        }
+    }
     for (const Category& category : Categories) {
         const s32 count = Load<s32>(view + ViewCategoryCount + category.index * 4);
         const s32 first = Load<s32>(view + ViewCategoryFirst + category.index * 4);

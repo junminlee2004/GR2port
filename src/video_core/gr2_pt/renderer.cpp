@@ -5,11 +5,13 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <memory>
 #include <thread>
 #include <vector>
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include "common/io_file.h"
 #include "common/logging/log.h"
@@ -26,6 +28,7 @@
 #include "video_core/gr2_pt/scene_ring.h"
 #include "video_core/gr2_pt/shaders/mesh_frag.h"
 #include "video_core/gr2_pt/shaders/mesh_vert.h"
+#include "video_core/gr2_pt/shadows.h"
 #include "video_core/gr2_pt/swapchain.h"
 #include "video_core/gr2_pt/textures.h"
 #include "video_core/gr2_pt/window.h"
@@ -35,6 +38,8 @@ namespace Gr2Pt::Renderer {
 namespace {
 
 constexpr u32 FramesInFlight = 2;
+// GPU timestamps per frame: the start, after the uploads, after each cascade and the end.
+constexpr u32 Timestamps = 3 + Scene::Cascades;
 constexpr u32 ReportFrames = 600;
 constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
 // A frame with more indices than this is not drawn: its items are not what the capture expects.
@@ -64,10 +69,18 @@ struct Stats {
     double work_ms = 0.0;
     double wait_ms = 0.0;
     double gpu_ms = 0.0;
+    std::array<double, Scene::Cascades> cascade_ms{};
+    double main_ms = 0.0;
+    std::array<u64, Scene::Cascades> caster_indices{};
     u64 draws = 0;
     u64 dropped = 0;
     u64 capture_ns = 0;
     u64 untextured = 0;
+    u64 casters = 0;
+    u64 skinned_casters = 0;
+    u64 dropped_casters = 0;
+    u64 caster_draws = 0;
+    u64 alpha_casters = 0;
     u64 indices = 0;
     u32 max_indices = 0;
     u32 refused = 0;
@@ -83,7 +96,9 @@ private:
     void Frame(const SceneRing::Packet& packet);
     void Record(Slot& slot, u32 index, const SceneRing::Packet& packet);
     void ReadTimes(u32 slot_index);
-    void LogScene(const SceneRing::Packet& packet);
+    void LogScene(const Scene::Header& header, const SceneRing::Packet& packet);
+    void LogShadows(const Scene::Header& header, const SceneRing::Packet& packet);
+    void LogLight(const SceneRing::Packet& packet);
     void RecordSnapshot(vk::CommandBuffer cmd, vk::Image image);
     void SaveSnapshot();
     void Report();
@@ -103,6 +118,7 @@ private:
     // the frame's slot is free.
     u64 frame = FramesInFlight;
     bool logged_scene = false;
+    bool logged_shadows = false;
     bool logged_refusal = false;
     // Each report saves the next frame to a PNG in the log folder.
     Buffer snapshot;
@@ -155,7 +171,7 @@ bool Thread::Init() {
     if (d.timestamp_period != 0.0) {
         const vk::QueryPoolCreateInfo info{
             .queryType = vk::QueryType::eTimestamp,
-            .queryCount = 2 * FramesInFlight,
+            .queryCount = Timestamps * FramesInFlight,
         };
         timestamps = d.device.createQueryPool(info, nullptr, dl).value;
     }
@@ -168,7 +184,7 @@ bool Thread::Init() {
                                           vk::BufferUsageFlagBits::eIndirectBuffer,
                                       Placement::Upload);
     if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
-        !Textures::Start(d, *memory)) {
+        !Textures::Start(d, *memory) || !Shadows::Start(d, *memory)) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -191,7 +207,7 @@ bool Thread::Recreate() {
                                 vk::ImageUsageFlagBits::eDepthStencilAttachment,
                                 vk::ImageAspectFlagBits::eDepth);
     if (pipeline_format != swapchain->Format()) {
-        const std::array set_layouts{Textures::SetLayout()};
+        const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout()};
         DestroyPipeline(d, mesh_pipeline);
         mesh_pipeline = CreateGraphicsPipeline(d, {
                                                       .vertex = MESH_VERT,
@@ -199,7 +215,7 @@ bool Thread::Recreate() {
                                                       .color = swapchain->Format(),
                                                       .depth = DepthFormat,
                                                       .depth_test = true,
-                                                      .push_constant_bytes = sizeof(u64),
+                                                      .push_constant_bytes = 2 * sizeof(u64),
                                                       .set_layouts = set_layouts,
                                                   });
         pipeline_format = swapchain->Format();
@@ -214,12 +230,17 @@ void Thread::ReadTimes(u32 slot_index) {
         return;
     }
     slot.timed = false;
-    std::array<u64, 2> ticks{};
-    const vk::Result result =
-        d.device.getQueryPoolResults(timestamps, 2 * slot_index, 2, sizeof(ticks), ticks.data(),
-                                     sizeof(u64), vk::QueryResultFlagBits::e64, d.dispatch);
-    if (result == vk::Result::eSuccess && ticks[1] >= ticks[0]) {
-        stats.gpu_ms += static_cast<double>(ticks[1] - ticks[0]) * d.timestamp_period * 1e-6;
+    std::array<u64, Timestamps> ticks{};
+    const vk::Result result = d.device.getQueryPoolResults(
+        timestamps, Timestamps * slot_index, Timestamps, sizeof(ticks), ticks.data(), sizeof(u64),
+        vk::QueryResultFlagBits::e64, d.dispatch);
+    if (result == vk::Result::eSuccess && std::ranges::is_sorted(ticks)) {
+        const double ms = d.timestamp_period * 1e-6;
+        stats.gpu_ms += static_cast<double>(ticks[Timestamps - 1] - ticks[0]) * ms;
+        for (u32 c = 0; c < Scene::Cascades; c++) {
+            stats.cascade_ms[c] += static_cast<double>(ticks[2 + c] - ticks[1 + c]) * ms;
+        }
+        stats.main_ms += static_cast<double>(ticks[Timestamps - 1] - ticks[Timestamps - 2]) * ms;
         stats.timed++;
     }
 }
@@ -286,22 +307,22 @@ void Thread::SaveSnapshot() {
 }
 
 // Logs the first packet with draws, and the first one too large to draw.
-void Thread::LogScene(const SceneRing::Packet& packet) {
-    const auto* header = reinterpret_cast<const Scene::Header*>(packet.data);
-    const bool refused = header->indices > MaxFrameIndices;
-    if (header->draws == 0 || (logged_scene && (!refused || logged_refusal))) {
+void Thread::LogScene(const Scene::Header& header, const SceneRing::Packet& packet) {
+    LogShadows(header, packet);
+    const bool refused = header.indices > MaxFrameIndices;
+    if (header.draws == 0 || (logged_scene && (!refused || logged_refusal))) {
         return;
     }
     logged_scene = true;
     logged_refusal |= refused;
     LOG_INFO(Render_Vulkan,
              "GR2 PT: game frame {}: {} draws, {} indices, the largest {}, {} items not drawn{}",
-             header->frame, header->draws, header->indices, header->max_indices, header->dropped,
+             header.frame, header.draws, header.indices, header.max_indices, header.dropped,
              refused ? "; too many indices, not drawn" : "");
     const auto* draws = reinterpret_cast<const Scene::Draw*>(packet.data + Scene::DrawsOffset);
     const auto* commands =
         reinterpret_cast<const Scene::Command*>(packet.data + Scene::CommandsOffset);
-    for (u32 i = 0; i < std::min(header->draws, 4u); i++) {
+    for (u32 i = 0; i < std::min(header.draws, 4u); i++) {
         const float* wvp = draws[i].world_view_projection;
         LOG_INFO(Render_Vulkan,
                  "GR2 PT: draw {}: vertices {:#x} stride {} position {:#x}, indices {} from {}, "
@@ -313,18 +334,93 @@ void Thread::LogScene(const SceneRing::Packet& packet) {
     }
 }
 
+// Logs the light the main view uses, once per report: the direction toward the key light derived
+// from the first cascade, and the game's key light.
+void Thread::LogLight(const SceneRing::Packet& packet) {
+    Scene::Shadows shadows;
+    std::memcpy(&shadows, packet.data + Scene::ShadowsOffset, sizeof(shadows));
+    const float* toward = shadows.light_direction;
+    const float* color = shadows.key_light_color;
+    const float* key = shadows.key_light_direction;
+    LOG_INFO(Render_Vulkan,
+             "GR2 PT light: toward the light ({:.3f} {:.3f} {:.3f}); the game's key light "
+             "colour ({:.3f} {:.3f} {:.3f} {:.3f}) direction of travel ({:.3f} {:.3f} {:.3f} "
+             "{:.3f})",
+             toward[0], toward[1], toward[2], color[0], color[1], color[2], color[3], key[0],
+             key[1], key[2], key[3]);
+}
+
+// Logs the cascades and the first casters of the first packet with casters.
+void Thread::LogShadows(const Scene::Header& header, const SceneRing::Packet& packet) {
+    if (logged_shadows || header.casters == 0) {
+        return;
+    }
+    logged_shadows = true;
+    const auto* shadows =
+        reinterpret_cast<const Scene::Shadows*>(packet.data + Scene::ShadowsOffset);
+    const float* light = shadows->light_direction;
+    LOG_INFO(Render_Vulkan,
+             "GR2 PT: game frame {}: cascades {:#x}, depth bias ({} {}) ({} {}) ({} {}), {} "
+             "casters, lists {} {} {}, {} skinned, {} not drawable, light ({:.3f} {:.3f} "
+             "{:.3f})",
+             header.frame, header.cascades, header.depth_bias[0][0], header.depth_bias[0][1],
+             header.depth_bias[1][0], header.depth_bias[1][1], header.depth_bias[2][0],
+             header.depth_bias[2][1], header.casters, header.caster_commands[0],
+             header.caster_commands[1], header.caster_commands[2], header.skinned_casters,
+             header.dropped_casters, light[0], light[1], light[2]);
+    for (u32 c = 0; c < Scene::Cascades; c++) {
+        const float* vp = shadows->view_projection[c * Scene::CasterTables];
+        LOG_INFO(Render_Vulkan,
+                 "GR2 PT: cascade {} VP rows ({:.4f} {:.4f} {:.4f} {:.4f}) ({:.4f} {:.4f} {:.4f} "
+                 "{:.4f}) ({:.4f} {:.4f} {:.4f} {:.4f}) ({:.4f} {:.4f} {:.4f} {:.4f})",
+                 c, vp[0], vp[1], vp[2], vp[3], vp[4], vp[5], vp[6], vp[7], vp[8], vp[9], vp[10],
+                 vp[11], vp[12], vp[13], vp[14], vp[15]);
+    }
+    const auto* casters =
+        reinterpret_cast<const Scene::Caster*>(packet.data + Scene::CastersOffset);
+    for (u32 i = 0; i < std::min(header.casters, 2u); i++) {
+        const float* w = casters[i].world;
+        LOG_INFO(Render_Vulkan,
+                 "GR2 PT: caster {}: vertices {:#x} stride {} position {:#x} table {}, world row 3 "
+                 "({:.2f} {:.2f} {:.2f} {:.2f})",
+                 i, casters[i].vertices, casters[i].stride, casters[i].position, casters[i].table,
+                 w[12], w[13], w[14], w[15]);
+    }
+}
+
 void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     const vk::CommandBuffer cmd = slot.commands;
     const auto& dl = d.dispatch;
     const u32 slot_index = static_cast<u32>(&slot - slots.data());
     (void)cmd.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit}, dl);
     if (timestamps) {
-        cmd.resetQueryPool(timestamps, 2 * slot_index, 2, dl);
-        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, timestamps, 2 * slot_index, dl);
+        cmd.resetQueryPool(timestamps, Timestamps * slot_index, Timestamps, dl);
+        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, timestamps,
+                            Timestamps * slot_index, dl);
     }
     memory->Refresh(frame);
     Meshes::Update(cmd, frame, frame - FramesInFlight);
     Textures::Update(cmd, frame, frame - FramesInFlight);
+    // One read of the header: the packet is write-combined.
+    Scene::Header header;
+    std::memcpy(&header, packet.data, sizeof(header));
+    LogScene(header, packet);
+    const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices;
+    stats.refused += header.indices > MaxFrameIndices;
+    const u64 offset = u64{packet.slot} * SceneRing::SlotBytes;
+    if (timestamps) {
+        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
+                            Timestamps * slot_index + 1, dl);
+    }
+    if (drawn) {
+        Shadows::Record(cmd, header, packet.address, scene_ring.buffer, offset, timestamps,
+                        Timestamps * slot_index + 2);
+    } else if (timestamps) {
+        for (u32 c = 0; c < Scene::Cascades; c++) {
+            cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
+                                Timestamps * slot_index + 2 + c, dl);
+        }
+    }
 
     const vk::Image image = swapchain->Image(index);
     Barrier(d, cmd, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
@@ -368,10 +464,6 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         .pDepthAttachment = &depth_attachment,
     };
     cmd.beginRendering(rendering, dl);
-    const auto* header = reinterpret_cast<const Scene::Header*>(packet.data);
-    LogScene(packet);
-    const bool drawn = header->draws != 0 && header->indices <= MaxFrameIndices;
-    stats.refused += header->indices > MaxFrameIndices;
     if (drawn) {
         // A negative height keeps the game's y-up clip space.
         const vk::Viewport viewport{
@@ -383,31 +475,43 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
             .maxDepth = 1.0f,
         };
         const vk::Rect2D scissor{{0, 0}, extent};
-        const u64 draws = packet.address + Scene::DrawsOffset;
-        const u64 offset = u64{packet.slot} * SceneRing::SlotBytes;
+        const std::array<u64, 2> addresses{packet.address + Scene::DrawsOffset,
+                                           packet.address + Scene::ShadowsOffset};
+        const std::array sets{Textures::Set(), Shadows::Set()};
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, mesh_pipeline.pipeline, dl);
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mesh_pipeline.layout, 0,
-                               Textures::Set(), {}, dl);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mesh_pipeline.layout, 0, sets, {},
+                               dl);
         cmd.setViewport(0, viewport, dl);
         cmd.setScissor(0, scissor, dl);
         cmd.pushConstants(mesh_pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
-                          sizeof(draws), &draws, dl);
+                          sizeof(addresses), addresses.data(), dl);
         cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
-        cmd.drawIndexedIndirect(scene_ring.buffer, offset + Scene::CommandsOffset, header->draws,
+        cmd.drawIndexedIndirect(scene_ring.buffer, offset + Scene::CommandsOffset, header.draws,
                                 sizeof(Scene::Command), dl);
     }
     cmd.endRendering(dl);
     if (snapshot_wanted) {
         snapshot_wanted = false;
+        LogLight(packet);
         RecordSnapshot(cmd, swapchain->Image(index));
         slot.snapshot = snapshot.mapped != nullptr;
     }
-    stats.draws += header->draws;
-    stats.dropped += header->dropped;
-    stats.capture_ns += header->capture_ns;
-    stats.untextured += header->untextured;
-    stats.indices += header->indices;
-    stats.max_indices = std::max(stats.max_indices, header->max_indices);
+    stats.draws += header.draws;
+    stats.dropped += header.dropped;
+    stats.capture_ns += header.capture_ns;
+    stats.untextured += header.untextured;
+    stats.indices += header.indices;
+    stats.max_indices = std::max(stats.max_indices, header.max_indices);
+    stats.casters += header.casters;
+    stats.skinned_casters += header.skinned_casters;
+    stats.dropped_casters += header.dropped_casters;
+    for (u32 c = 0; c < Scene::Cascades; c++) {
+        for (const u32 commands : header.caster_commands[c]) {
+            stats.caster_draws += commands;
+        }
+        stats.alpha_casters += header.caster_commands[c][2] + header.caster_commands[c][3];
+        stats.caster_indices[c] += header.caster_indices[c];
+    }
 
     Barrier(d, cmd, image, vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageLayout::ePresentSrcKHR, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
@@ -415,7 +519,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
             vk::AccessFlagBits2::eNone);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eBottomOfPipe, timestamps,
-                            2 * slot_index + 1, dl);
+                            Timestamps * slot_index + Timestamps - 1, dl);
         slot.timed = true;
     }
     (void)cmd.end(dl);
@@ -500,16 +604,19 @@ void Thread::Report() {
     const u64 skipped = SceneRing::Skipped();
     const double game_fps = static_cast<double>(game_frames - stats.game_frames) / seconds;
     const double frames = std::max(stats.frames, 1u);
-    const double gpu_ms = stats.timed != 0 ? stats.gpu_ms / stats.timed : 0.0;
+    const double timed = std::max(stats.timed, 1u);
+    const double gpu_ms = stats.gpu_ms / timed;
     const Meshes::Stats meshes = Meshes::TakeStats();
     const Textures::Stats textures = Textures::TakeStats();
     const Memory::Budget budget = memory->DeviceBudget();
     LOG_INFO(Render_Vulkan,
              "GR2 PT renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, {} game frames "
              "skipped, per frame {:.3f} ms of render thread work, {:.3f} ms waiting for a "
-             "frame slot and a swapchain image, {:.3f} ms on the GPU",
+             "frame slot and a swapchain image, {:.3f} ms on the GPU (cascades {:.3f} {:.3f} "
+             "{:.3f}, main view {:.3f})",
              game_fps, stats.frames, seconds, skipped - stats.skipped, stats.work_ms / frames,
-             stats.wait_ms / frames, gpu_ms);
+             stats.wait_ms / frames, gpu_ms, stats.cascade_ms[0] / timed,
+             stats.cascade_ms[1] / timed, stats.cascade_ms[2] / timed, stats.main_ms / timed);
     LOG_INFO(Render_Vulkan,
              "GR2 PT scene: per frame {:.0f} draws, {:.0f} items not drawn, {:.0f} indices "
              "(largest draw {}), {:.3f} ms of capture on the game's draw thread, {} frames not "
@@ -533,6 +640,18 @@ void Thread::Report() {
              static_cast<double>(textures.uploaded_data_bytes) / (1 << 20), textures.not_2d,
              textures.unsupported, textures.too_large, textures.failed, textures.missed_destroys,
              meshes.no_texcoord);
+    LOG_INFO(Render_Vulkan,
+             "GR2 PT shadows: per frame {:.0f} static casters in {:.0f} cascade draws ({:.0f} "
+             "alpha-tested) of {:.0f} {:.0f} {:.0f} indices; {:.0f} skinned casters and {:.0f} "
+             "others not drawn",
+             static_cast<double>(stats.casters) / frames,
+             static_cast<double>(stats.caster_draws) / frames,
+             static_cast<double>(stats.alpha_casters) / frames,
+             static_cast<double>(stats.caster_indices[0]) / frames,
+             static_cast<double>(stats.caster_indices[1]) / frames,
+             static_cast<double>(stats.caster_indices[2]) / frames,
+             static_cast<double>(stats.skinned_casters) / frames,
+             static_cast<double>(stats.dropped_casters) / frames);
     LOG_INFO(Render_Vulkan,
              "GR2 PT memory: device-local {} MB of a {} MB budget used by the process, {} MB by "
              "the renderer",
