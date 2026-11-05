@@ -10,6 +10,7 @@
 #include "common/memory_patcher.h"
 #include "core/libraries/error_codes.h"
 #include "core/memory.h"
+#include "video_core/gr2_pt/capture.h"
 #include "video_core/gr2_pt/gr2_pt.h"
 #include "video_core/gr2_pt/hooks.h"
 #include "video_core/gr2_pt/renderer.h"
@@ -26,7 +27,7 @@ constexpr u64 StubAreaOffset = 32_MB;
 constexpr Hooks::Entry FrameGraph{0x142ec00, 6, Hooks::FramePrologue};
 
 void PS4_SYSV_ABI OnFrameGraph(u32, const Hooks::Registers*, u64) {
-    Renderer::OnGameFrame();
+    Capture::OnFrame();
 }
 
 } // namespace

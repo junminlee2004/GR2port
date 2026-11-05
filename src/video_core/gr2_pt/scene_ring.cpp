@@ -1,0 +1,104 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include <array>
+#include <atomic>
+
+#include "video_core/gr2_pt/scene_ring.h"
+
+namespace Gr2Pt::SceneRing {
+
+namespace {
+
+enum State : u32 {
+    Free,
+    Writing,
+    Ready,
+    InUse,
+};
+
+struct Slot {
+    std::atomic<u32> state{Free};
+    std::atomic<u64> frame{0};
+};
+
+std::array<Slot, Slots> g_slots;
+std::atomic<u8*> g_cpu{nullptr};
+u64 g_address = 0;
+std::atomic<u64> g_published{0};
+std::atomic<u64> g_skipped{0};
+// The slot the draw thread is writing; only the draw thread touches it.
+u32 g_writing = Slots;
+
+} // namespace
+
+void Attach(u8* cpu, u64 address) {
+    g_address = address;
+    g_cpu.store(cpu, std::memory_order_release);
+}
+
+u8* Begin() {
+    u8* const cpu = g_cpu.load(std::memory_order_acquire);
+    if (cpu == nullptr) {
+        return nullptr;
+    }
+    for (u32 i = 0; i < Slots; i++) {
+        u32 expected = Free;
+        if (g_slots[i].state.compare_exchange_strong(expected, Writing,
+                                                     std::memory_order_acquire)) {
+            g_writing = i;
+            return cpu + i * SlotBytes;
+        }
+    }
+    g_skipped.fetch_add(1, std::memory_order_relaxed);
+    return nullptr;
+}
+
+void Publish(u64 frame) {
+    Slot& slot = g_slots[g_writing];
+    slot.frame.store(frame, std::memory_order_relaxed);
+    slot.state.store(Ready, std::memory_order_release);
+    g_published.store(frame, std::memory_order_release);
+    g_published.notify_one();
+}
+
+bool Take(u64 seen, Packet& packet) {
+    g_published.wait(seen, std::memory_order_acquire);
+    u32 newest = Slots;
+    u64 newest_frame = 0;
+    for (u32 i = 0; i < Slots; i++) {
+        if (g_slots[i].state.load(std::memory_order_acquire) != Ready) {
+            continue;
+        }
+        const u64 frame = g_slots[i].frame.load(std::memory_order_relaxed);
+        if (newest == Slots || frame > newest_frame) {
+            newest = i;
+            newest_frame = frame;
+        }
+    }
+    if (newest == Slots) {
+        return false;
+    }
+    for (u32 i = 0; i < Slots; i++) {
+        u32 expected = Ready;
+        g_slots[i].state.compare_exchange_strong(expected, i == newest ? InUse : Free,
+                                                 std::memory_order_acq_rel);
+    }
+    packet = {
+        .slot = newest,
+        .frame = newest_frame,
+        .data = g_cpu.load(std::memory_order_relaxed) + newest * SlotBytes,
+        .address = g_address + newest * SlotBytes,
+    };
+    return true;
+}
+
+void Release(u32 slot) {
+    g_slots[slot].state.store(Free, std::memory_order_release);
+}
+
+u64 Skipped() {
+    return g_skipped.load(std::memory_order_relaxed);
+}
+
+} // namespace Gr2Pt::SceneRing

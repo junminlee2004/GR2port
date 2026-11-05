@@ -13,8 +13,11 @@
 
 #include "common/logging/log.h"
 #include "common/thread.h"
+#include "video_core/gr2_pt/capture.h"
 #include "video_core/gr2_pt/device.h"
+#include "video_core/gr2_pt/memory.h"
 #include "video_core/gr2_pt/renderer.h"
+#include "video_core/gr2_pt/scene_ring.h"
 #include "video_core/gr2_pt/swapchain.h"
 #include "video_core/gr2_pt/window.h"
 
@@ -25,18 +28,19 @@ namespace {
 constexpr u32 FramesInFlight = 2;
 constexpr u32 ReportFrames = 600;
 
-std::atomic<u64> g_game_frames{0};
-
 struct Slot {
     vk::CommandPool pool;
     vk::CommandBuffer commands;
     vk::Fence done;
     vk::Semaphore acquired;
+    // The scene ring slot the frame reads.
+    u32 scene = SceneRing::Slots;
     bool timed = false;
 };
 
 struct Stats {
     u64 game_frames = 0;
+    u64 skipped = 0;
     u32 frames = 0;
     u32 timed = 0;
     double cpu_ms = 0.0;
@@ -50,13 +54,15 @@ public:
 
 private:
     bool Init();
-    void Frame(u64 game_frame);
+    void Frame(const SceneRing::Packet& packet);
     void Record(Slot& slot, u32 index, u64 game_frame);
     void ReadTimes(u32 slot_index);
     void Report();
     bool Recreate();
 
     Device d;
+    std::unique_ptr<Memory> memory;
+    Buffer scene_ring;
     std::unique_ptr<Swapchain> swapchain;
     std::array<Slot, FramesInFlight> slots;
     vk::QueryPool timestamps;
@@ -111,6 +117,16 @@ bool Thread::Init() {
         };
         timestamps = d.device.createQueryPool(info, nullptr, dl).value;
     }
+    memory = std::make_unique<Memory>(d);
+    if (!memory->Create()) {
+        return false;
+    }
+    scene_ring = memory->CreateBuffer(SceneRing::Slots * SceneRing::SlotBytes,
+                                      vk::BufferUsageFlagBits::eStorageBuffer, Placement::Upload);
+    if (scene_ring.mapped == nullptr) {
+        return false;
+    }
+    SceneRing::Attach(scene_ring.mapped, scene_ring.address);
     swapchain = std::make_unique<Swapchain>(d);
     needs_swapchain = true;
     return true;
@@ -191,25 +207,32 @@ void Thread::Record(Slot& slot, u32 index, u64 game_frame) {
     (void)cmd.end(dl);
 }
 
-void Thread::Frame(u64 game_frame) {
+void Thread::Frame(const SceneRing::Packet& packet) {
     const auto& dl = d.dispatch;
     const auto start = std::chrono::steady_clock::now();
     if (needs_swapchain && !Recreate()) {
+        SceneRing::Release(packet.slot);
         return;
     }
     const u32 slot_index = next;
     Slot& slot = slots[slot_index];
     (void)d.device.waitForFences(slot.done, true, UINT64_MAX, dl);
     ReadTimes(slot_index);
+    if (slot.scene != SceneRing::Slots) {
+        SceneRing::Release(slot.scene);
+        slot.scene = SceneRing::Slots;
+    }
 
     u32 index = 0;
     if (!swapchain->Acquire(slot.acquired, index)) {
         needs_swapchain = true;
+        SceneRing::Release(packet.slot);
         return;
     }
     (void)d.device.resetFences(slot.done, dl);
     (void)d.device.resetCommandPool(slot.pool, {}, dl);
-    Record(slot, index, game_frame);
+    Record(slot, index, packet.frame);
+    slot.scene = packet.slot;
 
     const vk::SemaphoreSubmitInfo wait{
         .semaphore = slot.acquired,
@@ -230,6 +253,8 @@ void Thread::Frame(u64 game_frame) {
     };
     if (d.queue.submit2(submit, slot.done, dl) != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "GR2 PT: the frame submit failed");
+        SceneRing::Release(slot.scene);
+        slot.scene = SceneRing::Slots;
         return;
     }
     next = (next + 1) % FramesInFlight;
@@ -244,18 +269,20 @@ void Thread::Frame(u64 game_frame) {
 void Thread::Report() {
     const auto now = std::chrono::steady_clock::now();
     const double seconds = std::chrono::duration<double>(now - stats.start).count();
-    const u64 game_frames = g_game_frames.load(std::memory_order_relaxed);
+    const u64 game_frames = Capture::Frames();
+    const u64 skipped = SceneRing::Skipped();
     const double game_fps = static_cast<double>(game_frames - stats.game_frames) / seconds;
     const double frames = std::max(stats.frames, 1u);
     const double gpu_ms = stats.timed != 0 ? stats.gpu_ms / stats.timed : 0.0;
     LOG_INFO(Render_Vulkan,
-             "GR2 PT renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, per frame "
-             "{:.3f} ms on the render thread, {:.3f} ms on the GPU",
-             game_fps, stats.frames, seconds, stats.cpu_ms / frames, gpu_ms);
+             "GR2 PT renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, {} game frames "
+             "skipped, per frame {:.3f} ms on the render thread, {:.3f} ms on the GPU",
+             game_fps, stats.frames, seconds, skipped - stats.skipped, stats.cpu_ms / frames,
+             gpu_ms);
     Window::SetTitle(fmt::format("GR2 PT | game {:.0f} fps | render thread {:.2f} ms | GPU "
                                  "{:.2f} ms",
                                  game_fps, stats.cpu_ms / frames, gpu_ms));
-    stats = {.game_frames = game_frames, .start = now};
+    stats = {.game_frames = game_frames, .skipped = skipped, .start = now};
 }
 
 void Thread::Run() {
@@ -264,12 +291,15 @@ void Thread::Run() {
         LOG_ERROR(Render_Vulkan, "GR2 PT: the renderer did not start");
         return;
     }
-    u64 seen = g_game_frames.load(std::memory_order_acquire);
-    stats.game_frames = seen;
+    u64 seen = 0;
+    stats.game_frames = Capture::Frames();
     for (;;) {
-        g_game_frames.wait(seen, std::memory_order_acquire);
-        seen = g_game_frames.load(std::memory_order_acquire);
-        Frame(seen);
+        SceneRing::Packet packet;
+        if (!SceneRing::Take(seen, packet)) {
+            continue;
+        }
+        seen = packet.frame;
+        Frame(packet);
         if (stats.frames >= ReportFrames) {
             Report();
         }
@@ -283,11 +313,6 @@ void Start() {
         static Thread thread;
         thread.Run();
     }).detach();
-}
-
-void OnGameFrame() {
-    g_game_frames.fetch_add(1, std::memory_order_release);
-    g_game_frames.notify_one();
 }
 
 } // namespace Gr2Pt::Renderer

@@ -3,13 +3,10 @@
 
 #pragma once
 
-// The render thread: draws a frame into the renderer's window for each frame the game builds.
+// The render thread: draws each scene the capture publishes into the renderer's window.
 namespace Gr2Pt::Renderer {
 
 /// Starts the render thread, which creates the window and the device.
 void Start();
-
-/// The game's draw thread starts a frame. Never blocks.
-void OnGameFrame();
 
 } // namespace Gr2Pt::Renderer

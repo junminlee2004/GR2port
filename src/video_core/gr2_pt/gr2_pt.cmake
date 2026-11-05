@@ -2,14 +2,21 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 target_sources(shadps4 PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/capture.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/capture.h
     ${CMAKE_CURRENT_LIST_DIR}/device.cpp
     ${CMAKE_CURRENT_LIST_DIR}/device.h
     ${CMAKE_CURRENT_LIST_DIR}/gr2_pt.cpp
     ${CMAKE_CURRENT_LIST_DIR}/gr2_pt.h
     ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp
     ${CMAKE_CURRENT_LIST_DIR}/hooks.h
+    ${CMAKE_CURRENT_LIST_DIR}/memory.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/memory.h
     ${CMAKE_CURRENT_LIST_DIR}/renderer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/renderer.h
+    ${CMAKE_CURRENT_LIST_DIR}/scene.h
+    ${CMAKE_CURRENT_LIST_DIR}/scene_ring.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/scene_ring.h
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.h
     ${CMAKE_CURRENT_LIST_DIR}/window.cpp
