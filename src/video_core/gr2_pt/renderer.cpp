@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -86,6 +87,7 @@ struct Stats {
     u64 untextured = 0;
     u64 skinned = 0;
     u64 palette_rows = 0;
+    std::array<u64, Scene::ItemCategories> category_items{};
     u64 casters = 0;
     u64 skinned_casters = 0;
     u64 dropped_casters = 0;
@@ -512,6 +514,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.untextured += header.untextured;
     stats.skinned += header.skinned;
     stats.palette_rows += header.palette_rows;
+    for (u32 c = 0; c < Scene::ItemCategories; c++) {
+        stats.category_items[c] += header.category_items[c];
+    }
     stats.indices += header.indices;
     stats.max_indices = std::max(stats.max_indices, header.max_indices);
     stats.casters += header.casters;
@@ -668,6 +673,14 @@ void Thread::Report() {
              static_cast<double>(stats.caster_indices[1]) / frames,
              static_cast<double>(stats.caster_indices[2]) / frames,
              static_cast<double>(stats.dropped_casters) / frames);
+    std::string categories;
+    for (u32 c = 0; c < Scene::ItemCategories; c++) {
+        if (stats.category_items[c] != 0) {
+            categories +=
+                fmt::format(" {}:{:.0f}", c, static_cast<double>(stats.category_items[c]) / frames);
+        }
+    }
+    LOG_INFO(Render_Vulkan, "GR2 PT categories: items per frame{}", categories);
     LOG_INFO(Render_Vulkan,
              "GR2 PT memory: device-local {} MB of a {} MB budget used by the process, {} MB by "
              "the renderer",

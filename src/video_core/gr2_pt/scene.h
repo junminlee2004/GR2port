@@ -19,6 +19,8 @@ inline constexpr u32 CasterTables = 3;
 inline constexpr u32 CasterLists = 4;
 /// Bone palette rows per packet: each bone is three rows of a 3x4 matrix.
 inline constexpr u32 MaxPaletteRows = 1u << 16;
+/// The game's item categories.
+inline constexpr u32 ItemCategories = 37;
 
 /// The start of each packet.
 struct Header {
@@ -48,6 +50,8 @@ struct Header {
     u32 cascades;
     /// The game's depth bias of each cascade in GCN units: constant, then slope.
     float depth_bias[Cascades][2];
+    /// The items of each category in the frame, at most 65535.
+    u16 category_items[ItemCategories];
 };
 static_assert(sizeof(Header) <= 256);
 

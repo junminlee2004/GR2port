@@ -473,6 +473,10 @@ void OnFrame(VAddr view) {
     }
     Scene::Header header = writer.Header();
     header.frame = frame;
+    for (u32 c = 0; c < Scene::ItemCategories; c++) {
+        const s32 count = Load<s32>(view + ViewCategoryCount + c * 4);
+        header.category_items[c] = static_cast<u16>(std::clamp(count, 0, 0xffff));
+    }
     header.capture_ns = static_cast<u32>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                              std::chrono::steady_clock::now() - start)
                                              .count());
