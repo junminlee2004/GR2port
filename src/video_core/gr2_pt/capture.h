@@ -8,8 +8,9 @@
 // The scene capture on the game's draw thread.
 namespace Gr2Pt::Capture {
 
-/// At the frame graph's entry: writes the frame's scene into the scene ring.
-void OnFrame();
+/// At the frame graph's entry, with the view it draws: writes the frame's scene into the scene
+/// ring.
+void OnFrame(VAddr view);
 
 /// The frames the game has started.
 u64 Frames();

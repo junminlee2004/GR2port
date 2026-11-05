@@ -12,6 +12,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/hooks.h
     ${CMAKE_CURRENT_LIST_DIR}/memory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/memory.h
+    ${CMAKE_CURRENT_LIST_DIR}/meshes.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/meshes.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.cpp
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.h
     ${CMAKE_CURRENT_LIST_DIR}/renderer.cpp
@@ -55,6 +57,8 @@ function(gr2_pt_add_shader FILENAME SHADER_NAME)
         VERBATIM)
     set(GR2_PT_SHADER_HEADERS ${GR2_PT_SHADER_HEADERS} ${HEADER_FILE} PARENT_SCOPE)
 endfunction()
+gr2_pt_add_shader(mesh.vert mesh_vert)
+gr2_pt_add_shader(mesh.frag mesh_frag)
 add_custom_target(gr2_pt_shaders DEPENDS ${GR2_PT_SHADER_HEADERS})
 target_include_directories(shadps4 PRIVATE ${GR2_PT_SHADER_INCLUDE})
 add_dependencies(shadps4 gr2_pt_shaders)

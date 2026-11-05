@@ -5,7 +5,6 @@
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <cmath>
 #include <memory>
 #include <thread>
 
@@ -16,8 +15,13 @@
 #include "video_core/gr2_pt/capture.h"
 #include "video_core/gr2_pt/device.h"
 #include "video_core/gr2_pt/memory.h"
+#include "video_core/gr2_pt/meshes.h"
+#include "video_core/gr2_pt/pipeline.h"
 #include "video_core/gr2_pt/renderer.h"
+#include "video_core/gr2_pt/scene.h"
 #include "video_core/gr2_pt/scene_ring.h"
+#include "video_core/gr2_pt/shaders/mesh_frag.h"
+#include "video_core/gr2_pt/shaders/mesh_vert.h"
 #include "video_core/gr2_pt/swapchain.h"
 #include "video_core/gr2_pt/window.h"
 
@@ -27,6 +31,11 @@ namespace {
 
 constexpr u32 FramesInFlight = 2;
 constexpr u32 ReportFrames = 600;
+constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
+// A frame with more indices than this is not drawn: its items are not what the capture expects.
+constexpr u64 MaxFrameIndices = 48u << 20;
+
+static_assert(Scene::PacketBytes <= SceneRing::SlotBytes);
 
 struct Slot {
     vk::CommandPool pool;
@@ -48,6 +57,12 @@ struct Stats {
     double work_ms = 0.0;
     double wait_ms = 0.0;
     double gpu_ms = 0.0;
+    u64 draws = 0;
+    u64 dropped = 0;
+    u64 capture_ns = 0;
+    u64 indices = 0;
+    u32 max_indices = 0;
+    u32 refused = 0;
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 };
 
@@ -58,8 +73,9 @@ public:
 private:
     bool Init();
     void Frame(const SceneRing::Packet& packet);
-    void Record(Slot& slot, u32 index, u64 game_frame);
+    void Record(Slot& slot, u32 index, const SceneRing::Packet& packet);
     void ReadTimes(u32 slot_index);
+    void LogScene(const SceneRing::Packet& packet);
     void Report();
     bool Recreate();
 
@@ -69,7 +85,15 @@ private:
     std::unique_ptr<Swapchain> swapchain;
     std::array<Slot, FramesInFlight> slots;
     vk::QueryPool timestamps;
+    Image depth;
+    Pipeline mesh_pipeline;
+    vk::Format pipeline_format = vk::Format::eUndefined;
     u32 next = 0;
+    // The number of the next frame to submit; frames up to frame - FramesInFlight are done once
+    // the frame's slot is free.
+    u64 frame = FramesInFlight;
+    bool logged_scene = false;
+    bool logged_refusal = false;
     bool needs_swapchain = false;
     Stats stats;
 };
@@ -125,8 +149,10 @@ bool Thread::Init() {
         return false;
     }
     scene_ring = memory->CreateBuffer(SceneRing::Slots * SceneRing::SlotBytes,
-                                      vk::BufferUsageFlagBits::eStorageBuffer, Placement::Upload);
-    if (scene_ring.mapped == nullptr) {
+                                      vk::BufferUsageFlagBits::eStorageBuffer |
+                                          vk::BufferUsageFlagBits::eIndirectBuffer,
+                                      Placement::Upload);
+    if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory)) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -141,6 +167,26 @@ bool Thread::Recreate() {
         return false;
     }
     needs_swapchain = !swapchain->Create(size.width, size.height);
+    if (needs_swapchain) {
+        return false;
+    }
+    memory->Destroy(depth);
+    depth = memory->CreateImage(DepthFormat, swapchain->Extent(),
+                                vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                                vk::ImageAspectFlagBits::eDepth);
+    if (pipeline_format != swapchain->Format()) {
+        DestroyPipeline(d, mesh_pipeline);
+        mesh_pipeline = CreateGraphicsPipeline(d, {
+                                                      .vertex = MESH_VERT,
+                                                      .fragment = MESH_FRAG,
+                                                      .color = swapchain->Format(),
+                                                      .depth = DepthFormat,
+                                                      .depth_test = true,
+                                                      .push_constant_bytes = sizeof(u64),
+                                                  });
+        pipeline_format = swapchain->Format();
+    }
+    needs_swapchain = !depth.image || !mesh_pipeline.pipeline;
     return !needs_swapchain;
 }
 
@@ -160,7 +206,35 @@ void Thread::ReadTimes(u32 slot_index) {
     }
 }
 
-void Thread::Record(Slot& slot, u32 index, u64 game_frame) {
+// Logs the first packet with draws, and the first one too large to draw.
+void Thread::LogScene(const SceneRing::Packet& packet) {
+    const auto* header = reinterpret_cast<const Scene::Header*>(packet.data);
+    const bool refused = header->indices > MaxFrameIndices;
+    if (header->draws == 0 || (logged_scene && (!refused || logged_refusal))) {
+        return;
+    }
+    logged_scene = true;
+    logged_refusal |= refused;
+    LOG_INFO(Render_Vulkan,
+             "GR2 PT: game frame {}: {} draws, {} indices, the largest {}, {} items not drawn{}",
+             header->frame, header->draws, header->indices, header->max_indices, header->dropped,
+             refused ? "; too many indices, not drawn" : "");
+    const auto* draws = reinterpret_cast<const Scene::Draw*>(packet.data + Scene::DrawsOffset);
+    const auto* commands =
+        reinterpret_cast<const Scene::Command*>(packet.data + Scene::CommandsOffset);
+    for (u32 i = 0; i < std::min(header->draws, 4u); i++) {
+        const float* wvp = draws[i].world_view_projection;
+        LOG_INFO(Render_Vulkan,
+                 "GR2 PT: draw {}: vertices {:#x} stride {} position {:#x}, indices {} from {}, "
+                 "WVP rows ({:.3f} {:.3f} {:.3f} {:.3f}) ({:.3f} {:.3f} {:.3f} {:.3f}) "
+                 "({:.3f} {:.3f} {:.3f} {:.3f}) ({:.3f} {:.3f} {:.3f} {:.3f})",
+                 i, draws[i].vertices, draws[i].stride, draws[i].position, commands[i].index_count,
+                 commands[i].first_index, wvp[0], wvp[1], wvp[2], wvp[3], wvp[4], wvp[5], wvp[6],
+                 wvp[7], wvp[8], wvp[9], wvp[10], wvp[11], wvp[12], wvp[13], wvp[14], wvp[15]);
+    }
+}
+
+void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     const vk::CommandBuffer cmd = slot.commands;
     const auto& dl = d.dispatch;
     const u32 slot_index = static_cast<u32>(&slot - slots.data());
@@ -169,34 +243,82 @@ void Thread::Record(Slot& slot, u32 index, u64 game_frame) {
         cmd.resetQueryPool(timestamps, 2 * slot_index, 2, dl);
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, timestamps, 2 * slot_index, dl);
     }
+    Meshes::Update(cmd, frame, frame - FramesInFlight);
+
     const vk::Image image = swapchain->Image(index);
     Barrier(d, cmd, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
             vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eNone,
             vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             vk::AccessFlagBits2::eColorAttachmentWrite);
+    const vk::ImageMemoryBarrier2 depth_barrier{
+        .srcStageMask = vk::PipelineStageFlagBits2::eLateFragmentTests,
+        .srcAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+        .dstStageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests,
+        .dstAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+        .oldLayout = vk::ImageLayout::eUndefined,
+        .newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
+        .image = depth.image,
+        .subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1},
+    };
+    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &depth_barrier},
+                         dl);
 
-    // The clear colour turns once every 600 game frames.
-    const float phase = static_cast<float>(game_frame % 600) / 600.0f * 6.2831853f;
-    const vk::ClearValue clear{
-        .color = vk::ClearColorValue{
-            .float32 = std::array<float, 4>{0.25f + 0.2f * std::sin(phase),
-                                            0.25f + 0.2f * std::sin(phase + 2.1f),
-                                            0.25f + 0.2f * std::sin(phase + 4.2f), 1.0f}}};
     const vk::RenderingAttachmentInfo color{
         .imageView = swapchain->View(index),
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
         .loadOp = vk::AttachmentLoadOp::eClear,
         .storeOp = vk::AttachmentStoreOp::eStore,
-        .clearValue = clear,
+        .clearValue = {.color = vk::ClearColorValue{.float32 = std::array<float, 4>{0.32f, 0.38f,
+                                                                                    0.45f, 1.0f}}},
     };
+    const vk::RenderingAttachmentInfo depth_attachment{
+        .imageView = depth.view,
+        .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eClear,
+        .storeOp = vk::AttachmentStoreOp::eDontCare,
+        .clearValue = {.depthStencil = {.depth = 0.0f}},
+    };
+    const vk::Extent2D extent = swapchain->Extent();
     const vk::RenderingInfo rendering{
-        .renderArea = {{0, 0}, swapchain->Extent()},
+        .renderArea = {{0, 0}, extent},
         .layerCount = 1,
         .colorAttachmentCount = 1,
         .pColorAttachments = &color,
+        .pDepthAttachment = &depth_attachment,
     };
     cmd.beginRendering(rendering, dl);
+    const auto* header = reinterpret_cast<const Scene::Header*>(packet.data);
+    LogScene(packet);
+    const bool drawn = header->draws != 0 && header->indices <= MaxFrameIndices;
+    stats.refused += header->indices > MaxFrameIndices;
+    if (drawn) {
+        // A negative height keeps the game's y-up clip space.
+        const vk::Viewport viewport{
+            .x = 0.0f,
+            .y = static_cast<float>(extent.height),
+            .width = static_cast<float>(extent.width),
+            .height = -static_cast<float>(extent.height),
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
+        const vk::Rect2D scissor{{0, 0}, extent};
+        const u64 draws = packet.address + Scene::DrawsOffset;
+        const u64 offset = u64{packet.slot} * SceneRing::SlotBytes;
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, mesh_pipeline.pipeline, dl);
+        cmd.setViewport(0, viewport, dl);
+        cmd.setScissor(0, scissor, dl);
+        cmd.pushConstants(mesh_pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
+                          sizeof(draws), &draws, dl);
+        cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
+        cmd.drawIndexedIndirect(scene_ring.buffer, offset + Scene::CommandsOffset, header->draws,
+                                sizeof(Scene::Command), dl);
+    }
     cmd.endRendering(dl);
+    stats.draws += header->draws;
+    stats.dropped += header->dropped;
+    stats.capture_ns += header->capture_ns;
+    stats.indices += header->indices;
+    stats.max_indices = std::max(stats.max_indices, header->max_indices);
 
     Barrier(d, cmd, image, vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageLayout::ePresentSrcKHR, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
@@ -239,7 +361,7 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     }
     (void)d.device.resetFences(slot.done, dl);
     (void)d.device.resetCommandPool(slot.pool, {}, dl);
-    Record(slot, index, packet.frame);
+    Record(slot, index, packet);
     slot.scene = packet.slot;
 
     const vk::SemaphoreSubmitInfo wait{
@@ -266,6 +388,7 @@ void Thread::Frame(const SceneRing::Packet& packet) {
         return;
     }
     next = (next + 1) % FramesInFlight;
+    frame++;
     using Ms = std::chrono::duration<double, std::milli>;
     const double waited =
         Ms(wait_end - wait_start).count() + Ms(acquire_end - acquire_start).count();
@@ -285,12 +408,25 @@ void Thread::Report() {
     const double game_fps = static_cast<double>(game_frames - stats.game_frames) / seconds;
     const double frames = std::max(stats.frames, 1u);
     const double gpu_ms = stats.timed != 0 ? stats.gpu_ms / stats.timed : 0.0;
+    const Meshes::Stats meshes = Meshes::TakeStats();
     LOG_INFO(Render_Vulkan,
              "GR2 PT renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, {} game frames "
              "skipped, per frame {:.3f} ms of render thread work, {:.3f} ms waiting for a "
              "frame slot and a swapchain image, {:.3f} ms on the GPU",
              game_fps, stats.frames, seconds, skipped - stats.skipped, stats.work_ms / frames,
              stats.wait_ms / frames, gpu_ms);
+    LOG_INFO(Render_Vulkan,
+             "GR2 PT scene: per frame {:.0f} draws, {:.0f} items not drawn, {:.0f} indices "
+             "(largest draw {}), {:.3f} ms of capture on the game's draw thread, {} frames not "
+             "drawn for too many indices; {} meshes in {:.1f} MB, {} waiting, {:.1f} MB "
+             "uploaded, {} not drawable ({} with indices past their vertices), {} missed "
+             "unloads, {} lost handles",
+             static_cast<double>(stats.draws) / frames, static_cast<double>(stats.dropped) / frames,
+             static_cast<double>(stats.indices) / frames, stats.max_indices,
+             static_cast<double>(stats.capture_ns) * 1e-6 / frames, stats.refused, meshes.meshes,
+             static_cast<double>(meshes.resident_bytes) / (1 << 20), meshes.pending,
+             static_cast<double>(meshes.uploaded_bytes) / (1 << 20), meshes.skipped,
+             meshes.bad_indices, meshes.missed_unloads, meshes.lost_handles);
     Window::SetTitle(fmt::format("GR2 PT | game {:.0f} fps | render thread {:.2f} ms | GPU "
                                  "{:.2f} ms",
                                  game_fps, stats.work_ms / frames, gpu_ms));

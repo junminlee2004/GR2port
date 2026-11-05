@@ -13,6 +13,7 @@
 #include "video_core/gr2_pt/capture.h"
 #include "video_core/gr2_pt/gr2_pt.h"
 #include "video_core/gr2_pt/hooks.h"
+#include "video_core/gr2_pt/meshes.h"
 #include "video_core/gr2_pt/renderer.h"
 
 namespace Gr2Pt {
@@ -26,8 +27,9 @@ constexpr u64 StubAreaOffset = 32_MB;
 // The frame graph FUN_0142ec00: the game's draw thread calls it once per frame.
 constexpr Hooks::Entry FrameGraph{0x142ec00, 6, Hooks::FramePrologue};
 
-void PS4_SYSV_ABI OnFrameGraph(u32, const Hooks::Registers*, u64) {
-    Capture::OnFrame();
+// FUN_0142ec00(T + 0xa0, view, ...): rsi is the view the frame draws.
+void PS4_SYSV_ABI OnFrameGraph(u32, const Hooks::Registers* registers, u64) {
+    Capture::OnFrame(registers->rsi);
 }
 
 } // namespace
@@ -52,6 +54,9 @@ void Install(VAddr module_base) {
         Hooks::ObserveEntry(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraph, 0);
     if (frame != Hooks::Result::Hooked && frame != Hooks::Result::Chained) {
         LOG_ERROR(Render_Vulkan, "GR2 PT: the frame graph's entry is not the expected code");
+        return;
+    }
+    if (!Meshes::Install(module_base, c, StubAreaSize)) {
         return;
     }
     Renderer::Start();

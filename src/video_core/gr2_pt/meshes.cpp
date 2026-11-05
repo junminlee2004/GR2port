@@ -1,0 +1,443 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include <algorithm>
+#include <array>
+#include <cstring>
+#include <deque>
+#include <map>
+#include <mutex>
+#include <vector>
+
+#include "common/logging/log.h"
+#include "video_core/gr2_pt/hooks.h"
+#include "video_core/gr2_pt/memory.h"
+#include "video_core/gr2_pt/meshes.h"
+
+namespace Gr2Pt::Meshes {
+
+namespace {
+
+// The .gfx builder FUN_01447990 returns the model; the model unload FUN_01451980 takes a pointer
+// to the model in rsi.
+constexpr Hooks::Entry Builder{0x1447990, 6, Hooks::FramePrologue};
+constexpr Hooks::Entry Unload{0x1451980, 6, Hooks::FramePrologue};
+
+// Model: shape entries of 0x50 bytes at *(model + 0xb0) + *(model + 0xbc), count at +0xb8, the
+// shape pointer first in each.
+constexpr u64 ModelBlock = 0xb0;
+constexpr u64 ModelShapeCount = 0xb8;
+constexpr u64 ModelShapeOffset = 0xbc;
+constexpr u64 ShapeEntrySize = 0x50;
+// Shape: SObj kind at +0xa, vertex buffer object at +0x60, index buffer object at +0x188.
+constexpr u64 ShapeKind = 0xa;
+constexpr u16 KindShape = 6;
+constexpr u64 ShapeVertexBuffer = 0x60;
+constexpr u64 ShapeHandle = 0x184;
+constexpr u64 ShapeIndexBuffer = 0x188;
+// Vertex buffer object: MemBlock* at +0, stride +0x18, element count +0x1c, vertex count +0x20,
+// element of each semantic at +0x24, elements {format, stride, offset, semantic} at +0x34.
+constexpr u64 VertexStride = 0x18;
+constexpr u64 VertexElements = 0x1c;
+constexpr u64 VertexSemanticElement = 0x24;
+constexpr u64 VertexElementInfo = 0x34;
+constexpr u32 SemanticPosition = 0;
+// Index buffer object: MemBlock* at +0, index size flag at +0x18 (0 = 16-bit).
+constexpr u64 IndexSizeFlag = 0x18;
+// MemBlock: data address at +0, size at +8.
+constexpr u64 BlockSize = 8;
+
+// Vertex formats the shaders decode: RGB32 FLOAT, RGBA32 FLOAT, RGBA16 FLOAT.
+constexpr bool PositionFormat(u32 format) {
+    return format == 3 || format == 4 || format == 7;
+}
+
+constexpr u64 UploadBudget = 64_MB;
+constexpr u32 LoggedUploads = 8;
+constexpr u64 IndexCapacity = 64ull << 20;
+
+template <typename T>
+T Load(VAddr address) {
+    T value;
+    std::memcpy(&value, reinterpret_cast<const void*>(address), sizeof(T));
+    return value;
+}
+
+std::array<Mesh, Capacity> g_meshes;
+
+// Guards the handle lists and the reads of game memory that unloads free.
+std::mutex g_mutex;
+std::vector<u32> g_free;
+u32 g_unused = 0;
+std::deque<u32> g_pending;
+std::vector<u32> g_unloaded;
+
+// Render thread only.
+struct Resident {
+    Buffer vertices;
+    u32 first_index = 0;
+    u32 indices = 0;
+};
+struct Retiring {
+    u32 handle;
+    // The last frame that can draw the mesh.
+    u64 frame;
+};
+struct Staging {
+    Buffer buffer;
+    u64 frame;
+};
+const Device* g_device = nullptr;
+Memory* g_memory = nullptr;
+Buffer g_index_buffer;
+std::map<u32, u32> g_free_indices;
+std::array<Resident, Capacity> g_resident;
+std::vector<Retiring> g_retiring;
+std::vector<Staging> g_staging;
+Stats g_stats{};
+
+bool AllocateIndices(u32 count, u32& first) {
+    for (auto it = g_free_indices.begin(); it != g_free_indices.end(); ++it) {
+        if (it->second < count) {
+            continue;
+        }
+        first = it->first;
+        const u32 left = it->second - count;
+        g_free_indices.erase(it);
+        if (left != 0) {
+            g_free_indices.emplace(first + count, left);
+        }
+        return true;
+    }
+    return false;
+}
+
+void FreeIndices(u32 first, u32 count) {
+    auto [it, inserted] = g_free_indices.emplace(first, count);
+    const auto next = std::next(it);
+    if (next != g_free_indices.end() && it->first + it->second == next->first) {
+        it->second += next->second;
+        g_free_indices.erase(next);
+    }
+    if (it != g_free_indices.begin()) {
+        const auto previous = std::prev(it);
+        if (previous->first + previous->second == it->first) {
+            previous->second += it->second;
+            g_free_indices.erase(it);
+        }
+    }
+}
+
+template <typename F>
+void ForEachShape(VAddr model, F&& f) {
+    const VAddr block = Load<VAddr>(model + ModelBlock);
+    const u32 count = Load<u32>(model + ModelShapeCount);
+    const s32 offset = Load<s32>(model + ModelShapeOffset);
+    if (block == 0) {
+        return;
+    }
+    for (u32 i = 0; i < count; i++) {
+        const VAddr shape = Load<VAddr>(block + offset + i * ShapeEntrySize);
+        if (shape != 0 && Load<u16>(shape + ShapeKind) == KindShape) {
+            f(shape);
+        }
+    }
+}
+
+u32 g_missed_unloads = 0;
+u32 g_lost_handles = 0;
+
+void PS4_SYSV_ABI OnBuilt(u32, const Hooks::Arguments*, u64 model) {
+    if (model == 0) {
+        return;
+    }
+    std::scoped_lock lock{g_mutex};
+    ForEachShape(model, [](VAddr shape) {
+        // The handle field starts as heap contents, which can be the handle of an earlier
+        // shape at this address.
+        const u32 earlier = Load<u32>(shape + ShapeHandle);
+        if (earlier < Capacity &&
+            g_meshes[earlier].shape.load(std::memory_order_relaxed) == shape) {
+            g_meshes[earlier].ready.store(false, std::memory_order_relaxed);
+            g_meshes[earlier].shape.store(0, std::memory_order_release);
+            g_unloaded.push_back(earlier);
+            g_missed_unloads++;
+        }
+        u32 handle = Capacity;
+        if (!g_free.empty()) {
+            handle = g_free.back();
+            g_free.pop_back();
+        } else if (g_unused < Capacity) {
+            handle = g_unused++;
+        }
+        std::memcpy(reinterpret_cast<void*>(shape + ShapeHandle), &handle, sizeof(handle));
+        if (handle == Capacity) {
+            return;
+        }
+        g_meshes[handle].ready.store(false, std::memory_order_relaxed);
+        g_meshes[handle].shape.store(shape, std::memory_order_release);
+        g_pending.push_back(handle);
+    });
+}
+
+void PS4_SYSV_ABI OnUnload(u32, const Hooks::Registers* registers, u64) {
+    const VAddr model = Load<VAddr>(registers->rsi);
+    if (model == 0) {
+        return;
+    }
+    std::scoped_lock lock{g_mutex};
+    ForEachShape(model, [](VAddr shape) {
+        const u32 handle = Load<u32>(shape + ShapeHandle);
+        if (handle >= Capacity || g_meshes[handle].shape.load(std::memory_order_relaxed) != shape) {
+            g_lost_handles += handle != Capacity;
+            return;
+        }
+        g_meshes[handle].ready.store(false, std::memory_order_relaxed);
+        g_meshes[handle].shape.store(0, std::memory_order_release);
+        g_unloaded.push_back(handle);
+    });
+}
+
+struct Source {
+    VAddr vertices;
+    u32 vertex_bytes;
+    VAddr indices;
+    u32 index_bytes;
+    u32 stride;
+    u32 position;
+};
+
+// Reads a shape's streams; false when the shaders cannot draw it.
+bool ReadShape(VAddr shape, Source& source) {
+    const VAddr vb = shape + ShapeVertexBuffer;
+    const VAddr vb_block = Load<VAddr>(vb);
+    const VAddr ib = shape + ShapeIndexBuffer;
+    const VAddr ib_block = Load<VAddr>(ib);
+    if (vb_block == 0 || ib_block == 0 || Load<u32>(ib + IndexSizeFlag) != 0) {
+        return false;
+    }
+    const u32 element = Load<u8>(vb + VertexSemanticElement + SemanticPosition);
+    if (element >= Load<u16>(vb + VertexElements)) {
+        return false;
+    }
+    const u32 format = Load<u8>(vb + VertexElementInfo + 4 * element);
+    const u32 offset = Load<u8>(vb + VertexElementInfo + 4 * element + 2);
+    source = {
+        .vertices = Load<VAddr>(vb_block),
+        .vertex_bytes = Load<u32>(vb_block + BlockSize),
+        .indices = Load<VAddr>(ib_block),
+        .index_bytes = Load<u32>(ib_block + BlockSize),
+        .stride = Load<u16>(vb + VertexStride),
+        .position = offset | format << 8,
+    };
+    return source.vertices != 0 && source.indices != 0 && source.vertex_bytes != 0 &&
+           source.index_bytes >= 2 && PositionFormat(format) && source.stride % 4 == 0 &&
+           offset % 4 == 0;
+}
+
+void Retire(u64 frame, u64 completed) {
+    std::vector<u32> unloaded;
+    {
+        std::scoped_lock lock{g_mutex};
+        unloaded.swap(g_unloaded);
+    }
+    // The packet of this frame, or the one the capture was writing at the unload, which the next
+    // frame takes at the latest, can still draw the mesh.
+    for (const u32 handle : unloaded) {
+        g_retiring.push_back({handle, frame + 1});
+    }
+    std::erase_if(g_retiring, [completed](const Retiring& r) {
+        if (completed < r.frame) {
+            return false;
+        }
+        Resident& resident = g_resident[r.handle];
+        if (resident.vertices.allocation != nullptr) {
+            g_stats.resident_bytes -= resident.vertices.size + 2ull * resident.indices;
+            g_memory->Destroy(resident.vertices);
+            FreeIndices(resident.first_index, resident.indices);
+            g_stats.meshes--;
+        }
+        resident = {};
+        std::scoped_lock lock{g_mutex};
+        g_free.push_back(r.handle);
+        return true;
+    });
+    std::erase_if(g_staging, [completed](Staging& s) {
+        if (s.frame > completed) {
+            return false;
+        }
+        g_memory->Destroy(s.buffer);
+        return true;
+    });
+}
+
+} // namespace
+
+bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
+    const Hooks::Result built =
+        Hooks::ObserveReturn(module_base, Builder, c, capacity, &OnBuilt, 0);
+    const Hooks::Result unload =
+        Hooks::ObserveEntry(module_base, Unload, c, capacity, &OnUnload, 0);
+    const auto ok = [](Hooks::Result r) {
+        return r == Hooks::Result::Hooked || r == Hooks::Result::Chained;
+    };
+    if (!ok(built) || !ok(unload)) {
+        LOG_ERROR(Render_Vulkan, "GR2 PT: the mesh builder or unload is not the expected code");
+        return false;
+    }
+    return true;
+}
+
+const Mesh* Get(VAddr shape) {
+    const u32 handle = Load<u32>(shape + ShapeHandle);
+    if (handle >= Capacity) {
+        return nullptr;
+    }
+    const Mesh& mesh = g_meshes[handle];
+    if (!mesh.ready.load(std::memory_order_acquire) ||
+        mesh.shape.load(std::memory_order_relaxed) != shape) {
+        return nullptr;
+    }
+    return &mesh;
+}
+
+bool Start(const Device& device, Memory& memory) {
+    g_device = &device;
+    g_memory = &memory;
+    g_index_buffer = memory.CreateBuffer(IndexCapacity * 2,
+                                         vk::BufferUsageFlagBits::eIndexBuffer |
+                                             vk::BufferUsageFlagBits::eTransferDst,
+                                         Placement::Device);
+    if (!g_index_buffer.buffer) {
+        return false;
+    }
+    g_free_indices.emplace(0u, static_cast<u32>(IndexCapacity));
+    return true;
+}
+
+void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
+    Retire(frame, completed);
+
+    std::vector<u32> uploaded;
+    u64 budget = UploadBudget;
+    {
+        std::scoped_lock lock{g_mutex};
+        while (!g_pending.empty() && budget != 0) {
+            const u32 handle = g_pending.front();
+            g_pending.pop_front();
+            Mesh& mesh = g_meshes[handle];
+            const VAddr shape = mesh.shape.load(std::memory_order_relaxed);
+            // A handle freed and reused before its first upload is queued twice.
+            if (shape == 0 || g_resident[handle].vertices.buffer) {
+                continue;
+            }
+            Source source;
+            u32 first_index = 0;
+            if (!ReadShape(shape, source) ||
+                !AllocateIndices(source.index_bytes / 2, first_index)) {
+                g_stats.skipped++;
+                continue;
+            }
+            const u64 bytes = u64{source.vertex_bytes} + source.index_bytes;
+            Staging staging{
+                .buffer = g_memory->CreateBuffer(bytes, vk::BufferUsageFlagBits::eTransferSrc,
+                                                 Placement::Upload),
+                .frame = frame,
+            };
+            Buffer vertices = g_memory->CreateBuffer(source.vertex_bytes,
+                                                     vk::BufferUsageFlagBits::eStorageBuffer |
+                                                         vk::BufferUsageFlagBits::eTransferDst,
+                                                     Placement::Device);
+            if (staging.buffer.mapped == nullptr || !vertices.buffer) {
+                FreeIndices(first_index, source.index_bytes / 2);
+                g_memory->Destroy(staging.buffer);
+                g_memory->Destroy(vertices);
+                g_stats.skipped++;
+                continue;
+            }
+            std::memcpy(staging.buffer.mapped, reinterpret_cast<const void*>(source.vertices),
+                        source.vertex_bytes);
+            std::memcpy(staging.buffer.mapped + source.vertex_bytes,
+                        reinterpret_cast<const void*>(source.indices), source.index_bytes);
+            // Every index must name a vertex inside the copied vertex data. The game's copy is
+            // read, as the staging memory is write-combined.
+            const auto* index_data = reinterpret_cast<const u16*>(source.indices);
+            const u32 max_index =
+                *std::max_element(index_data, index_data + source.index_bytes / 2);
+            const u32 vertex_count = source.vertex_bytes / std::max(source.stride, 1u);
+            if (g_stats.uploads_logged < LoggedUploads) {
+                g_stats.uploads_logged++;
+                LOG_INFO(Render_Vulkan,
+                         "GR2 PT: mesh {:#x}: {} vertices of {} bytes, position format {} at {}, "
+                         "{} indices up to {}",
+                         shape, vertex_count, source.stride, source.position >> 8,
+                         source.position & 0xff, source.index_bytes / 2, max_index);
+            }
+            if (source.stride == 0 || max_index >= vertex_count) {
+                FreeIndices(first_index, source.index_bytes / 2);
+                g_memory->Destroy(staging.buffer);
+                g_memory->Destroy(vertices);
+                g_stats.skipped++;
+                g_stats.bad_indices++;
+                continue;
+            }
+            const vk::BufferCopy vertex_copy{.size = source.vertex_bytes};
+            cmd.copyBuffer(staging.buffer.buffer, vertices.buffer, vertex_copy, g_device->dispatch);
+            const vk::BufferCopy index_copy{
+                .srcOffset = source.vertex_bytes,
+                .dstOffset = 2ull * first_index,
+                .size = source.index_bytes & ~1u,
+            };
+            cmd.copyBuffer(staging.buffer.buffer, g_index_buffer.buffer, index_copy,
+                           g_device->dispatch);
+            mesh.vertices = vertices.address;
+            mesh.first_index = first_index;
+            mesh.indices = source.index_bytes / 2;
+            mesh.stride = source.stride;
+            mesh.position = source.position;
+            g_resident[handle] = {
+                .vertices = vertices,
+                .first_index = first_index,
+                .indices = source.index_bytes / 2,
+            };
+            g_staging.push_back(staging);
+            g_stats.meshes++;
+            g_stats.uploaded_bytes += bytes;
+            g_stats.resident_bytes += bytes;
+            uploaded.push_back(handle);
+            budget = bytes >= budget ? 0 : budget - bytes;
+        }
+        g_stats.pending = static_cast<u32>(g_pending.size());
+        g_stats.missed_unloads = g_missed_unloads;
+        g_stats.lost_handles = g_lost_handles;
+    }
+    if (uploaded.empty()) {
+        return;
+    }
+    const vk::MemoryBarrier2 barrier{
+        .srcStageMask = vk::PipelineStageFlagBits2::eCopy,
+        .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+        .dstStageMask =
+            vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eIndexInput,
+        .dstAccessMask = vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eIndexRead,
+    };
+    cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &barrier},
+                         g_device->dispatch);
+    for (const u32 handle : uploaded) {
+        g_meshes[handle].ready.store(true, std::memory_order_release);
+    }
+}
+
+vk::Buffer IndexBuffer() {
+    return g_index_buffer.buffer;
+}
+
+Stats TakeStats() {
+    Stats stats = g_stats;
+    g_stats.uploaded_bytes = 0;
+    g_stats.skipped = 0;
+    g_stats.bad_indices = 0;
+    return stats;
+}
+
+} // namespace Gr2Pt::Meshes

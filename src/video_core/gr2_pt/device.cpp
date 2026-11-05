@@ -133,6 +133,14 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         .timelineSemaphore = true,
         .bufferDeviceAddress = true,
     };
+    vk::PhysicalDeviceVulkan11Features features11{
+        .pNext = &features12,
+        .shaderDrawParameters = true,
+    };
+    vk::PhysicalDeviceFeatures2 features{
+        .pNext = &features11,
+        .features = {.multiDrawIndirect = true, .shaderInt64 = true},
+    };
     const float priority = 1.0f;
     const vk::DeviceQueueCreateInfo queue_info{
         .queueFamilyIndex = d.queue_family,
@@ -141,7 +149,7 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     };
     const std::array extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     const vk::DeviceCreateInfo info{
-        .pNext = &features12,
+        .pNext = &features,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queue_info,
         .enabledExtensionCount = static_cast<u32>(extensions.size()),
