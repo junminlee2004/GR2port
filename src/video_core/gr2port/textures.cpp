@@ -559,8 +559,10 @@ bool CreateSet(const Device& d) {
         .addressModeU = vk::SamplerAddressMode::eRepeat,
         .addressModeV = vk::SamplerAddressMode::eRepeat,
         .addressModeW = vk::SamplerAddressMode::eRepeat,
+        // The game's loader sets this bias and ratio on every texture it loads.
+        .mipLodBias = -51.0f / 256.0f,
         .anisotropyEnable = true,
-        .maxAnisotropy = 8.0f,
+        .maxAnisotropy = 2.0f,
         .maxLod = VK_LOD_CLAMP_NONE,
     };
     g_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
