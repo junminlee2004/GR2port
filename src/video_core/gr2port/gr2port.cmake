@@ -8,6 +8,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/deformers.h
     ${CMAKE_CURRENT_LIST_DIR}/device.cpp
     ${CMAKE_CURRENT_LIST_DIR}/device.h
+    ${CMAKE_CURRENT_LIST_DIR}/fault_report.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/fault_report.h
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.cpp
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.h
     ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp

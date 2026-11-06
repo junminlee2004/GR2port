@@ -12,6 +12,7 @@
 #include "core/libraries/kernel/threads/pthread.h"
 #include "core/signals.h"
 #include "emulator.h"
+#include "video_core/gr2port/fault_report.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -151,6 +152,7 @@ static LONG WINAPI SignalHandler(EXCEPTION_POINTERS* pExp) noexcept {
     const bool report_unhandled =
         use_static_windows_guest_red_zone_protection ? static_protection_exception : true;
     if (report_unhandled) {
+        Gr2Port::ReportFault(pExp);
         LOG_CRITICAL(Debug, "Unhandled Exception code {:#x} at {}", code, address);
         Common::Singleton<Core::Emulator>::Instance()->Shutdown();
     }
