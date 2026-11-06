@@ -11,6 +11,7 @@ layout(set = 0, binding = 1) uniform sampler texture_sampler;
 layout(push_constant) uniform Constants {
     Draws scene_draws;
     Materials scene_materials;
+    LayerMaterials scene_layers;
 };
 
 layout(location = 0) in vec3 normal;
@@ -74,6 +75,92 @@ vec3 Gradate(vec3 color) {
     return mix(color, mix(darker, lighter, step(vec3(0.5), color)), 0.5);
 }
 
+// The normal n turned by a tangent-space normal, in the frame of the vertex's tangent.
+vec3 TurnedNormal(vec3 n, vec3 tangent_normal) {
+    if (tangent.xyz == vec3(0.0)) {
+        return n;
+    }
+    const vec3 t = normalize(tangent.xyz);
+    const vec3 b = cross(n, t) * sign(tangent.w);
+    const vec3 surface_normal = normalize(tangent_normal);
+    return normalize(t * surface_normal.x + b * surface_normal.y + n * surface_normal.z);
+}
+
+#ifdef ALPHA_TEST
+// A screen door fades a surface in. The game's depth runs the other way from this one.
+bool ScreenDoorShut(float threshold) {
+    const float seed = 256.0 * (0.0771356 * gl_FragCoord.x + 0.00888381 * gl_FragCoord.y) *
+                           (1.0 - gl_FragCoord.z) +
+                       1e-7;
+    return threshold < fract(fract(123456792.0 / seed) * seed);
+}
+#endif
+
+// A layer's scaled normal in tangent space. A layer without a normal map is flat.
+vec3 LayerNormal(LayerMaterials table, uint index, int layer, vec2 uv) {
+    const uint map = table.layers[index].normal_map[layer];
+    const vec3 direction =
+        map != 0u
+            ? 2.0 * Sample(map, Transformed(table.layers[index].normal_transform[layer], uv)).rgb -
+                  1.0
+            : vec3(0.0, 0.0, 1.0);
+    return table.layers[index].normal_scale[layer] * direction;
+}
+
+vec4 LayerSurface(LayerMaterials table, uint index, int layer) {
+    return vec4(table.layers[index].roughness[layer], table.layers[index].metallic[layer],
+                table.layers[index].translucency[layer], table.layers[index].emissive[layer]);
+}
+
+// The game's G2_BG_Layer pixel program without its velocity: four layers mixed from the last to the
+// first, each by a channel of the vertex colour and its colour's alpha. A layer with its blend flag
+// multiplies the layers below by twice its colour and adds its normal to theirs.
+void WriteLayers(uint index, uint hatching, vec3 n) {
+    LayerMaterials table = scene_layers;
+#ifdef ALPHA_TEST
+    if (ScreenDoorShut(table.layers[index].punch_through)) {
+        discard;
+    }
+#endif
+    vec2 uv = texcoord.xy;
+    const float parallax =
+        mix(mix(mix(table.layers[index].parallax[3], table.layers[index].parallax[2],
+                    vertex_color.z),
+                table.layers[index].parallax[1], vertex_color.y),
+            table.layers[index].parallax[0], vertex_color.x);
+    const uint height_map = table.layers[index].normal_map[0];
+    if (height_map != 0u && tangent.xyz != vec3(0.0) && parallax != 0.0) {
+        const vec4 transform = table.layers[index].normal_transform[0];
+        uv = (Parallax(height_map, Transformed(transform, uv), texcoord.zw * parallax, n.z) -
+              transform.xy) /
+             transform.zw;
+    }
+    vec3 albedo =
+        Sample(table.layers[index].color_map[3],
+               Transformed(table.layers[index].color_transform[3], uv))
+            .rgb *
+        table.layers[index].color_scale[3].rgb;
+    vec3 tangent_normal = LayerNormal(table, index, 3, uv);
+    vec4 surface = LayerSurface(table, index, 3);
+    for (int layer = 2; layer >= 0; layer--) {
+        const vec4 color = Sample(table.layers[index].color_map[layer],
+                                  Transformed(table.layers[index].color_transform[layer], uv));
+        const vec3 scaled = color.rgb * table.layers[index].color_scale[layer].rgb;
+        const vec3 layer_normal = LayerNormal(table, index, layer, uv);
+        const bool blends = table.layers[index].blend[layer] != 0u;
+        const float weight = vertex_color[layer] * color.a;
+        albedo = mix(albedo, blends ? 2.0 * albedo * scaled : scaled, weight);
+        tangent_normal =
+            mix(tangent_normal, blends ? tangent_normal + layer_normal : layer_normal, weight);
+        surface = mix(surface, LayerSurface(table, index, layer), weight);
+    }
+    const vec2 repeat =
+        vec2(table.layers[index].hatching_repeat_u, table.layers[index].hatching_repeat_v);
+    g_albedo = vec4(Gradate(albedo), Sample(hatching, uv * repeat).r);
+    g_normal = PackNormal(TurnedNormal(n, tangent_normal));
+    g_surface = surface;
+}
+
 // The game's G2_BG_Main pixel programs without their velocity, one program for all their variants.
 void main() {
     const float facing_sign = gl_FrontFacing ? 1.0 : -1.0;
@@ -97,6 +184,10 @@ void main() {
     }
     const uint index = material_index - 1u;
     Materials table = scene_materials;
+    if ((table.materials[index].flags & MaterialLayers) != 0u) {
+        WriteLayers(table.materials[index].layer_material, table.materials[index].hatching, n);
+        return;
+    }
     const bool layered = (table.materials[index].flags & MaterialLayered) != 0u;
     const float weight = layered ? vertex_color.a : 1.0;
     const uint normal_map = table.materials[index].normal_map;
@@ -114,14 +205,7 @@ void main() {
     const vec4 color =
         Sample(color_handle, Transformed(table.materials[index].color_transform, uv));
 #ifdef ALPHA_TEST
-    if (color.a < color_scale.w) {
-        discard;
-    }
-    // A screen door fades the surface in. The game's depth runs the other way from this one.
-    const float seed = 256.0 * (0.0771356 * gl_FragCoord.x + 0.00888381 * gl_FragCoord.y) *
-                           (1.0 - gl_FragCoord.z) +
-                       1e-7;
-    if (table.materials[index].punch_through < fract(fract(123456792.0 / seed) * seed)) {
+    if (color.a < color_scale.w || ScreenDoorShut(table.materials[index].punch_through)) {
         discard;
     }
 #endif
@@ -162,14 +246,8 @@ void main() {
     if ((table.materials[index].flags & MaterialGradation) != 0u) {
         albedo = Gradate(albedo);
     }
-    if (tangent.xyz != vec3(0.0)) {
-        const vec3 t = normalize(tangent.xyz);
-        const vec3 b = cross(n, t) * sign(tangent.w);
-        const vec3 surface_normal = normalize(tangent_normal);
-        n = normalize(t * surface_normal.x + b * surface_normal.y + n * surface_normal.z);
-    }
     const float repeat = table.materials[index].hatching_repeat;
     g_albedo = vec4(albedo, Sample(table.materials[index].hatching, uv * repeat).r);
-    g_normal = PackNormal(n);
+    g_normal = PackNormal(TurnedNormal(n, tangent_normal));
     g_surface = surface;
 }

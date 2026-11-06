@@ -283,6 +283,12 @@ constexpr u32 MainFlagAlpha = 0x2;
 constexpr u32 MainFlagCull = 0x4;
 constexpr u32 MainFlagNoHatching = 0x10;
 constexpr u32 MainFlagGradation = 0x40;
+// A G2_BG_Layer item: flags and gradation as G2_BG_Main's, the texture objects of its four colour
+// maps from +0x48 and of its four normal maps from +0x68, pixel constants as
+// Scene::LayerMaterial's.
+constexpr u64 LayerColorMaps = 0x48;
+constexpr u64 LayerNormalMaps = 0x68;
+constexpr u64 LayerPunchThrough = 0x134;
 // A G2_CH_Main item: the texture objects of its normal map +0x38, reflection +0x40 and detail
 // +0x48. Its vertex constants hold the normal bend's point at +0x140 and its range and bias at
 // +0x1c8.
@@ -358,16 +364,17 @@ struct Category {
     bool main_material = false;
     bool character = false;
     bool interior = false;
+    bool layers = false;
 };
 constexpr Category MainCategory{15, 0x60, 0x38, 0x68, 0x00, 0x20, None, true}; // G2_BG_Main
 // The world's other opaque categories, drawn into the surfaces after G2_BG_Main.
 constexpr std::array<Category, 6> WorldCategories{{
-    {16, 0x38, 0x48, 0x40, 0x80, 0x00}, // BG layer: the first of four layers
-    {17, 0x38, 0x48, 0x40, 0x00, None}, // BG single
-    {19, 0x38, 0x48, 0x40, 0x00, None}, // BG gem
-    {21, 0x38, 0x48, 0x40, 0x00, None}, // BG interior
-    {22, 0x38, 0x48, 0x40, 0x30, 0x00}, // BG vein
-    {23, 0x30, None, None, None, None}, // Far: untextured
+    {16, 0x38, 0x48, 0x40, 0x80, 0x00, None, false, false, false, true}, // BG layer
+    {17, 0x38, 0x48, 0x40, 0x00, None},                                  // BG single
+    {19, 0x38, 0x48, 0x40, 0x00, None},                                  // BG gem
+    {21, 0x38, 0x48, 0x40, 0x00, None},                                  // BG interior
+    {22, 0x38, 0x48, 0x40, 0x30, 0x00},                                  // BG vein
+    {23, 0x30, None, None, None, None},                                  // Far: untextured
 }};
 // G2_CH_Main: colour texture t1, decal texture t6.
 constexpr Category CharacterCategory{8, 0x68, 0x30, 0x70, 0xa0, None, 0x50, false, true};
@@ -466,7 +473,9 @@ public:
           materials{reinterpret_cast<Scene::Material*>(packet + Scene::MaterialsOffset)},
           characters{reinterpret_cast<Scene::Character*>(packet + Scene::CharactersOffset)},
           contours{reinterpret_cast<Scene::Contour*>(packet + Scene::ContoursOffset)},
-          leaves{reinterpret_cast<Scene::Leaf*>(packet + Scene::LeavesOffset)} {}
+          leaves{reinterpret_cast<Scene::Leaf*>(packet + Scene::LeavesOffset)},
+          layer_materials{
+              reinterpret_cast<Scene::LayerMaterial*>(packet + Scene::LayerMaterialsOffset)} {}
 
     // Ends a part of the capture's time.
     void EndPart(Scene::CapturePart part) {
@@ -605,6 +614,10 @@ public:
             alpha_tested =
                 (flags & MainFlagAlpha) != 0 || Load<float>(material + MainPunchThrough) < 1.0f;
             material_index = AddMainMaterial(item, flags, constants, material, *mesh);
+        }
+        if (category.layers && material != 0) {
+            material_index = AddLayers(item, constants, material);
+            alpha_tested = material_index != 0 && Load<float>(material + LayerPunchThrough) < 1.0f;
         }
         if (category.character) {
             if (material == 0 || header.characters == Scene::MaxCharacters) {
@@ -1078,6 +1091,36 @@ private:
         return ++header.materials;
     }
 
+    // Writes a G2_BG_Layer item's layers to the packet, and a material that names them and holds
+    // its gradation and hatching. Returns the material's index plus 1; 0 when the packet is full.
+    u32 AddLayers(VAddr item, VAddr vertex_constants, VAddr pixel_constants) {
+        if (header.materials == Scene::MaxMaterials ||
+            header.layer_materials == Scene::MaxLayerMaterials) {
+            header.dropped_materials++;
+            return 0;
+        }
+        const auto handles = [item](u64 first, u32(&out)[4]) {
+            for (u32 layer = 0; layer < 4; layer++) {
+                const VAddr object = Load<VAddr>(item + first + layer * sizeof(VAddr));
+                out[layer] = object != 0 ? Textures::Get(object) : 0;
+            }
+        };
+        // The fields are written in order: the packet is write-combined.
+        Scene::LayerMaterial& layers = layer_materials[header.layer_materials];
+        std::memcpy(layers.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
+                    sizeof(layers.pixel_constants));
+        handles(LayerColorMaps, layers.color_maps);
+        handles(LayerNormalMaps, layers.normal_maps);
+        Scene::Material& out = materials[header.materials];
+        std::memcpy(out.gradation_low,
+                    reinterpret_cast<const void*>(vertex_constants + MainGradation),
+                    sizeof(out.gradation_low) + sizeof(out.gradation_high));
+        out.hatching = (Load<u32>(item + MainFlags) & MainFlagNoHatching) == 0 ? hatching : 0;
+        out.flags = Scene::MaterialLayers;
+        out.layer_material = header.layer_materials++;
+        return ++header.materials;
+    }
+
     // Writes a G2_CH_Main item's constants to the packet and returns their index plus 1.
     u32 AddCharacter(VAddr item, VAddr vertex_constants, VAddr pixel_constants) {
         const auto handle = [item](u64 field) {
@@ -1189,6 +1232,7 @@ private:
     Scene::Character* characters;
     Scene::Contour* contours;
     Scene::Leaf* leaves;
+    Scene::LayerMaterial* layer_materials;
     u32 hatching = 0;
     VAddr last_palette = 0;
     u32 last_bones = 0;

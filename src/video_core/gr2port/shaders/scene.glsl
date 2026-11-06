@@ -73,6 +73,32 @@ struct Material {
     uint mask;
     uint hatching;
     uint flags;
+    uint layer_material;
+};
+
+// The game's G2_BG_Layer pixel constants, then the layers' texture handles.
+struct LayerMaterial {
+    vec4 color_transform[4];
+    vec4 normal_transform[4];
+    vec4 color_scale[4];
+    float normal_scale[4];
+    float roughness[4];
+    float metallic[4];
+    float translucency[4];
+    float emissive[4];
+    float parallax[4];
+    uint blend[3];
+    float hatching_repeat_u;
+    float hatching_repeat_v;
+    float punch_through;
+    float contour_mask;
+    float layer_padding;
+    uint color_map[4];
+    uint normal_map[4];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer LayerMaterials {
+    LayerMaterial layers[];
 };
 
 // The game's G2_CH_Main pixel constants, then what its programs take from elsewhere.
@@ -240,6 +266,7 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Le
 // Material flags.
 const uint MaterialLayered = 1u;
 const uint MaterialGradation = 2u;
+const uint MaterialLayers = 4u;
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Materials {
     Material materials[];

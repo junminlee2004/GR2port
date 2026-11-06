@@ -37,6 +37,8 @@ inline constexpr u32 MaxContours = 512;
 inline constexpr u32 MaxOccluders = 64;
 /// Leaf draws and leaf shadow draws per packet, together.
 inline constexpr u32 MaxLeaves = 2048;
+/// World draws of four mixed layers per packet.
+inline constexpr u32 MaxLayerMaterials = 1024;
 /// The effector grid: 6 x 6 x 10 cells of the view, each listing up to 127 spheres and an end
 /// marker.
 inline constexpr u32 GridCells = 360;
@@ -168,6 +170,8 @@ struct Header {
     u32 leaf_commands;
     u32 leaf_shadow_commands[Cascades];
     u32 dropped_leaves;
+    /// LayerMaterial records written; past MaxLayerMaterials draws count in dropped_materials.
+    u32 layer_materials;
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
@@ -351,13 +355,26 @@ struct Material {
     u32 mask;
     u32 hatching;
     u32 flags;
-    u32 padding[2];
+    /// With MaterialLayers, the index of the draw's LayerMaterial.
+    u32 layer_material;
+    u32 padding;
 };
 static_assert(sizeof(Material) == 224);
 /// The material has a second layer, weighted by the vertex colour's alpha.
 inline constexpr u32 MaterialLayered = 1;
 /// The material's gradation applies.
 inline constexpr u32 MaterialGradation = 2;
+/// The draw's surface is its LayerMaterial; the material holds only its gradation and hatching.
+inline constexpr u32 MaterialLayers = 4;
+
+/// A surface of four mixed layers: the game's G2_BG_Layer pixel constants, which shaders/scene.glsl
+/// names, then the layers' texture handles; 0 is white. A normal map of 0 means the layer has none.
+struct LayerMaterial {
+    u32 pixel_constants[80];
+    u32 color_maps[4];
+    u32 normal_maps[4];
+};
+static_assert(sizeof(LayerMaterial) == 352);
 
 /// What a character draw reads: the game's G2_CH_Main pixel constants, then the normal bend of its
 /// vertex constants and the item's texture objects. shaders/scene.glsl names the constants.
@@ -664,14 +681,16 @@ inline constexpr u64 LeafCommandsOffset = LeavesOffset + MaxLeaves * sizeof(Leaf
 /// MaxLeaves commands per cascade, at cascade * MaxLeaves.
 inline constexpr u64 LeafShadowCommandsOffset =
     LeafCommandsOffset + MaxLeaves * sizeof(VertexCommand);
-inline constexpr u64 PacketBytes =
+inline constexpr u64 LayerMaterialsOffset =
     LeafShadowCommandsOffset + Cascades * MaxLeaves * sizeof(VertexCommand);
+inline constexpr u64 PacketBytes = LayerMaterialsOffset + MaxLayerMaterials * sizeof(LayerMaterial);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
               SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0 && SkyOffset % 16 == 0 &&
               GradeOffset % 16 == 0 && LightOffset % 16 == 0 && FogOffset % 16 == 0 &&
               MaterialsOffset % 16 == 0 && CharactersOffset % 16 == 0 && ContoursOffset % 16 == 0 &&
-              LeavesOffset % 16 == 0 && LeafCommandsOffset % 16 == 0);
+              LeavesOffset % 16 == 0 && LeafCommandsOffset % 16 == 0 &&
+              LayerMaterialsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

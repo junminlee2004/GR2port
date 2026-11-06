@@ -28,6 +28,7 @@ namespace {
 struct SurfacePush {
     u64 draws;
     u64 materials;
+    u64 layer_materials;
 };
 
 // The light block, and the frame's place in the game's cycle of 26 frames.
@@ -416,6 +417,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, bool dra
     const SurfacePush push{
         .draws = address + Scene::DrawsOffset,
         .materials = address + Scene::MaterialsOffset,
+        .layer_materials = address + Scene::LayerMaterialsOffset,
     };
     u64 first = 0;
     for (u32 list = 0; drawn && list < g_surface_pipelines.size(); list++) {
