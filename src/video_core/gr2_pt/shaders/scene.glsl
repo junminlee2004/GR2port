@@ -35,6 +35,15 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Ro
     vec4 rows[];
 };
 
+// The game's packed normal: three unsigned components in the exponent and upper mantissa bits of
+// a half float, 11, 11 and 10 bits, holding n * 0.5 + 0.5.
+vec3 UnpackNormal(uint word) {
+    const vec3 halves = vec3(unpackHalf2x16((word << 4) & 0x7ff0u).x,
+                             unpackHalf2x16((word >> 7) & 0x7ff0u).x,
+                             unpackHalf2x16((word >> 17) & 0x7fe0u).x);
+    return halves * 2.0 - 1.0;
+}
+
 // Row r of a bone. A bone past the palette reads zeros, as the game's buffer loads past its records
 // do.
 vec4 BoneRow(Rows palette, uint bones, int bone, uint r) {

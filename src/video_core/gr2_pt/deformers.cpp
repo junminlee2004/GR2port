@@ -14,7 +14,10 @@
 #include "video_core/gr2_pt/meshes.h"
 #include "video_core/gr2_pt/pipeline.h"
 #include "video_core/gr2_pt/scene.h"
+#include "video_core/gr2_pt/shaders/effector_comp.h"
 #include "video_core/gr2_pt/shaders/skin_comp.h"
+#include "video_core/gr2_pt/shaders/soft_body_comp.h"
+#include "video_core/gr2_pt/shaders/soft_body_write_comp.h"
 
 namespace Gr2Pt::Deformers {
 
@@ -47,6 +50,8 @@ constexpr u64 CopyAlignment = 256;
 // position per particle.
 constexpr u64 StateHeaderBytes = 32;
 constexpr u64 ParticleStateBytes = 32;
+constexpr u32 GridSlices = 10;
+constexpr u64 GridBytes = u64{Scene::GridCells} * Scene::GridEntries * 4;
 constexpr u32 LoggedInstances = 4;
 static_assert(Capacity <= 0x80000000u);
 
@@ -99,7 +104,11 @@ struct Retiring {
 };
 const Device* g_device = nullptr;
 Pipeline g_skin;
+Pipeline g_effector;
+Pipeline g_soft_body;
+Pipeline g_soft_body_write;
 Buffer g_arena;
+Buffer g_grid;
 // Free ranges of the arena: offset to size.
 std::map<u64, u64> g_free_ranges;
 struct Range {
@@ -248,11 +257,17 @@ Copy Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame) 
 bool Start(const Device& device, Memory& memory) {
     g_device = &device;
     g_skin = CreateComputePipeline(device, SKIN_COMP, sizeof(u64));
+    g_effector = CreateComputePipeline(device, EFFECTOR_COMP, 3 * sizeof(u64));
+    g_soft_body = CreateComputePipeline(device, SOFT_BODY_COMP, 3 * sizeof(u64));
+    g_soft_body_write = CreateComputePipeline(device, SOFT_BODY_WRITE_COMP, 3 * sizeof(u64));
     g_arena = memory.CreateBuffer(
         ArenaBytes, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
         Placement::Device);
+    g_grid =
+        memory.CreateBuffer(GridBytes, vk::BufferUsageFlagBits::eStorageBuffer, Placement::Device);
     g_free_ranges.emplace(0, ArenaBytes);
-    return g_skin.pipeline && g_arena.buffer;
+    return g_skin.pipeline && g_effector.pipeline && g_soft_body.pipeline &&
+           g_soft_body_write.pipeline && g_arena.buffer && g_grid.buffer;
 }
 
 void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame) {
@@ -338,20 +353,57 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame) {
 }
 
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
-    if (header.skin_jobs == 0 || header.skin_jobs > Scene::MaxSkinJobs) {
+    const bool skins = header.skin_jobs != 0 && header.skin_jobs <= Scene::MaxSkinJobs;
+    const bool cloth =
+        header.soft_body_jobs != 0 && header.soft_body_jobs <= Scene::MaxSoftBodyJobs;
+    if (!skins && !cloth) {
         return;
     }
     const auto& dl = g_device->dispatch;
-    // The vertex shaders of earlier frames read the copies the jobs write.
+    // The vertex shaders of earlier frames read the copies the jobs write; the passes of earlier
+    // frames read the grid and wrote the states.
     const vk::MemoryBarrier2 drawn{
-        .srcStageMask = vk::PipelineStageFlagBits2::eVertexShader,
+        .srcStageMask =
+            vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eComputeShader,
+        .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
         .dstStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+        .dstAccessMask =
+            vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite,
+    };
+    const vk::MemoryBarrier2 computed{
+        .srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+        .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
+        .dstStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+        .dstAccessMask =
+            vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite,
     };
     cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &drawn}, dl);
-    const u64 jobs = address + Scene::SkinJobsOffset;
-    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_skin.pipeline, dl);
-    cmd.pushConstants(g_skin.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(jobs), &jobs, dl);
-    cmd.dispatch(header.skin_groups, header.skin_jobs, 1, dl);
+    const std::array<u64, 3> cloth_push{address + Scene::SoftBodyJobsOffset,
+                                        address + Scene::EffectorsOffset, g_grid.address};
+    const auto bind = [&](const Pipeline& pipeline) {
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline.pipeline, dl);
+        cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(cloth_push),
+                          cloth_push.data(), dl);
+    };
+    if (cloth) {
+        bind(g_effector);
+        cmd.dispatch(1, 1, GridSlices, dl);
+    }
+    if (skins) {
+        const u64 jobs = address + Scene::SkinJobsOffset;
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_skin.pipeline, dl);
+        cmd.pushConstants(g_skin.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(jobs), &jobs,
+                          dl);
+        cmd.dispatch(header.skin_groups, header.skin_jobs, 1, dl);
+    }
+    if (cloth) {
+        cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &computed}, dl);
+        bind(g_soft_body);
+        cmd.dispatch(header.soft_body_groups, header.soft_body_jobs, 1, dl);
+        cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &computed}, dl);
+        bind(g_soft_body_write);
+        cmd.dispatch(header.write_groups, header.soft_body_jobs, 1, dl);
+    }
     const vk::MemoryBarrier2 skinned{
         .srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
         .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,

@@ -46,15 +46,6 @@ vec4 BlendRow(Rows rows, uint bones, uvec4 b, vec4 w, uint r) {
            BoneRow(rows, bones, int(b.w), r) * w.w;
 }
 
-// The game's packed normal: three unsigned components in the exponent and upper mantissa bits of
-// a half float, 11, 11 and 10 bits, holding n * 0.5 + 0.5.
-vec3 UnpackNormal(uint word) {
-    const vec3 halves = vec3(unpackHalf2x16((word << 4) & 0x7ff0u).x,
-                             unpackHalf2x16((word >> 7) & 0x7ff0u).x,
-                             unpackHalf2x16((word >> 17) & 0x7fe0u).x);
-    return halves * 2.0 - 1.0;
-}
-
 uint PackNormal(vec3 n) {
     const vec3 c = max(n * 0.5 + 0.5, vec3(0.0));
     const uint x = packHalf2x16(vec2(c.x, 0.0));

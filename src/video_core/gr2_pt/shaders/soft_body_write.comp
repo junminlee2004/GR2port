@@ -1,0 +1,41 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's SoftBody write program (0x1c2018c): each invocation moves a vertex of the instance's
+// copy to the position of its particle, through the write constants' matrix. The workgroup's y is
+// the job. The pass marks the job's particles as holding positions.
+
+#version 460
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+#include "soft_body.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer Positions {
+    uint words[];
+};
+
+void main() {
+    SoftBodyJob job = Job();
+    State state = State(job.state);
+    const uint v = gl_GlobalInvocationID.x;
+    if (v == 0u) {
+        state.valid = 1u;
+    }
+    // Write constants: the matrix, then vertex count and stride.
+    if (v >= job.write[4].x) {
+        return;
+    }
+    const uint pair = Words(job.map).words[v >> 1u];
+    const uint particle = (pair >> ((v & 1u) * 16u)) & 0xffffu;
+    const mat4 m = mat4(uintBitsToFloat(job.write[0]), uintBitsToFloat(job.write[1]),
+                        uintBitsToFloat(job.write[2]), uintBitsToFloat(job.write[3]));
+    const vec3 x = (m * vec4(state.particles[2u * particle].xyz, 1.0)).xyz;
+    Positions destination = Positions(job.destination + uint64_t(v) * job.write[4].y);
+    destination.words[0] = floatBitsToUint(x.x);
+    destination.words[1] = floatBitsToUint(x.y);
+    destination.words[2] = floatBitsToUint(x.z);
+}

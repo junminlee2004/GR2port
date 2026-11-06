@@ -39,7 +39,8 @@ struct Copy {
 /// instance's layout is not its shape's. The capture's frame marks the instance used.
 Copy Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame);
 
-/// Render thread: creates the skinning pipeline and the buffer the copies share.
+/// Render thread: creates the deformer pipelines, the buffer the copies share and the effector
+/// grid.
 bool Start(const Device& device, Memory& memory);
 
 /// Render thread, before the frame's draws: records the copies that fill new instances' copies,
@@ -47,8 +48,8 @@ bool Start(const Device& device, Memory& memory);
 /// done. Frames up to completed are done on the GPU; game_frame is the packet's frame.
 void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame);
 
-/// Render thread, outside rendering: runs the skin jobs of the packet at address and makes their
-/// copies visible to vertex shaders.
+/// Render thread, outside rendering: runs the packet's effector grid, skin jobs and SoftBody jobs,
+/// in the game's order, and makes the copies visible to vertex shaders. The packet is at address.
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address);
 
 struct Stats {

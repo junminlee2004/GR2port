@@ -1,0 +1,124 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's SoftBody programs. Reset (0x1c20544) puts each particle on its anchor vertex.
+// Simulate (0x1c20954) moves it by verlet integration under gravity, wind, a push along the
+// anchor's normal and the effector spheres of its grid cell, relaxes its distance constraints,
+// then holds it near its anchor. Each invocation is a particle; the workgroup's y is the job. The
+// particles of a job reset when the game resets them or when they hold no positions yet.
+
+#version 460
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+#include "soft_body.glsl"
+
+layout(local_size_x = 64) in;
+
+void main() {
+    SoftBodyJob job = Job();
+    State state = State(job.state);
+    const bool game_reset = job.reset != 0u;
+    const uint count = Word(job, game_reset ? 0x12u : 0x2eu);
+    const uint stride = Word(job, game_reset ? 0x11u : 0x2du);
+    const uint i = gl_GlobalInvocationID.x;
+    if (i >= count) {
+        return;
+    }
+    // Particle record: anchor vertex and first constraint, then constraint count, anchor weight
+    // and wind weight.
+    Words particles = Words(job.particles);
+    const uint w0 = particles.words[2u * i];
+    const uint w1 = particles.words[2u * i + 1u];
+    Words skinned = Words(job.skinned + uint64_t(w0 & 0xffffu) * stride);
+    const vec3 anchor =
+        uintBitsToFloat(uvec3(skinned.words[0], skinned.words[1], skinned.words[2]));
+    const mat4 world = ConstantMatrix(job, 0u);
+    if (game_reset || state.valid == 0u) {
+        const vec3 x = (world * vec4(anchor, 1.0)).xyz;
+        state.particles[2u * i].xyz = x;
+        state.particles[2u * i + 1u].xyz = x;
+        return;
+    }
+    const vec4 p = state.particles[2u * i];
+    const float previous_w = state.particles[2u * i + 1u].w;
+    vec3 n = mat3(world) * UnpackNormal(skinned.words[3]);
+    n *= inversesqrt(dot(n, n));
+    const float a = Constant(job, 0x24u) * (dot(p.xyz, p.xyz) + Constant(job, 0x25u));
+    const vec3 wind = ConstantVector(job, 0x20u) + Constant(job, 0x26u) * (sin(a) + cos(2.0 * a));
+    vec3 force = Constant(job, 0x37u) * n - ConstantVector(job, 0x28u) +
+                 wind * (float(w1 >> 24) * (1.0 / 255.0));
+
+    // The particle's cell of the effector grid. Entries past the grid read 0, as the game's
+    // buffer loads past their records do.
+    const vec4 q = ConstantMatrix(job, 0x10u) * vec4(p.xyz, 1.0);
+    const float r = 1.0 / q.w;
+    const uint cx = uint(clamp(0.5 * (q.x * r) + 0.5, 0.0, 1.0) * 6.0);
+    const uint cy = uint(clamp(-0.5 * (q.y * r) + 0.5, 0.0, 1.0) * 6.0);
+    const uint cz = uint(clamp(q.z, 0.0, 1.0) * 10.0);
+    const uint cell = (cz * 6u + cy) * 6u + cx;
+    Effectors effector = Effectors(effectors);
+    Grid cells = Grid(grid);
+    const uint mask = Word(job, 0x30u) & 0xffffu;
+    const uint spheres = Word(job, 0x31u);
+    for (uint s = 0u; s < spheres; s++) {
+        const uint index = cell * GridEntries + s;
+        const uint entry = index < GridCells * GridEntries ? cells.entries[index] : 0u;
+        if (entry >= effector.count) {
+            break;
+        }
+        const uvec4 sphere = effector.spheres[2u * entry];
+        const uint flags = effector.spheres[2u * entry + 1u].w;
+        if ((flags & mask) == 0u) {
+            continue;
+        }
+        const vec3 d = p.xyz - uintBitsToFloat(sphere.xyz);
+        const float l2 = max(1e-6, dot(d, d));
+        const vec2 radii = unpackHalf2x16(sphere.w);
+        const float t = (1.0 - min(1.0, max(0.0, sqrt(l2) - radii.y) / (radii.x - radii.y))) *
+                        unpackHalf2x16(flags).y;
+        force += inversesqrt(l2) * (d * t);
+    }
+
+    const vec3 previous = state.particles[2u * i + 1u].xyz;
+    const float step = Constant(job, 0x3bu);
+    vec3 x = Constant(job, 0x34u) * (p.xyz - previous) + p.xyz + (step * step) * force;
+
+    // Distance constraints: u32s of neighbour particle and half float rest length.
+    Words constraints = Words(job.constraints + uint64_t(w0 >> 16) * 4u);
+    const uint links = w1 & 0xffffu;
+    const uint iterations = Word(job, 0x2fu);
+    const float rest_scale = Constant(job, 0x38u);
+    const float stiffness = Constant(job, 0x35u);
+    for (uint k = 0u; k < iterations; k++) {
+        vec3 sum = vec3(0.0);
+        for (uint j = 0u; j < links; j++) {
+            const uint link = constraints.words[j];
+            const vec3 d = state.particles[2u * (link & 0xffffu)].xyz - x;
+            const float l2 = max(1e-6, dot(d, d));
+            sum += 0.5 *
+                   (d * ((sqrt(l2) - rest_scale * unpackHalf2x16(link).y) * inversesqrt(l2)));
+        }
+        x += stiffness * sum;
+        state.particles[2u * i] = vec4(x, p.w);
+        state.particles[2u * i + 1u] = vec4(p.xyz, previous_w);
+    }
+    state.particles[2u * i + 1u] = vec4(p.xyz, previous_w);
+
+    // Hold: within a distance of the anchor, pulled toward it by the anchor weight and by depth
+    // past the grid's fade start, and out of the anchor's surface along its normal.
+    const float scale = Constant(job, 0x33u);
+    const float fade = clamp(1.0 - (scale * q.z - Constant(job, 0x32u) * scale), 0.0, 1.0);
+    const float anchor_weight = float((w1 >> 16) & 0xffu);
+    const float held = 1.0 - (fade - (anchor_weight * fade) * (1.0 / 255.0));
+    const float pin = Constant(job, 0x36u);
+    const float f = max(0.0, held - pin) * (1.0 / (1.0 - pin));
+    const vec3 target = (world * vec4(anchor, 1.0)).xyz;
+    const vec3 offset = x - target;
+    const float l2 = max(1e-6, dot(offset, offset));
+    x = offset * inversesqrt(l2) * min(Constant(job, 0x39u), sqrt(l2)) + target;
+    x += (target - x) * f;
+    x += (Constant(job, 0x3au) * n) * max(0.0, dot(n, target - x));
+    state.particles[2u * i] = vec4(x, p.w);
+}
