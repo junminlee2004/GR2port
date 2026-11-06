@@ -13,8 +13,9 @@ struct GraphicsPipelineInfo {
     std::span<const u32> vertex;
     /// None for a depth-only pipeline.
     std::span<const u32> fragment;
-    /// Undefined for no colour attachment.
+    /// Undefined for no colour attachment. colors, when not empty, replaces it with several.
     vk::Format color = vk::Format::eUndefined;
+    std::span<const vk::Format> colors;
     vk::Format depth = vk::Format::eUndefined;
     vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList;
     vk::CullModeFlags cull = vk::CullModeFlagBits::eNone;

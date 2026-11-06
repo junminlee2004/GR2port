@@ -324,6 +324,24 @@ void LogAndReadMeter(vk::CommandBuffer cmd, const u8* packet) {
                  sky.sun_color[0], sky.sun_color[1], sky.sun_color[2], sky.sun_size, sky.sun_outer,
                  sky.sun_direction[0], sky.sun_direction[1], sky.sun_direction[2]);
     }
+    Scene::Light light;
+    std::memcpy(&light, packet + Scene::LightOffset, sizeof(light));
+    const float* projection = light.shadow_projection[0];
+    LOG_INFO(Render_Vulkan,
+             "GR2port world: ambient cube maps {} {} and {} {} (blend {:.3f}), strength {:.3f}, "
+             "{} occluders, toning {:.3f}, gradation from {:.1f} over {:.1f}, background from "
+             "{:.1f} over {:.1f} strength {:.3f} level {:.2f}, shadows split at {:.1f} {:.1f}, end "
+             "at {:.1f}; first cascade rows ({:.4f} {:.4f} {:.4f} {:.4f}) ({:.4f} {:.4f} {:.4f} "
+             "{:.4f}) ({:.4f} {:.4f} {:.4f} {:.4f}) ({:.4f} {:.4f} {:.4f} {:.4f})",
+             light.radiance[0], light.irradiance[0], light.radiance[1], light.irradiance[1],
+             light.ibl_blend, light.ibl_intensity, light.occluders, light.toning,
+             light.gradation_start, 1.0f / light.gradation_range, light.background_start,
+             1.0f / light.background_range, light.background_intensity, light.background_lod,
+             light.split_depths[1], light.split_depths[2], light.shadow_fade_start + 10.0f,
+             projection[0], projection[1], projection[2], projection[3], projection[4],
+             projection[5], projection[6], projection[7], projection[8], projection[9],
+             projection[10], projection[11], projection[12], projection[13], projection[14],
+             projection[15]);
     if (!g_meter_cleared) {
         return;
     }

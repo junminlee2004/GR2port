@@ -36,6 +36,7 @@
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
 #include "video_core/gr2port/window.h"
+#include "video_core/gr2port/world.h"
 
 namespace Gr2Port::Renderer {
 
@@ -43,18 +44,22 @@ namespace {
 
 constexpr u32 FramesInFlight = 2;
 // GPU timestamps per frame: the start, after the uploads, after the deformers, after each cascade,
-// after the main view, after the meter and the end.
-constexpr u32 Timestamps = 6 + Scene::Cascades;
-constexpr u32 MainTimestamp = 3 + Scene::Cascades;
-constexpr u32 MeterTimestamp = MainTimestamp + 1;
-// GPU intervals per frame: the whole frame, the deformers, each cascade, the main view, the meter
-// and the picture.
-constexpr u32 Intervals = 5 + Scene::Cascades;
+// after the surfaces, the light, the forward draws and the meter, and the end.
+constexpr u32 Timestamps = 8 + Scene::Cascades;
+constexpr u32 SurfacesTimestamp = 3 + Scene::Cascades;
+constexpr u32 LightTimestamp = SurfacesTimestamp + 1;
+constexpr u32 ForwardTimestamp = SurfacesTimestamp + 2;
+constexpr u32 MeterTimestamp = SurfacesTimestamp + 3;
+// GPU intervals per frame: the whole frame, the deformers, each cascade, the surfaces, the light,
+// the forward draws, the meter and the picture.
+constexpr u32 Intervals = 7 + Scene::Cascades;
 constexpr u32 DeformerInterval = 1;
 constexpr u32 FirstCascadeInterval = 2;
-constexpr u32 MainInterval = FirstCascadeInterval + Scene::Cascades;
-constexpr u32 MeterInterval = MainInterval + 1;
-constexpr u32 PictureInterval = MainInterval + 2;
+constexpr u32 SurfacesInterval = FirstCascadeInterval + Scene::Cascades;
+constexpr u32 LightInterval = SurfacesInterval + 1;
+constexpr u32 ForwardInterval = SurfacesInterval + 2;
+constexpr u32 MeterInterval = SurfacesInterval + 3;
+constexpr u32 PictureInterval = SurfacesInterval + 4;
 constexpr u32 ReportFrames = 600;
 constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
 // A frame with more indices than this is not drawn: its items are not what the capture expects.
@@ -106,6 +111,8 @@ struct Stats {
     u64 spheres = 0;
     u64 decals = 0;
     u64 dropped_decals = 0;
+    u64 materials = 0;
+    u64 dropped_materials = 0;
     u64 palette_rows = 0;
     std::array<u64, Scene::ItemCategories> category_items{};
     u64 casters = 0;
@@ -219,7 +226,8 @@ bool Thread::Init() {
                                       Placement::Upload);
     if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
         !Textures::Start(d, *memory) || !Shadows::Start(d, *memory) ||
-        !Deformers::Start(d, *memory) || !Look::Start(d, *memory, DepthFormat)) {
+        !Deformers::Start(d, *memory) || !Look::Start(d, *memory, DepthFormat) ||
+        !World::Start(d, *memory, DepthFormat, Look::SceneFormat)) {
         return false;
     }
     const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout()};
@@ -252,9 +260,11 @@ bool Thread::Recreate() {
     }
     memory->Destroy(depth);
     depth = memory->CreateImage(DepthFormat, swapchain->Extent(),
-                                vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                                vk::ImageUsageFlagBits::eDepthStencilAttachment |
+                                    vk::ImageUsageFlagBits::eSampled,
                                 vk::ImageAspectFlagBits::eDepth);
-    needs_swapchain = !depth.image || !Look::Resize(swapchain->Extent(), swapchain->Format());
+    needs_swapchain = !depth.image || !Look::Resize(swapchain->Extent(), swapchain->Format()) ||
+                      !World::Resize(swapchain->Extent(), depth.view);
     return !needs_swapchain;
 }
 
@@ -466,7 +476,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     Textures::Update(cmd, frame, frame - FramesInFlight);
     Deformers::Update(cmd, frame, frame - FramesInFlight, header.frame);
     LogScene(header, packet);
-    const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices;
+    const bool drawn = header.draws + header.alpha_draws != 0 && header.indices <= MaxFrameIndices;
     stats.refused += header.indices > MaxFrameIndices;
     const u64 offset = u64{packet.slot} * SceneRing::SlotBytes;
     if (timestamps) {
@@ -490,6 +500,38 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         }
     }
 
+    const auto depth_barrier = [&](vk::ImageLayout from, vk::ImageLayout to,
+                                   vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
+                                   vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) {
+        const vk::ImageMemoryBarrier2 barrier{
+            .srcStageMask = src_stage,
+            .srcAccessMask = src_access,
+            .dstStageMask = dst_stage,
+            .dstAccessMask = dst_access,
+            .oldLayout = from,
+            .newLayout = to,
+            .image = depth.image,
+            .subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1},
+        };
+        cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier}, dl);
+    };
+    const vk::PipelineStageFlags2 depth_tests = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                                                vk::PipelineStageFlagBits2::eLateFragmentTests;
+    const vk::AccessFlags2 depth_writes = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                                          vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+    depth_barrier(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                  depth_tests, vk::AccessFlagBits2::eNone, depth_tests, depth_writes);
+    World::RecordSurfaces(cmd, header, drawn, packet.address, scene_ring.buffer, offset,
+                          depth.view);
+    if (timestamps) {
+        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
+                            Timestamps * slot_index + SurfacesTimestamp, dl);
+    }
+
+    depth_barrier(vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                  vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
+                  vk::PipelineStageFlagBits2::eFragmentShader,
+                  vk::AccessFlagBits2::eShaderSampledRead);
     // The last frame sampled the scene's colour in its meter and its picture.
     Barrier(d, cmd, Look::SceneImage(), vk::ImageLayout::eUndefined,
             vk::ImageLayout::eColorAttachmentOptimal,
@@ -497,20 +539,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                 vk::PipelineStageFlagBits2::eFragmentShader,
             vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             vk::AccessFlagBits2::eColorAttachmentWrite);
-    const vk::ImageMemoryBarrier2 depth_barrier{
-        .srcStageMask = vk::PipelineStageFlagBits2::eLateFragmentTests,
-        .srcAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-        .dstStageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests,
-        .dstAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-        .oldLayout = vk::ImageLayout::eUndefined,
-        .newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-        .image = depth.image,
-        .subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1},
-    };
-    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &depth_barrier},
-                         dl);
-
-    const vk::RenderingAttachmentInfo color{
+    const vk::Extent2D extent = swapchain->Extent();
+    const vk::RenderingAttachmentInfo lit{
         .imageView = Look::SceneView(),
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
         .loadOp = vk::AttachmentLoadOp::eClear,
@@ -521,23 +551,53 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                                                                                header.background[2],
                                                                                0.0f}}},
     };
+    cmd.beginRendering({.renderArea = {{0, 0}, extent},
+                        .layerCount = 1,
+                        .colorAttachmentCount = 1,
+                        .pColorAttachments = &lit},
+                       dl);
+    if (drawn) {
+        World::RecordLight(cmd, packet.address);
+    }
+    cmd.endRendering(dl);
+    if (timestamps) {
+        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
+                            Timestamps * slot_index + LightTimestamp, dl);
+    }
+
+    depth_barrier(vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+                  vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                  vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eNone,
+                  depth_tests, depth_writes);
+    const vk::MemoryBarrier2 lit_barrier{
+        .srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        .srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
+        .dstStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        .dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
+    };
+    cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &lit_barrier}, dl);
+    const vk::RenderingAttachmentInfo forward{
+        .imageView = Look::SceneView(),
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eLoad,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+    };
     const vk::RenderingAttachmentInfo depth_attachment{
         .imageView = depth.view,
         .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-        .loadOp = vk::AttachmentLoadOp::eClear,
+        .loadOp = vk::AttachmentLoadOp::eLoad,
         .storeOp = vk::AttachmentStoreOp::eDontCare,
-        .clearValue = {.depthStencil = {.depth = 0.0f}},
     };
-    const vk::Extent2D extent = swapchain->Extent();
     const vk::RenderingInfo rendering{
         .renderArea = {{0, 0}, extent},
         .layerCount = 1,
         .colorAttachmentCount = 1,
-        .pColorAttachments = &color,
+        .pColorAttachments = &forward,
         .pDepthAttachment = &depth_attachment,
     };
     cmd.beginRendering(rendering, dl);
-    if (drawn) {
+    const u32 forward_draws = header.draws - header.world_draws;
+    if (drawn && forward_draws != 0) {
         // A negative height keeps the game's y-up clip space.
         const vk::Viewport viewport{
             .x = 0.0f,
@@ -548,9 +608,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
             .maxDepth = 1.0f,
         };
         const vk::Rect2D scissor{{0, 0}, extent};
-        const std::array<u64, 3> addresses{packet.address + Scene::DrawsOffset,
-                                           packet.address + Scene::ShadowsOffset,
-                                           packet.address + Scene::DecalsOffset};
+        const std::array<u64, 3> addresses{
+            packet.address + Scene::DrawsOffset + u64{header.world_draws} * sizeof(Scene::Draw),
+            packet.address + Scene::ShadowsOffset, packet.address + Scene::DecalsOffset};
         const std::array sets{Textures::Set(), Shadows::Set()};
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, mesh_pipeline.pipeline, dl);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mesh_pipeline.layout, 0, sets, {},
@@ -560,8 +620,10 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         cmd.pushConstants(mesh_pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
                           sizeof(addresses), addresses.data(), dl);
         cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
-        cmd.drawIndexedIndirect(scene_ring.buffer, offset + Scene::CommandsOffset, header.draws,
-                                sizeof(Scene::Command), dl);
+        cmd.drawIndexedIndirect(scene_ring.buffer,
+                                offset + Scene::CommandsOffset +
+                                    u64{header.world_draws} * sizeof(Scene::Command),
+                                forward_draws, sizeof(Scene::Command), dl);
     }
     if (header.sky != 0) {
         Look::RecordSky(cmd, packet.address);
@@ -569,7 +631,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     cmd.endRendering(dl);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
-                            Timestamps * slot_index + MainTimestamp, dl);
+                            Timestamps * slot_index + ForwardTimestamp, dl);
     }
 
     Barrier(
@@ -609,7 +671,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         RecordSnapshot(cmd, swapchain->Image(index));
         slot.snapshot = snapshot.mapped != nullptr;
     }
-    stats.draws += header.draws;
+    stats.draws += header.draws + header.alpha_draws;
+    stats.materials += header.materials;
+    stats.dropped_materials += header.dropped_materials;
     stats.dropped += header.dropped;
     stats.capture_ns += header.capture_ns;
     stats.untextured += header.untextured;
@@ -744,22 +808,25 @@ void Thread::Report() {
              "GR2port renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, {} game frames "
              "skipped, per frame {:.3f} ms of render thread work, {:.3f} ms waiting for a "
              "frame slot and a swapchain image, {:.3f} ms on the GPU (deformers {:.3f}, cascades "
-             "{:.3f} {:.3f} {:.3f}, main view {:.3f}, meter {:.3f}, picture {:.3f}; shortest "
-             "{:.3f}, deformers {:.3f}, cascades {:.3f} {:.3f} {:.3f}, main view {:.3f}, meter "
-             "{:.3f}, picture {:.3f})",
+             "{:.3f} {:.3f} {:.3f}, surfaces {:.3f}, light {:.3f}, forward {:.3f}, meter {:.3f}, "
+             "picture {:.3f}; shortest {:.3f}, deformers {:.3f}, cascades {:.3f} {:.3f} {:.3f}, "
+             "surfaces {:.3f}, light {:.3f}, forward {:.3f}, meter {:.3f}, picture {:.3f})",
              game_fps, stats.frames, seconds, skipped - stats.skipped, stats.work_ms / frames,
              stats.wait_ms / frames, gpu_ms, stats.gpu_ms[DeformerInterval] / timed,
              stats.gpu_ms[FirstCascadeInterval] / timed,
              stats.gpu_ms[FirstCascadeInterval + 1] / timed,
-             stats.gpu_ms[FirstCascadeInterval + 2] / timed, stats.gpu_ms[MainInterval] / timed,
+             stats.gpu_ms[FirstCascadeInterval + 2] / timed, stats.gpu_ms[SurfacesInterval] / timed,
+             stats.gpu_ms[LightInterval] / timed, stats.gpu_ms[ForwardInterval] / timed,
              stats.gpu_ms[MeterInterval] / timed, stats.gpu_ms[PictureInterval] / timed,
              stats.gpu_min_ms[0], stats.gpu_min_ms[DeformerInterval],
              stats.gpu_min_ms[FirstCascadeInterval], stats.gpu_min_ms[FirstCascadeInterval + 1],
-             stats.gpu_min_ms[FirstCascadeInterval + 2], stats.gpu_min_ms[MainInterval],
+             stats.gpu_min_ms[FirstCascadeInterval + 2], stats.gpu_min_ms[SurfacesInterval],
+             stats.gpu_min_ms[LightInterval], stats.gpu_min_ms[ForwardInterval],
              stats.gpu_min_ms[MeterInterval], stats.gpu_min_ms[PictureInterval]);
     LOG_INFO(Render_Vulkan,
              "GR2port scene: per frame {:.0f} draws ({:.0f} skinned, {:.0f} deformed, {:.1f} with "
-             "decals, {:.1f} without room for theirs, {:.1f} KB of palettes), {:.0f} items not "
+             "decals, {:.1f} without room for theirs, {:.0f} with materials, {:.1f} without room "
+             "for theirs, {:.1f} KB of palettes), {:.0f} items not "
              "drawn and {:.0f} deformed ones waiting for their "
              "copy, {:.0f} indices (largest draw {}), {:.3f} ms of capture on the game's draw "
              "thread, {} frames not drawn for too many indices; {} meshes ({} skinned) in {:.1f} "
@@ -769,6 +836,8 @@ void Thread::Report() {
              static_cast<double>(stats.deformed) / frames,
              static_cast<double>(stats.decals) / frames,
              static_cast<double>(stats.dropped_decals) / frames,
+             static_cast<double>(stats.materials) / frames,
+             static_cast<double>(stats.dropped_materials) / frames,
              static_cast<double>(stats.palette_rows) * 16 / 1024 / frames,
              static_cast<double>(stats.dropped) / frames,
              static_cast<double>(stats.deformed_waiting) / frames,
@@ -777,17 +846,19 @@ void Thread::Report() {
              meshes.skinned, static_cast<double>(meshes.resident_bytes) / (1 << 20), meshes.pending,
              static_cast<double>(meshes.uploaded_bytes) / (1 << 20), meshes.skipped,
              meshes.bad_indices, meshes.missed_unloads, meshes.lost_handles);
-    LOG_INFO(Render_Vulkan,
-             "GR2port textures: per frame {:.0f} draws with a colour texture not converted; {} "
-             "textures in {:.1f} MB, {} waiting, {:.1f} MB uploaded of {:.1f} MB of data; not "
-             "converted: {} not a single 2D image or cube map, {} tiling or format, {} larger than "
-             "their data, {} no memory; {} missed destroys; {} meshes without texture coordinates",
-             static_cast<double>(stats.untextured) / frames, textures.textures,
-             static_cast<double>(textures.resident_bytes) / (1 << 20), textures.pending,
-             static_cast<double>(textures.uploaded_bytes) / (1 << 20),
-             static_cast<double>(textures.uploaded_data_bytes) / (1 << 20), textures.not_2d,
-             textures.unsupported, textures.too_large, textures.failed, textures.missed_destroys,
-             meshes.no_texcoord);
+    LOG_INFO(
+        Render_Vulkan,
+        "GR2port textures: per frame {:.0f} draws with a colour texture not converted; {} "
+        "textures in {:.1f} MB, {} waiting, {:.1f} MB uploaded of {:.1f} MB of data; not "
+        "converted: {} not a single 2D image or cube map, {} tiling or format, {} larger than "
+        "their data, {} no memory; {} missed destroys; {} meshes without texture coordinates, {} "
+        "without normals",
+        static_cast<double>(stats.untextured) / frames, textures.textures,
+        static_cast<double>(textures.resident_bytes) / (1 << 20), textures.pending,
+        static_cast<double>(textures.uploaded_bytes) / (1 << 20),
+        static_cast<double>(textures.uploaded_data_bytes) / (1 << 20), textures.not_2d,
+        textures.unsupported, textures.too_large, textures.failed, textures.missed_destroys,
+        meshes.no_texcoord, meshes.no_normal);
     LOG_INFO(
         Render_Vulkan,
         "GR2port shadows: per frame {:.0f} casters ({:.0f} skinned, {:.0f} deformed) in {:.0f} "

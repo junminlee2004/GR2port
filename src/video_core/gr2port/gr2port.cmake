@@ -36,7 +36,9 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/textures.cpp
     ${CMAKE_CURRENT_LIST_DIR}/textures.h
     ${CMAKE_CURRENT_LIST_DIR}/window.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/window.h)
+    ${CMAKE_CURRENT_LIST_DIR}/window.h
+    ${CMAKE_CURRENT_LIST_DIR}/world.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/world.h)
 
 # The renderer's shaders, compiled like the host shaders.
 if (TARGET glslang-standalone)
@@ -76,6 +78,10 @@ gr2port_add_shader(sky.frag sky_frag)
 gr2port_add_shader(luminance.comp luminance_comp)
 gr2port_add_shader(exposure.comp exposure_comp)
 gr2port_add_shader(composite.frag composite_frag)
+gr2port_add_shader(world.vert world_vert)
+gr2port_add_shader(world.frag world_frag)
+gr2port_add_shader(world_alpha.frag world_alpha_frag)
+gr2port_add_shader(deferred.frag deferred_frag)
 gr2port_add_shader(shadow.vert shadow_vert)
 gr2port_add_shader(shadow_alpha.vert shadow_alpha_vert)
 gr2port_add_shader(shadow_alpha.frag shadow_alpha_frag)

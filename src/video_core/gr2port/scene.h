@@ -29,6 +29,9 @@ inline constexpr u32 MaxSoftBodyJobs = 512;
 inline constexpr u32 MaxSpheres = 256;
 /// Character draws with decals per packet.
 inline constexpr u32 MaxDecals = 1024;
+/// World draws with a material per packet, and the spheres that shade the world's ambient light.
+inline constexpr u32 MaxMaterials = 8192;
+inline constexpr u32 MaxOccluders = 64;
 /// The effector grid: 6 x 6 x 10 cells of the view, each listing up to 127 spheres and an end
 /// marker.
 inline constexpr u32 GridCells = 360;
@@ -83,6 +86,13 @@ struct Header {
     /// Draws with decals, and draws past MaxDecals, which lose theirs.
     u32 decals;
     u32 dropped_decals;
+    /// Draws with a material, and draws past MaxMaterials, which lose theirs.
+    u32 materials;
+    u32 dropped_materials;
+    /// The draws are in three runs: world draws without alpha test from index 0, forward draws
+    /// after them, and alpha-tested world draws from the end of the array down.
+    u32 world_draws;
+    u32 alpha_draws;
     /// Shadow casters written, of them skinned ones; casters with no drawable mesh or palette, or
     /// past MaxCasters.
     u32 casters;
@@ -146,8 +156,15 @@ struct Draw {
     u32 bones;
     /// The index of the draw's decals in the packet, plus 1; 0 for none.
     u32 decal;
+    /// The elements of the packed normal, the tangent and the vertex colour, encoded as position;
+    /// format 0 for none.
+    u32 normal;
+    u32 tangent;
+    u32 vertex_color;
+    /// The index of the draw's material in the packet, plus 1; 0 for none.
+    u32 material;
 };
-static_assert(sizeof(Draw) == 208);
+static_assert(sizeof(Draw) == 224);
 
 /// A static shadow caster, read by the vertex shader at gl_InstanceIndex.
 struct Caster {
@@ -240,6 +257,47 @@ struct Decal {
 };
 static_assert(sizeof(Decal) == 144);
 
+/// What a world draw's material reads, from the game's G2_BG_Main constants (the pixel program's,
+/// then the gradation of the vertex program's) and the item's texture objects.
+struct Material {
+    float color_scale[4];
+    float layered_color_scale[4];
+    float color_transform[4];
+    float layered_color_transform[4];
+    float normal_transform[4];
+    float layered_normal_transform[4];
+    float mask_transform[4];
+    float punch_through;
+    float roughness;
+    float metallic;
+    float translucency;
+    float emissive;
+    float parallax;
+    float layered_roughness;
+    float layered_metallic;
+    float layered_translucency;
+    float layered_emissive;
+    float layered_parallax;
+    float hatching_repeat;
+    /// The colours a model's height blends between: the height where low applies in w of low, and
+    /// the inverse of the distance to high in w of high.
+    float gradation_low[4];
+    float gradation_high[4];
+    /// Texture handles; 0 is white. A normal map of 0 means the draw has none.
+    u32 normal_map;
+    u32 layered_color;
+    u32 layered_normal;
+    u32 mask;
+    u32 hatching;
+    u32 flags;
+    u32 padding[2];
+};
+static_assert(sizeof(Material) == 224);
+/// The material has a second layer, weighted by the vertex colour's alpha.
+inline constexpr u32 MaterialLayered = 1;
+/// The material's gradation applies.
+inline constexpr u32 MaterialGradation = 2;
+
 /// The frame's sky, as the game's sky pixel programs read it. Rays run in the sky's space, which
 /// the view's sky rotation sets. Matrices are as in Draw.
 struct Sky {
@@ -288,6 +346,59 @@ struct Grade {
 };
 static_assert(sizeof(Grade) == 144);
 
+/// The key light, ambient light and comic shading of the world, as the game's LightPass, IBL and
+/// Resolve programs read them. Matrices are as in Draw.
+struct Light {
+    /// View space to each cascade's texture coordinates and depth, and back.
+    float shadow_projection[Cascades][16];
+    float inverse_shadow_projection[Cascades][16];
+    /// View space to the sky's space.
+    float view_to_sky[16];
+    /// A depth d from 0 to 1 gives the distance 1 / (z (2d - 1) + w), and a pixel's view position
+    /// from x and y.
+    float inverse_projection[4];
+    /// The first cascade ends at the distance y, the second at z.
+    float split_depths[4];
+    float light_color[4];
+    /// The direction the key light's light travels in, in view space.
+    float light_direction[4];
+    /// The direction the occluders shade the ambient light along, in view space.
+    float occluder_direction[4];
+    /// The colours distant surfaces fade to, by the height of the view ray.
+    float gradation_high[4];
+    float gradation_middle[4];
+    float gradation_low[4];
+    float contour_color[4];
+    /// Between these distances surfaces lose their highlights.
+    float specular_fade[2];
+    float shadow_fade_start;
+    float ibl_intensity;
+    float contour_blend;
+    float contour_distant_blend;
+    float contour_start;
+    float contour_range;
+    float gradation_start;
+    float gradation_range;
+    float background_start;
+    float background_range;
+    float background_intensity;
+    float background_lod;
+    float hatching_intensity;
+    float toning;
+    float occluder_intensity;
+    float occluder_penumbra;
+    float occluder_range;
+    u32 occluders;
+    /// The ambient light's cube map handles; 0 for none. The second pair applies by ibl_blend.
+    u32 radiance[2];
+    u32 irradiance[2];
+    float ibl_blend;
+    u32 padding[3];
+    /// Occluders in view space: centre, radius.
+    float occluder_spheres[MaxOccluders][4];
+};
+static_assert(sizeof(Light) % 16 == 0);
+
 /// The indirect command of a draw, at the same index as the draw. A caster's command gives the
 /// caster's index as its first instance.
 struct Command {
@@ -314,11 +425,13 @@ inline constexpr u64 SoftBodyJobsOffset = EffectorsOffset + sizeof(Effectors);
 inline constexpr u64 DecalsOffset = SoftBodyJobsOffset + MaxSoftBodyJobs * sizeof(SoftBodyJob);
 inline constexpr u64 SkyOffset = DecalsOffset + MaxDecals * sizeof(Decal);
 inline constexpr u64 GradeOffset = SkyOffset + sizeof(Sky);
-inline constexpr u64 PacketBytes = GradeOffset + sizeof(Grade);
+inline constexpr u64 LightOffset = GradeOffset + sizeof(Grade);
+inline constexpr u64 MaterialsOffset = LightOffset + sizeof(Light);
+inline constexpr u64 PacketBytes = MaterialsOffset + MaxMaterials * sizeof(Material);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
               SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0 && SkyOffset % 16 == 0 &&
-              GradeOffset % 16 == 0);
+              GradeOffset % 16 == 0 && LightOffset % 16 == 0 && MaterialsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

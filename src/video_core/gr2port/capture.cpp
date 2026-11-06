@@ -151,6 +151,68 @@ constexpr u64 ViewLens = 0x20c;
 constexpr u64 ViewTime = 0x1078;
 constexpr u64 ViewCurves = 0xa00;
 constexpr u64 ViewSaturation = 0xa70;
+// View: the projection terms of a depth +0x820, the cascades' split depths +0x730, where w is the
+// distance shadows end at; the highlights' fade +0x830; the occluder direction +0x7f0; the
+// contour's colour +0x800, its blend near and past its fade +0x838 and +0x83c, and the fade's
+// distances +0x840 and +0x844; the hatching's strength +0x84c; the toning +0x888, the ambient
+// strength +0x88c; the gradation's distances +0x9c4 and +0x9c8 and colours +0x9cc (three of 3
+// floats); the background's distances +0x9f0 and +0x9f4, strength +0x9f8 and level +0x9fc; the
+// occluders +0xc40 with their count +0xc48 and a mode +0xc4c; the ambient light's list +0xc60 with
+// its count +0xc68.
+constexpr u64 ViewProjectionTerms = 0x820;
+constexpr u64 ViewSplitDepths = 0x730;
+constexpr u64 ViewShadowEnd = 0x73c;
+constexpr u64 ViewSpecularFade = 0x830;
+constexpr u64 ViewOccluderDirection = 0x7f0;
+constexpr u64 ViewContourColor = 0x800;
+constexpr u64 ViewContourBlend = 0x838;
+constexpr u64 ViewContourDistantBlend = 0x83c;
+constexpr u64 ViewContourStart = 0x840;
+constexpr u64 ViewContourEnd = 0x844;
+constexpr u64 ViewHatching = 0x84c;
+constexpr u64 ViewToning = 0x888;
+constexpr u64 ViewAmbient = 0x88c;
+constexpr u64 ViewGradationStart = 0x9c4;
+constexpr u64 ViewGradationEnd = 0x9c8;
+constexpr u64 ViewGradation = 0x9cc;
+constexpr u64 ViewBackgroundStart = 0x9f0;
+constexpr u64 ViewBackgroundEnd = 0x9f4;
+constexpr u64 ViewBackgroundIntensity = 0x9f8;
+constexpr u64 ViewBackgroundLod = 0x9fc;
+constexpr u64 ViewOccluders = 0xc40;
+constexpr u64 ViewOccluderCount = 0xc48;
+constexpr u64 ViewOccluderMode = 0xc4c;
+constexpr u64 ViewAmbientLights = 0xc60;
+constexpr u64 ViewAmbientLightCount = 0xc68;
+// An ambient light: the texture objects of its radiance +0xb0 and irradiance +0xb8 cube maps, its
+// weight +0xc4.
+constexpr u64 AmbientLightBytes = 0xd0;
+constexpr u64 AmbientLightRadiance = 0xb0;
+constexpr u64 AmbientLightIrradiance = 0xb8;
+constexpr u64 AmbientLightWeight = 0xc4;
+// Each cascade record holds world space to its texture coordinates and depth at +0xd0.
+constexpr u64 CascadeTexture = 0xd0;
+constexpr float MinFadeDistance = 0.0001f;
+constexpr float ShadowEndFade = 10.0f;
+// The occluders' strength, penumbra and range, and the same in the view's other mode.
+constexpr std::array<float, 3> OccluderConstants{0.65f, 5.0f, 1.25f};
+constexpr std::array<float, 3> OccluderModeConstants{0.3f, 14.0f, 2.2222223f};
+// The frame graph holds the hatching texture object at +0x91b8.
+constexpr u64 FrameGraphHatching = 0x91b8;
+// A G2_BG_Main item: material flags +0x30, the texture objects of its layered colour +0x40, normal
+// map +0x48, layered normal map +0x50 and mask +0x58. Its vertex constants hold the gradation at
+// +0xc0; its pixel constants, the head of a Scene::Material, take 0xa0 bytes.
+constexpr u64 MainFlags = 0x30;
+constexpr u64 MainLayeredColor = 0x40;
+constexpr u64 MainNormalMap = 0x48;
+constexpr u64 MainLayeredNormal = 0x50;
+constexpr u64 MainMask = 0x58;
+constexpr u64 MainGradation = 0xc0;
+constexpr u64 MainPixelConstantBytes = 0xa0;
+constexpr u64 MainPunchThrough = 0x70;
+constexpr u32 MainFlagAlpha = 0x2;
+constexpr u32 MainFlagNoHatching = 0x10;
+constexpr u32 MainFlagGradation = 0x40;
 // The game's Composite pass takes these from a view's values.
 constexpr u32 CurveKnots = 7;
 constexpr float LensOutwardScale = 1.3f;
@@ -208,17 +270,20 @@ struct Category {
     u64 color_scale;
     u64 texcoord_transform;
     u64 decal = None;
+    bool main_material = false;
 };
-constexpr std::array<Category, 8> Categories{{
-    {15, 0x60, 0x38, 0x68, 0x00, 0x20},      // G2_BG_Main
-    {16, 0x38, 0x48, 0x40, 0x80, 0x00},      // BG layer: the first of four layers
-    {17, 0x38, 0x48, 0x40, 0x00, None},      // BG single
-    {19, 0x38, 0x48, 0x40, 0x00, None},      // BG gem
-    {21, 0x38, 0x48, 0x40, 0x00, None},      // BG interior
-    {22, 0x38, 0x48, 0x40, 0x30, 0x00},      // BG vein
-    {23, 0x30, None, None, None, None},      // Far: untextured
-    {8, 0x68, 0x30, 0x70, 0xa0, None, 0x50}, // G2_CH_Main: colour texture t1, decal texture t6
+constexpr Category MainCategory{15, 0x60, 0x38, 0x68, 0x00, 0x20, None, true}; // G2_BG_Main
+// The world's other opaque categories, drawn into the surfaces after G2_BG_Main.
+constexpr std::array<Category, 6> WorldCategories{{
+    {16, 0x38, 0x48, 0x40, 0x80, 0x00}, // BG layer: the first of four layers
+    {17, 0x38, 0x48, 0x40, 0x00, None}, // BG single
+    {19, 0x38, 0x48, 0x40, 0x00, None}, // BG gem
+    {21, 0x38, 0x48, 0x40, 0x00, None}, // BG interior
+    {22, 0x38, 0x48, 0x40, 0x30, 0x00}, // BG vein
+    {23, 0x30, None, None, None, None}, // Far: untextured
 }};
+// G2_CH_Main: colour texture t1, decal texture t6.
+constexpr Category CharacterCategory{8, 0x68, 0x30, 0x70, 0xa0, None, 0x50};
 // CH_Main's vertex constants hold the decals' positions and targets, then their scales, which are
 // 0 when a material has no decals. Its pixel constants hold GradationColor and the alpha step flag.
 constexpr u64 DecalPositions = 0x150;
@@ -264,7 +329,8 @@ public:
           palettes_address{address + Scene::PalettesOffset},
           skin_jobs{reinterpret_cast<Scene::SkinJob*>(packet + Scene::SkinJobsOffset)},
           soft_body_jobs{reinterpret_cast<Scene::SoftBodyJob*>(packet + Scene::SoftBodyJobsOffset)},
-          decals{reinterpret_cast<Scene::Decal*>(packet + Scene::DecalsOffset)} {}
+          decals{reinterpret_cast<Scene::Decal*>(packet + Scene::DecalsOffset)},
+          materials{reinterpret_cast<Scene::Material*>(packet + Scene::MaterialsOffset)} {}
 
     void SetCascades(u32 mask) {
         header.cascades = mask;
@@ -272,6 +338,15 @@ public:
 
     void SetSpheres(u32 count) {
         header.spheres = count;
+    }
+
+    void SetHatching(u32 handle) {
+        hatching = handle;
+    }
+
+    // The draws so far are the world's opaque draws.
+    void EndWorld() {
+        header.world_draws = header.draws;
     }
 
     void SetSky(u32 cube, const std::array<float, 3>& background) {
@@ -294,7 +369,8 @@ public:
         const VAddr constants = Load<VAddr>(item + category.constants);
         const VAddr shape = index_buffer - ShapeIndexBuffer;
         if (submesh == 0 || index_buffer == 0 || constants == 0 ||
-            Load<u16>(submesh + SubmeshRanges) == 0 || header.draws == Scene::MaxDraws) {
+            Load<u16>(submesh + SubmeshRanges) == 0 ||
+            header.draws + header.alpha_draws == Scene::MaxDraws) {
             header.dropped++;
             return;
         }
@@ -351,7 +427,15 @@ public:
         if (material != 0 && category.decal != None) {
             decal = AddDecal(constants, material, Load<VAddr>(item + category.decal));
         }
-        const u32 i = header.draws++;
+        u32 material_index = 0;
+        bool alpha_tested = false;
+        if (category.main_material && material != 0) {
+            const u32 flags = Load<u32>(item + MainFlags);
+            alpha_tested =
+                (flags & MainFlagAlpha) != 0 || Load<float>(material + MainPunchThrough) < 1.0f;
+            material_index = AddMainMaterial(item, flags, constants, material, *mesh);
+        }
+        const u32 i = alpha_tested ? Scene::MaxDraws - 1 - header.alpha_draws++ : header.draws++;
         // The fields are written in order: the packet is write-combined.
         Scene::Draw& draw = draws[i];
         std::memcpy(draw.world_view, reinterpret_cast<const void*>(constants), 2 * MatrixBytes);
@@ -366,6 +450,10 @@ public:
         draw.palette = skin.palette;
         draw.bones = skin.bones;
         draw.decal = decal;
+        draw.normal = mesh->normal;
+        draw.tangent = mesh->tangent;
+        draw.vertex_color = mesh->vertex_color;
+        draw.material = material_index;
         commands[i] = {
             .index_count = count,
             .instance_count = 1,
@@ -622,6 +710,35 @@ private:
         return ++header.decals;
     }
 
+    // Writes a G2_BG_Main item's material to the packet and returns its index plus 1; 0 when the
+    // packet is full.
+    u32 AddMainMaterial(VAddr item, u32 flags, VAddr vertex_constants, VAddr pixel_constants,
+                        const Meshes::Mesh& mesh) {
+        if (header.materials == Scene::MaxMaterials) {
+            header.dropped_materials++;
+            return 0;
+        }
+        const auto handle = [item](u64 field) {
+            const VAddr object = Load<VAddr>(item + field);
+            return object != 0 ? Textures::Get(object) : 0;
+        };
+        const bool layered = mesh.vertex_color != 0;
+        // The fields are written in order: the packet is write-combined.
+        Scene::Material& out = materials[header.materials];
+        std::memcpy(&out, reinterpret_cast<const void*>(pixel_constants), MainPixelConstantBytes);
+        std::memcpy(out.gradation_low,
+                    reinterpret_cast<const void*>(vertex_constants + MainGradation),
+                    sizeof(out.gradation_low) + sizeof(out.gradation_high));
+        out.normal_map = mesh.tangent != 0 ? handle(MainNormalMap) : 0;
+        out.layered_color = layered ? handle(MainLayeredColor) : 0;
+        out.layered_normal = layered && mesh.tangent != 0 ? handle(MainLayeredNormal) : 0;
+        out.mask = handle(MainMask);
+        out.hatching = (flags & MainFlagNoHatching) == 0 ? hatching : 0;
+        out.flags = (layered ? Scene::MaterialLayered : 0) |
+                    ((flags & MainFlagGradation) != 0 ? Scene::MaterialGradation : 0);
+        return ++header.materials;
+    }
+
     // Copies a palette into the packet once for each run of users that share it.
     bool CopyPalette(VAddr palette, u32 bones, u64& address) {
         if (palette != last_palette || bones != last_bones) {
@@ -673,6 +790,8 @@ private:
     Scene::SkinJob* skin_jobs;
     Scene::SoftBodyJob* soft_body_jobs;
     Scene::Decal* decals;
+    Scene::Material* materials;
+    u32 hatching = 0;
     VAddr last_palette = 0;
     u32 last_bones = 0;
     u64 last_address = 0;
@@ -766,29 +885,72 @@ Matrix Multiply(const Matrix& a, const Matrix& b) {
     return result;
 }
 
+// A's inverse.
+Matrix Invert(const Matrix& a) {
+    const float s0 = a[0] * a[5] - a[4] * a[1];
+    const float s1 = a[0] * a[6] - a[4] * a[2];
+    const float s2 = a[0] * a[7] - a[4] * a[3];
+    const float s3 = a[1] * a[6] - a[5] * a[2];
+    const float s4 = a[1] * a[7] - a[5] * a[3];
+    const float s5 = a[2] * a[7] - a[6] * a[3];
+    const float c5 = a[10] * a[15] - a[14] * a[11];
+    const float c4 = a[9] * a[15] - a[13] * a[11];
+    const float c3 = a[9] * a[14] - a[13] * a[10];
+    const float c2 = a[8] * a[15] - a[12] * a[11];
+    const float c1 = a[8] * a[14] - a[12] * a[10];
+    const float c0 = a[8] * a[13] - a[12] * a[9];
+    const float scale = 1.0f / (s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0);
+    return {
+        (a[5] * c5 - a[6] * c4 + a[7] * c3) * scale,
+        (-a[1] * c5 + a[2] * c4 - a[3] * c3) * scale,
+        (a[13] * s5 - a[14] * s4 + a[15] * s3) * scale,
+        (-a[9] * s5 + a[10] * s4 - a[11] * s3) * scale,
+        (-a[4] * c5 + a[6] * c2 - a[7] * c1) * scale,
+        (a[0] * c5 - a[2] * c2 + a[3] * c1) * scale,
+        (-a[12] * s5 + a[14] * s2 - a[15] * s1) * scale,
+        (a[8] * s5 - a[10] * s2 + a[11] * s1) * scale,
+        (a[4] * c4 - a[5] * c2 + a[7] * c0) * scale,
+        (-a[0] * c4 + a[1] * c2 - a[3] * c0) * scale,
+        (a[12] * s4 - a[13] * s2 + a[15] * s0) * scale,
+        (-a[8] * s4 + a[9] * s2 - a[11] * s0) * scale,
+        (-a[4] * c3 + a[5] * c1 - a[6] * c0) * scale,
+        (a[0] * c3 - a[1] * c1 + a[2] * c0) * scale,
+        (-a[12] * s3 + a[13] * s1 - a[14] * s0) * scale,
+        (a[8] * s3 - a[9] * s1 + a[10] * s0) * scale,
+    };
+}
+
+// The two heaviest records of a list that accept selects, as the frame graph picks them.
+template <typename Accept>
+std::pair<VAddr, VAddr> HeaviestTwo(VAddr list, s32 count, u64 bytes, u64 weight_field,
+                                    Accept accept) {
+    VAddr first = 0;
+    VAddr second = 0;
+    for (s32 i = 0; i < count; i++) {
+        const VAddr record = list + i * bytes;
+        if (!accept(record)) {
+            continue;
+        }
+        const float weight = Load<float>(record + weight_field);
+        if (first == 0) {
+            first = record;
+        } else if (weight > Load<float>(first + weight_field)) {
+            second = first;
+            first = record;
+        } else if (second == 0 || weight > Load<float>(second + weight_field)) {
+            second = record;
+        }
+    }
+    return {first, second};
+}
+
 // The sky of the game's sky pass: the two heaviest skies of the view's list with a cube map,
 // blended by weight. With no sky the pass fills the scene with the background colour.
 void WriteSky(VAddr frame_graph, VAddr view, u8* packet, Writer& writer) {
     const auto background = Load<std::array<float, 3>>(view + ViewBackground);
-    const VAddr list = Load<VAddr>(view + ViewSkies);
-    const s32 count = Load<s32>(view + ViewSkyCount);
-    VAddr first = 0;
-    VAddr second = 0;
-    for (s32 i = 0; i < count; i++) {
-        const VAddr sky = list + i * SkyBytes;
-        if (Load<VAddr>(sky + SkyCube) == 0) {
-            continue;
-        }
-        const float weight = Load<float>(sky + SkyWeight);
-        if (first == 0) {
-            first = sky;
-        } else if (weight > Load<float>(first + SkyWeight)) {
-            second = first;
-            first = sky;
-        } else if (second == 0 || weight > Load<float>(second + SkyWeight)) {
-            second = sky;
-        }
-    }
+    const auto [first, second] =
+        HeaviestTwo(Load<VAddr>(view + ViewSkies), Load<s32>(view + ViewSkyCount), SkyBytes,
+                    SkyWeight, [](VAddr sky) { return Load<VAddr>(sky + SkyCube) != 0; });
     const u32 cube = first != 0 ? Textures::GetCube(Load<VAddr>(first + SkyCube)) : 0;
     writer.SetSky(cube, background);
     if (cube == 0) {
@@ -885,6 +1047,83 @@ void WriteGrade(VAddr view, u8* packet) {
     std::memcpy(packet + Scene::GradeOffset, &grade, sizeof(grade));
 }
 
+// The values the game's LightPass, IBL and Resolve passes set up on the draw thread after the
+// capture, from the view. The cascades' projections take view space to their texture coordinates.
+void WriteLight(VAddr view, u8* packet) {
+    Scene::Light light{};
+    const auto number = [view](u64 field) { return Load<float>(view + field); };
+    const auto copy = [view](float* out, u64 field, size_t bytes) {
+        std::memcpy(out, reinterpret_cast<const void*>(view + field), bytes);
+    };
+    const auto inverse_view = Load<Matrix>(view + ViewInverse);
+    for (u32 c = 0; c < Scene::Cascades; c++) {
+        const Matrix projection = Multiply(
+            inverse_view, Load<Matrix>(view + ViewCascades + c * CascadeBytes + CascadeTexture));
+        const Matrix inverse = Invert(projection);
+        std::memcpy(light.shadow_projection[c], projection.data(), sizeof(projection));
+        std::memcpy(light.inverse_shadow_projection[c], inverse.data(), sizeof(inverse));
+    }
+    const Matrix view_to_sky = Multiply(inverse_view, Load<Matrix>(view + ViewSkyRotation));
+    std::memcpy(light.view_to_sky, view_to_sky.data(), sizeof(view_to_sky));
+    copy(light.inverse_projection, ViewProjectionTerms, sizeof(light.inverse_projection));
+    copy(light.split_depths, ViewSplitDepths, sizeof(light.split_depths));
+    copy(light.light_color, ViewKeyLight, sizeof(light.light_color));
+    copy(light.light_direction, ViewKeyLight + 0x10, sizeof(light.light_direction));
+    const auto occluder_direction = Load<std::array<float, 3>>(view + ViewOccluderDirection);
+    for (u32 j = 0; j < 3; j++) {
+        light.occluder_direction[j] = -occluder_direction[j];
+    }
+    copy(light.gradation_high, ViewGradation, 3 * sizeof(float));
+    copy(light.gradation_middle, ViewGradation + 12, 3 * sizeof(float));
+    copy(light.gradation_low, ViewGradation + 24, 3 * sizeof(float));
+    copy(light.contour_color, ViewContourColor, sizeof(light.contour_color));
+    copy(light.specular_fade, ViewSpecularFade, sizeof(light.specular_fade));
+    const auto inverse_length = [&number](u64 start, u64 end) {
+        return 1.0f / std::max(number(end) - number(start), MinFadeDistance);
+    };
+    light.shadow_fade_start = number(ViewShadowEnd) - ShadowEndFade;
+    light.ibl_intensity = number(ViewAmbient);
+    light.contour_blend = number(ViewContourBlend);
+    light.contour_distant_blend = number(ViewContourDistantBlend);
+    light.contour_start = number(ViewContourStart);
+    light.contour_range = inverse_length(ViewContourStart, ViewContourEnd);
+    light.gradation_start = number(ViewGradationStart);
+    light.gradation_range = inverse_length(ViewGradationStart, ViewGradationEnd);
+    light.background_start = number(ViewBackgroundStart);
+    light.background_range = inverse_length(ViewBackgroundStart, ViewBackgroundEnd);
+    light.background_intensity = number(ViewBackgroundIntensity);
+    light.background_lod = number(ViewBackgroundLod);
+    light.hatching_intensity = 2.0f * number(ViewHatching);
+    light.toning = number(ViewToning) + 1.0f;
+    const auto& occluder =
+        Load<s32>(view + ViewOccluderMode) > 0 ? OccluderModeConstants : OccluderConstants;
+    light.occluder_intensity = occluder[0];
+    light.occluder_penumbra = occluder[1];
+    light.occluder_range = occluder[2];
+    const VAddr spheres = Load<VAddr>(view + ViewOccluders);
+    light.occluders = spheres != 0 ? std::clamp<s32>(Load<s32>(view + ViewOccluderCount), 0,
+                                                     static_cast<s32>(Scene::MaxOccluders))
+                                   : 0;
+    std::memcpy(light.occluder_spheres, reinterpret_cast<const void*>(spheres),
+                light.occluders * sizeof(light.occluder_spheres[0]));
+    const auto [first, second] =
+        HeaviestTwo(Load<VAddr>(view + ViewAmbientLights), Load<s32>(view + ViewAmbientLightCount),
+                    AmbientLightBytes, AmbientLightWeight, [](VAddr) { return true; });
+    const auto cube = [](VAddr record, u64 field) {
+        const VAddr object = record != 0 ? Load<VAddr>(record + field) : 0;
+        return object != 0 ? Textures::GetCube(object) : 0;
+    };
+    light.radiance[0] = cube(first, AmbientLightRadiance);
+    light.irradiance[0] = cube(first, AmbientLightIrradiance);
+    light.radiance[1] = cube(second, AmbientLightRadiance);
+    light.irradiance[1] = cube(second, AmbientLightIrradiance);
+    if (second != 0) {
+        const float second_weight = Load<float>(second + AmbientLightWeight);
+        light.ibl_blend = second_weight / (second_weight + Load<float>(first + AmbientLightWeight));
+    }
+    std::memcpy(packet + Scene::LightOffset, &light, sizeof(light));
+}
+
 // The effector constants and spheres as the game's effector program reads them.
 void WriteEffectors(VAddr view, u8* packet, Writer& writer) {
     auto* effectors = reinterpret_cast<Scene::Effectors*>(packet + Scene::EffectorsOffset);
@@ -932,6 +1171,9 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     WriteShadows(view, packet, writer);
     WriteSky(frame_graph, view, packet, writer);
     WriteGrade(view, packet);
+    WriteLight(view, packet);
+    const VAddr hatching = Load<VAddr>(frame_graph + FrameGraphHatching);
+    writer.SetHatching(hatching != 0 ? Textures::Get(hatching) : 0);
     const VAddr records = Load<VAddr>(view + ViewDeformers);
     const VAddr list = Load<VAddr>(view + ViewDeformerList);
     if (records != 0 && list != 0) {
@@ -970,23 +1212,29 @@ void OnFrame(VAddr frame_graph, VAddr view) {
         ForEachItem(count, CasterWorld, keyed(category.index),
                     [&](VAddr item) { writer.AddCaster(item, category); });
     }
-    for (const Category& category : Categories) {
+    const auto add_category = [&](const Category& category) {
         const s32 count = std::min(Load<s32>(view + ViewCategoryCount + category.index * 4),
                                    static_cast<s32>(Scene::MaxDraws));
         ForEachItem(count, category.constants, keyed(category.index),
                     [&](VAddr item) { writer.Add(item, category); });
-    }
+    };
+    add_category(MainCategory);
     const VAddr batch = Load<VAddr>(view + ViewBatchList);
     if (batch != 0) {
         const VAddr entries = Load<VAddr>(batch);
         const s32 count = std::min(Load<s32>(batch + 8), static_cast<s32>(Scene::MaxDraws));
         ForEachItem(
-            count, Categories[0].constants,
+            count, MainCategory.constants,
             [items, entries](s32 i) {
                 return items + static_cast<u32>(Load<u32>(entries + i * 8 + 4) << 6);
             },
-            [&](VAddr item) { writer.Add(item, Categories[0]); });
+            [&](VAddr item) { writer.Add(item, MainCategory); });
     }
+    for (const Category& category : WorldCategories) {
+        add_category(category);
+    }
+    writer.EndWorld();
+    add_category(CharacterCategory);
     Scene::Header header = writer.Header();
     header.frame = frame;
     for (u32 c = 0; c < Scene::ItemCategories; c++) {

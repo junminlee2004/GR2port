@@ -21,6 +21,10 @@ struct Draw {
     uint64_t palette;
     uint bones;
     uint decal;
+    uint normal;
+    uint tangent;
+    uint vertex_color;
+    uint material;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Draws {
@@ -38,6 +42,45 @@ struct Decal {
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Decals {
     Decal decals[];
+};
+
+// The game's G2_BG_Main constants, then what its programs take from elsewhere.
+struct Material {
+    vec4 color_scale;
+    vec4 layered_color_scale;
+    vec4 color_transform;
+    vec4 layered_color_transform;
+    vec4 normal_transform;
+    vec4 layered_normal_transform;
+    vec4 mask_transform;
+    float punch_through;
+    float roughness;
+    float metallic;
+    float translucency;
+    float emissive;
+    float parallax;
+    float layered_roughness;
+    float layered_metallic;
+    float layered_translucency;
+    float layered_emissive;
+    float layered_parallax;
+    float hatching_repeat;
+    vec4 gradation_low;
+    vec4 gradation_high;
+    uint normal_map;
+    uint layered_color;
+    uint layered_normal;
+    uint mask;
+    uint hatching;
+    uint flags;
+};
+
+// Material flags.
+const uint MaterialLayered = 1u;
+const uint MaterialGradation = 2u;
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Materials {
+    Material materials[];
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Words {
@@ -84,6 +127,7 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Ca
 
 const uint Cascades = 3u;
 const uint CasterTables = 3u;
+const uint MaxOccluders = 64u;
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Shadows {
     mat4 inverse_view;
@@ -129,3 +173,42 @@ layout(buffer_reference, std430, buffer_reference_align = 16) buffer Meter {
 };
 
 const float MeterScale = 256.0;
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Light {
+    mat4 shadow_projection[Cascades];
+    mat4 inverse_shadow_projection[Cascades];
+    mat4 view_to_sky;
+    vec4 inverse_projection;
+    vec4 split_depths;
+    vec4 light_color;
+    vec4 light_direction;
+    vec4 occluder_direction;
+    vec4 gradation_high;
+    vec4 gradation_middle;
+    vec4 gradation_low;
+    vec4 contour_color;
+    vec2 specular_fade;
+    float shadow_fade_start;
+    float ibl_intensity;
+    float contour_blend;
+    float contour_distant_blend;
+    float contour_start;
+    float contour_range;
+    float gradation_start;
+    float gradation_range;
+    float background_start;
+    float background_range;
+    float background_intensity;
+    float background_lod;
+    float hatching_intensity;
+    float toning;
+    float occluder_intensity;
+    float occluder_penumbra;
+    float occluder_range;
+    uint occluders;
+    uint radiance[2];
+    uint irradiance[2];
+    float ibl_blend;
+    uint padding[3];
+    vec4 occluder_spheres[MaxOccluders];
+};

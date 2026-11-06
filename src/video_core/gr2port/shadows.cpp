@@ -34,6 +34,7 @@ const Device* g_device = nullptr;
 Image g_maps;
 std::array<vk::ImageView, Scene::Cascades> g_layers;
 vk::Sampler g_sampler;
+vk::Sampler g_depth_sampler;
 vk::DescriptorSetLayout g_set_layout;
 vk::DescriptorPool g_pool;
 vk::DescriptorSet g_set;
@@ -65,17 +66,33 @@ bool CreateSet(const Device& d) {
         .compareOp = vk::CompareOp::eLessOrEqual,
     };
     g_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
-    const vk::DescriptorSetLayoutBinding binding{0, vk::DescriptorType::eCombinedImageSampler, 1,
-                                                 vk::ShaderStageFlagBits::eFragment, &g_sampler};
+    const vk::SamplerCreateInfo depth_sampler_info{
+        .magFilter = vk::Filter::eNearest,
+        .minFilter = vk::Filter::eNearest,
+        .mipmapMode = vk::SamplerMipmapMode::eNearest,
+        .addressModeU = vk::SamplerAddressMode::eClampToEdge,
+        .addressModeV = vk::SamplerAddressMode::eClampToEdge,
+        .addressModeW = vk::SamplerAddressMode::eClampToEdge,
+    };
+    g_depth_sampler = d.device.createSampler(depth_sampler_info, nullptr, dl).value;
+    const std::array<vk::DescriptorSetLayoutBinding, 2> bindings{{
+        {0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment,
+         &g_sampler},
+        {1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment,
+         &g_depth_sampler},
+    }};
     g_set_layout =
-        d.device.createDescriptorSetLayout({.bindingCount = 1, .pBindings = &binding}, nullptr, dl)
+        d.device
+            .createDescriptorSetLayout(
+                {.bindingCount = static_cast<u32>(bindings.size()), .pBindings = bindings.data()},
+                nullptr, dl)
             .value;
-    const vk::DescriptorPoolSize size{vk::DescriptorType::eCombinedImageSampler, 1};
+    const vk::DescriptorPoolSize size{vk::DescriptorType::eCombinedImageSampler, 2};
     g_pool = d.device
                  .createDescriptorPool({.maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &size},
                                        nullptr, dl)
                  .value;
-    if (!g_sampler || !g_set_layout || !g_pool) {
+    if (!g_sampler || !g_depth_sampler || !g_set_layout || !g_pool) {
         return false;
     }
     const auto [result, sets] = d.device.allocateDescriptorSets(
@@ -88,14 +105,23 @@ bool CreateSet(const Device& d) {
         .imageView = g_maps.view,
         .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
     };
-    const vk::WriteDescriptorSet write{
-        .dstSet = g_set,
-        .dstBinding = 0,
-        .descriptorCount = 1,
-        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-        .pImageInfo = &info,
-    };
-    d.device.updateDescriptorSets(write, {}, dl);
+    const std::array<vk::WriteDescriptorSet, 2> writes{{
+        {
+            .dstSet = g_set,
+            .dstBinding = 0,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+            .pImageInfo = &info,
+        },
+        {
+            .dstSet = g_set,
+            .dstBinding = 1,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+            .pImageInfo = &info,
+        },
+    }};
+    d.device.updateDescriptorSets(writes, {}, dl);
     return true;
 }
 

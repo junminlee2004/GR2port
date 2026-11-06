@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
+#include <vector>
 
 #include "common/logging/log.h"
 #include "video_core/gr2port/pipeline.h"
@@ -73,10 +74,16 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
         .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
                           vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
     };
-    const u32 color_count = info.color != vk::Format::eUndefined ? 1 : 0;
+    const std::span<const vk::Format> colors = !info.colors.empty() ? info.colors
+                                               : info.color != vk::Format::eUndefined
+                                                   ? std::span<const vk::Format>{&info.color, 1}
+                                                   : std::span<const vk::Format>{};
+    const std::vector<vk::PipelineColorBlendAttachmentState> blend_attachments(colors.size(),
+                                                                               blend_attachment);
+    const u32 color_count = static_cast<u32>(colors.size());
     const vk::PipelineColorBlendStateCreateInfo blend{
         .attachmentCount = color_count,
-        .pAttachments = &blend_attachment,
+        .pAttachments = blend_attachments.data(),
     };
     const std::array dynamic_states{vk::DynamicState::eViewport, vk::DynamicState::eScissor,
                                     vk::DynamicState::eDepthBias};
@@ -86,7 +93,7 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
     };
     const vk::PipelineRenderingCreateInfo rendering{
         .colorAttachmentCount = color_count,
-        .pColorAttachmentFormats = &info.color,
+        .pColorAttachmentFormats = colors.data(),
         .depthAttachmentFormat = info.depth,
     };
     const vk::GraphicsPipelineCreateInfo pipeline_info{
