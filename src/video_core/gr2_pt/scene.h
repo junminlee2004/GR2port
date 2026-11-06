@@ -23,6 +23,29 @@ inline constexpr u32 MaxPaletteRows = 1u << 16;
 inline constexpr u32 ItemCategories = 37;
 /// Deformed instances the renderer skins per packet.
 inline constexpr u32 MaxSkinJobs = 256;
+/// Deformed instances the renderer simulates as cloth per packet, and the effector spheres they
+/// collide with.
+inline constexpr u32 MaxSoftBodyJobs = 512;
+inline constexpr u32 MaxSpheres = 256;
+/// The effector grid: 6 x 6 x 10 cells of the view, each listing up to 127 spheres and an end
+/// marker.
+inline constexpr u32 GridCells = 360;
+inline constexpr u32 GridEntries = 128;
+
+/// Why the capture does not run a SoftBody record.
+enum class SoftBodyDrop : u32 {
+    /// The shape's mesh is not uploaded.
+    Mesh,
+    /// The instance's copy is not ready.
+    Copy,
+    /// The record's fields are not the shape's cloth data.
+    Record,
+    /// The game's constants do not fit the mesh.
+    Constants,
+    /// The packet already holds MaxSoftBodyJobs jobs.
+    JobCap,
+    Count,
+};
 
 /// The start of each packet.
 struct Header {
@@ -48,6 +71,13 @@ struct Header {
     u32 skin_jobs;
     u32 skin_groups;
     u32 dropped_skins;
+    /// SoftBody jobs written, the workgroups of the largest particle count and of the largest
+    /// vertex count, SoftBody records not written by reason, and the effector spheres copied.
+    u32 soft_body_jobs;
+    u32 soft_body_groups;
+    u32 write_groups;
+    u32 dropped_soft_bodies[static_cast<u32>(SoftBodyDrop::Count)];
+    u32 spheres;
     /// Shadow casters written, of them skinned ones; casters with no drawable mesh or palette, or
     /// past MaxCasters.
     u32 casters;
@@ -65,7 +95,7 @@ struct Header {
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
-static_assert(sizeof(Header) <= 256);
+static_assert(sizeof(Header) <= 512);
 
 /// The frame's shadow cascades. Matrices are as in Draw.
 struct Shadows {
@@ -148,6 +178,42 @@ struct SkinJob {
 };
 static_assert(sizeof(SkinJob) == 64);
 
+/// The effector constants as the game's effector program reads them, then the spheres: 32 bytes
+/// each, {center xyz, radii (outer and inner half floats), ..., mask and strength half float}.
+struct Effectors {
+    /// World space to view space.
+    float view[16];
+    /// The depth the 10 slices cover, the depth where they start and the depth of one slice.
+    float depth;
+    float start;
+    float slice;
+    u32 count;
+    float projection_x;
+    float projection_y;
+    u32 padding[2];
+    u32 spheres[MaxSpheres][8];
+};
+static_assert(sizeof(Effectors) == 96 + MaxSpheres * 32);
+
+/// A deformed instance the renderer simulates as the game's SoftBody deformer does. Anchors come
+/// from skinned (the instance's copy after Skin, or its shape's vertex data); particles,
+/// constraints and map are the shape's, state is the renderer's (see Deformers::Copy), and the
+/// write pass puts positions into the copy at destination. constants holds the game's simulate
+/// constants, or its reset constants when reset is 1; write holds its write constants.
+struct SoftBodyJob {
+    u64 skinned;
+    u64 particles;
+    u64 constraints;
+    u64 map;
+    u64 state;
+    u64 destination;
+    u32 reset;
+    u32 padding[3];
+    u32 constants[60];
+    u32 write[20];
+};
+static_assert(sizeof(SoftBodyJob) == 384);
+
 /// The indirect command of a draw, at the same index as the draw. A caster's command gives the
 /// caster's index as its first instance.
 struct Command {
@@ -159,8 +225,8 @@ struct Command {
 };
 static_assert(sizeof(Command) == 20);
 
-inline constexpr u64 ShadowsOffset = 256;
-inline constexpr u64 DrawsOffset = 1024;
+inline constexpr u64 ShadowsOffset = 512;
+inline constexpr u64 DrawsOffset = 1280;
 inline constexpr u64 CommandsOffset = DrawsOffset + MaxDraws * sizeof(Draw);
 inline constexpr u64 CastersOffset = CommandsOffset + MaxDraws * sizeof(Command);
 /// MaxCasters commands per cascade and list, at (cascade * CasterLists + list) * MaxCasters.
@@ -169,8 +235,12 @@ inline constexpr u64 CasterCommandsOffset = CastersOffset + MaxCasters * sizeof(
 inline constexpr u64 PalettesOffset =
     CasterCommandsOffset + Cascades * CasterLists * MaxCasters * sizeof(Command);
 inline constexpr u64 SkinJobsOffset = PalettesOffset + MaxPaletteRows * 16;
-inline constexpr u64 PacketBytes = SkinJobsOffset + MaxSkinJobs * sizeof(SkinJob);
-static_assert(ShadowsOffset + sizeof(Shadows) <= DrawsOffset && CastersOffset % 16 == 0 &&
-              PalettesOffset % 16 == 0 && SkinJobsOffset % 16 == 0);
+inline constexpr u64 EffectorsOffset = SkinJobsOffset + MaxSkinJobs * sizeof(SkinJob);
+inline constexpr u64 SoftBodyJobsOffset = EffectorsOffset + sizeof(Effectors);
+inline constexpr u64 PacketBytes = SoftBodyJobsOffset + MaxSoftBodyJobs * sizeof(SoftBodyJob);
+static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
+              DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
+              SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
+              SoftBodyJobsOffset % 16 == 0);
 
 } // namespace Gr2Pt::Scene
