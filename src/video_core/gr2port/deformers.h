@@ -35,8 +35,9 @@ struct Copy {
 };
 
 /// Capture thread: the renderer's copy of the deformed instance whose vertex buffer object is at
-/// vertex_buffer, a copy of mesh's shape; zeros while the copy is not ready or when the
-/// instance's layout is not its shape's. The capture's frame marks the instance used.
+/// vertex_buffer, a copy of mesh's shape, usable from the frame being captured; zeros when the
+/// buffer has no room or the instance's layout is not its shape's. The capture's frame marks the
+/// instance used.
 Copy Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame);
 
 /// Render thread: creates the deformer pipelines, the buffer the copies share and the effector
@@ -56,7 +57,7 @@ struct Stats {
     /// Instances with a copy, and the bytes of the copies.
     u32 instances;
     u64 resident_bytes;
-    /// Instances waiting for room in the buffer the copies share.
+    /// Captures of instances that found no room in the buffer the copies share.
     u32 pending;
     /// Instances whose layout is not their shape's, and copies freed after going unused.
     u32 unsupported;

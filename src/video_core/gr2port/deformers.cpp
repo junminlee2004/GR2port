@@ -79,22 +79,28 @@ u32 UnsupportedStamp(VAddr shape) {
 struct Instance {
     std::atomic<VAddr> object{0};
     std::atomic<VAddr> shape{0};
-    std::atomic<bool> ready{false};
     // The last game frame the capture used the instance.
     std::atomic<u64> used{0};
     // Written by the capture before it publishes object.
     const Meshes::Mesh* mesh = nullptr;
-    // Written by the render thread before it publishes ready.
     Copy copy;
 };
 
-// Guards the handle lists.
+struct Range {
+    u64 offset = 0;
+    u64 size = 0;
+};
+
+// Guards the handle lists and the arena's free ranges: offset to size.
 std::mutex g_mutex;
 std::vector<u32> g_free;
 u32 g_unused = 0;
 std::vector<u32> g_pending;
+std::map<u64, u64> g_free_ranges;
 std::array<Instance, Capacity> g_instances;
+std::array<Range, Capacity> g_ranges;
 std::atomic<u32> g_unsupported{0};
+std::atomic<u32> g_no_room{0};
 
 // Render thread only.
 struct Retiring {
@@ -109,15 +115,7 @@ Pipeline g_soft_body;
 Pipeline g_soft_body_write;
 Buffer g_arena;
 Buffer g_grid;
-// Free ranges of the arena: offset to size.
-std::map<u64, u64> g_free_ranges;
-struct Range {
-    u64 offset = 0;
-    u64 size = 0;
-};
-std::array<Range, Capacity> g_ranges;
 std::vector<u32> g_live;
-std::vector<u32> g_waiting;
 std::vector<Retiring> g_retiring;
 Stats g_stats{};
 u32 g_logged = 0;
@@ -170,36 +168,57 @@ bool SameLayout(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh) {
                        VertexElementInfo - VertexLayout + 4 * elements) == 0;
 }
 
-void Register(VAddr object, VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame) {
+u64 VertexBytes(const Meshes::Mesh& mesh) {
+    return Aligned(mesh.vertex_bytes);
+}
+
+u64 StateBytes(const Meshes::Mesh& mesh) {
+    return mesh.particle_count != 0
+               ? Aligned(StateHeaderBytes + u64{mesh.particle_count} * ParticleStateBytes)
+               : 0;
+}
+
+// Gives an instance its copy at once: the frame being captured can already use it, because the
+// render thread fills the copy before it runs that frame's jobs and draws.
+Copy Register(VAddr object, VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame) {
     if (Load<u16>(object + InstanceKind) != KindDeformed ||
         Load<VAddr>(object + InstanceShape) != shape || !SameLayout(vertex_buffer, shape, mesh)) {
         Stamp(object, UnsupportedStamp(shape));
         g_unsupported.fetch_add(1, std::memory_order_relaxed);
-        return;
+        return {};
     }
+    const u64 vertex_bytes = VertexBytes(mesh);
+    const u64 state_bytes = StateBytes(mesh);
+    Range range{.size = vertex_bytes + state_bytes};
     std::scoped_lock lock{g_mutex};
+    if (g_free.empty() && g_unused == Capacity) {
+        return {};
+    }
+    if (!Allocate(range.size, range.offset)) {
+        g_no_room.fetch_add(1, std::memory_order_relaxed);
+        return {};
+    }
     u32 handle = Capacity;
     if (!g_free.empty()) {
         handle = g_free.back();
         g_free.pop_back();
-    } else if (g_unused < Capacity) {
-        handle = g_unused++;
     } else {
-        return;
+        handle = g_unused++;
     }
+    g_ranges[handle] = range;
+    const u64 address = g_arena.address + range.offset;
     Instance& instance = g_instances[handle];
     instance.mesh = &mesh;
+    instance.copy = {
+        .vertices = address,
+        .state = state_bytes != 0 ? address + vertex_bytes : 0,
+    };
     instance.shape.store(shape, std::memory_order_relaxed);
     instance.used.store(frame, std::memory_order_relaxed);
     instance.object.store(object, std::memory_order_release);
     Stamp(object, handle);
     g_pending.push_back(handle);
-}
-
-void Free(u32 handle) {
-    g_instances[handle].object.store(0, std::memory_order_release);
-    std::scoped_lock lock{g_mutex};
-    g_free.push_back(handle);
+    return instance.copy;
 }
 
 bool Unused(const Instance& instance, u64 game_frame) {
@@ -214,7 +233,6 @@ void Retire(u64 frame, u64 completed, u64 game_frame) {
         if (!Unused(instance, game_frame)) {
             return false;
         }
-        instance.ready.store(false, std::memory_order_relaxed);
         instance.object.store(0, std::memory_order_release);
         g_retiring.push_back({handle, frame + 1});
         g_stats.retired++;
@@ -224,12 +242,12 @@ void Retire(u64 frame, u64 completed, u64 game_frame) {
         if (completed < r.frame) {
             return false;
         }
+        std::scoped_lock lock{g_mutex};
         Range& range = g_ranges[r.handle];
         g_stats.resident_bytes -= range.size;
         g_stats.instances--;
         Release(range.offset, range.size);
         range = {};
-        std::scoped_lock lock{g_mutex};
         g_free.push_back(r.handle);
         return true;
     });
@@ -245,13 +263,12 @@ Copy Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame) 
         if (instance.object.load(std::memory_order_acquire) == object &&
             instance.shape.load(std::memory_order_relaxed) == shape) {
             instance.used.store(frame, std::memory_order_relaxed);
-            return instance.ready.load(std::memory_order_acquire) ? instance.copy : Copy{};
+            return instance.copy;
         }
     } else if (handle == UnsupportedStamp(shape)) {
         return {};
     }
-    Register(object, vertex_buffer, shape, mesh, frame);
-    return {};
+    return Register(object, vertex_buffer, shape, mesh, frame);
 }
 
 bool Start(const Device& device, Memory& memory) {
@@ -273,46 +290,43 @@ bool Start(const Device& device, Memory& memory) {
 void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame) {
     const auto& dl = g_device->dispatch;
     Retire(frame, completed, game_frame);
+    std::vector<u32> created;
     {
         std::scoped_lock lock{g_mutex};
-        g_waiting.insert(g_waiting.end(), g_pending.begin(), g_pending.end());
-        g_pending.clear();
+        created.swap(g_pending);
     }
-    std::vector<u32> created;
-    std::erase_if(g_waiting, [&](u32 handle) {
+    if (created.empty()) {
+        return;
+    }
+    // The mesh's own upload can be in this command buffer.
+    const vk::MemoryBarrier2 uploaded{
+        .srcStageMask = vk::PipelineStageFlagBits2::eCopy,
+        .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+        .dstStageMask = vk::PipelineStageFlagBits2::eCopy,
+        .dstAccessMask = vk::AccessFlagBits2::eTransferRead,
+    };
+    cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &uploaded}, dl);
+    for (const u32 handle : created) {
         Instance& instance = g_instances[handle];
         const Meshes::Mesh& mesh = *instance.mesh;
-        // An instance whose mesh was unloaded, or that went unused before it got a copy, was
-        // never drawn: its handle is free at once.
-        if (Unused(instance, game_frame) || !mesh.ready.load(std::memory_order_acquire) ||
+        const Range range = g_ranges[handle];
+        g_stats.instances++;
+        g_stats.resident_bytes += range.size;
+        // An instance whose mesh was unloaded since the capture has nothing to copy, and the
+        // game no longer draws it.
+        if (!mesh.ready.load(std::memory_order_acquire) ||
             mesh.shape.load(std::memory_order_relaxed) !=
                 instance.shape.load(std::memory_order_relaxed)) {
-            Free(handle);
-            return true;
-        }
-        const u64 vertex_bytes = Aligned(mesh.vertex_bytes);
-        const u64 state_bytes =
-            mesh.particle_count != 0
-                ? Aligned(StateHeaderBytes + u64{mesh.particle_count} * ParticleStateBytes)
-                : 0;
-        Range range{.size = vertex_bytes + state_bytes};
-        if (!Allocate(range.size, range.offset)) {
-            return false;
-        }
-        if (created.empty()) {
-            // The mesh's own upload can be in this command buffer.
-            const vk::MemoryBarrier2 uploaded{
-                .srcStageMask = vk::PipelineStageFlagBits2::eCopy,
-                .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-                .dstStageMask = vk::PipelineStageFlagBits2::eCopy,
-                .dstAccessMask = vk::AccessFlagBits2::eTransferRead,
-            };
-            cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &uploaded}, dl);
+            instance.object.store(0, std::memory_order_release);
+            g_retiring.push_back({handle, frame + 1});
+            continue;
         }
         Meshes::CopyVertices(cmd, mesh, g_arena.buffer, range.offset);
+        const u64 state_bytes = StateBytes(mesh);
         if (state_bytes != 0) {
             // No particle holds a position yet: the simulate pass resets them.
-            cmd.fillBuffer(g_arena.buffer, range.offset + vertex_bytes, StateHeaderBytes, 0, dl);
+            cmd.fillBuffer(g_arena.buffer, range.offset + VertexBytes(mesh), StateHeaderBytes, 0,
+                           dl);
         }
         if (g_logged < LoggedInstances) {
             g_logged++;
@@ -322,20 +336,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame) {
                      instance.shape.load(std::memory_order_relaxed), mesh.vertex_bytes,
                      mesh.stride);
         }
-        const u64 address = g_arena.address + range.offset;
-        instance.copy = {
-            .vertices = address,
-            .state = state_bytes != 0 ? address + vertex_bytes : 0,
-        };
-        g_ranges[handle] = range;
-        g_stats.instances++;
-        g_stats.resident_bytes += range.size;
-        created.push_back(handle);
-        return true;
-    });
-    g_stats.pending = static_cast<u32>(g_waiting.size());
-    if (created.empty()) {
-        return;
+        g_live.push_back(handle);
     }
     const vk::MemoryBarrier2 copied{
         .srcStageMask = vk::PipelineStageFlagBits2::eCopy | vk::PipelineStageFlagBits2::eClear,
@@ -346,10 +347,6 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame) {
             vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite,
     };
     cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &copied}, dl);
-    for (const u32 handle : created) {
-        g_live.push_back(handle);
-        g_instances[handle].ready.store(true, std::memory_order_release);
-    }
 }
 
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
@@ -416,6 +413,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
 Stats TakeStats() {
     Stats stats = g_stats;
     stats.unsupported = g_unsupported.exchange(0, std::memory_order_relaxed);
+    stats.pending = g_no_room.exchange(0, std::memory_order_relaxed);
     g_stats.retired = 0;
     return stats;
 }
