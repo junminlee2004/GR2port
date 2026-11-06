@@ -33,6 +33,7 @@
 #include "video_core/gr2port/renderer.h"
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/scene_ring.h"
+#include "video_core/gr2port/shaders/character_depth_frag.h"
 #include "video_core/gr2port/shaders/character_frag.h"
 #include "video_core/gr2port/shaders/character_vert.h"
 #include "video_core/gr2port/shadows.h"
@@ -161,6 +162,9 @@ private:
     void LogShadows(const Scene::Header& header, const SceneRing::Packet& packet);
     void LogDecals(const Scene::Header& header, const SceneRing::Packet& packet);
     void LogLight(const SceneRing::Packet& packet);
+    void DrawCharacters(vk::CommandBuffer cmd, const Pipeline& pipeline,
+                        std::span<const vk::DescriptorSet> sets, const Scene::Header& header,
+                        const SceneRing::Packet& packet, u64 offset);
     void RecordSnapshot(vk::CommandBuffer cmd, vk::Image image);
     void SaveSnapshot();
     void Report();
@@ -173,7 +177,10 @@ private:
     std::array<Slot, FramesInFlight> slots;
     vk::QueryPool timestamps;
     Image depth;
+    // The characters' depth alone, for the ambient occlusion.
+    Image character_depth;
     Pipeline character_pipeline;
+    Pipeline character_depth_pipeline;
     u32 next = 0;
     // The number of the next frame to submit; frames up to frame - FramesInFlight are done once
     // the frame's slot is free.
@@ -193,7 +200,8 @@ private:
 
 void Barrier(const Device& d, vk::CommandBuffer cmd, vk::Image image, vk::ImageLayout from,
              vk::ImageLayout to, vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
-             vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) {
+             vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access,
+             vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor) {
     const vk::ImageMemoryBarrier2 barrier{
         .srcStageMask = src_stage,
         .srcAccessMask = src_access,
@@ -202,7 +210,7 @@ void Barrier(const Device& d, vk::CommandBuffer cmd, vk::Image image, vk::ImageL
         .oldLayout = from,
         .newLayout = to,
         .image = image,
-        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+        .subresourceRange = {aspect, 0, 1, 0, 1},
     };
     cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier},
                          d.dispatch);
@@ -263,7 +271,18 @@ bool Thread::Init() {
                                                        .push_constant_bytes = sizeof(CharacterPush),
                                                        .set_layouts = set_layouts,
                                                    });
-    if (!character_pipeline.pipeline) {
+    const std::array depth_set_layouts{Textures::SetLayout()};
+    character_depth_pipeline =
+        CreateGraphicsPipeline(d, {
+                                      .vertex = CHARACTER_VERT,
+                                      .fragment = CHARACTER_DEPTH_FRAG,
+                                      .depth = DepthFormat,
+                                      .cull = vk::CullModeFlagBits::eBack,
+                                      .depth_test = true,
+                                      .push_constant_bytes = sizeof(CharacterPush),
+                                      .set_layouts = depth_set_layouts,
+                                  });
+    if (!character_pipeline.pipeline || !character_depth_pipeline.pipeline) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -281,14 +300,59 @@ bool Thread::Recreate() {
     if (needs_swapchain) {
         return false;
     }
-    memory->Destroy(depth);
-    depth = memory->CreateImage(DepthFormat, swapchain->Extent(),
-                                vk::ImageUsageFlagBits::eDepthStencilAttachment |
-                                    vk::ImageUsageFlagBits::eSampled,
-                                vk::ImageAspectFlagBits::eDepth);
-    needs_swapchain = !depth.image || !Look::Resize(swapchain->Extent(), swapchain->Format()) ||
-                      !World::Resize(swapchain->Extent(), depth.view);
+    for (Image* image : {&depth, &character_depth}) {
+        memory->Destroy(*image);
+        *image = memory->CreateImage(DepthFormat, swapchain->Extent(),
+                                     vk::ImageUsageFlagBits::eDepthStencilAttachment |
+                                         vk::ImageUsageFlagBits::eSampled,
+                                     vk::ImageAspectFlagBits::eDepth);
+    }
+    needs_swapchain = !depth.image || !character_depth.image ||
+                      !Look::Resize(swapchain->Extent(), swapchain->Format()) ||
+                      !World::Resize(swapchain->Extent(), depth.view, character_depth.view);
     return !needs_swapchain;
+}
+
+// Inside a rendering at the swapchain's size: draws the packet's character draws with pipeline.
+void Thread::DrawCharacters(vk::CommandBuffer cmd, const Pipeline& pipeline,
+                            std::span<const vk::DescriptorSet> sets, const Scene::Header& header,
+                            const SceneRing::Packet& packet, u64 offset) {
+    const auto& dl = d.dispatch;
+    const u32 character_draws = header.draw_commands[static_cast<u32>(Scene::DrawList::Character)];
+    if (character_draws == 0) {
+        return;
+    }
+    const vk::Extent2D extent = swapchain->Extent();
+    // A negative height keeps the game's y-up clip space.
+    const vk::Viewport viewport{
+        .x = 0.0f,
+        .y = static_cast<float>(extent.height),
+        .width = static_cast<float>(extent.width),
+        .height = -static_cast<float>(extent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+    const vk::Rect2D scissor{{0, 0}, extent};
+    const CharacterPush push{
+        .draws = packet.address + Scene::DrawsOffset,
+        .characters = packet.address + Scene::CharactersOffset,
+        .decals = packet.address + Scene::DecalsOffset,
+        .light = packet.address + Scene::LightOffset,
+        .target_inverse = {1.0f / static_cast<float>(extent.width),
+                           -1.0f / static_cast<float>(extent.height)},
+    };
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, sets, {}, dl);
+    cmd.setViewport(0, viewport, dl);
+    cmd.setScissor(0, scissor, dl);
+    cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
+                      &push, dl);
+    cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
+    cmd.drawIndexedIndirect(scene_ring.buffer,
+                            offset + Scene::CommandsOffset +
+                                u64{Scene::FirstCommand(header, Scene::DrawList::Character)} *
+                                    sizeof(Scene::Command),
+                            character_draws, sizeof(Scene::Command), dl);
 }
 
 void Thread::ReadTimes(u32 slot_index) {
@@ -569,6 +633,29 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                             Timestamps * slot_index + LinesTimestamp, dl);
     }
     if (drawn) {
+        // The last frame's occlusion sampled the characters' depth.
+        Barrier(d, cmd, character_depth.image, vk::ImageLayout::eUndefined,
+                vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eNone, depth_tests,
+                depth_writes, vk::ImageAspectFlagBits::eDepth);
+        const vk::RenderingAttachmentInfo characters{
+            .imageView = character_depth.view,
+            .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+            .storeOp = vk::AttachmentStoreOp::eStore,
+            .clearValue = {.depthStencil = {.depth = 0.0f}},
+        };
+        cmd.beginRendering({.renderArea = {{0, 0}, swapchain->Extent()},
+                            .layerCount = 1,
+                            .pDepthAttachment = &characters},
+                           dl);
+        DrawCharacters(cmd, character_depth_pipeline, std::array{Textures::Set()}, header, packet,
+                       offset);
+        cmd.endRendering(dl);
+        Barrier(d, cmd, character_depth.image, vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
+                vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderSampledRead,
+                vk::ImageAspectFlagBits::eDepth);
         World::RecordOcclusion(cmd, packet.address);
     }
     if (timestamps) {
@@ -640,40 +727,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         .pDepthAttachment = &depth_attachment,
     };
     cmd.beginRendering(rendering, dl);
-    const u32 character_draws = header.draw_commands[static_cast<u32>(Scene::DrawList::Character)];
-    if (drawn && character_draws != 0) {
-        // A negative height keeps the game's y-up clip space.
-        const vk::Viewport viewport{
-            .x = 0.0f,
-            .y = static_cast<float>(extent.height),
-            .width = static_cast<float>(extent.width),
-            .height = -static_cast<float>(extent.height),
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f,
-        };
-        const vk::Rect2D scissor{{0, 0}, extent};
-        const CharacterPush push{
-            .draws = packet.address + Scene::DrawsOffset,
-            .characters = packet.address + Scene::CharactersOffset,
-            .decals = packet.address + Scene::DecalsOffset,
-            .light = packet.address + Scene::LightOffset,
-            .target_inverse = {1.0f / static_cast<float>(extent.width),
-                               -1.0f / static_cast<float>(extent.height)},
-        };
-        const std::array sets{Textures::Set(), Shadows::Set()};
-        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, character_pipeline.pipeline, dl);
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, character_pipeline.layout, 0, sets,
-                               {}, dl);
-        cmd.setViewport(0, viewport, dl);
-        cmd.setScissor(0, scissor, dl);
-        cmd.pushConstants(character_pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
-                          sizeof(push), &push, dl);
-        cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
-        cmd.drawIndexedIndirect(scene_ring.buffer,
-                                offset + Scene::CommandsOffset +
-                                    u64{Scene::FirstCommand(header, Scene::DrawList::Character)} *
-                                        sizeof(Scene::Command),
-                                character_draws, sizeof(Scene::Command), dl);
+    if (drawn) {
+        DrawCharacters(cmd, character_pipeline, std::array{Textures::Set(), Shadows::Set()}, header,
+                       packet, offset);
     }
     if (header.sky != 0) {
         Look::RecordSky(cmd, packet.address);

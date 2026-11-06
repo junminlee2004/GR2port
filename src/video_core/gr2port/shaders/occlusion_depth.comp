@@ -7,13 +7,15 @@ layout(local_size_x = 8, local_size_y = 8) in;
 
 layout(set = 0, binding = 0) uniform sampler2D scene_depth;
 layout(set = 0, binding = 1, r32f) uniform writeonly image2D level_image;
+layout(set = 0, binding = 2) uniform sampler2D character_depth;
 
 layout(push_constant) uniform Constants {
     int level;
 };
 
-// The game's depth mips for its SSAO (CS 0x1c24124): a texel of a level reads the full depth at
-// its place scaled by the level, one pixel along each axis by the other axis's parity.
+// The game's depth mips for its SSAO (CS 0x1c24124): a texel of a level reads the full depth, the
+// nearer of the world and the characters, at its place scaled by the level, one pixel along each
+// axis by the other axis's parity.
 void main() {
     const ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
     if (any(greaterThanEqual(texel, imageSize(level_image)))) {
@@ -21,5 +23,7 @@ void main() {
     }
     const ivec2 size = textureSize(scene_depth, 0);
     const ivec2 source = min((texel << level) + (texel.yx & ivec2(1)), size - ivec2(1));
-    imageStore(level_image, texel, vec4(texelFetch(scene_depth, source, 0).r));
+    const float depth =
+        max(texelFetch(scene_depth, source, 0).r, texelFetch(character_depth, source, 0).r);
+    imageStore(level_image, texel, vec4(depth));
 }

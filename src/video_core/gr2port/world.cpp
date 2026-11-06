@@ -138,23 +138,25 @@ bool CreateSet(const Device& d) {
         {2, Combined, 1, Compute, &g_linear_sampler},
         {3, Storage, 1, Compute},
     }};
-    const std::array<vk::DescriptorSetLayoutBinding, 5> occlusion_bindings{{
+    const std::array<vk::DescriptorSetLayoutBinding, 6> occlusion_bindings{{
         {0, Combined, 1, Compute, &g_sampler},
         {1, Combined, 1, Compute, &g_sampler},
         {2, Combined, 1, Compute, &g_sampler},
         {3, Combined, 1, Compute, &g_linear_sampler},
         {4, Storage, 1, Compute},
+        {5, Combined, 1, Compute, &g_sampler},
     }};
-    const std::array<vk::DescriptorSetLayoutBinding, 2> depth_level_bindings{{
+    const std::array<vk::DescriptorSetLayoutBinding, 3> depth_level_bindings{{
         {0, Combined, 1, Compute, &g_sampler},
         {1, Storage, 1, Compute},
+        {2, Combined, 1, Compute, &g_sampler},
     }};
     g_set_layout = CreateLayout(d, bindings);
     g_lines_layout = CreateLayout(d, line_bindings);
     g_occlusion_layout = CreateLayout(d, occlusion_bindings);
     g_depth_level_layout = CreateLayout(d, depth_level_bindings);
     const std::array<vk::DescriptorPoolSize, 2> sizes{{
-        {Combined, LineImages * static_cast<u32>(bindings.size() + 3 + 4) + DepthLevels},
+        {Combined, LineImages * static_cast<u32>(bindings.size() + 3 + 5) + 2 * DepthLevels},
         {Storage, 2 * LineImages + DepthLevels},
     }};
     g_pool = d.device
@@ -241,7 +243,7 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
            g_depth_level_pipeline.pipeline;
 }
 
-bool Resize(vk::Extent2D extent, vk::ImageView depth) {
+bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_depth) {
     g_extent = extent;
     for (u32 i = 0; i < SurfaceFormats.size(); i++) {
         g_memory->Destroy(g_surfaces[i]);
@@ -298,6 +300,10 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth) {
         .imageView = depth,
         .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
     };
+    const vk::DescriptorImageInfo character_depth_info{
+        .imageView = character_depth,
+        .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+    };
     const auto read_info = [](const Image& image, vk::ImageLayout layout) {
         return vk::DescriptorImageInfo{.imageView = image.view, .imageLayout = layout};
     };
@@ -327,7 +333,7 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth) {
             read_info(g_occlusion[i], vk::ImageLayout::eGeneral);
         const vk::DescriptorImageInfo occlusion_history =
             read_info(g_occlusion[last], vk::ImageLayout::eGeneral);
-        const std::array<vk::WriteDescriptorSet, 15> writes{
+        const std::array<vk::WriteDescriptorSet, 16> writes{
             write(g_sets[i], 0, Combined, &depth_info),
             write(g_sets[i], 1, Combined, &surface_infos[0]),
             write(g_sets[i], 2, Combined, &surface_infos[1]),
@@ -343,15 +349,17 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth) {
             write(g_occlusion_sets[i], 2, Combined, &surface_infos[1]),
             write(g_occlusion_sets[i], 3, Combined, &occlusion_history),
             write(g_occlusion_sets[i], 4, Storage, &occlusion),
+            write(g_occlusion_sets[i], 5, Combined, &character_depth_info),
         };
         g_device->device.updateDescriptorSets(writes, {}, dl);
     }
     for (u32 k = 0; k < DepthLevels; k++) {
         const vk::DescriptorImageInfo level{.imageView = g_depth_level_views[k],
                                             .imageLayout = vk::ImageLayout::eGeneral};
-        const std::array<vk::WriteDescriptorSet, 2> writes{
+        const std::array<vk::WriteDescriptorSet, 3> writes{
             write(g_depth_level_sets[k], 0, Combined, &depth_info),
             write(g_depth_level_sets[k], 1, Storage, &level),
+            write(g_depth_level_sets[k], 2, Combined, &character_depth_info),
         };
         g_device->device.updateDescriptorSets(writes, {}, dl);
     }

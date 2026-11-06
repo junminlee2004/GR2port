@@ -19,8 +19,8 @@ namespace Gr2Port::World {
 bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Format scene_format);
 
 /// With the GPU idle: creates the surface images at extent. depth is the scene's depth, for the
-/// light pass to sample.
-bool Resize(vk::Extent2D extent, vk::ImageView depth);
+/// light pass to sample; character_depth holds the characters' depth alone, for the occlusion.
+bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_depth);
 
 /// Outside rendering, with depth ready as an attachment: clears the surfaces and depth and, when
 /// drawn, draws the world's draws of the packet at address, which is at offset in buffer. Leaves
@@ -31,8 +31,8 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, bool dra
 /// Outside rendering, with the surfaces and depth readable: draws the world's ink lines from them.
 void RecordLines(vk::CommandBuffer cmd, u64 address);
 
-/// After RecordLines, which starts the frame's history images: draws the world's ambient
-/// occlusion from the depth and normals.
+/// After RecordLines, which starts the frame's history images, with the characters' depth
+/// readable: draws the world's ambient occlusion from the depths and normals.
 void RecordOcclusion(vk::CommandBuffer cmd, u64 address);
 
 /// Inside a rendering into the scene's colour, after RecordOcclusion: lights the surfaces.
