@@ -63,7 +63,7 @@ bool CreateSet(const Device& d) {
         .addressModeV = vk::SamplerAddressMode::eClampToEdge,
         .addressModeW = vk::SamplerAddressMode::eClampToEdge,
         .compareEnable = true,
-        .compareOp = vk::CompareOp::eLessOrEqual,
+        .compareOp = vk::CompareOp::eLess,
     };
     g_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
     const vk::SamplerCreateInfo depth_sampler_info{
