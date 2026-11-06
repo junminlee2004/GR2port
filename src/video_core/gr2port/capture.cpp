@@ -952,29 +952,43 @@ private:
 // Items are scattered through the pool and point at scattered objects. The loops prefetch the
 // item Lookahead places ahead, and the objects of the item half as far ahead.
 constexpr s32 Lookahead = 8;
+constexpr u64 LineBytes = 64;
 
 void Prefetch(VAddr address) {
     __builtin_prefetch(reinterpret_cast<const void*>(address));
 }
 
 // The submesh, the shape's handle (just before its index buffer object) and the matrices of an
-// item.
-void PrefetchObjects(VAddr item, u64 matrices) {
+// item, and of an item with pixel constants, the second matrix and those constants.
+void PrefetchObjects(VAddr item, u64 matrices, u64 pixel_constants) {
     const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
     Prefetch(submesh);
     Prefetch(submesh + SubmeshRange);
     Prefetch(Load<VAddr>(item + ItemIndexBuffer) - 4);
-    Prefetch(Load<VAddr>(item + matrices));
+    const VAddr constants = Load<VAddr>(item + matrices);
+    Prefetch(constants);
+    if (pixel_constants == None) {
+        return;
+    }
+    Prefetch(constants + LineBytes);
+    const VAddr pixels = Load<VAddr>(item + pixel_constants);
+    Prefetch(pixels);
+    Prefetch(pixels + LineBytes);
+    Prefetch(pixels + 2 * LineBytes);
 }
 
 template <typename ItemAt, typename Visit>
-void ForEachItem(s32 count, u64 matrices, ItemAt item_at, Visit visit) {
+void ForEachItem(s32 count, u64 matrices, u64 pixel_constants, ItemAt item_at, Visit visit) {
     for (s32 i = 0; i < count; i++) {
         if (i + Lookahead < count) {
             Prefetch(item_at(i + Lookahead));
+            // An item with pixel constants holds its pointers in its second line.
+            if (pixel_constants != None) {
+                Prefetch(item_at(i + Lookahead) + LineBytes);
+            }
         }
         if (i + Lookahead / 2 < count) {
-            PrefetchObjects(item_at(i + Lookahead / 2), matrices);
+            PrefetchObjects(item_at(i + Lookahead / 2), matrices, pixel_constants);
         }
         visit(item_at(i));
     }
@@ -1369,14 +1383,14 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     };
     for (const CasterCategory& category : CasterCategories) {
         const s32 count = Load<s32>(view + ViewCategoryCount + category.index * 4);
-        ForEachItem(count, CasterWorld, keyed(category.index),
+        ForEachItem(count, CasterWorld, None, keyed(category.index),
                     [&](VAddr item) { writer.AddCaster(item, category); });
     }
     writer.EndPart(Scene::CapturePart::Casters);
     const auto add_category = [&](const Category& category) {
         const s32 count = std::min(Load<s32>(view + ViewCategoryCount + category.index * 4),
                                    static_cast<s32>(Scene::MaxDraws));
-        ForEachItem(count, category.constants, keyed(category.index),
+        ForEachItem(count, category.constants, category.material, keyed(category.index),
                     [&](VAddr item) { writer.Add(item, category); });
     };
     add_category(MainCategory);
@@ -1385,7 +1399,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
         const VAddr entries = Load<VAddr>(batch);
         const s32 count = std::min(Load<s32>(batch + 8), static_cast<s32>(Scene::MaxDraws));
         ForEachItem(
-            count, MainCategory.constants,
+            count, MainCategory.constants, MainCategory.material,
             [items, entries](s32 i) {
                 return items + static_cast<u32>(Load<u32>(entries + i * 8 + 4) << 6);
             },
@@ -1398,7 +1412,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     writer.EndPart(Scene::CapturePart::World);
     add_category(CharacterCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + ContourCategory * 4), ContourVertexConstants,
-                keyed(ContourCategory), [&](VAddr item) { writer.AddContour(item); });
+                None, keyed(ContourCategory), [&](VAddr item) { writer.AddContour(item); });
     writer.CopyCommands();
     writer.EndPart(Scene::CapturePart::Characters);
     Scene::Header header = writer.Header();
