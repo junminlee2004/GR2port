@@ -92,3 +92,25 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Sh
     vec4 key_light_color;
     vec4 key_light_direction;
 };
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Grade {
+    float exposure;
+    float adaption_range;
+    float adaption_speed;
+    float key_value;
+    float knots[3][8];
+    vec4 distortion;
+    vec2 fluctuation;
+    float saturation;
+    uint distorted;
+};
+
+// The meter's state, which lasts from frame to frame: the frame's sum of log luminance in units of
+// 1 / MeterScale, the exposure the picture uses, and the brightness the meter has adapted to.
+layout(buffer_reference, std430, buffer_reference_align = 16) buffer Meter {
+    int log_sum;
+    float exposure;
+    float adapted;
+};
+
+const float MeterScale = 256.0;

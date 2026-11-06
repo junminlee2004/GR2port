@@ -14,6 +14,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.h
     ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp
     ${CMAKE_CURRENT_LIST_DIR}/hooks.h
+    ${CMAKE_CURRENT_LIST_DIR}/look.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/look.h
     ${CMAKE_CURRENT_LIST_DIR}/memory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/memory.h
     ${CMAKE_CURRENT_LIST_DIR}/meshes.cpp
@@ -69,6 +71,10 @@ function(gr2port_add_shader FILENAME SHADER_NAME)
 endfunction()
 gr2port_add_shader(mesh.vert mesh_vert)
 gr2port_add_shader(mesh.frag mesh_frag)
+gr2port_add_shader(fullscreen.vert fullscreen_vert)
+gr2port_add_shader(luminance.comp luminance_comp)
+gr2port_add_shader(exposure.comp exposure_comp)
+gr2port_add_shader(composite.frag composite_frag)
 gr2port_add_shader(shadow.vert shadow_vert)
 gr2port_add_shader(shadow_alpha.vert shadow_alpha_vert)
 gr2port_add_shader(shadow_alpha.frag shadow_alpha_frag)

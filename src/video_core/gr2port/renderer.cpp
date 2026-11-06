@@ -22,6 +22,7 @@
 #include "video_core/gr2port/capture.h"
 #include "video_core/gr2port/deformers.h"
 #include "video_core/gr2port/device.h"
+#include "video_core/gr2port/look.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/overlays.h"
@@ -41,14 +42,19 @@ namespace Gr2Port::Renderer {
 namespace {
 
 constexpr u32 FramesInFlight = 2;
-// GPU timestamps per frame: the start, after the uploads, after the deformers, after each cascade
-// and the end.
-constexpr u32 Timestamps = 4 + Scene::Cascades;
-// GPU intervals per frame: the whole frame, the deformers, each cascade and the main view.
-constexpr u32 Intervals = 3 + Scene::Cascades;
+// GPU timestamps per frame: the start, after the uploads, after the deformers, after each cascade,
+// after the main view, after the meter and the end.
+constexpr u32 Timestamps = 6 + Scene::Cascades;
+constexpr u32 MainTimestamp = 3 + Scene::Cascades;
+constexpr u32 MeterTimestamp = MainTimestamp + 1;
+// GPU intervals per frame: the whole frame, the deformers, each cascade, the main view, the meter
+// and the picture.
+constexpr u32 Intervals = 5 + Scene::Cascades;
 constexpr u32 DeformerInterval = 1;
 constexpr u32 FirstCascadeInterval = 2;
-constexpr u32 MainInterval = Intervals - 1;
+constexpr u32 MainInterval = FirstCascadeInterval + Scene::Cascades;
+constexpr u32 MeterInterval = MainInterval + 1;
+constexpr u32 PictureInterval = MainInterval + 2;
 constexpr u32 ReportFrames = 600;
 constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
 // A frame with more indices than this is not drawn: its items are not what the capture expects.
@@ -140,7 +146,6 @@ private:
     vk::QueryPool timestamps;
     Image depth;
     Pipeline mesh_pipeline;
-    vk::Format pipeline_format = vk::Format::eUndefined;
     u32 next = 0;
     // The number of the next frame to submit; frames up to frame - FramesInFlight are done once
     // the frame's slot is free.
@@ -214,7 +219,20 @@ bool Thread::Init() {
                                       Placement::Upload);
     if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
         !Textures::Start(d, *memory) || !Shadows::Start(d, *memory) ||
-        !Deformers::Start(d, *memory)) {
+        !Deformers::Start(d, *memory) || !Look::Start(d, *memory)) {
+        return false;
+    }
+    const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout()};
+    mesh_pipeline = CreateGraphicsPipeline(d, {
+                                                  .vertex = MESH_VERT,
+                                                  .fragment = MESH_FRAG,
+                                                  .color = Look::SceneFormat,
+                                                  .depth = DepthFormat,
+                                                  .depth_test = true,
+                                                  .push_constant_bytes = 3 * sizeof(u64),
+                                                  .set_layouts = set_layouts,
+                                              });
+    if (!mesh_pipeline.pipeline) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -236,21 +254,7 @@ bool Thread::Recreate() {
     depth = memory->CreateImage(DepthFormat, swapchain->Extent(),
                                 vk::ImageUsageFlagBits::eDepthStencilAttachment,
                                 vk::ImageAspectFlagBits::eDepth);
-    if (pipeline_format != swapchain->Format()) {
-        const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout()};
-        DestroyPipeline(d, mesh_pipeline);
-        mesh_pipeline = CreateGraphicsPipeline(d, {
-                                                      .vertex = MESH_VERT,
-                                                      .fragment = MESH_FRAG,
-                                                      .color = swapchain->Format(),
-                                                      .depth = DepthFormat,
-                                                      .depth_test = true,
-                                                      .push_constant_bytes = 3 * sizeof(u64),
-                                                      .set_layouts = set_layouts,
-                                                  });
-        pipeline_format = swapchain->Format();
-    }
-    needs_swapchain = !depth.image || !mesh_pipeline.pipeline;
+    needs_swapchain = !depth.image || !Look::Resize(swapchain->Extent(), swapchain->Format());
     return !needs_swapchain;
 }
 
@@ -486,10 +490,12 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         }
     }
 
-    const vk::Image image = swapchain->Image(index);
-    Barrier(d, cmd, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eNone,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+    // The last frame sampled the scene's colour in its meter and its picture.
+    Barrier(d, cmd, Look::SceneImage(), vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::PipelineStageFlagBits2::eComputeShader |
+                vk::PipelineStageFlagBits2::eFragmentShader,
+            vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             vk::AccessFlagBits2::eColorAttachmentWrite);
     const vk::ImageMemoryBarrier2 depth_barrier{
         .srcStageMask = vk::PipelineStageFlagBits2::eLateFragmentTests,
@@ -505,7 +511,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                          dl);
 
     const vk::RenderingAttachmentInfo color{
-        .imageView = swapchain->View(index),
+        .imageView = Look::SceneView(),
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
         .loadOp = vk::AttachmentLoadOp::eClear,
         .storeOp = vk::AttachmentStoreOp::eStore,
@@ -555,9 +561,45 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                                 sizeof(Scene::Command), dl);
     }
     cmd.endRendering(dl);
+    if (timestamps) {
+        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
+                            Timestamps * slot_index + MainTimestamp, dl);
+    }
+
+    Barrier(
+        d, cmd, Look::SceneImage(), vk::ImageLayout::eColorAttachmentOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::AccessFlagBits2::eColorAttachmentWrite,
+        vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::AccessFlagBits2::eShaderSampledRead);
+    Look::RecordMeter(cmd, packet.address);
+    if (timestamps) {
+        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
+                            Timestamps * slot_index + MeterTimestamp, dl);
+    }
+
+    const vk::Image image = swapchain->Image(index);
+    Barrier(d, cmd, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eNone,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::AccessFlagBits2::eColorAttachmentWrite);
+    const vk::RenderingAttachmentInfo picture{
+        .imageView = swapchain->View(index),
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eDontCare,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+    };
+    cmd.beginRendering({.renderArea = {{0, 0}, extent},
+                        .layerCount = 1,
+                        .colorAttachmentCount = 1,
+                        .pColorAttachments = &picture},
+                       dl);
+    Look::RecordComposite(cmd, packet.address);
+    cmd.endRendering(dl);
     if (snapshot_wanted) {
         snapshot_wanted = false;
         LogLight(packet);
+        Look::LogAndReadMeter(cmd, packet.data);
         RecordSnapshot(cmd, swapchain->Image(index));
         slot.snapshot = snapshot.mapped != nullptr;
     }
@@ -696,16 +738,19 @@ void Thread::Report() {
              "GR2port renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, {} game frames "
              "skipped, per frame {:.3f} ms of render thread work, {:.3f} ms waiting for a "
              "frame slot and a swapchain image, {:.3f} ms on the GPU (deformers {:.3f}, cascades "
-             "{:.3f} {:.3f} {:.3f}, main view {:.3f}; shortest {:.3f}, deformers {:.3f}, cascades "
-             "{:.3f} {:.3f} {:.3f}, main view {:.3f})",
+             "{:.3f} {:.3f} {:.3f}, main view {:.3f}, meter {:.3f}, picture {:.3f}; shortest "
+             "{:.3f}, deformers {:.3f}, cascades {:.3f} {:.3f} {:.3f}, main view {:.3f}, meter "
+             "{:.3f}, picture {:.3f})",
              game_fps, stats.frames, seconds, skipped - stats.skipped, stats.work_ms / frames,
              stats.wait_ms / frames, gpu_ms, stats.gpu_ms[DeformerInterval] / timed,
              stats.gpu_ms[FirstCascadeInterval] / timed,
              stats.gpu_ms[FirstCascadeInterval + 1] / timed,
              stats.gpu_ms[FirstCascadeInterval + 2] / timed, stats.gpu_ms[MainInterval] / timed,
+             stats.gpu_ms[MeterInterval] / timed, stats.gpu_ms[PictureInterval] / timed,
              stats.gpu_min_ms[0], stats.gpu_min_ms[DeformerInterval],
              stats.gpu_min_ms[FirstCascadeInterval], stats.gpu_min_ms[FirstCascadeInterval + 1],
-             stats.gpu_min_ms[FirstCascadeInterval + 2], stats.gpu_min_ms[MainInterval]);
+             stats.gpu_min_ms[FirstCascadeInterval + 2], stats.gpu_min_ms[MainInterval],
+             stats.gpu_min_ms[MeterInterval], stats.gpu_min_ms[PictureInterval]);
     LOG_INFO(Render_Vulkan,
              "GR2port scene: per frame {:.0f} draws ({:.0f} skinned, {:.0f} deformed, {:.1f} with "
              "decals, {:.1f} without room for theirs, {:.1f} KB of palettes), {:.0f} items not "
@@ -729,8 +774,8 @@ void Thread::Report() {
     LOG_INFO(Render_Vulkan,
              "GR2port textures: per frame {:.0f} draws with a colour texture not converted; {} "
              "textures in {:.1f} MB, {} waiting, {:.1f} MB uploaded of {:.1f} MB of data; not "
-             "converted: {} not a single 2D image, {} tiling or format, {} larger than their data, "
-             "{} no memory; {} missed destroys; {} meshes without texture coordinates",
+             "converted: {} not a single 2D image or cube map, {} tiling or format, {} larger than "
+             "their data, {} no memory; {} missed destroys; {} meshes without texture coordinates",
              static_cast<double>(stats.untextured) / frames, textures.textures,
              static_cast<double>(textures.resident_bytes) / (1 << 20), textures.pending,
              static_cast<double>(textures.uploaded_bytes) / (1 << 20),

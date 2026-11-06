@@ -117,8 +117,8 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
     return result;
 }
 
-Pipeline CreateComputePipeline(const Device& d, std::span<const u32> code,
-                               u32 push_constant_bytes) {
+Pipeline CreateComputePipeline(const Device& d, std::span<const u32> code, u32 push_constant_bytes,
+                               std::span<const vk::DescriptorSetLayout> set_layouts) {
     const auto& dl = d.dispatch;
     Pipeline result;
     const vk::PushConstantRange push{
@@ -126,6 +126,8 @@ Pipeline CreateComputePipeline(const Device& d, std::span<const u32> code,
         .size = push_constant_bytes,
     };
     const vk::PipelineLayoutCreateInfo layout_info{
+        .setLayoutCount = static_cast<u32>(set_layouts.size()),
+        .pSetLayouts = set_layouts.data(),
         .pushConstantRangeCount = push_constant_bytes != 0 ? 1u : 0u,
         .pPushConstantRanges = &push,
     };

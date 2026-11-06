@@ -236,6 +236,27 @@ struct Decal {
 };
 static_assert(sizeof(Decal) == 144);
 
+/// How the scene's HDR colour becomes the picture, as the game's exposure, Tonemap and Composite
+/// programs read it.
+struct Grade {
+    /// The base exposure in stops, how many stops the meter may move it, the share of the way to
+    /// the measured brightness each frame moves, and the brightness the meter aims for.
+    float exposure;
+    float adaption_range;
+    float adaption_speed;
+    float key_value;
+    /// Each channel's curve: 7 knots evenly over 0 to 1.
+    float knots[3][8];
+    /// The lens: x and y shape it, z bends it.
+    float distortion[4];
+    /// The screen's wobble: its phase and its amount.
+    float fluctuation[2];
+    float saturation;
+    /// 1 when the lens and the wobble apply.
+    u32 distorted;
+};
+static_assert(sizeof(Grade) == 144);
+
 /// The indirect command of a draw, at the same index as the draw. A caster's command gives the
 /// caster's index as its first instance.
 struct Command {
@@ -260,10 +281,11 @@ inline constexpr u64 SkinJobsOffset = PalettesOffset + MaxPaletteRows * 16;
 inline constexpr u64 EffectorsOffset = SkinJobsOffset + MaxSkinJobs * sizeof(SkinJob);
 inline constexpr u64 SoftBodyJobsOffset = EffectorsOffset + sizeof(Effectors);
 inline constexpr u64 DecalsOffset = SoftBodyJobsOffset + MaxSoftBodyJobs * sizeof(SoftBodyJob);
-inline constexpr u64 PacketBytes = DecalsOffset + MaxDecals * sizeof(Decal);
+inline constexpr u64 GradeOffset = DecalsOffset + MaxDecals * sizeof(Decal);
+inline constexpr u64 PacketBytes = GradeOffset + sizeof(Grade);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
-              SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0);
+              SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0 && GradeOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

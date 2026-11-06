@@ -31,10 +31,6 @@ const float Ambient = 0.4;
 // Cascades are used inside this part of their square, which leaves room for the filter.
 const float CascadeInner = 0.98;
 
-vec3 LinearToSrgb(vec3 c) {
-    return mix(12.92 * c, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
-}
-
 // 1 where the key light reaches the point, from the first cascade that covers it. Cascades are
 // drawn with a flipped viewport, as the main view, so their rows run from y = 1 down.
 float Shadow(vec3 position) {
@@ -62,8 +58,7 @@ vec3 DecalFactor(float color_alpha) {
     return mix(vec3(1.0), mix(decal.rgb, gradation.rgb, gradation.a), decal.a * mask);
 }
 
-// The albedo, lit by the key light with the face normal and the shadow cascades. The swapchain is
-// UNORM, so the shader encodes sRGB itself.
+// The albedo, lit by the key light with the face normal and the shadow cascades, in linear HDR.
 void main() {
     const vec4 color_map =
         texture(sampler2D(textures[nonuniformEXT(texture_index)], texture_sampler), texcoord);
@@ -75,5 +70,5 @@ void main() {
     normal = dot(normal, view_position) > 0.0 ? -normal : normal;
     const float diffuse = max(dot(normal, shadows.light_direction.xyz), 0.0);
     const float light = Ambient + (1.0 - Ambient) * diffuse * Shadow(view_position);
-    color = vec4(LinearToSrgb(albedo * light), 1.0);
+    color = vec4(albedo * light, 1.0);
 }

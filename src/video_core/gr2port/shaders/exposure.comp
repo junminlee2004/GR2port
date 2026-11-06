@@ -1,0 +1,30 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+
+layout(local_size_x = 1) in;
+
+layout(push_constant) uniform Constants {
+    Grade grade;
+    Meter meter;
+    float tile_share;
+};
+
+// The game's adaption program: the adapted brightness moves toward the frame's log average, and the
+// exposure aims for the key value within a range of stops around the base exposure.
+void main() {
+    const float average = exp(float(meter.log_sum) / MeterScale * tile_share);
+    meter.log_sum = 0;
+    const float range = grade.adaption_range;
+    if (range <= 0.0) {
+        meter.exposure = pow(2.0, grade.exposure);
+        return;
+    }
+    meter.adapted += grade.adaption_speed * (average - meter.adapted);
+    const float stops = log2(max(grade.key_value / meter.adapted, 1e-6));
+    meter.exposure = pow(2.0, grade.exposure + clamp(stops - grade.exposure, -range, range));
+}

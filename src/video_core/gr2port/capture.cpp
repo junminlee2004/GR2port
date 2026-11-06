@@ -113,6 +113,22 @@ constexpr u64 ViewCasterTables = 0x748;
 // View: the key light's colour times intensity +0x7b0 and the view-space direction its light
 // travels in +0x7c0.
 constexpr u64 ViewKeyLight = 0x7b0;
+// View: the exposure {stops, adaption range, adaption rate, key value} +0x8a0, the wobble's amount
+// +0x8b0, the lens +0x20c, the time +0x1078 (a double), each channel's curve +0xa00 and the curve
+// all channels add +0xa54 (7 floats each), the saturation +0xa70.
+constexpr u64 ViewExposure = 0x8a0;
+constexpr u64 ViewFluctuation = 0x8b0;
+constexpr u64 ViewLens = 0x20c;
+constexpr u64 ViewTime = 0x1078;
+constexpr u64 ViewCurves = 0xa00;
+constexpr u64 ViewSaturation = 0xa70;
+// The game's Composite pass takes these from a view's values.
+constexpr u32 CurveKnots = 7;
+constexpr float LensOutwardScale = 1.3f;
+constexpr float LensOutwardShape = 1.4281480f; // tan(55 degrees)
+constexpr float LensInwardBend = 6.0f;
+// The game's adaption rate counts seconds at 30 frames per second.
+constexpr float AdaptionFrame = 1.0f / 30.0f;
 constexpr u64 CasterTableBytes = 0x18;
 // Shadow caster items: flags +4 (0x08 culls back faces, 0x10 and 0x20 pick a view-projection
 // table), cascade mask +5, world matrix +0x30. Alpha-tested casters hold pixel constants {alpha
@@ -701,6 +717,43 @@ void WriteShadows(VAddr view, u8* packet, Writer& writer) {
                 sizeof(shadows->key_light_color) + sizeof(shadows->key_light_direction));
 }
 
+// The values the game's exposure, Tonemap and Composite passes set up on the draw thread after the
+// capture, all from the view.
+void WriteGrade(VAddr view, u8* packet) {
+    Scene::Grade grade{};
+    const auto exposure = Load<std::array<float, 4>>(view + ViewExposure);
+    grade.exposure = exposure[0];
+    grade.adaption_range = exposure[1];
+    grade.adaption_speed =
+        exposure[2] > 1.0f ? 1.0f : 1.0f - std::exp(-exposure[2] * AdaptionFrame);
+    grade.key_value = exposure[3];
+    const auto curves = Load<std::array<float, 4 * CurveKnots>>(view + ViewCurves);
+    for (u32 channel = 0; channel < 3; channel++) {
+        for (u32 knot = 0; knot < CurveKnots; knot++) {
+            // Every curve is a difference from the straight line through the knots.
+            const float value = curves[channel * CurveKnots + knot] +
+                                curves[3 * CurveKnots + knot] - static_cast<float>(knot) / 6.0f;
+            grade.knots[channel][knot] = std::clamp(value, 0.0f, 1.0f);
+        }
+    }
+    const float lens = Load<float>(view + ViewLens);
+    const float fluctuation = Load<float>(view + ViewFluctuation);
+    if (lens <= 0.0f) {
+        grade.distortion[0] = 1.0f;
+        grade.distortion[1] = 1.0f;
+        grade.distortion[2] = lens * LensInwardBend;
+    } else {
+        grade.distortion[0] = lens * LensOutwardScale;
+        grade.distortion[1] = LensOutwardShape;
+        grade.distortion[2] = 1.0f;
+    }
+    grade.fluctuation[0] = static_cast<float>(std::fmod(Load<double>(view + ViewTime) * 1.5, 6.28));
+    grade.fluctuation[1] = std::max(0.0f, fluctuation * 2.0f);
+    grade.saturation = Load<float>(view + ViewSaturation);
+    grade.distorted = lens > 0.0f || fluctuation > 0.0f ? 1 : 0;
+    std::memcpy(packet + Scene::GradeOffset, &grade, sizeof(grade));
+}
+
 // The effector constants and spheres as the game's effector program reads them.
 void WriteEffectors(VAddr view, u8* packet, Writer& writer) {
     auto* effectors = reinterpret_cast<Scene::Effectors*>(packet + Scene::EffectorsOffset);
@@ -746,6 +799,7 @@ void OnFrame(VAddr view) {
     }
     Writer writer{packet, SceneRing::Address(packet), frame};
     WriteShadows(view, packet, writer);
+    WriteGrade(view, packet);
     const VAddr records = Load<VAddr>(view + ViewDeformers);
     const VAddr list = Load<VAddr>(view + ViewDeformerList);
     if (records != 0 && list != 0) {
