@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstring>
 #include <memory>
+#include <span>
 #include <string>
 #include <thread>
 #include <vector>
@@ -111,6 +112,9 @@ struct Stats {
     u64 draws = 0;
     u64 dropped = 0;
     u64 capture_ns = 0;
+    std::array<u64, static_cast<u32>(Scene::CapturePart::Count)> capture_parts_ns{};
+    // Each frame's capture, for their median: work on other threads makes some much longer.
+    std::array<u32, ReportFrames> captures{};
     u64 untextured = 0;
     u64 skinned = 0;
     u64 deformed = 0;
@@ -710,6 +714,10 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.dropped_contours += header.dropped_contours;
     stats.dropped += header.dropped;
     stats.capture_ns += header.capture_ns;
+    for (u32 part = 0; part < stats.capture_parts_ns.size(); part++) {
+        stats.capture_parts_ns[part] += header.capture_parts_ns[part];
+    }
+    stats.captures[stats.frames] = header.capture_ns;
     stats.untextured += header.untextured;
     stats.skinned += header.skinned;
     stats.deformed += header.deformed;
@@ -834,6 +842,11 @@ void Thread::Report() {
     const double frames = std::max(stats.frames, 1u);
     const double timed = std::max(stats.timed, 1u);
     const double gpu_ms = stats.gpu_ms[0] / timed;
+    const std::span captures = std::span{stats.captures}.first(stats.frames);
+    std::ranges::nth_element(captures, captures.begin() + captures.size() / 2);
+    const auto capture_part = [&](Scene::CapturePart part) {
+        return static_cast<double>(stats.capture_parts_ns[static_cast<u32>(part)]) * 1e-6 / frames;
+    };
     const Meshes::Stats meshes = Meshes::TakeStats();
     const Textures::Stats textures = Textures::TakeStats();
     const Deformers::Stats deformers = Deformers::TakeStats();
@@ -859,32 +872,39 @@ void Thread::Report() {
              stats.gpu_min_ms[SurfacesInterval], stats.gpu_min_ms[LinesInterval],
              stats.gpu_min_ms[LightInterval], stats.gpu_min_ms[ForwardInterval],
              stats.gpu_min_ms[MeterInterval], stats.gpu_min_ms[PictureInterval]);
-    LOG_INFO(Render_Vulkan,
-             "GR2port scene: per frame {:.0f} draws ({:.0f} skinned, {:.0f} deformed, {:.1f} with "
-             "decals, {:.1f} without room for theirs, {:.0f} with materials, {:.1f} without room "
-             "for theirs, {:.1f} outlines, {:.1f} not drawn, {:.1f} KB of palettes), {:.0f} items "
-             "not "
-             "drawn and {:.0f} deformed ones waiting for their "
-             "copy, {:.0f} indices (largest draw {}), {:.3f} ms of capture on the game's draw "
-             "thread, {} frames not drawn for too many indices; {} meshes ({} skinned) in {:.1f} "
-             "MB, {} waiting, {:.1f} MB uploaded, {} not drawable ({} with indices past their "
-             "vertices), {} missed unloads, {} lost handles",
-             static_cast<double>(stats.draws) / frames, static_cast<double>(stats.skinned) / frames,
-             static_cast<double>(stats.deformed) / frames,
-             static_cast<double>(stats.decals) / frames,
-             static_cast<double>(stats.dropped_decals) / frames,
-             static_cast<double>(stats.materials) / frames,
-             static_cast<double>(stats.dropped_materials) / frames,
-             static_cast<double>(stats.contours) / frames,
-             static_cast<double>(stats.dropped_contours) / frames,
-             static_cast<double>(stats.palette_rows) * 16 / 1024 / frames,
-             static_cast<double>(stats.dropped) / frames,
-             static_cast<double>(stats.deformed_waiting) / frames,
-             static_cast<double>(stats.indices) / frames, stats.max_indices,
-             static_cast<double>(stats.capture_ns) * 1e-6 / frames, stats.refused, meshes.meshes,
-             meshes.skinned, static_cast<double>(meshes.resident_bytes) / (1 << 20), meshes.pending,
-             static_cast<double>(meshes.uploaded_bytes) / (1 << 20), meshes.skipped,
-             meshes.bad_indices, meshes.missed_unloads, meshes.lost_handles);
+    LOG_INFO(
+        Render_Vulkan,
+        "GR2port scene: per frame {:.0f} draws ({:.0f} skinned, {:.0f} deformed, {:.1f} with "
+        "decals, {:.1f} without room for theirs, {:.0f} with materials, {:.1f} without room "
+        "for theirs, {:.1f} outlines, {:.1f} not drawn, {:.1f} KB of palettes), {:.0f} items "
+        "not "
+        "drawn and {:.0f} deformed ones waiting for their "
+        "copy, {:.0f} indices (largest draw {}), {:.3f} ms of capture on the game's draw "
+        "thread (median {:.3f}, shortest {:.3f}; constants {:.3f}, deformers {:.3f}, casters "
+        "{:.3f}, world {:.3f}, characters {:.3f}), {} frames not drawn for too many indices; {} "
+        "meshes ({} skinned) in {:.1f} "
+        "MB, {} waiting, {:.1f} MB uploaded, {} not drawable ({} with indices past their "
+        "vertices), {} missed unloads, {} lost handles",
+        static_cast<double>(stats.draws) / frames, static_cast<double>(stats.skinned) / frames,
+        static_cast<double>(stats.deformed) / frames, static_cast<double>(stats.decals) / frames,
+        static_cast<double>(stats.dropped_decals) / frames,
+        static_cast<double>(stats.materials) / frames,
+        static_cast<double>(stats.dropped_materials) / frames,
+        static_cast<double>(stats.contours) / frames,
+        static_cast<double>(stats.dropped_contours) / frames,
+        static_cast<double>(stats.palette_rows) * 16 / 1024 / frames,
+        static_cast<double>(stats.dropped) / frames,
+        static_cast<double>(stats.deformed_waiting) / frames,
+        static_cast<double>(stats.indices) / frames, stats.max_indices,
+        static_cast<double>(stats.capture_ns) * 1e-6 / frames,
+        static_cast<double>(captures[captures.size() / 2]) * 1e-6,
+        static_cast<double>(*std::ranges::min_element(captures)) * 1e-6,
+        capture_part(Scene::CapturePart::Constants), capture_part(Scene::CapturePart::Deformers),
+        capture_part(Scene::CapturePart::Casters), capture_part(Scene::CapturePart::World),
+        capture_part(Scene::CapturePart::Characters), stats.refused, meshes.meshes, meshes.skinned,
+        static_cast<double>(meshes.resident_bytes) / (1 << 20), meshes.pending,
+        static_cast<double>(meshes.uploaded_bytes) / (1 << 20), meshes.skipped, meshes.bad_indices,
+        meshes.missed_unloads, meshes.lost_handles);
     LOG_INFO(
         Render_Vulkan,
         "GR2port textures: per frame {:.0f} draws with a colour texture not converted; {} "

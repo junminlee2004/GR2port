@@ -341,9 +341,10 @@ T Load(VAddr address) {
 // the writer only stores to it, and counts in its own members.
 class Writer {
 public:
-    /// packet is at address on the GPU; frame is the capture's.
-    Writer(u8* packet, u64 address, u64 frame)
-        : frame{frame}, draws{reinterpret_cast<Scene::Draw*>(packet + Scene::DrawsOffset)},
+    /// packet is at address on the GPU; frame is the capture's, which began at start.
+    Writer(u8* packet, u64 address, u64 frame, std::chrono::steady_clock::time_point start)
+        : frame{frame}, part_start{start},
+          draws{reinterpret_cast<Scene::Draw*>(packet + Scene::DrawsOffset)},
           commands{reinterpret_cast<Scene::Command*>(packet + Scene::CommandsOffset)},
           casters{reinterpret_cast<Scene::Caster*>(packet + Scene::CastersOffset)},
           caster_commands{reinterpret_cast<Scene::Command*>(packet + Scene::CasterCommandsOffset)},
@@ -357,6 +358,14 @@ public:
           contours{reinterpret_cast<Scene::Contour*>(packet + Scene::ContoursOffset)},
           contour_commands{
               reinterpret_cast<Scene::Command*>(packet + Scene::ContourCommandsOffset)} {}
+
+    // Ends a part of the capture's time.
+    void EndPart(Scene::CapturePart part) {
+        const auto now = std::chrono::steady_clock::now();
+        header.capture_parts_ns[static_cast<u32>(part)] = static_cast<u32>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(now - part_start).count());
+        part_start = now;
+    }
 
     void SetCascades(u32 mask) {
         header.cascades = mask;
@@ -900,6 +909,7 @@ private:
 
     Scene::Header header{};
     u64 frame;
+    std::chrono::steady_clock::time_point part_start;
     Scene::Draw* draws;
     Scene::Command* commands;
     Scene::Caster* casters;
@@ -1295,13 +1305,14 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     if (packet == nullptr) {
         return;
     }
-    Writer writer{packet, SceneRing::Address(packet), frame};
+    Writer writer{packet, SceneRing::Address(packet), frame, start};
     WriteShadows(view, packet, writer);
     WriteSky(frame_graph, view, packet, writer);
     WriteGrade(view, packet);
     WriteLight(frame_graph, view, packet);
     const VAddr hatching = Load<VAddr>(frame_graph + FrameGraphHatching);
     writer.SetHatching(hatching != 0 ? Textures::Get(hatching) : 0);
+    writer.EndPart(Scene::CapturePart::Constants);
     const VAddr records = Load<VAddr>(view + ViewDeformers);
     const VAddr list = Load<VAddr>(view + ViewDeformerList);
     if (records != 0 && list != 0) {
@@ -1325,6 +1336,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
             }
         }
     }
+    writer.EndPart(Scene::CapturePart::Deformers);
     const VAddr items = Load<VAddr>(view + ViewItems);
     const VAddr keys = Load<VAddr>(view + ViewKeys);
     const s32 key_count = Load<s32>(view + ViewKeyCount);
@@ -1340,6 +1352,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
         ForEachItem(count, CasterWorld, keyed(category.index),
                     [&](VAddr item) { writer.AddCaster(item, category); });
     }
+    writer.EndPart(Scene::CapturePart::Casters);
     const auto add_category = [&](const Category& category) {
         const s32 count = std::min(Load<s32>(view + ViewCategoryCount + category.index * 4),
                                    static_cast<s32>(Scene::MaxDraws));
@@ -1362,9 +1375,11 @@ void OnFrame(VAddr frame_graph, VAddr view) {
         add_category(category);
     }
     writer.EndWorld();
+    writer.EndPart(Scene::CapturePart::World);
     add_category(CharacterCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + ContourCategory * 4), ContourVertexConstants,
                 keyed(ContourCategory), [&](VAddr item) { writer.AddContour(item); });
+    writer.EndPart(Scene::CapturePart::Characters);
     Scene::Header header = writer.Header();
     header.frame = frame;
     for (u32 c = 0; c < Scene::ItemCategories; c++) {

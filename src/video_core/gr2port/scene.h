@@ -55,6 +55,19 @@ enum class SoftBodyDrop : u32 {
     Count,
 };
 
+/// The parts of the capture's time.
+enum class CapturePart : u32 {
+    /// The frame's constants: shadows, sky, exposure, light.
+    Constants,
+    Deformers,
+    Casters,
+    /// The world's draws and materials.
+    World,
+    /// The characters' draws and outlines, and copying the commands to the packet.
+    Characters,
+    Count,
+};
+
 /// The start of each packet.
 struct Header {
     u64 frame;
@@ -64,8 +77,9 @@ struct Header {
     u32 draws;
     /// Items with no drawable mesh or palette, or past MaxDraws.
     u32 dropped;
-    /// The capture's time on the game's draw thread.
+    /// The capture's time on the game's draw thread, and its parts.
     u32 capture_ns;
+    u32 capture_parts_ns[static_cast<u32>(CapturePart::Count)];
     /// Draws whose colour texture is not converted.
     u32 untextured;
     /// Draws of skinned meshes; draws of items whose vertices the game's compute deforms each
