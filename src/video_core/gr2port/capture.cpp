@@ -162,17 +162,26 @@ struct Category {
     u64 material;
     u64 color_scale;
     u64 texcoord_transform;
+    u64 decal = None;
 };
 constexpr std::array<Category, 8> Categories{{
-    {15, 0x60, 0x38, 0x68, 0x00, 0x20}, // G2_BG_Main
-    {16, 0x38, 0x48, 0x40, 0x80, 0x00}, // BG layer: the first of four layers
-    {17, 0x38, 0x48, 0x40, 0x00, None}, // BG single
-    {19, 0x38, 0x48, 0x40, 0x00, None}, // BG gem
-    {21, 0x38, 0x48, 0x40, 0x00, None}, // BG interior
-    {22, 0x38, 0x48, 0x40, 0x30, 0x00}, // BG vein
-    {23, 0x30, None, None, None, None}, // Far: untextured
-    {8, 0x68, 0x30, 0x70, 0xa0, None},  // G2_CH_Main: the colour texture is t1
+    {15, 0x60, 0x38, 0x68, 0x00, 0x20},      // G2_BG_Main
+    {16, 0x38, 0x48, 0x40, 0x80, 0x00},      // BG layer: the first of four layers
+    {17, 0x38, 0x48, 0x40, 0x00, None},      // BG single
+    {19, 0x38, 0x48, 0x40, 0x00, None},      // BG gem
+    {21, 0x38, 0x48, 0x40, 0x00, None},      // BG interior
+    {22, 0x38, 0x48, 0x40, 0x30, 0x00},      // BG vein
+    {23, 0x30, None, None, None, None},      // Far: untextured
+    {8, 0x68, 0x30, 0x70, 0xa0, None, 0x50}, // G2_CH_Main: colour texture t1, decal texture t6
 }};
+// CH_Main's vertex constants hold the decals' positions and targets, then their scales, which are
+// 0 when a material has no decals. Its pixel constants hold GradationColor and the alpha step flag.
+constexpr u64 DecalPositions = 0x150;
+constexpr u64 DecalScales = 0x1b0;
+constexpr u64 DecalConstantBytes =
+    sizeof(Scene::Decal::positions) + sizeof(Scene::Decal::targets) + sizeof(Scene::Decal::scales);
+constexpr u64 GradationColor = 0xb0;
+constexpr u64 AlphaStepFlag = 0x1fc;
 constexpr std::array<float, 4> NoScale{1.0f, 1.0f, 1.0f, 1.0f};
 constexpr std::array<float, 4> NoTransform{0.0f, 0.0f, 1.0f, 1.0f};
 constexpr u32 BatchedCategory = 15;
@@ -209,8 +218,8 @@ public:
           palettes{packet + Scene::PalettesOffset},
           palettes_address{address + Scene::PalettesOffset},
           skin_jobs{reinterpret_cast<Scene::SkinJob*>(packet + Scene::SkinJobsOffset)},
-          soft_body_jobs{
-              reinterpret_cast<Scene::SoftBodyJob*>(packet + Scene::SoftBodyJobsOffset)} {}
+          soft_body_jobs{reinterpret_cast<Scene::SoftBodyJob*>(packet + Scene::SoftBodyJobsOffset)},
+          decals{reinterpret_cast<Scene::Decal*>(packet + Scene::DecalsOffset)} {}
 
     void SetCascades(u32 mask) {
         header.cascades = mask;
@@ -288,6 +297,10 @@ public:
             texcoord_transform =
                 reinterpret_cast<const void*>(material + category.texcoord_transform);
         }
+        u32 decal = 0;
+        if (material != 0 && category.decal != None) {
+            decal = AddDecal(constants, material, Load<VAddr>(item + category.decal));
+        }
         const u32 i = header.draws++;
         // The fields are written in order: the packet is write-combined.
         Scene::Draw& draw = draws[i];
@@ -302,6 +315,7 @@ public:
         draw.skin = skin.stream;
         draw.palette = skin.palette;
         draw.bones = skin.bones;
+        draw.decal = decal;
         commands[i] = {
             .index_count = count,
             .instance_count = 1,
@@ -528,6 +542,36 @@ private:
         header.dropped_soft_bodies[static_cast<u32>(reason)]++;
     }
 
+    // Writes a CH_Main item's decals to the packet and returns their index plus 1; 0 when the
+    // material has none or its texture is not converted.
+    u32 AddDecal(VAddr constants, VAddr pixel_constants, VAddr object) {
+        if (object == 0) {
+            return 0;
+        }
+        const auto scales = Load<std::array<float, 6>>(constants + DecalScales);
+        if (std::ranges::all_of(scales, [](float scale) { return scale == 0.0f; })) {
+            return 0;
+        }
+        const u32 texture = Textures::Get(object);
+        if (texture == 0) {
+            return 0;
+        }
+        if (header.decals == Scene::MaxDecals) {
+            header.dropped_decals++;
+            return 0;
+        }
+        // The fields are written in order: the packet is write-combined.
+        Scene::Decal& decal = decals[header.decals];
+        std::memcpy(&decal, reinterpret_cast<const void*>(constants + DecalPositions),
+                    DecalConstantBytes);
+        decal.texture = texture;
+        decal.color_alpha = Load<u32>(pixel_constants + AlphaStepFlag) == 0 ? 1 : 0;
+        std::memcpy(decal.gradation,
+                    reinterpret_cast<const void*>(pixel_constants + GradationColor),
+                    sizeof(decal.gradation));
+        return ++header.decals;
+    }
+
     // Copies a palette into the packet once for each run of users that share it.
     bool CopyPalette(VAddr palette, u32 bones, u64& address) {
         if (palette != last_palette || bones != last_bones) {
@@ -578,6 +622,7 @@ private:
     u64 palettes_address;
     Scene::SkinJob* skin_jobs;
     Scene::SoftBodyJob* soft_body_jobs;
+    Scene::Decal* decals;
     VAddr last_palette = 0;
     u32 last_bones = 0;
     u64 last_address = 0;

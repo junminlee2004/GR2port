@@ -27,6 +27,8 @@ inline constexpr u32 MaxSkinJobs = 256;
 /// collide with.
 inline constexpr u32 MaxSoftBodyJobs = 512;
 inline constexpr u32 MaxSpheres = 256;
+/// Character draws with decals per packet.
+inline constexpr u32 MaxDecals = 1024;
 /// The effector grid: 6 x 6 x 10 cells of the view, each listing up to 127 spheres and an end
 /// marker.
 inline constexpr u32 GridCells = 360;
@@ -78,6 +80,9 @@ struct Header {
     u32 write_groups;
     u32 dropped_soft_bodies[static_cast<u32>(SoftBodyDrop::Count)];
     u32 spheres;
+    /// Draws with decals, and draws past MaxDecals, which lose theirs.
+    u32 decals;
+    u32 dropped_decals;
     /// Shadow casters written, of them skinned ones; casters with no drawable mesh or palette, or
     /// past MaxCasters.
     u32 casters;
@@ -135,7 +140,8 @@ struct Draw {
     u64 skin;
     u64 palette;
     u32 bones;
-    u32 padding;
+    /// The index of the draw's decals in the packet, plus 1; 0 for none.
+    u32 decal;
 };
 static_assert(sizeof(Draw) == 208);
 
@@ -214,6 +220,22 @@ struct SoftBodyJob {
 };
 static_assert(sizeof(SoftBodyJob) == 384);
 
+/// A character draw's decals, as the game's CH_Main programs read them. Each of the three projects
+/// the texture along its target direction onto the mesh around its position, in model space; a
+/// vertex takes the nearest. The result multiplies the colour map.
+struct Decal {
+    float positions[3][4];
+    float targets[3][4];
+    float scales[3][2];
+    /// The texture's handle.
+    u32 texture;
+    /// 1 when the colour map's alpha masks the decal.
+    u32 color_alpha;
+    /// The game's GradationColor: its alpha replaces the decal's colour with its colour.
+    float gradation[4];
+};
+static_assert(sizeof(Decal) == 144);
+
 /// The indirect command of a draw, at the same index as the draw. A caster's command gives the
 /// caster's index as its first instance.
 struct Command {
@@ -237,10 +259,11 @@ inline constexpr u64 PalettesOffset =
 inline constexpr u64 SkinJobsOffset = PalettesOffset + MaxPaletteRows * 16;
 inline constexpr u64 EffectorsOffset = SkinJobsOffset + MaxSkinJobs * sizeof(SkinJob);
 inline constexpr u64 SoftBodyJobsOffset = EffectorsOffset + sizeof(Effectors);
-inline constexpr u64 PacketBytes = SoftBodyJobsOffset + MaxSoftBodyJobs * sizeof(SoftBodyJob);
+inline constexpr u64 DecalsOffset = SoftBodyJobsOffset + MaxSoftBodyJobs * sizeof(SoftBodyJob);
+inline constexpr u64 PacketBytes = DecalsOffset + MaxDecals * sizeof(Decal);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
-              SoftBodyJobsOffset % 16 == 0);
+              SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

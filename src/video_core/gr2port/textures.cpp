@@ -154,6 +154,7 @@ struct Upload {
 const Device* g_device = nullptr;
 Memory* g_memory = nullptr;
 vk::Sampler g_sampler;
+vk::Sampler g_decal_sampler;
 vk::DescriptorSetLayout g_set_layout;
 vk::DescriptorPool g_pool;
 vk::DescriptorSet g_set;
@@ -540,7 +541,7 @@ bool CreateSet(const Device& d) {
         LOG_ERROR(Render_Vulkan, "GR2port: the GPU binds fewer than {} textures", Capacity);
         return false;
     }
-    const vk::SamplerCreateInfo sampler_info{
+    vk::SamplerCreateInfo sampler_info{
         .magFilter = vk::Filter::eLinear,
         .minFilter = vk::Filter::eLinear,
         .mipmapMode = vk::SamplerMipmapMode::eLinear,
@@ -552,14 +553,21 @@ bool CreateSet(const Device& d) {
         .maxLod = VK_LOD_CLAMP_NONE,
     };
     g_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
-    const std::array<vk::DescriptorSetLayoutBinding, 2> bindings{{
+    // The game clamps its decal textures to their edges.
+    sampler_info.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+    sampler_info.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+    sampler_info.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+    g_decal_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
+    const std::array<vk::DescriptorSetLayoutBinding, 3> bindings{{
         {0, vk::DescriptorType::eSampledImage, Capacity, vk::ShaderStageFlagBits::eFragment},
         {1, vk::DescriptorType::eSampler, 1, vk::ShaderStageFlagBits::eFragment, &g_sampler},
+        {2, vk::DescriptorType::eSampler, 1, vk::ShaderStageFlagBits::eFragment, &g_decal_sampler},
     }};
-    const std::array<vk::DescriptorBindingFlags, 2> binding_flags{
+    const std::array<vk::DescriptorBindingFlags, 3> binding_flags{
         vk::DescriptorBindingFlagBits::ePartiallyBound |
             vk::DescriptorBindingFlagBits::eUpdateAfterBind |
             vk::DescriptorBindingFlagBits::eUpdateUnusedWhilePending,
+        {},
         {},
     };
     const vk::DescriptorSetLayoutBindingFlagsCreateInfo flags_info{
@@ -576,7 +584,7 @@ bool CreateSet(const Device& d) {
                        .value;
     const std::array<vk::DescriptorPoolSize, 2> sizes{{
         {vk::DescriptorType::eSampledImage, Capacity},
-        {vk::DescriptorType::eSampler, 1},
+        {vk::DescriptorType::eSampler, 2},
     }};
     g_pool = d.device
                  .createDescriptorPool({.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind,
@@ -585,7 +593,7 @@ bool CreateSet(const Device& d) {
                                         .pPoolSizes = sizes.data()},
                                        nullptr, dl)
                  .value;
-    if (!g_sampler || !g_set_layout || !g_pool) {
+    if (!g_sampler || !g_decal_sampler || !g_set_layout || !g_pool) {
         return false;
     }
     const auto [result, sets] = d.device.allocateDescriptorSets(

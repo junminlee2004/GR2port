@@ -20,10 +20,24 @@ struct Draw {
     uint64_t skin;
     uint64_t palette;
     uint bones;
+    uint decal;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Draws {
     Draw draws[];
+};
+
+struct Decal {
+    vec4 positions[3];
+    vec4 targets[3];
+    vec2 scales[3];
+    uint texture;
+    uint color_alpha;
+    vec4 gradation;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Decals {
+    Decal decals[];
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Words {

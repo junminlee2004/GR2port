@@ -9,17 +9,21 @@
 
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
+layout(set = 0, binding = 2) uniform sampler decal_sampler;
 layout(set = 1, binding = 0) uniform sampler2DArrayShadow shadow_map;
 
 layout(push_constant) uniform Constants {
     Draws scene_draws;
     Shadows shadows;
+    Decals scene_decals;
 };
 
 layout(location = 0) in vec3 view_position;
 layout(location = 1) in vec2 texcoord;
 layout(location = 2) flat in vec3 color_scale;
 layout(location = 3) flat in uint texture_index;
+layout(location = 4) in vec2 decal_texcoord;
+layout(location = 5) flat in uint decal_index;
 
 layout(location = 0) out vec4 color;
 
@@ -46,12 +50,27 @@ float Shadow(vec3 position) {
     return 1.0;
 }
 
+// The game's CH_Main pixel programs: the factor a decal multiplies the colour by. The decal's alpha
+// and, unless the material sets its alpha step flag, the colour map's alpha mask it.
+vec3 DecalFactor(float color_alpha) {
+    const uint index = decal_index - 1u;
+    const uint handle = scene_decals.decals[index].texture;
+    const vec4 decal =
+        texture(sampler2D(textures[nonuniformEXT(handle)], decal_sampler), decal_texcoord);
+    const vec4 gradation = scene_decals.decals[index].gradation;
+    const float mask = scene_decals.decals[index].color_alpha != 0u ? color_alpha : 1.0;
+    return mix(vec3(1.0), mix(decal.rgb, gradation.rgb, gradation.a), decal.a * mask);
+}
+
 // The albedo, lit by the key light with the face normal and the shadow cascades. The swapchain is
 // UNORM, so the shader encodes sRGB itself.
 void main() {
-    const vec3 albedo =
-        texture(sampler2D(textures[nonuniformEXT(texture_index)], texture_sampler), texcoord).rgb *
-        color_scale;
+    const vec4 color_map =
+        texture(sampler2D(textures[nonuniformEXT(texture_index)], texture_sampler), texcoord);
+    vec3 albedo = color_map.rgb * color_scale;
+    if (decal_index != 0u) {
+        albedo *= DecalFactor(color_map.a);
+    }
     vec3 normal = normalize(cross(dFdx(view_position), dFdy(view_position)));
     normal = dot(normal, view_position) > 0.0 ? -normal : normal;
     const float diffuse = max(dot(normal, shadows.light_direction.xyz), 0.0);

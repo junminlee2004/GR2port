@@ -98,6 +98,8 @@ struct Stats {
     u64 soft_body_jobs = 0;
     std::array<u64, static_cast<u32>(Scene::SoftBodyDrop::Count)> dropped_soft_bodies{};
     u64 spheres = 0;
+    u64 decals = 0;
+    u64 dropped_decals = 0;
     u64 palette_rows = 0;
     std::array<u64, Scene::ItemCategories> category_items{};
     u64 casters = 0;
@@ -123,6 +125,7 @@ private:
     void ReadTimes(u32 slot_index);
     void LogScene(const Scene::Header& header, const SceneRing::Packet& packet);
     void LogShadows(const Scene::Header& header, const SceneRing::Packet& packet);
+    void LogDecals(const Scene::Header& header, const SceneRing::Packet& packet);
     void LogLight(const SceneRing::Packet& packet);
     void RecordSnapshot(vk::CommandBuffer cmd, vk::Image image);
     void SaveSnapshot();
@@ -144,6 +147,7 @@ private:
     u64 frame = FramesInFlight;
     bool logged_scene = false;
     bool logged_shadows = false;
+    bool logged_decals = false;
     bool logged_refusal = false;
     // Each report saves the next frame to a PNG in the log folder.
     Buffer snapshot;
@@ -241,7 +245,7 @@ bool Thread::Recreate() {
                                                       .color = swapchain->Format(),
                                                       .depth = DepthFormat,
                                                       .depth_test = true,
-                                                      .push_constant_bytes = 2 * sizeof(u64),
+                                                      .push_constant_bytes = 3 * sizeof(u64),
                                                       .set_layouts = set_layouts,
                                                   });
         pipeline_format = swapchain->Format();
@@ -335,6 +339,7 @@ void Thread::SaveSnapshot() {
 // Logs the first packet with draws, and the first one too large to draw.
 void Thread::LogScene(const Scene::Header& header, const SceneRing::Packet& packet) {
     LogShadows(header, packet);
+    LogDecals(header, packet);
     const bool refused = header.indices > MaxFrameIndices;
     if (header.draws == 0 || (logged_scene && (!refused || logged_refusal))) {
         return;
@@ -357,6 +362,30 @@ void Thread::LogScene(const Scene::Header& header, const SceneRing::Packet& pack
                  i, draws[i].vertices, draws[i].stride, draws[i].position, commands[i].index_count,
                  commands[i].first_index, wvp[0], wvp[1], wvp[2], wvp[3], wvp[4], wvp[5], wvp[6],
                  wvp[7], wvp[8], wvp[9], wvp[10], wvp[11], wvp[12], wvp[13], wvp[14], wvp[15]);
+    }
+}
+
+// Logs the first decals of the first packet that has some.
+void Thread::LogDecals(const Scene::Header& header, const SceneRing::Packet& packet) {
+    if (logged_decals || header.decals == 0) {
+        return;
+    }
+    logged_decals = true;
+    const auto* decals = reinterpret_cast<const Scene::Decal*>(packet.data + Scene::DecalsOffset);
+    for (u32 i = 0; i < std::min(header.decals, 4u); i++) {
+        const Scene::Decal& decal = decals[i];
+        std::string text;
+        for (u32 j = 0; j < 3; j++) {
+            text += fmt::format(" ({:.3f} {:.3f} {:.3f}) ({:.3f} {:.3f} {:.3f}) ({:.2f} {:.2f})",
+                                decal.positions[j][0], decal.positions[j][1], decal.positions[j][2],
+                                decal.targets[j][0], decal.targets[j][1], decal.targets[j][2],
+                                decal.scales[j][0], decal.scales[j][1]);
+        }
+        LOG_INFO(Render_Vulkan,
+                 "GR2port: decals {}: texture {}, colour alpha {}, gradation ({:.2f} {:.2f} {:.2f} "
+                 "{:.2f}), position, target, scale of each:{}",
+                 i, decal.texture, decal.color_alpha, decal.gradation[0], decal.gradation[1],
+                 decal.gradation[2], decal.gradation[3], text);
     }
 }
 
@@ -510,8 +539,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
             .maxDepth = 1.0f,
         };
         const vk::Rect2D scissor{{0, 0}, extent};
-        const std::array<u64, 2> addresses{packet.address + Scene::DrawsOffset,
-                                           packet.address + Scene::ShadowsOffset};
+        const std::array<u64, 3> addresses{packet.address + Scene::DrawsOffset,
+                                           packet.address + Scene::ShadowsOffset,
+                                           packet.address + Scene::DecalsOffset};
         const std::array sets{Textures::Set(), Shadows::Set()};
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, mesh_pipeline.pipeline, dl);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mesh_pipeline.layout, 0, sets, {},
@@ -545,6 +575,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         stats.dropped_soft_bodies[reason] += header.dropped_soft_bodies[reason];
     }
     stats.spheres += header.spheres;
+    stats.decals += header.decals;
+    stats.dropped_decals += header.dropped_decals;
     stats.palette_rows += header.palette_rows;
     for (u32 c = 0; c < Scene::ItemCategories; c++) {
         stats.category_items[c] += header.category_items[c];
@@ -675,14 +707,17 @@ void Thread::Report() {
              stats.gpu_min_ms[FirstCascadeInterval], stats.gpu_min_ms[FirstCascadeInterval + 1],
              stats.gpu_min_ms[FirstCascadeInterval + 2], stats.gpu_min_ms[MainInterval]);
     LOG_INFO(Render_Vulkan,
-             "GR2port scene: per frame {:.0f} draws ({:.0f} skinned, {:.0f} deformed, {:.1f} KB "
-             "of palettes), {:.0f} items not drawn and {:.0f} deformed ones waiting for their "
+             "GR2port scene: per frame {:.0f} draws ({:.0f} skinned, {:.0f} deformed, {:.1f} with "
+             "decals, {:.1f} without room for theirs, {:.1f} KB of palettes), {:.0f} items not "
+             "drawn and {:.0f} deformed ones waiting for their "
              "copy, {:.0f} indices (largest draw {}), {:.3f} ms of capture on the game's draw "
              "thread, {} frames not drawn for too many indices; {} meshes ({} skinned) in {:.1f} "
              "MB, {} waiting, {:.1f} MB uploaded, {} not drawable ({} with indices past their "
              "vertices), {} missed unloads, {} lost handles",
              static_cast<double>(stats.draws) / frames, static_cast<double>(stats.skinned) / frames,
              static_cast<double>(stats.deformed) / frames,
+             static_cast<double>(stats.decals) / frames,
+             static_cast<double>(stats.dropped_decals) / frames,
              static_cast<double>(stats.palette_rows) * 16 / 1024 / frames,
              static_cast<double>(stats.dropped) / frames,
              static_cast<double>(stats.deformed_waiting) / frames,
