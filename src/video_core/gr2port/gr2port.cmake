@@ -18,6 +18,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/memory.h
     ${CMAKE_CURRENT_LIST_DIR}/meshes.cpp
     ${CMAKE_CURRENT_LIST_DIR}/meshes.h
+    ${CMAKE_CURRENT_LIST_DIR}/overlays.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/overlays.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.cpp
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.h
     ${CMAKE_CURRENT_LIST_DIR}/renderer.cpp

@@ -24,6 +24,7 @@
 #include "video_core/gr2port/device.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
+#include "video_core/gr2port/overlays.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/renderer.h"
 #include "video_core/gr2port/scene.h"
@@ -760,6 +761,7 @@ void Thread::Run() {
         LOG_ERROR(Render_Vulkan, "GR2port: the renderer did not start");
         return;
     }
+    LogOverlays();
     u64 seen = 0;
     stats.game_frames = Capture::Frames();
     for (;;) {
