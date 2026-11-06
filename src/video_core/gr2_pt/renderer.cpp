@@ -94,6 +94,9 @@ struct Stats {
     u64 deformed_waiting = 0;
     u64 skin_jobs = 0;
     u64 dropped_skins = 0;
+    u64 soft_body_jobs = 0;
+    std::array<u64, static_cast<u32>(Scene::SoftBodyDrop::Count)> dropped_soft_bodies{};
+    u64 spheres = 0;
     u64 palette_rows = 0;
     std::array<u64, Scene::ItemCategories> category_items{};
     u64 casters = 0;
@@ -535,6 +538,11 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.deformed_waiting += header.deformed_waiting;
     stats.skin_jobs += header.skin_jobs;
     stats.dropped_skins += header.dropped_skins;
+    stats.soft_body_jobs += header.soft_body_jobs;
+    for (u32 reason = 0; reason < stats.dropped_soft_bodies.size(); reason++) {
+        stats.dropped_soft_bodies[reason] += header.dropped_soft_bodies[reason];
+    }
+    stats.spheres += header.spheres;
     stats.palette_rows += header.palette_rows;
     for (u32 c = 0; c < Scene::ItemCategories; c++) {
         stats.category_items[c] += header.category_items[c];
@@ -713,14 +721,26 @@ void Thread::Report() {
         }
     }
     LOG_INFO(Render_Vulkan, "GR2 PT categories: items per frame{}", categories);
+    const auto dropped_soft_bodies = [&](Scene::SoftBodyDrop reason) {
+        return static_cast<double>(stats.dropped_soft_bodies[static_cast<u32>(reason)]) / frames;
+    };
     LOG_INFO(Render_Vulkan,
-             "GR2 PT deformers: per frame {:.1f} skin jobs, {:.1f} Skin records not run; {} "
-             "instance copies in {:.2f} MB, {} waiting, {} with a layout not their shape's, {} "
-             "freed unused",
+             "GR2 PT deformers: per frame {:.1f} skin jobs, {:.1f} Skin records not run, {:.1f} "
+             "SoftBody jobs, SoftBody records not run: {:.1f} mesh not uploaded, {:.1f} copy not "
+             "ready, {:.1f} record mismatch, {:.1f} constants, {:.1f} job cap; {:.1f} effector "
+             "spheres; {} instance copies in {:.2f} MB, {} waiting, {} with a layout not their "
+             "shape's, {} freed unused; {} meshes with cloth, {} with cloth data out of range",
              static_cast<double>(stats.skin_jobs) / frames,
-             static_cast<double>(stats.dropped_skins) / frames, deformers.instances,
+             static_cast<double>(stats.dropped_skins) / frames,
+             static_cast<double>(stats.soft_body_jobs) / frames,
+             dropped_soft_bodies(Scene::SoftBodyDrop::Mesh),
+             dropped_soft_bodies(Scene::SoftBodyDrop::Copy),
+             dropped_soft_bodies(Scene::SoftBodyDrop::Record),
+             dropped_soft_bodies(Scene::SoftBodyDrop::Constants),
+             dropped_soft_bodies(Scene::SoftBodyDrop::JobCap),
+             static_cast<double>(stats.spheres) / frames, deformers.instances,
              static_cast<double>(deformers.resident_bytes) / (1 << 20), deformers.pending,
-             deformers.unsupported, deformers.retired);
+             deformers.unsupported, deformers.retired, meshes.cloth, meshes.bad_cloth);
     LOG_INFO(Render_Vulkan,
              "GR2 PT memory: device-local {} MB of a {} MB budget used by the process, {} MB by "
              "the renderer",
