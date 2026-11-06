@@ -84,15 +84,14 @@ bool CreateSet(const Device& d) {
         .addressModeW = vk::SamplerAddressMode::eClampToEdge,
     };
     g_depth_sampler = d.device.createSampler(depth_sampler_info, nullptr, dl).value;
+    constexpr vk::ShaderStageFlags Stages =
+        vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
+    constexpr auto Combined = vk::DescriptorType::eCombinedImageSampler;
     const std::array<vk::DescriptorSetLayoutBinding, 4> bindings{{
-        {0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment,
-         &g_sampler},
-        {1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment,
-         &g_depth_sampler},
-        {2, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment,
-         &g_sampler},
-        {3, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment,
-         &g_depth_sampler},
+        {0, Combined, 1, Stages, &g_sampler},
+        {1, Combined, 1, Stages, &g_depth_sampler},
+        {2, Combined, 1, Stages, &g_sampler},
+        {3, Combined, 1, Stages, &g_depth_sampler},
     }};
     g_set_layout =
         d.device
@@ -217,7 +216,9 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
             u64 offset, vk::QueryPool timestamps, u32 first_query) {
     const auto& dl = g_device->dispatch;
     Transition(cmd, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
-               vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eNone,
+               vk::PipelineStageFlagBits2::eFragmentShader |
+                   vk::PipelineStageFlagBits2::eComputeShader,
+               vk::AccessFlagBits2::eNone,
                vk::PipelineStageFlagBits2::eEarlyFragmentTests |
                    vk::PipelineStageFlagBits2::eLateFragmentTests,
                vk::AccessFlagBits2::eDepthStencilAttachmentRead |
@@ -281,7 +282,8 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
                vk::ImageLayout::eDepthStencilReadOnlyOptimal,
                vk::PipelineStageFlagBits2::eLateFragmentTests,
                vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-               vk::PipelineStageFlagBits2::eFragmentShader,
+               vk::PipelineStageFlagBits2::eFragmentShader |
+                   vk::PipelineStageFlagBits2::eComputeShader,
                vk::AccessFlagBits2::eShaderSampledRead);
 }
 

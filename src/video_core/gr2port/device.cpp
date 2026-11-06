@@ -152,7 +152,9 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         .storageBuffer16BitAccess = true,
         .shaderDrawParameters = true,
     };
-    d.geometry_shaders = d.gpu.getFeatures(d.dispatch).geometryShader != VK_FALSE;
+    const vk::PhysicalDeviceFeatures supported = d.gpu.getFeatures(d.dispatch);
+    d.geometry_shaders = supported.geometryShader != VK_FALSE;
+    d.storage_extended_formats = supported.shaderStorageImageExtendedFormats != VK_FALSE;
     vk::PhysicalDeviceFeatures2 features{
         .pNext = &features11,
         .features = {.geometryShader = d.geometry_shaders,
@@ -160,6 +162,7 @@ bool CreateDevice(SDL_Window* window, Device& d) {
                      .drawIndirectFirstInstance = true,
                      .samplerAnisotropy = true,
                      .textureCompressionBC = true,
+                     .shaderStorageImageExtendedFormats = d.storage_extended_formats,
                      .shaderInt64 = true},
     };
     const float priority = 1.0f;

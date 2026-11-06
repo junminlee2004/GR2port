@@ -1,0 +1,36 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform sampler3D map;
+layout(set = 0, binding = 1, r8) uniform writeonly image3D darkness;
+
+layout(push_constant) uniform Constants {
+    Fog fog;
+};
+
+const int Steps = 16;
+const float StepShare = 0.0625;
+
+// The game's cloud darkness bake (CS 0x1c2966c): the map summed over 16 texels toward the sun.
+void main() {
+    const ivec3 texel = ivec3(gl_GlobalInvocationID);
+    const ivec3 size = imageSize(darkness);
+    if (any(greaterThanEqual(texel, size))) {
+        return;
+    }
+    // The map's y runs along the world's z, its z along the world's y.
+    const vec3 step_size = -fog.sun.xzy / vec3(size);
+    const vec3 start = (vec3(texel) + 0.5) / vec3(size);
+    float sum = 0.0;
+    for (int k = 0; k < Steps; k++) {
+        sum += textureLod(map, start + float(k) * step_size, 0.0).r;
+    }
+    imageStore(darkness, texel, vec4(StepShare * sum));
+}

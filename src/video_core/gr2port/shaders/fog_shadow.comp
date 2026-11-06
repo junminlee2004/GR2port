@@ -1,0 +1,53 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+#include "fog.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform sampler3D last_shadow;
+layout(set = 0, binding = 1, r8) uniform writeonly image3D shadow_out;
+layout(set = 1, binding = 0) uniform sampler2DArrayShadow shadow_map;
+layout(set = 1, binding = 2) uniform sampler2DShadow last_shadow_map;
+
+layout(push_constant) uniform Constants {
+    Fog fog;
+    Light light;
+};
+
+const float Jitter = 0.18;
+const float Blend = 0.14;
+
+// The game's fog shadow (CS 0x1c2caac): whether the sun reaches a random point of each cell, by one
+// sample of its cascade, blended with the last frame's.
+void main() {
+    const ivec3 cell = ivec3(gl_GlobalInvocationID);
+    if (cell.x >= FogColumns || cell.y >= FogRows) {
+        return;
+    }
+    const float a = float(cell.z) / float(FogSlices);
+    const float b = float(cell.z + 1) / float(FogSlices);
+    const float j = FogJitter(cell, fog.shadow_time);
+    const vec3 position = FogPosition(FogNdc(cell, Jitter * j), a * a + j * (b * b - a * a),
+                                      fog.projection);
+    const uint cascade = -position.z < light.split_depths.y   ? 0u
+                         : -position.z < light.split_depths.z ? 1u
+                                                              : 2u;
+    const vec4 clip = light.shadow_projection[cascade] * vec4(position, 1.0);
+    const vec3 coord = clip.xyz / clip.w;
+    // One sample at the top level, as the game's.
+    const float lit =
+        cascade == 2u
+            ? textureGrad(last_shadow_map, coord, vec2(0.0), vec2(0.0))
+            : textureGrad(shadow_map, vec4(coord.xy, float(cascade), coord.z), vec2(0.0),
+                          vec2(0.0));
+
+    // The history follows the slice's near edge at the cell's corner.
+    const vec3 corner = FogPosition(FogNdc(cell, 0.0), a * a, fog.projection);
+    const vec3 last = FogLastCell(corner, light.view_to_previous, fog.projection);
+    imageStore(shadow_out, cell, vec4(mix(textureLod(last_shadow, last, 0.0).r, lit, Blend)));
+}

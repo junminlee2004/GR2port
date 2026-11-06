@@ -571,10 +571,12 @@ bool CreateSet(const Device& d) {
     sampler_info.addressModeV = vk::SamplerAddressMode::eClampToEdge;
     sampler_info.addressModeW = vk::SamplerAddressMode::eClampToEdge;
     g_clamp_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
+    constexpr vk::ShaderStageFlags Stages =
+        vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
     const std::array<vk::DescriptorSetLayoutBinding, 3> bindings{{
-        {0, vk::DescriptorType::eSampledImage, Capacity, vk::ShaderStageFlagBits::eFragment},
-        {1, vk::DescriptorType::eSampler, 1, vk::ShaderStageFlagBits::eFragment, &g_sampler},
-        {2, vk::DescriptorType::eSampler, 1, vk::ShaderStageFlagBits::eFragment, &g_clamp_sampler},
+        {0, vk::DescriptorType::eSampledImage, Capacity, Stages},
+        {1, vk::DescriptorType::eSampler, 1, Stages, &g_sampler},
+        {2, vk::DescriptorType::eSampler, 1, Stages, &g_clamp_sampler},
     }};
     const std::array<vk::DescriptorBindingFlags, 3> binding_flags{
         vk::DescriptorBindingFlagBits::ePartiallyBound |

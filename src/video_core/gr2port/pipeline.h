@@ -30,6 +30,9 @@ struct GraphicsPipelineInfo {
     bool depth_bias = false;
     /// Colour blends over the target by the fragment's alpha.
     bool alpha_blend = false;
+    /// Colour adds to the target scaled by one minus the fragment's alpha; the target keeps its
+    /// alpha.
+    bool premultiplied_blend = false;
     u32 push_constant_bytes = 0;
     /// The pipeline's descriptor sets, in set order.
     std::span<const vk::DescriptorSetLayout> set_layouts;

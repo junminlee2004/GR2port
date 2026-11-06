@@ -1,0 +1,77 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+#include "fog.glsl"
+
+layout(local_size_x = 32) in;
+
+layout(set = 0, binding = 0) uniform sampler3D noise;
+layout(set = 0, binding = 1) uniform sampler3D density;
+layout(set = 0, binding = 2) uniform sampler3D darkness;
+layout(set = 0, binding = 3) uniform sampler3D shadow;
+layout(set = 0, binding = 4, rgba16f) uniform writeonly image3D scattered;
+
+layout(push_constant) uniform Constants {
+    Fog fog;
+};
+
+// The clouds reach CloudReach depth scales from the eye and thin out over the last
+// 1 - CloudSustain of that.
+const float CloudSustain = 0.85;
+const float CloudReach = 40.0;
+const float DensityScale = 0.125;
+
+float Phase(vec4 terms, float c) {
+    return terms.x / pow(abs(terms.y - terms.z * c), 1.5);
+}
+
+// The game's fog scattering (CS 0x1c2afe8): along each column, the sun's light scattered by the air
+// and the clouds toward the eye, dimmed by the clouds' darkness and the sun's shadow, and the share
+// of what lies behind that still shows, at the end of each slice.
+void main() {
+    const ivec2 column = ivec2(gl_GlobalInvocationID.xy);
+    if (column.x >= FogColumns || column.y >= FogRows) {
+        return;
+    }
+    const vec2 ndc = FogNdc(ivec3(column, 0), 0.0);
+    const vec2 slope = ndc * fog.projection.xy;
+    const vec3 ray = -fog.projection.w * vec3(slope, -1.0);
+    const float c = -dot(fog.light_direction.xyz, ray) / length(ray);
+    const vec3 air = fog.light_color.rgb * Phase(fog.phase_air, c);
+    const vec3 cloud = fog.cloud_color.rgb * Phase(fog.phase_cloud, c);
+    const float inverse_reach = 1.0 / (CloudReach * fog.depth_scale);
+    const float inverse_sustain = 1.0 / (1.0 - CloudSustain);
+    float optical_depth = 0.0;
+    vec3 light_in = vec3(0.0);
+    for (int i = 0; i < FogSlices; i++) {
+        const float a = float(i) / float(FogSlices);
+        const float b = float(i + 1) / float(FogSlices);
+        const float z = 0.5 * fog.projection.z * (a * a + b * b) + fog.projection.w;
+        const vec3 position = vec3(-z * slope, z);
+        const vec3 world = (fog.view_to_world * vec4(position, 1.0)).xyz;
+        const float n = textureLod(noise, (world + fog.noise.xyz) * fog.noise.w, 0.0).r;
+        const float amplitude = fog.noise_scale * exp(fog.noise_attenuation * z);
+        const float shaped = clamp(amplitude * (2.0 * n - 1.0) + 0.5, 0.0, 1.0);
+        const float slice = float(FogSlices) * (b * b - a * a);
+        const float path = fog.depth_scale * slice * shaped * shaped;
+        const float fade =
+            clamp((1.0 - length(position) * inverse_reach) * inverse_sustain, 0.0, 1.0);
+        const float smooth_fade = fade * fade * (3.0 - 2.0 * fade);
+        const ivec3 cell = ivec3(column, i);
+        const float extinction =
+            max(fog.light_color.w, texelFetch(density, cell, 0).r * smooth_fade * DensityScale);
+        const float step_depth = path * extinction;
+        const float shown = clamp(exp(-optical_depth), 0.0, 1.0);
+        const float sun = pow(texelFetch(shadow, cell, 0).r, 4.0);
+        const float visible = exp(-fog.darkness_scale * texelFetch(darkness, cell, 0).r);
+        const float air_visible = min(visible, 1.0 + fog.shadow_darkness * (sun - 1.0));
+        const float cloud_visible = min(visible, 1.0 + fog.cloud_shadow * (sun - 1.0));
+        light_in += shown * (air * slice * air_visible + cloud * step_depth * cloud_visible);
+        optical_depth += step_depth;
+        imageStore(scattered, cell, vec4(light_in, exp(-optical_depth)));
+    }
+}

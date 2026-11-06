@@ -1,0 +1,48 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform sampler3D fbm;
+layout(set = 0, binding = 1, r8) uniform writeonly image3D map;
+layout(set = 1, binding = 0) uniform texture2D textures[];
+layout(set = 1, binding = 1) uniform sampler texture_sampler;
+
+layout(push_constant) uniform Constants {
+    Fog fog;
+    // 0 for the stratus map, 1 for the region map.
+    uint layer;
+};
+
+// The game's cloud map bake (CS 0x1c28d50): noise kept where it passes a humidity that grows with
+// the cumulus texture and toward the map's top and bottom, with a soft edge.
+void main() {
+    const ivec3 texel = ivec3(gl_GlobalInvocationID);
+    const ivec3 size = imageSize(map);
+    if (any(greaterThanEqual(texel, size))) {
+        return;
+    }
+    const vec4 humidity = fog.bakes[layer][0];
+    const vec4 edges = fog.bakes[layer][1];
+    const float height = (float(texel.z) + 0.5) / float(size.z);
+    const float edge = min(1.0, 2.0 * abs(height - 0.5));
+    const float edge_humidity = height > 0.5 ? humidity.x : humidity.y;
+    const vec2 uv = vec2(texel.xy) / vec2(size.xy);
+    const float noise =
+        textureLod(fbm, vec3(uv, float(texel.z) / float(size.x)), 0.0).r;
+    // The game's default texture is white until the cumulus texture loads.
+    const uint handle = fog.bake_cumulus[layer];
+    const float cumulus =
+        handle != 0u
+            ? textureLod(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), uv, 0.0).r
+            : 1.0;
+    const float h = humidity.z + humidity.w * cumulus + edge * edge_humidity;
+    const float kept = clamp((noise - (1.0 - h)) / edges.x, 0.0, 1.0);
+    imageStore(map, texel, vec4(pow(kept, edges.y)));
+}

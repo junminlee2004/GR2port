@@ -12,6 +12,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/device.h
     ${CMAKE_CURRENT_LIST_DIR}/fault_report.cpp
     ${CMAKE_CURRENT_LIST_DIR}/fault_report.h
+    ${CMAKE_CURRENT_LIST_DIR}/fog.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/fog.h
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.cpp
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.h
     ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp
@@ -87,6 +89,12 @@ gr2port_add_shader(exposure.comp exposure_comp)
 gr2port_add_shader(composite.frag composite_frag)
 gr2port_add_shader(bloom_extract.frag bloom_extract_frag)
 gr2port_add_shader(bloom_blur.frag bloom_blur_frag)
+gr2port_add_shader(fog_bake.comp fog_bake_comp)
+gr2port_add_shader(fog_darkness.comp fog_darkness_comp)
+gr2port_add_shader(fog_density.comp fog_density_comp)
+gr2port_add_shader(fog_shadow.comp fog_shadow_comp)
+gr2port_add_shader(fog_scatter.comp fog_scatter_comp)
+gr2port_add_shader(fog_apply.frag fog_apply_frag)
 gr2port_add_shader(world.vert world_vert)
 gr2port_add_shader(world.frag world_frag)
 gr2port_add_shader(world_alpha.frag world_alpha_frag)

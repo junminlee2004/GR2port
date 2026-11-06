@@ -151,12 +151,22 @@ struct Header {
     float background[3];
     /// BloomOn when the game runs bloom, with BloomFeedback when it blends the last frame's in.
     u32 bloom;
+    /// FogShadow when the fog's sun shadow runs.
+    u32 fog;
+    /// Counts of the changes to the inputs of the stratus and region maps, and of their darkness,
+    /// which the sun's direction changes as well.
+    u32 fog_maps[2];
+    u32 fog_darkness[2];
+    /// The guest addresses of the fog's two noise volumes, Perlin then fbm: 64^3 bytes each, x
+    /// fastest. 0 until the game has made them.
+    u64 fog_noise[2];
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
 static_assert(sizeof(Header) <= 512);
 inline constexpr u32 BloomOn = 1;
 inline constexpr u32 BloomFeedback = 2;
+inline constexpr u32 FogShadow = 1;
 
 /// The frame's shadow cascades. Matrices are as in Draw.
 struct Shadows {
@@ -437,6 +447,63 @@ struct Grade {
 };
 static_assert(sizeof(Grade) == 240);
 
+/// The volumetric fog, as the game's FogCloud, FogDist, FogCast and FogRender passes read it.
+/// Matrices are as in Draw.
+struct Fog {
+    /// View space to the fog's space, to world space, and to the sky's rotated world space.
+    float view_to_fog[16];
+    float view_to_world[16];
+    float view_to_rotated[16];
+    /// 1 / P00, 1 / P11, near - far, -near, with the fog's own far distance.
+    float projection[4];
+    /// Each cumulus layer: its base, the inverse of half its height, its density and its scale;
+    /// then its offsets in x and z.
+    float cumulus[3][4];
+    float cumulus_offsets[3][4];
+    /// The stratus, then the region map: the height of its centre, the inverse of half its
+    /// height, its density and scale; then its offsets in x and z and its darkness.
+    float layers[2][4];
+    float layer_offsets[2][4];
+    /// The sun's colour, w the least extinction; its direction in view space; the noise's offset
+    /// and, in w, its frequency.
+    float light_color[4];
+    float light_direction[4];
+    float noise[4];
+    /// The Henyey-Greenstein terms of the air and the clouds, and the clouds' colour.
+    float phase_air[4];
+    float phase_cloud[4];
+    float cloud_color[4];
+    float depth_scale;
+    float darkness_scale;
+    float noise_scale;
+    float noise_attenuation;
+    /// How much the sun's shadow darkens the air and the clouds; the jitter's two clocks.
+    float shadow_darkness;
+    float cloud_shadow;
+    float time;
+    float shadow_time;
+    /// The apply pass: depth to distance as 1 / (x (2z - 1) + y), near, 1 / (far - near); the
+    /// colour the fog fades to, w its share; the eye in rotated world space.
+    float apply_depth[4];
+    float apply_color[4];
+    float eye[4];
+    /// The height fog: its top, density and longest path.
+    float puddle_height;
+    float puddle_density;
+    float puddle_range;
+    /// The handle of the cumulus texture the layers read.
+    u32 cumulus_texture;
+    /// The stratus, then the region bake: top and bottom humidity, humidity, the cumulus' share,
+    /// edge range and edge power.
+    float bakes[2][8];
+    /// The handles of the cumulus textures the bakes read.
+    u32 bake_cumulus[2];
+    u32 padding[2];
+    /// The sun's direction for the darkness bakes.
+    float sun[4];
+};
+static_assert(sizeof(Fog) == 656);
+
 /// The key light, ambient light and comic shading of the world, as the game's LightPass, IBL and
 /// Resolve programs read them. Matrices are as in Draw.
 struct Light {
@@ -533,7 +600,8 @@ inline constexpr u64 DecalsOffset = SoftBodyJobsOffset + MaxSoftBodyJobs * sizeo
 inline constexpr u64 SkyOffset = DecalsOffset + MaxDecals * sizeof(Decal);
 inline constexpr u64 GradeOffset = SkyOffset + sizeof(Sky);
 inline constexpr u64 LightOffset = GradeOffset + sizeof(Grade);
-inline constexpr u64 MaterialsOffset = LightOffset + sizeof(Light);
+inline constexpr u64 FogOffset = LightOffset + sizeof(Light);
+inline constexpr u64 MaterialsOffset = FogOffset + sizeof(Fog);
 inline constexpr u64 CharactersOffset = MaterialsOffset + MaxMaterials * sizeof(Material);
 inline constexpr u64 ContoursOffset = CharactersOffset + MaxCharacters * sizeof(Character);
 inline constexpr u64 ContourCommandsOffset = ContoursOffset + MaxContours * sizeof(Contour);
@@ -542,7 +610,7 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
               SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0 && SkyOffset % 16 == 0 &&
-              GradeOffset % 16 == 0 && LightOffset % 16 == 0 && MaterialsOffset % 16 == 0 &&
-              CharactersOffset % 16 == 0 && ContoursOffset % 16 == 0);
+              GradeOffset % 16 == 0 && LightOffset % 16 == 0 && FogOffset % 16 == 0 &&
+              MaterialsOffset % 16 == 0 && CharactersOffset % 16 == 0 && ContoursOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

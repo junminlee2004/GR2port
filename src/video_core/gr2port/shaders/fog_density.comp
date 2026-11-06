@@ -1,0 +1,90 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+#include "fog.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform sampler3D last_density;
+layout(set = 0, binding = 1) uniform sampler3D last_darkness;
+layout(set = 0, binding = 2) uniform sampler3D stratus;
+layout(set = 0, binding = 3) uniform sampler3D stratus_darkness;
+layout(set = 0, binding = 4) uniform sampler3D region;
+layout(set = 0, binding = 5) uniform sampler3D region_darkness;
+layout(set = 0, binding = 6, r8) uniform writeonly image3D density_out;
+layout(set = 0, binding = 7, r8) uniform writeonly image3D darkness_out;
+layout(set = 1, binding = 0) uniform texture2D textures[];
+layout(set = 1, binding = 1) uniform sampler texture_sampler;
+
+layout(push_constant) uniform Constants {
+    Fog fog;
+    Light light;
+};
+
+// The share of the new value each frame, of density and of darkness; the density's scale.
+const float DensityBlend = 0.38;
+const float DarknessBlend = 0.18;
+const float DensityScale = 8.0;
+const float Jitter = 0.15;
+
+// Adds a cloud map's density and darkness at a point in the fog's space.
+void AddMap(sampler3D map, sampler3D map_darkness, vec4 layer, vec4 offset, vec3 p,
+            inout float density, inout float darkness) {
+    if (layer.z > 0.0) {
+        const vec3 q = vec3(offset.x + layer.w * p.x, offset.y + layer.w * p.z,
+                            (p.y - layer.x) * layer.y + 0.5);
+        density += layer.z * textureLod(map, q, 0.0).r;
+        darkness += offset.z * textureLod(map_darkness, q, 0.0).r;
+    }
+}
+
+// The game's FogDist (CS 0x1c29f34): each cell's cloud density from three cumulus layers and the
+// stratus and region maps, and their darkness, at a jittered point, blended with the last frame's.
+void main() {
+    const ivec3 cell = ivec3(gl_GlobalInvocationID);
+    if (cell.x >= FogColumns || cell.y >= FogRows) {
+        return;
+    }
+    const float a = float(cell.z) / float(FogSlices);
+    const float b = float(cell.z + 1) / float(FogSlices);
+    const float j = FogJitter(cell, fog.time);
+    const float t = 0.5 * (a * a + b * b) + Jitter * j * (b * b - a * a);
+    const vec3 position = FogPosition(FogNdc(cell, Jitter * j), t, fog.projection);
+    const vec3 p = (fog.view_to_fog * vec4(position, 1.0)).xyz;
+
+    float density = 0.0;
+    for (int i = 0; i < 3; i++) {
+        const vec4 layer = fog.cumulus[i];
+        if (layer.z > 0.0) {
+            const vec2 offset = fog.cumulus_offsets[i].xy;
+            const vec2 uv = (p.xz + offset) * layer.w;
+            // The game's default texture is white until the cumulus texture loads.
+            const float c =
+                fog.cumulus_texture != 0u
+                    ? textureLod(sampler2D(textures[nonuniformEXT(fog.cumulus_texture)],
+                                           texture_sampler),
+                                 uv, 0.0)
+                          .r
+                    : 1.0;
+            const float u = min(1.0, abs(p.y - layer.x) * layer.y);
+            density += layer.z * c * (1.0 - u * u * u);
+        }
+    }
+    float darkness = 0.0;
+    AddMap(stratus, stratus_darkness, fog.layers[0], fog.layer_offsets[0], p, density, darkness);
+    AddMap(region, region_darkness, fog.layers[1], fog.layer_offsets[1], p, density, darkness);
+
+    // The history follows the cell's centre without the jitter.
+    const vec3 centre = FogPosition(FogNdc(cell, 0.0), 0.5 * (a * a + b * b), fog.projection);
+    const vec3 last = FogLastCell(centre, light.view_to_previous, fog.projection);
+    const float kept_density = textureLod(last_density, last, 0.0).r;
+    const float kept_darkness = textureLod(last_darkness, last, 0.0).r;
+    imageStore(density_out, cell,
+               vec4(mix(kept_density, min(1.0, DensityScale * density), DensityBlend)));
+    imageStore(darkness_out, cell, vec4(mix(kept_darkness, darkness, DarknessBlend)));
+}

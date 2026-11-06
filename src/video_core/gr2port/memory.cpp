@@ -158,6 +158,44 @@ Image Memory::CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsage
     return image;
 }
 
+Image Memory::CreateVolume(vk::Format format, vk::Extent3D extent, vk::ImageUsageFlags usage) {
+    const VkImageCreateInfo image_info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_3D,
+        .format = static_cast<VkFormat>(format),
+        .extent = {extent.width, extent.height, extent.depth},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = static_cast<VkImageUsageFlags>(usage),
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    const VmaAllocationCreateInfo allocation_info{
+        .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+    };
+    Image image{.format = format, .extent = {extent.width, extent.height}};
+    VkImage handle = VK_NULL_HANDLE;
+    VmaAllocationInfo result{};
+    if (vmaCreateImage(allocator, &image_info, &allocation_info, &handle, &image.allocation,
+                       &result) != VK_SUCCESS) {
+        LOG_ERROR(Render_Vulkan, "GR2port: no memory for a {}x{}x{} {} volume", extent.width,
+                  extent.height, extent.depth, vk::to_string(format));
+        return {};
+    }
+    image.image = handle;
+    image.size = result.size;
+    const vk::ImageViewCreateInfo view_info{
+        .image = image.image,
+        .viewType = vk::ImageViewType::e3D,
+        .format = format,
+        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+    };
+    image.view = d.device.createImageView(view_info, nullptr, d.dispatch).value;
+    return image;
+}
+
 Image Memory::CreateTexture(vk::Format format, vk::Extent2D extent, u32 levels,
                             vk::ComponentMapping mapping, bool cube) {
     const u32 layers = cube ? 6 : 1;

@@ -163,6 +163,55 @@ constexpr u64 ViewBloomWidth = 0xab4;
 constexpr u64 ViewBloomFeedback = 0xabc;
 constexpr u64 ViewBloomColor = 0xac0;
 constexpr u64 ViewBloomStrength = 0xacc;
+// View, for the fog: the eye in the sky's rotated space +0x1b0; the last frame's time step +0x1084;
+// the sun's direction in view space +0x7c0 and in world space +0x7d0; the projection's scales +0xa0
+// and +0xb4; the near plane +0x120 and the fog's distance +0x8cc; the sun's strength +0x8b4, the
+// clouds' brightness +0x8b8, the phase asymmetries +0x8bc and +0x8c0, the least extinction +0x8c4
+// and its density +0x8c8, the noise's frequency, scale and attenuation +0x8d0..; the cumulus
+// layers' bases +0x8e8, heights +0x8f4, densities +0x900 and scales +0x918 (3 floats each); the
+// darkness scale +0x924; the shadow and cloud shadow +0x928, +0x92c; the stratus map +0x930.. and
+// its bake +0x940..; the region map +0x968.. and its bake +0x978..; the height fog +0x9a0; the
+// colours +0x9a8 and +0x9b8; the sky's rotation +0xcd0 and the fog's space +0xd10.
+constexpr u64 ViewRotatedEye = 0x1b0;
+constexpr u64 ViewTimeStep = 0x1084;
+constexpr u64 ViewSunView = 0x7c0;
+constexpr u64 ViewFogDistance = 0x8cc;
+constexpr u64 ViewFogLight = 0x8b4;
+constexpr u64 ViewFogCloud = 0x8b8;
+constexpr u64 ViewFogPhaseAir = 0x8bc;
+constexpr u64 ViewFogPhaseCloud = 0x8c0;
+constexpr u64 ViewFogExtinction = 0x8c4;
+constexpr u64 ViewFogExtinctionDensity = 0x8c8;
+constexpr u64 ViewFogNoise = 0x8d0;
+constexpr u64 ViewCumulusBase = 0x8e8;
+constexpr u64 ViewCumulusHeight = 0x8f4;
+constexpr u64 ViewCumulusDensity = 0x900;
+constexpr u64 ViewCumulusScale = 0x918;
+constexpr u64 ViewFogDarkness = 0x924;
+constexpr u64 ViewFogShadow = 0x928;
+constexpr u64 ViewFogCloudShadow = 0x92c;
+constexpr u64 ViewStratus = 0x930;
+constexpr u64 ViewStratusBake = 0x940;
+constexpr u64 ViewStratusOffset = 0x95c;
+constexpr u64 ViewRegion = 0x968;
+constexpr u64 ViewRegionBake = 0x978;
+constexpr u64 ViewRegionOffset = 0x994;
+constexpr u64 ViewPuddle = 0x9a0;
+constexpr u64 ViewFogColor = 0x9a8;
+constexpr u64 ViewFogLightColor = 0x9b8;
+constexpr u64 ViewFogSpace = 0xd10;
+// The frame graph: the noise volumes' texture records +0x3e48 (Perlin) and +0x3f00 (fbm), whose
+// +0x28 points at a pointer to their bytes; the noise's offset +0x42cc, the cumulus layers' x and z
+// offsets +0x42d8 and +0x42e4, the stratus and region maps' +0x42f0 and +0x42f8; the object at
+// +0x3018 holds the cumulus texture objects at +0x91e0.
+constexpr std::array<u64, 2> FrameGraphFogNoise{0x3e48, 0x3f00};
+constexpr u64 TextureRecordMemory = 0x28;
+constexpr u64 FrameGraphFogScroll = 0x42cc;
+constexpr u64 FrameGraphCumulusOffsets = 0x42d8;
+constexpr u64 FrameGraphLayerOffsets = 0x42f0;
+constexpr u64 FrameGraphFogTextures = 0x3018;
+constexpr u64 FogCumulusTextures = 0x91e0;
+constexpr u32 FogCumulusCount = 4;
 // View: the last frame's view-projection +0x320, the distance the world's lines measure depth
 // against +0x124, the projection terms of a depth +0x820, the cascades' split depths +0x730, where
 // w is the distance shadows end at; the highlights' fade +0x830; the occluder direction +0x7f0; the
@@ -254,6 +303,8 @@ constexpr float BloomLevelStep = 1.0f / 255.0f;
 constexpr float BloomWidthStep = 0.0001f;
 // The game's SSAO scales the view's strength by this (FUN_0142ec00).
 constexpr float OcclusionScale = 0.0863267f;
+// The fog's jitter clocks run on the time step and start again past this.
+constexpr float FogClockWrap = 10.0f;
 constexpr u64 CasterTableBytes = 0x18;
 // Shadow caster items: flags +4 (0x08 culls back faces, 0x10 and 0x20 pick a view-projection
 // table), cascade mask +5, world matrix +0x30. Alpha-tested casters hold pixel constants {alpha
@@ -1295,6 +1346,169 @@ void WriteGrade(VAddr view, u8* packet) {
     std::memcpy(packet + Scene::GradeOffset, &grade, sizeof(grade));
 }
 
+// The fog's state on the draw thread: the jitter clocks, and the inputs of the maps and their
+// darkness with the counts of their changes.
+struct FogState {
+    float time = 0.0f;
+    float shadow_time = 0.0f;
+    std::array<std::array<float, 7>, 2> maps{};
+    std::array<float, 3> sun{};
+    std::array<u32, 2> map_changes{};
+    std::array<u32, 2> darkness_changes{};
+};
+FogState g_fog;
+
+// The fog's values for the header: its flags, the counts of map changes and the noise volumes.
+struct FogHeader {
+    u32 flags;
+    std::array<u32, 2> maps;
+    std::array<u32, 2> darkness;
+    std::array<u64, 2> noise;
+};
+
+// The values the game's FogCloud, FogDist, FogCast and FogRender passes set up on the draw thread,
+// from the view and the frame graph.
+FogHeader WriteFog(VAddr frame_graph, VAddr view, u8* packet) {
+    Scene::Fog fog{};
+    const auto number = [view](u64 field) { return Load<float>(view + field); };
+    // The game's density from an opacity: -ln(1 - v) / 40, or 1 for an opacity of 1.
+    const auto density = [](float v) { return v < 1.0f ? -0.025f * std::log(1.0f - v) : 1.0f; };
+    const Matrix inverse_view = Load<Matrix>(view + ViewInverse);
+    const Matrix to_fog = Multiply(inverse_view, Load<Matrix>(view + ViewFogSpace));
+    const Matrix to_rotated = Multiply(inverse_view, Load<Matrix>(view + ViewSkyRotation));
+    std::memcpy(fog.view_to_fog, to_fog.data(), sizeof(to_fog));
+    std::memcpy(fog.view_to_world, inverse_view.data(), sizeof(inverse_view));
+    std::memcpy(fog.view_to_rotated, to_rotated.data(), sizeof(to_rotated));
+    const float depth_start = number(ViewGridNear);
+    const float fog_distance = number(ViewFogDistance);
+    fog.projection[0] = 1.0f / number(ViewProjectionX);
+    fog.projection[1] = 1.0f / number(ViewProjectionY);
+    fog.projection[2] = depth_start - fog_distance;
+    fog.projection[3] = -depth_start;
+    const auto cumulus_offsets = Load<std::array<float, 6>>(frame_graph + FrameGraphCumulusOffsets);
+    for (u32 i = 0; i < 3; i++) {
+        const float height = number(ViewCumulusHeight + i * 4);
+        fog.cumulus[i][0] = number(ViewCumulusBase + i * 4) - 0.5f * height;
+        fog.cumulus[i][1] = 2.0f / height;
+        fog.cumulus[i][2] = density(number(ViewCumulusDensity + i * 4));
+        fog.cumulus[i][3] = 1.0f / number(ViewCumulusScale + i * 4);
+        fog.cumulus_offsets[i][0] = cumulus_offsets[i];
+        fog.cumulus_offsets[i][1] = cumulus_offsets[3 + i];
+    }
+    const auto layer_offsets = Load<std::array<float, 4>>(frame_graph + FrameGraphLayerOffsets);
+    const std::array<u64, 2> layer_fields{ViewStratus, ViewRegion};
+    const std::array<u64, 2> layer_offset_fields{ViewStratusOffset, ViewRegionOffset};
+    for (u32 i = 0; i < 2; i++) {
+        const u64 field = layer_fields[i];
+        const float height = number(field + 4);
+        fog.layers[i][0] = number(field);
+        fog.layers[i][1] = 2.0f / height;
+        fog.layers[i][2] = density(number(field + 8));
+        fog.layers[i][3] = 0.25f / height;
+        fog.layer_offsets[i][0] = number(layer_offset_fields[i]) + layer_offsets[i * 2];
+        fog.layer_offsets[i][1] = number(layer_offset_fields[i] + 4) + layer_offsets[i * 2 + 1];
+        fog.layer_offsets[i][2] = number(field + 8) * number(field + 12);
+    }
+    const float light = 0.01f * number(ViewFogLight);
+    const float least_density = number(ViewFogExtinctionDensity);
+    for (u32 i = 0; i < 3; i++) {
+        fog.light_color[i] = number(ViewFogLightColor + i * 4) * light;
+    }
+    fog.light_color[3] =
+        0.1f * number(ViewFogExtinction) +
+        (least_density < 1.0f ? std::log(1.0f - least_density) / (depth_start - fog_distance)
+                              : 1.0f);
+    for (u32 i = 0; i < 3; i++) {
+        fog.light_direction[i] = number(ViewSunView + i * 4);
+    }
+    std::memcpy(fog.noise, reinterpret_cast<const void*>(frame_graph + FrameGraphFogScroll),
+                3 * sizeof(float));
+    fog.noise[3] = 0.2f * number(ViewFogNoise);
+    const auto phase = [](float g, float* out) {
+        out[0] = (1.0f - g * g) * 0.07957747f;
+        out[1] = g * g + 1.0f;
+        out[2] = g + g;
+    };
+    phase(number(ViewFogPhaseAir), fog.phase_air);
+    phase(number(ViewFogPhaseCloud), fog.phase_cloud);
+    const float cloud = std::exp(number(ViewFogCloud));
+    for (u32 i = 0; i < 3; i++) {
+        fog.cloud_color[i] = number(ViewFogColor + i * 4) * cloud;
+    }
+    fog.cloud_color[3] = 1.0f;
+    fog.depth_scale = (fog_distance - depth_start) * 0.025f;
+    fog.darkness_scale = number(ViewFogDarkness) * 16.0f;
+    fog.noise_scale = number(ViewFogNoise + 4);
+    fog.noise_attenuation = number(ViewFogNoise + 8);
+    const float shadow = number(ViewFogShadow);
+    const float cloud_shadow = number(ViewFogCloudShadow);
+    fog.shadow_darkness = shadow > 0.0f ? 1.0f : 0.0f;
+    fog.cloud_shadow = cloud_shadow;
+    // The game moves its clocks inside the frame graph, after the capture.
+    const float step = number(ViewTimeStep);
+    const auto advance = [step](float& clock) {
+        clock += step;
+        clock = clock > FogClockWrap ? 0.0f : clock;
+        return clock;
+    };
+    fog.time = advance(g_fog.time);
+    const bool shadowed = shadow > 0.0f || cloud_shadow != 0.0f;
+    fog.shadow_time = shadowed ? advance(g_fog.shadow_time) : g_fog.shadow_time;
+    const float depth_range = number(ViewDepthRange);
+    const float scale = 1.0f / (depth_start * (depth_range + depth_range));
+    fog.apply_depth[0] = (depth_start - depth_range) * scale;
+    fog.apply_depth[1] = (depth_range + depth_start) * scale;
+    fog.apply_depth[2] = depth_start;
+    fog.apply_depth[3] = 1.0f / (fog_distance - depth_start);
+    std::memcpy(fog.apply_color, reinterpret_cast<const void*>(view + ViewFogColor),
+                sizeof(fog.apply_color));
+    std::memcpy(fog.eye, reinterpret_cast<const void*>(view + ViewRotatedEye), 3 * sizeof(float));
+    fog.eye[3] = 1.0f;
+    fog.puddle_height = number(ViewPuddle);
+    fog.puddle_density = 0.1f * number(ViewPuddle + 4);
+    fog.puddle_range = fog_distance - depth_start;
+    const VAddr textures = Load<VAddr>(frame_graph + FrameGraphFogTextures);
+    const auto cumulus = [textures](u32 i) {
+        const VAddr object = textures != 0 && i < FogCumulusCount
+                                 ? Load<VAddr>(textures + FogCumulusTextures + i * 8)
+                                 : 0;
+        return object != 0 ? Textures::Get(object) : 0;
+    };
+    fog.cumulus_texture = cumulus(0);
+    const std::array<u64, 2> bake_fields{ViewStratusBake, ViewRegionBake};
+    const auto sun = Load<std::array<float, 3>>(view + ViewSunTravel);
+    const bool sun_moved = sun != g_fog.sun;
+    g_fog.sun = sun;
+    for (u32 i = 0; i < 2; i++) {
+        auto inputs = Load<std::array<float, 7>>(view + bake_fields[i]);
+        for (u32 k = 0; k < 6; k++) {
+            fog.bakes[i][k] = inputs[k];
+        }
+        fog.bake_cumulus[i] = cumulus(static_cast<u32>(static_cast<s32>(inputs[6])));
+        // The handle stands in for the index, so a texture that arrives late bakes again.
+        inputs[6] = static_cast<float>(fog.bake_cumulus[i]);
+        if (inputs != g_fog.maps[i]) {
+            g_fog.maps[i] = inputs;
+            g_fog.map_changes[i]++;
+            g_fog.darkness_changes[i]++;
+        } else if (sun_moved) {
+            g_fog.darkness_changes[i]++;
+        }
+    }
+    std::memcpy(fog.sun, sun.data(), sizeof(sun));
+    std::memcpy(packet + Scene::FogOffset, &fog, sizeof(fog));
+    FogHeader header{
+        .flags = shadowed ? Scene::FogShadow : 0,
+        .maps = g_fog.map_changes,
+        .darkness = g_fog.darkness_changes,
+    };
+    for (u32 i = 0; i < 2; i++) {
+        const VAddr memory = Load<VAddr>(frame_graph + FrameGraphFogNoise[i] + TextureRecordMemory);
+        header.noise[i] = memory != 0 ? Load<VAddr>(memory) : 0;
+    }
+    return header;
+}
+
 // The values the game's LightPass, IBL and Resolve passes set up on the draw thread after the
 // capture, from the view. The cascades' projections take view space to their texture coordinates.
 void WriteLight(VAddr frame_graph, VAddr view, u8* packet) {
@@ -1428,6 +1642,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     WriteSky(frame_graph, view, packet, writer);
     WriteGrade(view, packet);
     WriteLight(frame_graph, view, packet);
+    const FogHeader fog = WriteFog(frame_graph, view, packet);
     const VAddr hatching = Load<VAddr>(frame_graph + FrameGraphHatching);
     writer.SetHatching(hatching != 0 ? Textures::Get(hatching) : 0);
     writer.EndPart(Scene::CapturePart::Constants);
@@ -1501,6 +1716,12 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     writer.EndPart(Scene::CapturePart::Characters);
     Scene::Header header = writer.Header();
     header.frame = frame;
+    header.fog = fog.flags;
+    for (u32 i = 0; i < 2; i++) {
+        header.fog_maps[i] = fog.maps[i];
+        header.fog_darkness[i] = fog.darkness[i];
+        header.fog_noise[i] = fog.noise[i];
+    }
     header.bloom = (Load<float>(view + ViewBloomStrength) != 0.0f ? Scene::BloomOn : 0) |
                    (Load<float>(view + ViewBloomFeedback) > 0.0f ? Scene::BloomFeedback : 0);
     for (u32 c = 0; c < Scene::ItemCategories; c++) {

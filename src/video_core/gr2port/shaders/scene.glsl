@@ -315,6 +315,42 @@ layout(buffer_reference, std430, buffer_reference_align = 16) buffer Meter {
 
 const float MeterScale = 256.0;
 
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Fog {
+    mat4 view_to_fog;
+    mat4 view_to_world;
+    mat4 view_to_rotated;
+    vec4 projection;
+    vec4 cumulus[3];
+    vec4 cumulus_offsets[3];
+    vec4 layers[2];
+    vec4 layer_offsets[2];
+    vec4 light_color;
+    vec4 light_direction;
+    vec4 noise;
+    vec4 phase_air;
+    vec4 phase_cloud;
+    vec4 cloud_color;
+    float depth_scale;
+    float darkness_scale;
+    float noise_scale;
+    float noise_attenuation;
+    float shadow_darkness;
+    float cloud_shadow;
+    float time;
+    float shadow_time;
+    vec4 apply_depth;
+    vec4 apply_color;
+    vec4 eye;
+    float puddle_height;
+    float puddle_density;
+    float puddle_range;
+    uint cumulus_texture;
+    vec4 bakes[2][2];
+    uint bake_cumulus[2];
+    uint fog_padding[2];
+    vec4 sun;
+};
+
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Light {
     mat4 shadow_projection[Cascades];
     mat4 inverse_shadow_projection[Cascades];

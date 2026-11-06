@@ -25,6 +25,8 @@ struct Device {
     /// The device reports the process's memory use and budget (VK_EXT_memory_budget).
     bool memory_budget = false;
     bool geometry_shaders = false;
+    /// Storage images may have formats such as R8 (shaderStorageImageExtendedFormats).
+    bool storage_extended_formats = false;
 };
 
 /// Creates the instance, a surface for window, and a device on the first discrete GPU (else the

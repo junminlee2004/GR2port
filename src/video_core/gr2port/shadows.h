@@ -18,7 +18,8 @@ namespace Gr2Port::Shadows {
 bool Start(const Device& device, Memory& memory);
 
 /// Render thread, outside rendering: draws the casters of the packet at address into the
-/// cascades and leaves them for fragment shaders to sample. The packet is at offset in buffer.
+/// cascades and leaves them for fragment and compute shaders to sample. The packet is at offset in
+/// buffer.
 /// With a query pool, writes a timestamp after each cascade from first_query on.
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
             u64 offset, vk::QueryPool timestamps, u32 first_query);
