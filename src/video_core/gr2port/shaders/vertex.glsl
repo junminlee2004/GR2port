@@ -85,7 +85,8 @@ vec4 LoadVertexColor(uint64_t vertices, uint stride, uint element) {
     return vec4(unpackHalf2x16(words.words[0]), unpackHalf2x16(words.words[1]));
 }
 
-// A skinned direction: as SkinPosition, by the blended rows scaled to unit length.
+// A skinned direction: as SkinPosition, without the translation. It keeps the bones' scale, which
+// the game's vertex programs normalise away after the view matrix.
 vec3 SkinDirection(vec3 d, uint64_t skin, uint64_t palette, uint bones) {
     Words words = Words(skin + uint64_t(gl_VertexIndex) * 16u);
     const vec2 w01 = unpackHalf2x16(words.words[0]);
@@ -99,7 +100,7 @@ vec3 SkinDirection(vec3 d, uint64_t skin, uint64_t palette, uint bones) {
     for (uint r = 0u; r < 3u; r++) {
         const vec4 row = BoneRow(rows, bones, b0, r) * w01.x + BoneRow(rows, bones, b1, r) * w01.y +
                          BoneRow(rows, bones, b2, r) * w23.x + BoneRow(rows, bones, b3, r) * w23.y;
-        turned[r] = dot(row.xyz * inversesqrt(dot(row, row)), d);
+        turned[r] = dot(row.xyz, d);
     }
     return turned;
 }
