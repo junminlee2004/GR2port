@@ -9,6 +9,8 @@ const uint FormatRg32Float = 2u;
 const uint FormatRg16Float = 6u;
 const uint FormatRgba16Float = 7u;
 const uint FormatRg16Sint = 12u;
+const uint FormatRgba16Unorm = 10u;
+const uint FormatRgba8Unorm = 16u;
 
 Words Element(uint64_t vertices, uint stride, uint element) {
     return Words(vertices + uint64_t(gl_VertexIndex) * stride + (element & 0xffu));
@@ -60,4 +62,44 @@ vec2 LoadTexcoord(uint64_t vertices, uint stride, uint element) {
         return unpackHalf2x16(words.words[0]);
     }
     return uintBitsToFloat(uvec2(words.words[0], words.words[1]));
+}
+
+vec3 LoadNormal(uint64_t vertices, uint stride, uint element) {
+    return UnpackNormal(Element(vertices, stride, element).words[0]);
+}
+
+vec4 LoadTangent(uint64_t vertices, uint stride, uint element) {
+    Words words = Element(vertices, stride, element);
+    return vec4(unpackHalf2x16(words.words[0]), unpackHalf2x16(words.words[1]));
+}
+
+vec4 LoadVertexColor(uint64_t vertices, uint stride, uint element) {
+    Words words = Element(vertices, stride, element);
+    const uint format = element >> 8;
+    if (format == FormatRgba8Unorm) {
+        return unpackUnorm4x8(words.words[0]);
+    }
+    if (format == FormatRgba16Unorm) {
+        return vec4(unpackUnorm2x16(words.words[0]), unpackUnorm2x16(words.words[1]));
+    }
+    return vec4(unpackHalf2x16(words.words[0]), unpackHalf2x16(words.words[1]));
+}
+
+// A skinned direction: as SkinPosition, by the blended rows scaled to unit length.
+vec3 SkinDirection(vec3 d, uint64_t skin, uint64_t palette, uint bones) {
+    Words words = Words(skin + uint64_t(gl_VertexIndex) * 16u);
+    const vec2 w01 = unpackHalf2x16(words.words[0]);
+    const vec2 w23 = unpackHalf2x16(words.words[1]);
+    const int b0 = bitfieldExtract(int(words.words[2]), 0, 16);
+    const int b1 = bitfieldExtract(int(words.words[2]), 16, 16);
+    const int b2 = bitfieldExtract(int(words.words[3]), 0, 16);
+    const int b3 = bitfieldExtract(int(words.words[3]), 16, 16);
+    Rows rows = Rows(palette);
+    vec3 turned;
+    for (uint r = 0u; r < 3u; r++) {
+        const vec4 row = BoneRow(rows, bones, b0, r) * w01.x + BoneRow(rows, bones, b1, r) * w01.y +
+                         BoneRow(rows, bones, b2, r) * w23.x + BoneRow(rows, bones, b3, r) * w23.y;
+        turned[r] = dot(row.xyz * inversesqrt(dot(row, row)), d);
+    }
+    return turned;
 }

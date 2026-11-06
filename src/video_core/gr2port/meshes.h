@@ -38,6 +38,11 @@ struct Mesh {
     u32 position = 0;
     /// The texture coordinate element, encoded as position; format 0 when the shape has none.
     u32 texcoord = 0;
+    /// The elements of the packed normal, the RGBA16 FLOAT tangent and the vertex colour, encoded
+    /// as position; format 0 when the shape has none.
+    u32 normal = 0;
+    u32 tangent = 0;
+    u32 vertex_color = 0;
     /// The device address of the skin stream (four RGBA16 FLOAT weights, then four RGBA16 SINT
     /// bone indices, 16 bytes a vertex), 0 when the shape is not skinned.
     u64 skin = 0;
@@ -90,6 +95,7 @@ struct Stats {
     u32 lost_handles;
     /// Shapes with no texture coordinates the shaders decode.
     u32 no_texcoord;
+    u32 no_normal;
     u64 uploaded_bytes;
     u64 resident_bytes;
 };

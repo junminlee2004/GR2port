@@ -58,6 +58,9 @@ constexpr u64 VertexElements = 0x1c;
 constexpr u64 VertexSemanticElement = 0x24;
 constexpr u64 VertexElementInfo = 0x34;
 constexpr u32 SemanticPosition = 0;
+constexpr u32 SemanticNormal = 2;
+constexpr u32 SemanticVertexColor = 3;
+constexpr u32 SemanticTangent = 14;
 // Index buffer object: MemBlock* at +0, index size flag at +0x18 (0 = 16-bit).
 constexpr u64 IndexSizeFlag = 0x18;
 // MemBlock: data address at +0, size at +8.
@@ -73,9 +76,24 @@ constexpr bool TexcoordFormat(u32 format) {
     return format == 2 || format == 6 || format == 12;
 }
 
+// The normal is 10_11_11 FLOAT, the tangent RGBA16 FLOAT.
+constexpr bool NormalFormat(u32 format) {
+    return format == 20;
+}
+
+constexpr bool TangentFormat(u32 format) {
+    return format == 7;
+}
+
+// Vertex colour formats the shaders decode: RGBA8 UNORM, RGBA16 UNORM, RGBA16 FLOAT.
+constexpr bool VertexColorFormat(u32 format) {
+    return format == 16 || format == 10 || format == 7;
+}
+
 constexpr u64 UploadBudget = 64_MB;
 constexpr u32 LoggedUploads = 8;
 constexpr u32 LoggedSkins = 4;
+constexpr u32 LoggedVertexStreams = 12;
 constexpr u32 LoggedCloth = 4;
 constexpr u64 IndexCapacity = 64ull << 20;
 
@@ -231,6 +249,9 @@ struct Source {
     u32 stride;
     u32 position;
     u32 texcoord;
+    u32 normal;
+    u32 tangent;
+    u32 vertex_color;
     VAddr skin = 0;
     u32 skin_bytes = 0;
     VAddr particles = 0;
@@ -289,6 +310,17 @@ bool ValidSoftBody(const Source& source, u32 vertex_count) {
     return std::all_of(map, map + vertex_count, [count](u16 p) { return p < count; });
 }
 
+std::string DescribeElements(VAddr vb) {
+    std::string elements;
+    const u32 count = std::min<u32>(Load<u16>(vb + VertexElements), 16);
+    for (u32 i = 0; i < count; i++) {
+        const VAddr info = vb + VertexElementInfo + 4 * i;
+        elements += fmt::format(" (format {} offset {} semantic {})", Load<u8>(info),
+                                Load<u8>(info + 2), Load<u8>(info + 3));
+    }
+    return elements;
+}
+
 // Logs the elements of the first skin streams.
 void LogSkin(VAddr shape, VAddr vb) {
     static u32 logged = 0;
@@ -296,15 +328,32 @@ void LogSkin(VAddr shape, VAddr vb) {
         return;
     }
     logged++;
-    std::string elements;
-    const u32 count = std::min<u32>(Load<u16>(vb + VertexElements), 4);
-    for (u32 i = 0; i < count; i++) {
-        const VAddr info = vb + VertexElementInfo + 4 * i;
-        elements += fmt::format(" (format {} offset {} semantic {})", Load<u8>(info),
-                                Load<u8>(info + 2), Load<u8>(info + 3));
-    }
     LOG_INFO(Render_Vulkan, "GR2port: skin of mesh {:#x}: stride {},{}", shape,
-             Load<u16>(vb + VertexStride), elements);
+             Load<u16>(vb + VertexStride), DescribeElements(vb));
+}
+
+// Logs the elements of the first vertex streams.
+void LogVertices(VAddr shape, VAddr vb) {
+    static u32 logged = 0;
+    if (logged == LoggedVertexStreams) {
+        return;
+    }
+    logged++;
+    LOG_INFO(Render_Vulkan, "GR2port: vertices of mesh {:#x}: stride {},{}", shape,
+             Load<u16>(vb + VertexStride), DescribeElements(vb));
+}
+
+// The element of a semantic, encoded as a position, when its format is one the shaders decode;
+// else 0.
+template <typename Accepted>
+u32 ReadElement(VAddr vb, u32 semantic, Accepted accepted) {
+    const u32 element = Load<u8>(vb + VertexSemanticElement + semantic);
+    if (element >= Load<u16>(vb + VertexElements)) {
+        return 0;
+    }
+    const u32 format = Load<u8>(vb + VertexElementInfo + 4 * element);
+    const u32 offset = Load<u8>(vb + VertexElementInfo + 4 * element + 2);
+    return accepted(format) && offset % 4 == 0 ? offset | format << 8 : 0;
 }
 
 // The texture coordinates: the two-component element of the lowest semantic after the position.
@@ -350,7 +399,11 @@ bool ReadShape(VAddr shape, Source& source) {
         .stride = Load<u16>(vb + VertexStride),
         .position = offset | format << 8,
         .texcoord = ReadTexcoord(vb),
+        .normal = ReadElement(vb, SemanticNormal, NormalFormat),
+        .tangent = ReadElement(vb, SemanticTangent, TangentFormat),
+        .vertex_color = ReadElement(vb, SemanticVertexColor, VertexColorFormat),
     };
+    LogVertices(shape, vb);
     const VAddr skin = Load<VAddr>(shape + ShapeSkin);
     if (skin != 0) {
         const VAddr skin_vb = skin + SkinVertexBuffer;
@@ -575,6 +628,9 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             mesh.vertex_bytes = source.vertex_bytes;
             mesh.position = source.position;
             mesh.texcoord = source.texcoord;
+            mesh.normal = source.normal;
+            mesh.tangent = source.tangent;
+            mesh.vertex_color = source.vertex_color;
             mesh.skin = source.skin != 0 ? vertices.address + skin_offset : 0;
             mesh.particles = valid_cloth ? vertices.address + particles_offset : 0;
             mesh.constraints = valid_cloth ? vertices.address + constraints_offset : 0;
@@ -588,6 +644,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                          source.map_bytes / 2, vertex_count);
             }
             g_stats.no_texcoord += source.texcoord == 0;
+            g_stats.no_normal += source.normal == 0;
             g_stats.skinned += source.skin != 0;
             g_stats.cloth += valid_cloth;
             g_resident[handle] = {
