@@ -321,6 +321,13 @@ constexpr u64 MatrixBytes = 64;
 
 std::atomic<u64> g_frames{0};
 
+// The frame's commands, which reach the packet in one go. Written item by item, they would leave
+// half-full write-combined lines in several places for the reads between items to evict.
+alignas(64) std::array<Scene::Command, Scene::MaxDraws> g_commands;
+alignas(64) std::array<Scene::Command,
+                       Scene::Cascades * Scene::CasterLists * Scene::MaxCasters> g_caster_commands;
+alignas(64) std::array<Scene::Command, Scene::MaxContours> g_contour_commands;
+
 // The simulate constants the game's SoftBody pass sets on its draw thread after the capture: the
 // grid matrix (the view's clip matrix with z over GridFar + n), the sphere count and the depth
 // fade.
@@ -343,11 +350,9 @@ class Writer {
 public:
     /// packet is at address on the GPU; frame is the capture's, which began at start.
     Writer(u8* packet, u64 address, u64 frame, std::chrono::steady_clock::time_point start)
-        : frame{frame}, part_start{start},
+        : frame{frame}, part_start{start}, packet{packet},
           draws{reinterpret_cast<Scene::Draw*>(packet + Scene::DrawsOffset)},
-          commands{reinterpret_cast<Scene::Command*>(packet + Scene::CommandsOffset)},
           casters{reinterpret_cast<Scene::Caster*>(packet + Scene::CastersOffset)},
-          caster_commands{reinterpret_cast<Scene::Command*>(packet + Scene::CasterCommandsOffset)},
           palettes{packet + Scene::PalettesOffset},
           palettes_address{address + Scene::PalettesOffset},
           skin_jobs{reinterpret_cast<Scene::SkinJob*>(packet + Scene::SkinJobsOffset)},
@@ -355,9 +360,7 @@ public:
           decals{reinterpret_cast<Scene::Decal*>(packet + Scene::DecalsOffset)},
           materials{reinterpret_cast<Scene::Material*>(packet + Scene::MaterialsOffset)},
           characters{reinterpret_cast<Scene::Character*>(packet + Scene::CharactersOffset)},
-          contours{reinterpret_cast<Scene::Contour*>(packet + Scene::ContoursOffset)},
-          contour_commands{
-              reinterpret_cast<Scene::Command*>(packet + Scene::ContourCommandsOffset)} {}
+          contours{reinterpret_cast<Scene::Contour*>(packet + Scene::ContoursOffset)} {}
 
     // Ends a part of the capture's time.
     void EndPart(Scene::CapturePart part) {
@@ -365,6 +368,25 @@ public:
         header.capture_parts_ns[static_cast<u32>(part)] = static_cast<u32>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(now - part_start).count());
         part_start = now;
+    }
+
+    // Writes the frame's commands to the packet.
+    void CopyCommands() {
+        constexpr u64 Bytes = sizeof(Scene::Command);
+        std::memcpy(packet + Scene::CommandsOffset, g_commands.data(), header.draws * Bytes);
+        const u32 alpha_first = Scene::MaxDraws - header.alpha_draws;
+        std::memcpy(packet + Scene::CommandsOffset + alpha_first * Bytes,
+                    g_commands.data() + alpha_first, header.alpha_draws * Bytes);
+        for (u32 c = 0; c < Scene::Cascades; c++) {
+            for (u32 list = 0; list < Scene::CasterLists; list++) {
+                const u32 first = (c * Scene::CasterLists + list) * Scene::MaxCasters;
+                std::memcpy(packet + Scene::CasterCommandsOffset + first * Bytes,
+                            g_caster_commands.data() + first,
+                            header.caster_commands[c][list] * Bytes);
+            }
+        }
+        std::memcpy(packet + Scene::ContourCommandsOffset, g_contour_commands.data(),
+                    header.contours * Bytes);
     }
 
     void SetCascades(u32 mask) {
@@ -497,7 +519,7 @@ public:
         draw.tangent = mesh->tangent;
         draw.vertex_color = mesh->vertex_color;
         draw.material = material_index;
-        commands[i] = {
+        g_commands[i] = {
             .index_count = count,
             .instance_count = 1,
             .first_index = mesh->first_index + first,
@@ -561,7 +583,7 @@ public:
         contour.bones = skin.bones;
         contour.skin = skin.stream;
         contour.palette = skin.palette;
-        contour_commands[i] = {
+        g_contour_commands[i] = {
             .index_count = count,
             .instance_count = 1,
             .first_index = mesh->first_index + first,
@@ -654,7 +676,7 @@ public:
             }
             header.caster_indices[c] += count;
             u32& n = header.caster_commands[c][list];
-            caster_commands[(c * Scene::CasterLists + list) * Scene::MaxCasters + n++] = {
+            g_caster_commands[(c * Scene::CasterLists + list) * Scene::MaxCasters + n++] = {
                 .index_count = count,
                 .instance_count = 1,
                 .first_index = mesh->first_index + first,
@@ -910,10 +932,9 @@ private:
     Scene::Header header{};
     u64 frame;
     std::chrono::steady_clock::time_point part_start;
+    u8* packet;
     Scene::Draw* draws;
-    Scene::Command* commands;
     Scene::Caster* casters;
-    Scene::Command* caster_commands;
     u8* palettes;
     u64 palettes_address;
     Scene::SkinJob* skin_jobs;
@@ -922,7 +943,6 @@ private:
     Scene::Material* materials;
     Scene::Character* characters;
     Scene::Contour* contours;
-    Scene::Command* contour_commands;
     u32 hatching = 0;
     VAddr last_palette = 0;
     u32 last_bones = 0;
@@ -1379,6 +1399,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     add_category(CharacterCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + ContourCategory * 4), ContourVertexConstants,
                 keyed(ContourCategory), [&](VAddr item) { writer.AddContour(item); });
+    writer.CopyCommands();
     writer.EndPart(Scene::CapturePart::Characters);
     Scene::Header header = writer.Header();
     header.frame = frame;
