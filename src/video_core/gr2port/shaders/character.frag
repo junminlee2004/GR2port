@@ -245,7 +245,7 @@ void main() {
         table.characters[index].specular_border + table.characters[index].specular_smooth,
         highlight_value);
     const vec3 specular_color = table.characters[index].specular_color.rgb * diffuse;
-    result += min(result, specular_color) * diffuse * specular * detail_mask;
+    result += min(result, specular_color) * diffuse * specular * detail_mask * vertex_color.x;
     const float rim_light =
         min(table.characters[index].rim_lighting * max(travel.z, 0.0), 1.0) * normal.w;
     const float rim =
