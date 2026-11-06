@@ -28,9 +28,9 @@ constexpr u64 StubAreaOffset = 32_MB;
 // The frame graph FUN_0142ec00: the game's draw thread calls it once per frame.
 constexpr Hooks::Entry FrameGraph{0x142ec00, 6, Hooks::FramePrologue};
 
-// FUN_0142ec00(T + 0xa0, view, ...): rsi is the view the frame draws.
+// FUN_0142ec00(T + 0xa0, view, ...): rdi is the frame graph, rsi the view the frame draws.
 void PS4_SYSV_ABI OnFrameGraph(u32, const Hooks::Registers* registers, u64) {
-    Capture::OnFrame(registers->rsi);
+    Capture::OnFrame(registers->rdi, registers->rsi);
 }
 
 } // namespace

@@ -10,7 +10,7 @@ namespace Gr2Port::Capture {
 
 /// At the frame graph's entry, with the view it draws: writes the frame's scene into the scene
 /// ring.
-void OnFrame(VAddr view);
+void OnFrame(VAddr frame_graph, VAddr view);
 
 /// The frames the game has started.
 u64 Frames();

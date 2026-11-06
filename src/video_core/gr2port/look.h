@@ -9,15 +9,15 @@ namespace Gr2Port {
 class Memory;
 }
 
-// The passes that give a frame GR2's look, on the render thread: the meter that sets the exposure,
-// and the game's Tonemap and Composite programs, which turn the scene's HDR colour into the
-// picture.
+// The passes that give a frame GR2's look, on the render thread: the sky behind the scene, the
+// meter that sets the exposure, and the game's Tonemap and Composite programs, which turn the
+// scene's HDR colour into the picture.
 namespace Gr2Port::Look {
 
 inline constexpr vk::Format SceneFormat = vk::Format::eR16G16B16A16Sfloat;
 
-/// Creates the pipelines and the meter.
-bool Start(const Device& device, Memory& memory);
+/// After Textures::Start: creates the pipelines and the meter. depth_format is the scene's.
+bool Start(const Device& device, Memory& memory, vk::Format depth_format);
 
 /// With the GPU idle: creates the scene's colour image at extent, and the picture's pipeline for
 /// picture_format.
@@ -25,6 +25,9 @@ bool Resize(vk::Extent2D extent, vk::Format picture_format);
 
 vk::Image SceneImage();
 vk::ImageView SceneView();
+
+/// Inside the scene's rendering, after its opaque draws: draws the sky where nothing is drawn yet.
+void RecordSky(vk::CommandBuffer cmd, u64 packet_address);
 
 /// After the scene's rendering, with the scene's colour readable: measures it and sets the
 /// exposure.

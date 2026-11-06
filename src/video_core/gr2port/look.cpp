@@ -13,6 +13,8 @@
 #include "video_core/gr2port/shaders/exposure_comp.h"
 #include "video_core/gr2port/shaders/fullscreen_vert.h"
 #include "video_core/gr2port/shaders/luminance_comp.h"
+#include "video_core/gr2port/shaders/sky_frag.h"
+#include "video_core/gr2port/textures.h"
 
 namespace Gr2Port::Look {
 
@@ -60,6 +62,7 @@ vk::Sampler g_scene_sampler;
 vk::DescriptorSetLayout g_scene_layout;
 vk::DescriptorPool g_pool;
 vk::DescriptorSet g_scene_set;
+Pipeline g_sky;
 Pipeline g_luminance;
 Pipeline g_exposure;
 Pipeline g_composite;
@@ -118,7 +121,7 @@ void MeterBarrier(vk::CommandBuffer cmd, vk::PipelineStageFlags2 src_stage,
 
 } // namespace
 
-bool Start(const Device& device, Memory& memory) {
+bool Start(const Device& device, Memory& memory, vk::Format depth_format) {
     g_device = &device;
     g_memory = &memory;
     if (!CreateSceneSet(device)) {
@@ -136,10 +139,21 @@ bool Start(const Device& device, Memory& memory) {
         return false;
     }
     std::memset(g_meter_read.mapped, 0, sizeof(MeterState));
+    const std::array texture_set{Textures::SetLayout()};
     const std::array scene_set{g_scene_layout};
+    g_sky = CreateGraphicsPipeline(device, {
+                                               .vertex = FULLSCREEN_VERT,
+                                               .fragment = SKY_FRAG,
+                                               .color = SceneFormat,
+                                               .depth = depth_format,
+                                               .depth_test = true,
+                                               .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                               .push_constant_bytes = sizeof(u64),
+                                               .set_layouts = texture_set,
+                                           });
     g_luminance = CreateComputePipeline(device, LUMINANCE_COMP, sizeof(LuminancePush), scene_set);
     g_exposure = CreateComputePipeline(device, EXPOSURE_COMP, sizeof(ExposurePush));
-    return g_luminance.pipeline && g_exposure.pipeline;
+    return g_sky.pipeline && g_luminance.pipeline && g_exposure.pipeline;
 }
 
 bool Resize(vk::Extent2D extent, vk::Format picture_format) {
@@ -187,6 +201,28 @@ vk::Image SceneImage() {
 
 vk::ImageView SceneView() {
     return g_scene.view;
+}
+
+void RecordSky(vk::CommandBuffer cmd, u64 packet_address) {
+    const auto& dl = g_device->dispatch;
+    // A negative height keeps the game's y-up clip space, as in the scene's draws.
+    const vk::Viewport viewport{
+        .x = 0.0f,
+        .y = static_cast<float>(g_extent.height),
+        .width = static_cast<float>(g_extent.width),
+        .height = -static_cast<float>(g_extent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+    const u64 sky = packet_address + Scene::SkyOffset;
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_sky.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_sky.layout, 0, Textures::Set(), {},
+                           dl);
+    cmd.setViewport(0, viewport, dl);
+    cmd.setScissor(0, vk::Rect2D{{0, 0}, g_extent}, dl);
+    cmd.pushConstants(g_sky.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(sky), &sky,
+                      dl);
+    cmd.draw(3, 1, 0, 0, dl);
 }
 
 void RecordMeter(vk::CommandBuffer cmd, u64 packet_address) {
@@ -261,6 +297,10 @@ void RecordComposite(vk::CommandBuffer cmd, u64 packet_address) {
 
 void LogAndReadMeter(vk::CommandBuffer cmd, const u8* packet) {
     const auto& dl = g_device->dispatch;
+    Scene::Header header;
+    std::memcpy(&header, packet, sizeof(header));
+    Scene::Sky sky;
+    std::memcpy(&sky, packet + Scene::SkyOffset, sizeof(sky));
     Scene::Grade grade;
     std::memcpy(&grade, packet + Scene::GradeOffset, sizeof(grade));
     MeterState meter;
@@ -273,6 +313,17 @@ void LogAndReadMeter(vk::CommandBuffer cmd, const u8* packet) {
              grade.exposure, grade.adaption_range, grade.adaption_speed, grade.key_value,
              meter.exposure, meter.adapted, grade.saturation, grade.distorted, knots[0], knots[1],
              knots[2], knots[3], knots[4], knots[5], knots[6]);
+    if (header.sky == 0) {
+        LOG_INFO(Render_Vulkan, "GR2port sky: none, background ({:.3f} {:.3f} {:.3f})",
+                 header.background[0], header.background[1], header.background[2]);
+    } else {
+        LOG_INFO(Render_Vulkan,
+                 "GR2port sky: cube maps {} {} (blend {:.3f}), clouds {} opacity {:.3f}, sun "
+                 "({:.2f} {:.2f} {:.2f}) size {:.4f} outer {:.2f} direction ({:.3f} {:.3f} {:.3f})",
+                 sky.cubes[0], sky.cubes[1], sky.blend, sky.cloud, sky.cloud_color[3],
+                 sky.sun_color[0], sky.sun_color[1], sky.sun_color[2], sky.sun_size, sky.sun_outer,
+                 sky.sun_direction[0], sky.sun_direction[1], sky.sun_direction[2]);
+    }
     if (!g_meter_cleared) {
         return;
     }

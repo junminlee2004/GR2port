@@ -113,6 +113,35 @@ constexpr u64 ViewCasterTables = 0x748;
 // View: the key light's colour times intensity +0x7b0 and the view-space direction its light
 // travels in +0x7c0.
 constexpr u64 ViewKeyLight = 0x7b0;
+// View: the colour behind everything when there is no sky +0x8, inverse(P) +0xe0, the world-space
+// direction the key light's light travels in +0x7d0, the list of skies +0xc80 with its count
+// +0xc88, and the rotation from world space to the sky's space +0xcd0.
+constexpr u64 ViewBackground = 0x8;
+constexpr u64 ViewInverseProjection = 0xe0;
+constexpr u64 ViewSunTravel = 0x7d0;
+constexpr u64 ViewSkies = 0xc80;
+constexpr u64 ViewSkyCount = 0xc88;
+constexpr u64 ViewSkyRotation = 0xcd0;
+// View: the sun's angle and soft edge in degrees +0xad0 and +0xad4, its colour +0xad8; the clouds'
+// scale +0xae4, the second layer's added scale +0xae8, the size their scroll wraps at +0xaec, their
+// texture scale over that size +0xaf0 and their opacity +0xaf8.
+constexpr u64 ViewSunSize = 0xad0;
+constexpr u64 ViewSunOuter = 0xad4;
+constexpr u64 ViewSunColor = 0xad8;
+constexpr u64 ViewCloudScale = 0xae4;
+constexpr u64 ViewCloudScaleStep = 0xae8;
+constexpr u64 ViewCloudSize = 0xaec;
+constexpr u64 ViewCloudTexcoord = 0xaf0;
+constexpr u64 ViewCloudOpacity = 0xaf8;
+constexpr float DegreesToRadians = 0.017453292f;
+// A sky: the transform of its cube map +0, the texture objects of its cube map +0x40 and clouds
+// +0x50, its weight +0x58. The frame graph keeps the clouds' scroll at +0x2fb8, which the frame
+// draws after the capture moves on by one frame's wind.
+constexpr u64 SkyBytes = 0x70;
+constexpr u64 SkyCube = 0x40;
+constexpr u64 SkyCloud = 0x50;
+constexpr u64 SkyWeight = 0x58;
+constexpr u64 FrameGraphCloudScroll = 0x2fb8;
 // View: the exposure {stops, adaption range, adaption rate, key value} +0x8a0, the wobble's amount
 // +0x8b0, the lens +0x20c, the time +0x1078 (a double), each channel's curve +0xa00 and the curve
 // all channels add +0xa54 (7 floats each), the saturation +0xa70.
@@ -243,6 +272,11 @@ public:
 
     void SetSpheres(u32 count) {
         header.spheres = count;
+    }
+
+    void SetSky(u32 cube, const std::array<float, 3>& background) {
+        header.sky = cube;
+        std::memcpy(header.background, background.data(), sizeof(header.background));
     }
 
     void SetDepthBias(u32 cascade, float constant, float slope) {
@@ -717,6 +751,103 @@ void WriteShadows(VAddr view, u8* packet, Writer& writer) {
                 sizeof(shadows->key_light_color) + sizeof(shadows->key_light_direction));
 }
 
+using Matrix = std::array<float, 16>;
+
+// a * b for the game's row-major matrices.
+Matrix Multiply(const Matrix& a, const Matrix& b) {
+    Matrix result{};
+    for (u32 row = 0; row < 4; row++) {
+        for (u32 column = 0; column < 4; column++) {
+            for (u32 i = 0; i < 4; i++) {
+                result[row * 4 + column] += a[row * 4 + i] * b[i * 4 + column];
+            }
+        }
+    }
+    return result;
+}
+
+// The sky of the game's sky pass: the two heaviest skies of the view's list with a cube map,
+// blended by weight. With no sky the pass fills the scene with the background colour.
+void WriteSky(VAddr frame_graph, VAddr view, u8* packet, Writer& writer) {
+    const auto background = Load<std::array<float, 3>>(view + ViewBackground);
+    const VAddr list = Load<VAddr>(view + ViewSkies);
+    const s32 count = Load<s32>(view + ViewSkyCount);
+    VAddr first = 0;
+    VAddr second = 0;
+    for (s32 i = 0; i < count; i++) {
+        const VAddr sky = list + i * SkyBytes;
+        if (Load<VAddr>(sky + SkyCube) == 0) {
+            continue;
+        }
+        const float weight = Load<float>(sky + SkyWeight);
+        if (first == 0) {
+            first = sky;
+        } else if (weight > Load<float>(first + SkyWeight)) {
+            second = first;
+            first = sky;
+        } else if (second == 0 || weight > Load<float>(second + SkyWeight)) {
+            second = sky;
+        }
+    }
+    const u32 cube = first != 0 ? Textures::GetCube(Load<VAddr>(first + SkyCube)) : 0;
+    writer.SetSky(cube, background);
+    if (cube == 0) {
+        return;
+    }
+    Scene::Sky sky{.cubes = {cube, 0}};
+    const auto rotation = Load<Matrix>(view + ViewSkyRotation);
+    auto camera = Load<Matrix>(view + ViewInverse);
+    camera[12] = camera[13] = camera[14] = 0.0f;
+    const Matrix inverse =
+        Multiply(Load<Matrix>(view + ViewInverseProjection), Multiply(camera, rotation));
+    std::memcpy(sky.inverse_view_projection, inverse.data(), sizeof(inverse));
+    std::memcpy(sky.transforms[0], reinterpret_cast<const void*>(first), MatrixBytes);
+    const float first_weight = Load<float>(first + SkyWeight);
+    const u32 second_cube = second != 0 ? Textures::GetCube(Load<VAddr>(second + SkyCube)) : 0;
+    float opacity = Load<float>(view + ViewCloudOpacity);
+    if (second != 0) {
+        // The clouds of two skies do not match: they thin out halfway through the blend.
+        const float second_weight = Load<float>(second + SkyWeight);
+        const float share = second_weight / (second_weight + first_weight);
+        opacity *= std::abs(share - 0.5f) * 2.0f;
+        if (second_cube != 0) {
+            std::memcpy(sky.transforms[1], reinterpret_cast<const void*>(second), MatrixBytes);
+            sky.cubes[1] = second_cube;
+            sky.blend = share;
+        }
+    }
+    const auto sun_color = Load<std::array<float, 3>>(view + ViewSunColor);
+    std::memcpy(sky.sun_color, sun_color.data(), sizeof(sun_color));
+    const auto travel = Load<std::array<float, 3>>(view + ViewSunTravel);
+    for (u32 j = 0; j < 3; j++) {
+        sky.sun_direction[j] =
+            -(travel[0] * rotation[j] + travel[1] * rotation[4 + j] + travel[2] * rotation[8 + j]);
+    }
+    const float sun_size = Load<float>(view + ViewSunSize);
+    sky.sun_size = sun_size == 0.0f ? -10.0f : sun_size * DegreesToRadians * 0.5f;
+    sky.sun_outer = 1.0f / std::max(Load<float>(view + ViewSunOuter) * DegreesToRadians, 1e-6f);
+    const VAddr cloud = Load<VAddr>(first + SkyCloud);
+    if (cloud != 0) {
+        // The game's default cloud texture is white, as handle 0 is.
+        sky.cloud = Textures::Get(cloud);
+        opacity = sky.cloud != 0 ? opacity : 0.0f;
+    }
+    sky.cloud_color[0] = sky.cloud_color[1] = sky.cloud_color[2] = 1.0f;
+    sky.cloud_color[3] = opacity;
+    const auto scroll = Load<std::array<float, 2>>(frame_graph + FrameGraphCloudScroll);
+    const float cloud_scale = Load<float>(view + ViewCloudScale);
+    const float cloud_size = Load<float>(view + ViewCloudSize);
+    const float texcoord_scale = Load<float>(view + ViewCloudTexcoord) / cloud_size;
+    const std::array<float, 4> layer0{cloud_scale, scroll[0], scroll[1], texcoord_scale};
+    const std::array<float, 4> layer1{cloud_scale + Load<float>(view + ViewCloudScaleStep),
+                                      cloud_size * 0.5f + scroll[0], scroll[1], texcoord_scale};
+    std::memcpy(sky.cloud_layers[0], layer0.data(), sizeof(layer0));
+    std::memcpy(sky.cloud_layers[1], layer1.data(), sizeof(layer1));
+    sky.cloud_fade[0] = cloud_size * 0.5f;
+    sky.cloud_fade[1] = 1.0f / cloud_size;
+    std::memcpy(packet + Scene::SkyOffset, &sky, sizeof(sky));
+}
+
 // The values the game's exposure, Tonemap and Composite passes set up on the draw thread after the
 // capture, all from the view.
 void WriteGrade(VAddr view, u8* packet) {
@@ -789,7 +920,7 @@ GridConstants ReadGridConstants(VAddr view) {
 
 } // namespace
 
-void OnFrame(VAddr view) {
+void OnFrame(VAddr frame_graph, VAddr view) {
     const auto start = std::chrono::steady_clock::now();
     const u64 frame = g_frames.load(std::memory_order_relaxed) + 1;
     g_frames.store(frame, std::memory_order_relaxed);
@@ -799,6 +930,7 @@ void OnFrame(VAddr view) {
     }
     Writer writer{packet, SceneRing::Address(packet), frame};
     WriteShadows(view, packet, writer);
+    WriteSky(frame_graph, view, packet, writer);
     WriteGrade(view, packet);
     const VAddr records = Load<VAddr>(view + ViewDeformers);
     const VAddr list = Load<VAddr>(view + ViewDeformerList);

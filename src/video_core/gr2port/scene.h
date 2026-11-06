@@ -97,6 +97,10 @@ struct Header {
     u32 cascades;
     /// The game's depth bias of each cascade in GCN units: constant, then slope.
     float depth_bias[Cascades][2];
+    /// The handle of the sky's first cube map, 0 when no sky is drawn, and the colour the scene
+    /// starts from, which shows where no sky is drawn.
+    u32 sky;
+    float background[3];
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
@@ -236,6 +240,33 @@ struct Decal {
 };
 static_assert(sizeof(Decal) == 144);
 
+/// The frame's sky, as the game's sky pixel programs read it. Rays run in the sky's space, which
+/// the view's sky rotation sets. Matrices are as in Draw.
+struct Sky {
+    /// Clip space to the sky's space, without the camera's position.
+    float inverse_view_projection[16];
+    /// A ray to the direction each cube map is sampled in.
+    float transforms[2][16];
+    float sun_color[4];
+    float sun_direction[4];
+    /// The clouds' colour; w is their opacity.
+    float cloud_color[4];
+    /// Each cloud layer: its scale, its offset in xy after the scale, its texture coordinate scale.
+    float cloud_layers[2][4];
+    /// The clouds fade out from a scaled distance x over the inverse of y.
+    float cloud_fade[2];
+    /// The sun's angle in radians, below 0 for no disc, and the inverse of its soft edge.
+    float sun_size;
+    float sun_outer;
+    /// The second cube map's share of the sky.
+    float blend;
+    /// The cube maps' handles: the first is never 0, the second is 0 when blend is 0.
+    u32 cubes[2];
+    /// The cloud texture's handle; 0 is white.
+    u32 cloud;
+};
+static_assert(sizeof(Sky) == 304);
+
 /// How the scene's HDR colour becomes the picture, as the game's exposure, Tonemap and Composite
 /// programs read it.
 struct Grade {
@@ -281,11 +312,13 @@ inline constexpr u64 SkinJobsOffset = PalettesOffset + MaxPaletteRows * 16;
 inline constexpr u64 EffectorsOffset = SkinJobsOffset + MaxSkinJobs * sizeof(SkinJob);
 inline constexpr u64 SoftBodyJobsOffset = EffectorsOffset + sizeof(Effectors);
 inline constexpr u64 DecalsOffset = SoftBodyJobsOffset + MaxSoftBodyJobs * sizeof(SoftBodyJob);
-inline constexpr u64 GradeOffset = DecalsOffset + MaxDecals * sizeof(Decal);
+inline constexpr u64 SkyOffset = DecalsOffset + MaxDecals * sizeof(Decal);
+inline constexpr u64 GradeOffset = SkyOffset + sizeof(Sky);
 inline constexpr u64 PacketBytes = GradeOffset + sizeof(Grade);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
-              SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0 && GradeOffset % 16 == 0);
+              SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0 && SkyOffset % 16 == 0 &&
+              GradeOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

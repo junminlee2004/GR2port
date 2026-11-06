@@ -219,7 +219,7 @@ bool Thread::Init() {
                                       Placement::Upload);
     if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
         !Textures::Start(d, *memory) || !Shadows::Start(d, *memory) ||
-        !Deformers::Start(d, *memory) || !Look::Start(d, *memory)) {
+        !Deformers::Start(d, *memory) || !Look::Start(d, *memory, DepthFormat)) {
         return false;
     }
     const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout()};
@@ -515,8 +515,11 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
         .loadOp = vk::AttachmentLoadOp::eClear,
         .storeOp = vk::AttachmentStoreOp::eStore,
-        .clearValue = {.color = vk::ClearColorValue{.float32 = std::array<float, 4>{0.32f, 0.38f,
-                                                                                    0.45f, 1.0f}}},
+        .clearValue = {.color =
+                           vk::ClearColorValue{.float32 = std::array<float, 4>{header.background[0],
+                                                                               header.background[1],
+                                                                               header.background[2],
+                                                                               0.0f}}},
     };
     const vk::RenderingAttachmentInfo depth_attachment{
         .imageView = depth.view,
@@ -559,6 +562,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
         cmd.drawIndexedIndirect(scene_ring.buffer, offset + Scene::CommandsOffset, header.draws,
                                 sizeof(Scene::Command), dl);
+    }
+    if (header.sky != 0) {
+        Look::RecordSky(cmd, packet.address);
     }
     cmd.endRendering(dl);
     if (timestamps) {

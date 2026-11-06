@@ -93,6 +93,21 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Sh
     vec4 key_light_direction;
 };
 
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Sky {
+    mat4 inverse_view_projection;
+    mat4 transforms[2];
+    vec4 sun_color;
+    vec4 sun_direction;
+    vec4 cloud_color;
+    vec4 cloud_layers[2];
+    vec2 cloud_fade;
+    float sun_size;
+    float sun_outer;
+    float blend;
+    uint cubes[2];
+    uint cloud;
+};
+
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Grade {
     float exposure;
     float adaption_range;
