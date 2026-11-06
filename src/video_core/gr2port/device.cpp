@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <optional>
 #include <string_view>
@@ -20,8 +21,12 @@ namespace {
 constexpr u32 ApiVersion = VK_API_VERSION_1_3;
 constexpr const char* ValidationLayer = "VK_LAYER_KHRONOS_validation";
 
-// The validation layer checks the renderer's own instance whenever the loader finds it.
+// The validation layer checks the renderer's own instance whenever the loader finds it, except in
+// timing runs, which set GR2PORT_NO_VALIDATION.
 bool HasValidation(const Device& d) {
+    if (std::getenv("GR2PORT_NO_VALIDATION") != nullptr) {
+        return false;
+    }
     const auto [result, layers] = vk::enumerateInstanceLayerProperties(d.dispatch);
     if (result != vk::Result::eSuccess) {
         return false;
