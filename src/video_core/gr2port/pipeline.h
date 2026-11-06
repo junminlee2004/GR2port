@@ -11,6 +11,8 @@ namespace Gr2Port {
 
 struct GraphicsPipelineInfo {
     std::span<const u32> vertex;
+    /// None for no geometry stage.
+    std::span<const u32> geometry;
     /// None for a depth-only pipeline.
     std::span<const u32> fragment;
     /// Undefined for no colour attachment. colors, when not empty, replaces it with several.
@@ -20,10 +22,14 @@ struct GraphicsPipelineInfo {
     vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList;
     vk::CullModeFlags cull = vk::CullModeFlagBits::eNone;
     bool depth_test = false;
+    /// With depth_test, whether passing fragments write depth.
+    bool depth_write = true;
     /// Greater for reverse depth, where nearer is greater.
     vk::CompareOp depth_compare = vk::CompareOp::eGreater;
     /// The depth bias is enabled and set as dynamic state.
     bool depth_bias = false;
+    /// Colour blends over the target by the fragment's alpha.
+    bool alpha_blend = false;
     u32 push_constant_bytes = 0;
     /// The pipeline's descriptor sets, in set order.
     std::span<const vk::DescriptorSetLayout> set_layouts;

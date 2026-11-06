@@ -31,8 +31,9 @@ inline constexpr u32 MaxSpheres = 256;
 inline constexpr u32 MaxDecals = 1024;
 /// World draws with a material per packet, and the spheres that shade the world's ambient light.
 inline constexpr u32 MaxMaterials = 8192;
-/// Character draws per packet.
+/// Character draws per packet, and their outlines.
 inline constexpr u32 MaxCharacters = 1024;
+inline constexpr u32 MaxContours = 512;
 inline constexpr u32 MaxOccluders = 64;
 /// The effector grid: 6 x 6 x 10 cells of the view, each listing up to 127 spheres and an end
 /// marker.
@@ -94,6 +95,9 @@ struct Header {
     /// Character draws, and those past MaxCharacters, which are not drawn.
     u32 characters;
     u32 dropped_characters;
+    /// Outlines, and those that cannot be drawn.
+    u32 contours;
+    u32 dropped_contours;
     /// The draws are in three runs: world draws without alpha test from index 0, forward draws
     /// after them, and alpha-tested world draws from the end of the array down.
     u32 world_draws;
@@ -319,6 +323,23 @@ struct Character {
 };
 static_assert(sizeof(Character) == 656);
 
+/// A character's outline: the game's G2_CH_Contour constants of the vertex, geometry and pixel
+/// programs, whose names are in shaders/scene.glsl, then its mesh. The elements are as in Draw.
+struct Contour {
+    float vertex_constants[40];
+    float geometry_constants[8];
+    float pixel_constants[12];
+    u64 vertices;
+    u32 stride;
+    u32 position;
+    u32 normal;
+    u32 bones;
+    u64 skin;
+    u64 palette;
+    u32 padding[2];
+};
+static_assert(sizeof(Contour) == 288);
+
 /// The frame's sky, as the game's sky pixel programs read it. Rays run in the sky's space, which
 /// the view's sky rotation sets. Matrices are as in Draw.
 struct Sky {
@@ -451,12 +472,14 @@ inline constexpr u64 GradeOffset = SkyOffset + sizeof(Sky);
 inline constexpr u64 LightOffset = GradeOffset + sizeof(Grade);
 inline constexpr u64 MaterialsOffset = LightOffset + sizeof(Light);
 inline constexpr u64 CharactersOffset = MaterialsOffset + MaxMaterials * sizeof(Material);
-inline constexpr u64 PacketBytes = CharactersOffset + MaxCharacters * sizeof(Character);
+inline constexpr u64 ContoursOffset = CharactersOffset + MaxCharacters * sizeof(Character);
+inline constexpr u64 ContourCommandsOffset = ContoursOffset + MaxContours * sizeof(Contour);
+inline constexpr u64 PacketBytes = ContourCommandsOffset + MaxContours * sizeof(Command);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
               SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0 && SkyOffset % 16 == 0 &&
               GradeOffset % 16 == 0 && LightOffset % 16 == 0 && MaterialsOffset % 16 == 0 &&
-              CharactersOffset % 16 == 0);
+              CharactersOffset % 16 == 0 && ContoursOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

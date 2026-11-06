@@ -39,19 +39,27 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
     const vk::ShaderModule vertex = CreateModule(d, info.vertex);
     const vk::ShaderModule fragment =
         info.fragment.empty() ? vk::ShaderModule{} : CreateModule(d, info.fragment);
-    const std::array stages{
-        vk::PipelineShaderStageCreateInfo{
-            .stage = vk::ShaderStageFlagBits::eVertex,
-            .module = vertex,
+    const vk::ShaderModule geometry =
+        info.geometry.empty() ? vk::ShaderModule{} : CreateModule(d, info.geometry);
+    std::vector<vk::PipelineShaderStageCreateInfo> stages{{
+        .stage = vk::ShaderStageFlagBits::eVertex,
+        .module = vertex,
+        .pName = "main",
+    }};
+    if (geometry) {
+        stages.push_back({
+            .stage = vk::ShaderStageFlagBits::eGeometry,
+            .module = geometry,
             .pName = "main",
-        },
-        vk::PipelineShaderStageCreateInfo{
+        });
+    }
+    if (fragment) {
+        stages.push_back({
             .stage = vk::ShaderStageFlagBits::eFragment,
             .module = fragment,
             .pName = "main",
-        },
-    };
-    const u32 stage_count = fragment ? 2 : 1;
+        });
+    }
     const vk::PipelineVertexInputStateCreateInfo vertex_input{};
     const vk::PipelineInputAssemblyStateCreateInfo input_assembly{.topology = info.topology};
     const vk::PipelineViewportStateCreateInfo viewport{.viewportCount = 1, .scissorCount = 1};
@@ -67,10 +75,17 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
     };
     const vk::PipelineDepthStencilStateCreateInfo depth_stencil{
         .depthTestEnable = info.depth_test,
-        .depthWriteEnable = info.depth_test,
+        .depthWriteEnable = info.depth_test && info.depth_write,
         .depthCompareOp = info.depth_compare,
     };
     const vk::PipelineColorBlendAttachmentState blend_attachment{
+        .blendEnable = info.alpha_blend,
+        .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
+        .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+        .colorBlendOp = vk::BlendOp::eAdd,
+        .srcAlphaBlendFactor = vk::BlendFactor::eOne,
+        .dstAlphaBlendFactor = vk::BlendFactor::eZero,
+        .alphaBlendOp = vk::BlendOp::eAdd,
         .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
                           vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
     };
@@ -98,7 +113,7 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
     };
     const vk::GraphicsPipelineCreateInfo pipeline_info{
         .pNext = &rendering,
-        .stageCount = stage_count,
+        .stageCount = static_cast<u32>(stages.size()),
         .pStages = stages.data(),
         .pVertexInputState = &vertex_input,
         .pInputAssemblyState = &input_assembly,
@@ -115,6 +130,9 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
     d.device.destroyShaderModule(vertex, nullptr, dl);
     if (fragment) {
         d.device.destroyShaderModule(fragment, nullptr, dl);
+    }
+    if (geometry) {
+        d.device.destroyShaderModule(geometry, nullptr, dl);
     }
     if (pipeline_result != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "GR2port: no pipeline: {}", vk::to_string(pipeline_result));

@@ -20,6 +20,7 @@
 #include "common/stb.h"
 #include "common/thread.h"
 #include "video_core/gr2port/capture.h"
+#include "video_core/gr2port/contours.h"
 #include "video_core/gr2port/deformers.h"
 #include "video_core/gr2port/device.h"
 #include "video_core/gr2port/look.h"
@@ -121,6 +122,8 @@ struct Stats {
     u64 dropped_decals = 0;
     u64 materials = 0;
     u64 dropped_materials = 0;
+    u64 contours = 0;
+    u64 dropped_contours = 0;
     u64 palette_rows = 0;
     std::array<u64, Scene::ItemCategories> category_items{};
     u64 casters = 0;
@@ -235,7 +238,8 @@ bool Thread::Init() {
     if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
         !Textures::Start(d, *memory) || !Shadows::Start(d, *memory) ||
         !Deformers::Start(d, *memory) || !Look::Start(d, *memory, DepthFormat) ||
-        !World::Start(d, *memory, DepthFormat, Look::SceneFormat)) {
+        !World::Start(d, *memory, DepthFormat, Look::SceneFormat) ||
+        !Contours::Start(d, Look::SceneFormat, DepthFormat)) {
         return false;
     }
     const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout()};
@@ -642,6 +646,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     if (header.sky != 0) {
         Look::RecordSky(cmd, packet.address);
     }
+    if (drawn) {
+        Contours::Record(cmd, header, packet.address, scene_ring.buffer, offset, extent);
+    }
     cmd.endRendering(dl);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
@@ -688,6 +695,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.draws += header.draws + header.alpha_draws;
     stats.materials += header.materials;
     stats.dropped_materials += header.dropped_materials;
+    stats.contours += header.contours;
+    stats.dropped_contours += header.dropped_contours;
     stats.dropped += header.dropped;
     stats.capture_ns += header.capture_ns;
     stats.untextured += header.untextured;
@@ -840,7 +849,8 @@ void Thread::Report() {
     LOG_INFO(Render_Vulkan,
              "GR2port scene: per frame {:.0f} draws ({:.0f} skinned, {:.0f} deformed, {:.1f} with "
              "decals, {:.1f} without room for theirs, {:.0f} with materials, {:.1f} without room "
-             "for theirs, {:.1f} KB of palettes), {:.0f} items not "
+             "for theirs, {:.1f} outlines, {:.1f} not drawn, {:.1f} KB of palettes), {:.0f} items "
+             "not "
              "drawn and {:.0f} deformed ones waiting for their "
              "copy, {:.0f} indices (largest draw {}), {:.3f} ms of capture on the game's draw "
              "thread, {} frames not drawn for too many indices; {} meshes ({} skinned) in {:.1f} "
@@ -852,6 +862,8 @@ void Thread::Report() {
              static_cast<double>(stats.dropped_decals) / frames,
              static_cast<double>(stats.materials) / frames,
              static_cast<double>(stats.dropped_materials) / frames,
+             static_cast<double>(stats.contours) / frames,
+             static_cast<double>(stats.dropped_contours) / frames,
              static_cast<double>(stats.palette_rows) * 16 / 1024 / frames,
              static_cast<double>(stats.dropped) / frames,
              static_cast<double>(stats.deformed_waiting) / frames,

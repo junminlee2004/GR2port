@@ -4,6 +4,8 @@
 target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/capture.cpp
     ${CMAKE_CURRENT_LIST_DIR}/capture.h
+    ${CMAKE_CURRENT_LIST_DIR}/contours.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/contours.h
     ${CMAKE_CURRENT_LIST_DIR}/deformers.cpp
     ${CMAKE_CURRENT_LIST_DIR}/deformers.h
     ${CMAKE_CURRENT_LIST_DIR}/device.cpp
@@ -73,6 +75,9 @@ function(gr2port_add_shader FILENAME SHADER_NAME)
 endfunction()
 gr2port_add_shader(character.vert character_vert)
 gr2port_add_shader(character.frag character_frag)
+gr2port_add_shader(contour.vert contour_vert)
+gr2port_add_shader(contour.geom contour_geom)
+gr2port_add_shader(contour.frag contour_frag)
 gr2port_add_shader(fullscreen.vert fullscreen_vert)
 gr2port_add_shader(sky.frag sky_frag)
 gr2port_add_shader(luminance.comp luminance_comp)

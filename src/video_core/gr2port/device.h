@@ -24,6 +24,7 @@ struct Device {
     double timestamp_period = 0.0;
     /// The device reports the process's memory use and budget (VK_EXT_memory_budget).
     bool memory_budget = false;
+    bool geometry_shaders = false;
 };
 
 /// Creates the instance, a surface for window, and a device on the first discrete GPU (else the

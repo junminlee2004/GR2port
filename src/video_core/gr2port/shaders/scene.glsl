@@ -156,6 +156,41 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Ch
     Character characters[];
 };
 
+// A character's outline: the game's G2_CH_Contour constants of each stage, then its mesh.
+struct Contour {
+    mat4 world_view;
+    mat4 world_view_projection;
+    vec4 fade_center;
+    float transparency;
+    float fading;
+    vec2 padding;
+    vec2 inverse_z;
+    float size_amplitude;
+    float fading_scale;
+    float threshold;
+    float offset;
+    vec2 bias;
+    vec4 color;
+    float size;
+    float line_amplitude;
+    float line_cycle;
+    float curve_amplitude;
+    float curve_cycle;
+    float softness;
+    vec2 pixel_padding;
+    uint64_t vertices;
+    uint stride;
+    uint position;
+    uint normal;
+    uint bones;
+    uint64_t skin;
+    uint64_t palette;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Contours {
+    Contour contours[];
+};
+
 // Material flags.
 const uint MaterialLayered = 1u;
 const uint MaterialGradation = 2u;

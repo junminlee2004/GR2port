@@ -152,9 +152,11 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         .storageBuffer16BitAccess = true,
         .shaderDrawParameters = true,
     };
+    d.geometry_shaders = d.gpu.getFeatures(d.dispatch).geometryShader != VK_FALSE;
     vk::PhysicalDeviceFeatures2 features{
         .pNext = &features11,
-        .features = {.multiDrawIndirect = true,
+        .features = {.geometryShader = d.geometry_shaders,
+                     .multiDrawIndirect = true,
                      .drawIndirectFirstInstance = true,
                      .samplerAnisotropy = true,
                      .textureCompressionBC = true,

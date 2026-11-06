@@ -295,6 +295,14 @@ constexpr std::array<Category, 6> WorldCategories{{
 }};
 // G2_CH_Main: colour texture t1, decal texture t6.
 constexpr Category CharacterCategory{8, 0x68, 0x30, 0x70, 0xa0, None, 0x50, false, true};
+// G2_CH_Contour: the constants of its vertex, geometry and pixel programs. The submesh holds the
+// range of its adjacency indices at +0x50, when it has more than 2 ranges.
+constexpr u32 ContourCategory = 11;
+constexpr u64 ContourVertexConstants = 0x30;
+constexpr u64 ContourGeometryConstants = 0x38;
+constexpr u64 ContourPixelConstants = 0x40;
+constexpr u64 SubmeshAdjacencyRange = 0x50;
+constexpr u32 ContourMinRanges = 3;
 // CH_Main's vertex constants hold the decals' positions and targets, then their scales, which are
 // 0 when a material has no decals. Its pixel constants hold GradationColor and the alpha step flag.
 constexpr u64 DecalPositions = 0x150;
@@ -342,7 +350,10 @@ public:
           soft_body_jobs{reinterpret_cast<Scene::SoftBodyJob*>(packet + Scene::SoftBodyJobsOffset)},
           decals{reinterpret_cast<Scene::Decal*>(packet + Scene::DecalsOffset)},
           materials{reinterpret_cast<Scene::Material*>(packet + Scene::MaterialsOffset)},
-          characters{reinterpret_cast<Scene::Character*>(packet + Scene::CharactersOffset)} {}
+          characters{reinterpret_cast<Scene::Character*>(packet + Scene::CharactersOffset)},
+          contours{reinterpret_cast<Scene::Contour*>(packet + Scene::ContoursOffset)},
+          contour_commands{
+              reinterpret_cast<Scene::Command*>(packet + Scene::ContourCommandsOffset)} {}
 
     void SetCascades(u32 mask) {
         header.cascades = mask;
@@ -475,6 +486,70 @@ public:
         draw.vertex_color = mesh->vertex_color;
         draw.material = material_index;
         commands[i] = {
+            .index_count = count,
+            .instance_count = 1,
+            .first_index = mesh->first_index + first,
+            .vertex_offset = 0,
+            .first_instance = 0,
+        };
+    }
+
+    // A G2_CH_Contour item: the mesh's adjacency indices with the item's constants.
+    void AddContour(VAddr item) {
+        const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
+        const VAddr index_buffer = Load<VAddr>(item + ItemIndexBuffer);
+        const VAddr vertex_constants = Load<VAddr>(item + ContourVertexConstants);
+        const VAddr geometry_constants = Load<VAddr>(item + ContourGeometryConstants);
+        const VAddr pixel_constants = Load<VAddr>(item + ContourPixelConstants);
+        const VAddr shape = index_buffer - ShapeIndexBuffer;
+        if (submesh == 0 || index_buffer == 0 || vertex_constants == 0 || geometry_constants == 0 ||
+            pixel_constants == 0 || Load<u16>(submesh + SubmeshRanges) < ContourMinRanges ||
+            header.contours == Scene::MaxContours) {
+            header.dropped_contours++;
+            return;
+        }
+        const Meshes::Mesh* mesh = Meshes::Get(shape);
+        if (mesh == nullptr || mesh->normal == 0) {
+            header.dropped_contours++;
+            return;
+        }
+        const u32 first =
+            Load<u32>(submesh + SubmeshFirstIndex) + Load<u32>(submesh + SubmeshAdjacencyRange);
+        const u32 count = Load<u32>(submesh + SubmeshAdjacencyRange + 4);
+        Skin skin;
+        u64 vertices = mesh->vertices;
+        const VAddr vertex_buffer = Load<VAddr>(item + ItemVertexBuffer);
+        if (u64{first} + count > mesh->indices) {
+            header.dropped_contours++;
+            return;
+        }
+        if (vertex_buffer != shape + ShapeVertexBuffer) {
+            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame).vertices;
+            if (vertices == 0) {
+                header.dropped_contours++;
+                return;
+            }
+        } else if (!ReadSkin(item, shape, *mesh, skin)) {
+            header.dropped_contours++;
+            return;
+        }
+        const u32 i = header.contours++;
+        // The fields are written in order: the packet is write-combined.
+        Scene::Contour& contour = contours[i];
+        std::memcpy(contour.vertex_constants, reinterpret_cast<const void*>(vertex_constants),
+                    sizeof(contour.vertex_constants));
+        std::memcpy(contour.geometry_constants, reinterpret_cast<const void*>(geometry_constants),
+                    sizeof(contour.geometry_constants));
+        std::memcpy(contour.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
+                    sizeof(contour.pixel_constants));
+        contour.vertices = vertices;
+        contour.stride = mesh->stride;
+        contour.position = mesh->position;
+        contour.normal = mesh->normal;
+        contour.bones = skin.bones;
+        contour.skin = skin.stream;
+        contour.palette = skin.palette;
+        contour_commands[i] = {
             .index_count = count,
             .instance_count = 1,
             .first_index = mesh->first_index + first,
@@ -833,6 +908,8 @@ private:
     Scene::Decal* decals;
     Scene::Material* materials;
     Scene::Character* characters;
+    Scene::Contour* contours;
+    Scene::Command* contour_commands;
     u32 hatching = 0;
     VAddr last_palette = 0;
     u32 last_bones = 0;
@@ -1279,6 +1356,8 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     }
     writer.EndWorld();
     add_category(CharacterCategory);
+    ForEachItem(Load<s32>(view + ViewCategoryCount + ContourCategory * 4), ContourVertexConstants,
+                keyed(ContourCategory), [&](VAddr item) { writer.AddContour(item); });
     Scene::Header header = writer.Header();
     header.frame = frame;
     for (u32 c = 0; c < Scene::ItemCategories; c++) {
