@@ -446,6 +446,31 @@ constexpr u64 GrassWidth = 0x90;
 constexpr u64 GrassPixelValues = 0x20;
 constexpr u32 GrassPixelCount = 6;
 constexpr u32 PatchVertices = 3;
+constexpr u32 QuadVertices = 6;
+// Branch, deformer kind 4: a record holds its instance's vertex buffer object +0x10, its shape
+// +0x38 and its kernel's constants +0x48: World, its inverse and WVP, the sway's cycle +0xc0, the
+// clip depth's scale to the effector grid +0xc4 and the vertex count +0xcc.
+constexpr u32 KindBranch = 4;
+constexpr u64 BranchOutput = 0x10;
+constexpr u64 BranchShape = 0x38;
+constexpr u64 BranchConstants = 0x48;
+constexpr u64 BranchCycle = 0xc0;
+constexpr u64 BranchClusterScale = 0xc4;
+constexpr u64 BranchVertexCount = 0xcc;
+constexpr u32 BranchVertexBytes = 16;
+constexpr u32 BranchStateBytes = 12;
+constexpr u32 BranchGroupSize = 64;
+constexpr u32 PositionHalfFloat = 7;
+// A branch ribbon item: the texture, hull and domain constants as a leaf item's. Its hull constants
+// start with its segments, its domain constants hold the eye +0x80, then the texture's range, the
+// tip and root colours, and the tip and root widths +0xc0. Its pixel constants +0x50 hold {alpha
+// reference, translucency, roughness, metallic, screen door}, and its vertex count is +0x58.
+constexpr u32 BranchCategory = 28;
+constexpr u64 BranchPixelConstants = 0x50;
+constexpr u64 BranchItemVertexCount = 0x58;
+constexpr u64 BranchEye = 0x80;
+constexpr u64 BranchWidths = 0xc0;
+constexpr u32 BranchPixelCount = 5;
 // CH_Main's vertex constants hold the decals' positions and targets, then their scales, which are
 // 0 when a material has no decals. Its pixel constants hold GradationColor and the alpha step flag.
 constexpr u64 DecalPositions = 0x150;
@@ -471,6 +496,7 @@ alignas(64) std::array<Scene::Command, Scene::MaxContours> g_contour_commands;
 alignas(64) std::array<Scene::VertexCommand, Scene::MaxLeaves> g_leaf_commands;
 alignas(
     64) std::array<Scene::VertexCommand, Scene::Cascades * Scene::MaxLeaves> g_leaf_shadow_commands;
+alignas(64) std::array<Scene::VertexCommand, Scene::MaxBranches> g_branch_commands;
 // The wind's place in its cycle. The game keeps one per instance; only its rate shows, and only on
 // instances that move fast.
 float g_grass_phase = 0.0f;
@@ -535,7 +561,9 @@ public:
           leaves{reinterpret_cast<Scene::Leaf*>(packet + Scene::LeavesOffset)},
           layer_materials{
               reinterpret_cast<Scene::LayerMaterial*>(packet + Scene::LayerMaterialsOffset)},
-          grass{reinterpret_cast<Scene::Grass*>(packet + Scene::GrassOffset)} {}
+          grass{reinterpret_cast<Scene::Grass*>(packet + Scene::GrassOffset)},
+          branch_jobs{reinterpret_cast<Scene::BranchJob*>(packet + Scene::BranchJobsOffset)},
+          branches{reinterpret_cast<Scene::Branch*>(packet + Scene::BranchesOffset)} {}
 
     // Ends a part of the capture's time.
     void EndPart(Scene::CapturePart part) {
@@ -577,6 +605,8 @@ public:
             const Scene::VertexCommand grass_command{.instance_count = 1};
             std::memcpy(packet + Scene::GrassCommandOffset, &grass_command, sizeof(grass_command));
         }
+        std::memcpy(packet + Scene::BranchCommandsOffset, g_branch_commands.data(),
+                    header.branches * VertexBytes);
     }
 
     void SetCascades(u32 mask) {
@@ -797,17 +827,93 @@ public:
         };
     }
 
-    // A Branch leaf item: the shape's vertices as patches of three, with the item's constants. The
-    // leaves grow from the shape's rest pose: the renderer does not run the game's Branch deformer.
+    // A Branch deformer record: the renderer's kernel sways the instance's copy of the shape's
+    // vertices with the record's constants.
+    void AddBranchJob(VAddr record) {
+        const VAddr vertex_buffer = Load<VAddr>(record + BranchOutput);
+        const VAddr shape = Load<VAddr>(record + BranchShape);
+        const VAddr constants = Load<VAddr>(record + BranchConstants);
+        if (vertex_buffer == 0 || shape == 0 || constants == 0 ||
+            header.branch_jobs == Scene::MaxBranchJobs) {
+            header.dropped_branch_jobs++;
+            return;
+        }
+        const Meshes::Mesh* mesh = Meshes::Get(shape);
+        const u32 segments = Load<u32>(constants + BranchVertexCount) / PatchVertices;
+        if (mesh == nullptr || !IsBranchMesh(*mesh) || segments == 0 ||
+            u64{segments} * PatchVertices * mesh->stride > mesh->vertex_bytes) {
+            header.dropped_branch_jobs++;
+            return;
+        }
+        const Deformers::Copy copy = BranchCopy(vertex_buffer, shape, *mesh);
+        if (copy.state == 0) {
+            header.dropped_branch_jobs++;
+            return;
+        }
+        // The fields are written in order: the packet is write-combined.
+        Scene::BranchJob& job = branch_jobs[header.branch_jobs++];
+        std::memcpy(job.world, reinterpret_cast<const void*>(constants), 3 * MatrixBytes);
+        job.source = mesh->vertices;
+        job.destination = copy.vertices;
+        job.state = copy.state;
+        job.segments = segments;
+        job.cycle = Load<float>(constants + BranchCycle);
+        job.cluster_scale = Load<float>(constants + BranchClusterScale);
+        header.branch_groups =
+            std::max(header.branch_groups, (segments + BranchGroupSize - 1) / BranchGroupSize);
+    }
+
+    // A branch ribbon item: a ribbon of the item's segments along each curve of three vertices.
+    void AddBranch(VAddr item) {
+        const VAddr hull = Load<VAddr>(item + LeafHullConstants);
+        const VAddr domain = Load<VAddr>(item + LeafDomainConstants);
+        const VAddr pixel = Load<VAddr>(item + BranchPixelConstants);
+        const Meshes::Mesh* mesh = nullptr;
+        u64 address = 0;
+        u32 vertices = 0;
+        u32 texture = 0;
+        if (hull == 0 || domain == 0 || pixel == 0 || header.branches == Scene::MaxBranches ||
+            !ReadBranchItem(item, BranchItemVertexCount, mesh, address, vertices, texture) ||
+            !IsBranchMesh(*mesh)) {
+            header.dropped_branches++;
+            return;
+        }
+        const u32 segments = std::max(static_cast<u32>(std::ceil(Load<float>(hull))), 1u);
+        const u32 i = header.branches++;
+        // The fields are written in order: the packet is write-combined.
+        Scene::Branch& branch = branches[i];
+        std::memcpy(branch.world_view_projection, reinterpret_cast<const void*>(domain),
+                    MatrixBytes);
+        std::memcpy(branch.eye, reinterpret_cast<const void*>(domain + BranchEye),
+                    sizeof(branch.eye) + sizeof(branch.uv_range) + sizeof(branch.tip_color) +
+                        sizeof(branch.root_color));
+        branch.vertices = address;
+        branch.stride = mesh->stride;
+        branch.segments = segments;
+        branch.texture = texture;
+        std::memcpy(&branch.tip_width, reinterpret_cast<const void*>(domain + BranchWidths),
+                    2 * sizeof(float));
+        std::memcpy(&branch.alpha_reference, reinterpret_cast<const void*>(pixel),
+                    BranchPixelCount * sizeof(float));
+        g_branch_commands[i] = {
+            .vertex_count = vertices / PatchVertices * segments * QuadVertices,
+            .instance_count = 1,
+            .first_vertex = 0,
+            .first_instance = i,
+        };
+    }
+
+    // A Branch leaf item: its instance's vertices as patches of three, with the item's constants.
     void AddLeaf(VAddr item) {
         const VAddr hull = Load<VAddr>(item + LeafHullConstants);
         const VAddr domain = Load<VAddr>(item + LeafDomainConstants);
         const VAddr pixel = Load<VAddr>(item + LeafPixelConstants);
         const Meshes::Mesh* mesh = nullptr;
+        u64 address = 0;
         u32 vertices = 0;
         u32 texture = 0;
-        if (hull == 0 || domain == 0 || pixel == 0 ||
-            !ReadLeafItem(item, mesh, vertices, texture)) {
+        if (hull == 0 || domain == 0 || pixel == 0 || header.leaves == Scene::MaxLeaves ||
+            !ReadBranchItem(item, LeafVertexCount, mesh, address, vertices, texture)) {
             header.dropped_leaves++;
             return;
         }
@@ -818,7 +924,7 @@ public:
         std::memcpy(leaf.world, reinterpret_cast<const void*>(domain + LeafWorld), 2 * MatrixBytes);
         std::memcpy(leaf.tip_color, reinterpret_cast<const void*>(pixel),
                     sizeof(leaf.tip_color) + sizeof(leaf.root_color));
-        leaf.vertices = mesh->vertices;
+        leaf.vertices = address;
         leaf.stride = mesh->stride;
         leaf.position = mesh->position;
         leaf.texture = texture;
@@ -845,10 +951,11 @@ public:
         const VAddr domain = Load<VAddr>(item + LeafDomainConstants);
         const VAddr pixel = Load<VAddr>(item + LeafPixelConstants);
         const Meshes::Mesh* mesh = nullptr;
+        u64 address = 0;
         u32 vertices = 0;
         u32 texture = 0;
-        if (hull == 0 || domain == 0 || pixel == 0 ||
-            !ReadLeafItem(item, mesh, vertices, texture)) {
+        if (hull == 0 || domain == 0 || pixel == 0 || header.leaves == Scene::MaxLeaves ||
+            !ReadBranchItem(item, LeafVertexCount, mesh, address, vertices, texture)) {
             header.dropped_leaves++;
             return;
         }
@@ -857,7 +964,7 @@ public:
         Scene::Leaf& leaf = leaves[i];
         std::memcpy(leaf.world, reinterpret_cast<const void*>(domain + LeafShadowWorld),
                     MatrixBytes);
-        leaf.vertices = mesh->vertices;
+        leaf.vertices = address;
         leaf.stride = mesh->stride;
         leaf.position = mesh->position;
         leaf.texture = texture;
@@ -1340,22 +1447,44 @@ private:
         return true;
     }
 
-    // The mesh, whole patches of vertices and texture of a leaf item. False when the item cannot
-    // be drawn: an untextured leaf would fill its quad with white.
-    bool ReadLeafItem(VAddr item, const Meshes::Mesh*& mesh, u32& vertices, u32& texture) {
+    // A Branch shape's positions as the kernel and the ribbons read them.
+    static bool IsBranchMesh(const Meshes::Mesh& mesh) {
+        return mesh.stride == BranchVertexBytes && (mesh.position & 0xff) == 0 &&
+               (mesh.position >> 8) != PositionHalfFloat;
+    }
+
+    // The renderer's copy of a Branch instance, with a timer, a phase and a word unused per curve.
+    Deformers::Copy BranchCopy(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh) {
+        return Deformers::Get(vertex_buffer, shape, mesh, frame,
+                              mesh.vertex_bytes / mesh.stride / PatchVertices * BranchStateBytes);
+    }
+
+    // The mesh, vertices' address, whole patches of vertices and texture of a Branch item. False
+    // when the item cannot be drawn: an untextured one would fill its quads with white.
+    bool ReadBranchItem(VAddr item, u64 count_field, const Meshes::Mesh*& mesh, u64& address,
+                        u32& vertices, u32& texture) {
         const VAddr index_buffer = Load<VAddr>(item + ItemIndexBuffer);
         const VAddr object = Load<VAddr>(item + LeafTexture);
-        vertices = Load<u32>(item + LeafVertexCount) / PatchVertices * PatchVertices;
-        if (index_buffer == 0 || object == 0 || vertices == 0 ||
-            header.leaves == Scene::MaxLeaves) {
+        vertices = Load<u32>(item + count_field) / PatchVertices * PatchVertices;
+        if (index_buffer == 0 || object == 0 || vertices == 0) {
             return false;
         }
-        mesh = Meshes::Get(index_buffer - ShapeIndexBuffer);
+        const VAddr shape = index_buffer - ShapeIndexBuffer;
+        mesh = Meshes::Get(shape);
         if (mesh == nullptr || mesh->stride == 0 || vertices > mesh->vertex_bytes / mesh->stride) {
             return false;
         }
         texture = Textures::Get(object);
-        return texture != 0;
+        if (texture == 0) {
+            return false;
+        }
+        address = mesh->vertices;
+        const VAddr vertex_buffer = Load<VAddr>(item + ItemVertexBuffer);
+        if (vertex_buffer != 0 && vertex_buffer != shape + ShapeVertexBuffer) {
+            const u64 copy = BranchCopy(vertex_buffer, shape, *mesh).vertices;
+            address = copy != 0 ? copy : address;
+        }
+        return true;
     }
 
     Scene::Header header{};
@@ -1375,6 +1504,8 @@ private:
     Scene::Leaf* leaves;
     Scene::LayerMaterial* layer_materials;
     Scene::Grass* grass;
+    Scene::BranchJob* branch_jobs;
+    Scene::Branch* branches;
     std::array<VAddr, Scene::MaxGrass> grass_records;
     u32 grass_record_count = 0;
     float grass_advance = 0.0f;
@@ -1971,8 +2102,10 @@ void OnFrame(VAddr frame_graph, VAddr view) {
             writer.AddSkin(record(e));
         }
         const auto [first_soft_body, end_soft_body] = range(KindSoftBody);
+        const auto [first_branch, end_branch] = range(KindBranch);
         const auto [first_grass, end_grass] = range(KindGrass);
-        if (first_soft_body < end_soft_body || first_grass < end_grass) {
+        if (first_soft_body < end_soft_body || first_branch < end_branch ||
+            first_grass < end_grass) {
             WriteEffectors(view, packet, writer);
         }
         if (first_soft_body < end_soft_body) {
@@ -1980,6 +2113,9 @@ void OnFrame(VAddr frame_graph, VAddr view) {
             for (u32 e = first_soft_body; e < end_soft_body; e++) {
                 writer.AddSoftBody(record(e), grid);
             }
+        }
+        for (u32 e = first_branch; e < end_branch; e++) {
+            writer.AddBranchJob(record(e));
         }
         for (u32 e = first_grass; e < end_grass; e++) {
             writer.AddGrassRecord(record(e));
@@ -2026,6 +2162,9 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     for (const Category& category : WorldCategories) {
         add_category(category);
     }
+    ForEachItem(Load<s32>(view + ViewCategoryCount + BranchCategory * 4), LeafDomainConstants,
+                BranchPixelConstants, keyed(BranchCategory),
+                [&](VAddr item) { writer.AddBranch(item); });
     ForEachItem(Load<s32>(view + ViewCategoryCount + LeafCategory * 4), LeafDomainConstants,
                 LeafPixelConstants, keyed(LeafCategory), [&](VAddr item) { writer.AddLeaf(item); });
     const s32 grass_items = Load<s32>(view + ViewCategoryCount + GrassCategory * 4);

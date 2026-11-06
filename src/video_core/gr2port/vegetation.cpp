@@ -6,6 +6,9 @@
 #include "video_core/gr2port/deformers.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/pipeline.h"
+#include "video_core/gr2port/shaders/branch_comp.h"
+#include "video_core/gr2port/shaders/branch_frag.h"
+#include "video_core/gr2port/shaders/branch_vert.h"
 #include "video_core/gr2port/shaders/grass_comp.h"
 #include "video_core/gr2port/shaders/grass_frag.h"
 #include "video_core/gr2port/shaders/grass_vert.h"
@@ -47,10 +50,18 @@ struct GrassPush {
     u64 blades;
 };
 
+struct BranchKernelPush {
+    u64 jobs;
+    u64 effectors;
+    u64 grid;
+};
+
 const Device* g_device = nullptr;
 Buffer g_blades;
 Pipeline g_kernel;
 Pipeline g_grass;
+Pipeline g_branch_kernel;
+Pipeline g_branches;
 Pipeline g_leaves;
 Pipeline g_leaf_shadows;
 
@@ -81,7 +92,18 @@ bool Start(const Device& device, Memory& memory, std::span<const vk::Format> sur
                                                  .push_constant_bytes = sizeof(GrassPush),
                                                  .set_layouts = texture_set,
                                              });
-    if (!g_blades.buffer || !g_kernel.pipeline || !g_grass.pipeline) {
+    g_branch_kernel = CreateComputePipeline(device, BRANCH_COMP, sizeof(BranchKernelPush));
+    g_branches = CreateGraphicsPipeline(device, {
+                                                    .vertex = BRANCH_VERT,
+                                                    .fragment = BRANCH_FRAG,
+                                                    .colors = surface_formats,
+                                                    .depth = depth_format,
+                                                    .depth_test = true,
+                                                    .push_constant_bytes = sizeof(u64),
+                                                    .set_layouts = texture_set,
+                                                });
+    if (!g_blades.buffer || !g_kernel.pipeline || !g_grass.pipeline || !g_branch_kernel.pipeline ||
+        !g_branches.pipeline) {
         return false;
     }
     if (!device.tessellation_shaders || !device.geometry_shaders) {
@@ -118,12 +140,12 @@ bool Start(const Device& device, Memory& memory, std::span<const vk::Format> sur
     return g_leaves.pipeline && g_leaf_shadows.pipeline;
 }
 
-void RecordGrass(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
-    if (header.grass == 0) {
+void RecordKernels(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
+    if (header.grass == 0 && header.branch_jobs == 0) {
         return;
     }
     const auto& dl = g_device->dispatch;
-    // The grid was just computed, and earlier frames wrote and drew the blades.
+    // The grid was just computed, and earlier frames wrote and drew the blades and the branches.
     const vk::MemoryBarrier2 before{
         .srcStageMask =
             vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eVertexShader,
@@ -133,17 +155,30 @@ void RecordGrass(vk::CommandBuffer cmd, const Scene::Header& header, u64 address
             vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite,
     };
     cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &before}, dl);
-    const KernelPush push{
-        .grass = address + Scene::GrassOffset,
-        .blades = g_blades.address,
-        .effectors = address + Scene::EffectorsOffset,
-        .grid = Deformers::GridAddress(),
-        .vertex_count = address + Scene::GrassCommandOffset,
-    };
-    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_kernel.pipeline, dl);
-    cmd.pushConstants(g_kernel.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(push), &push,
-                      dl);
-    cmd.dispatch(header.grass_groups, header.grass, 1, dl);
+    if (header.branch_jobs != 0) {
+        const BranchKernelPush push{
+            .jobs = address + Scene::BranchJobsOffset,
+            .effectors = address + Scene::EffectorsOffset,
+            .grid = Deformers::GridAddress(),
+        };
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_branch_kernel.pipeline, dl);
+        cmd.pushConstants(g_branch_kernel.layout, vk::ShaderStageFlagBits::eCompute, 0,
+                          sizeof(push), &push, dl);
+        cmd.dispatch(header.branch_groups, header.branch_jobs, 1, dl);
+    }
+    if (header.grass != 0) {
+        const KernelPush push{
+            .grass = address + Scene::GrassOffset,
+            .blades = g_blades.address,
+            .effectors = address + Scene::EffectorsOffset,
+            .grid = Deformers::GridAddress(),
+            .vertex_count = address + Scene::GrassCommandOffset,
+        };
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_kernel.pipeline, dl);
+        cmd.pushConstants(g_kernel.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(push),
+                          &push, dl);
+        cmd.dispatch(header.grass_groups, header.grass, 1, dl);
+    }
     const vk::MemoryBarrier2 after{
         .srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
         .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
@@ -164,6 +199,12 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, u64 addr
         };
         Bind(cmd, g_grass, &push, sizeof(push));
         cmd.drawIndirect(buffer, offset + Scene::GrassCommandOffset, 1,
+                         sizeof(Scene::VertexCommand), g_device->dispatch);
+    }
+    if (header.branches != 0) {
+        const u64 branches = address + Scene::BranchesOffset;
+        Bind(cmd, g_branches, &branches, sizeof(branches));
+        cmd.drawIndirect(buffer, offset + Scene::BranchCommandsOffset, header.branches,
                          sizeof(Scene::VertexCommand), g_device->dispatch);
     }
     if (!g_leaves.pipeline || header.leaf_commands == 0) {

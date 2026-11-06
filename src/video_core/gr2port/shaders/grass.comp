@@ -11,6 +11,7 @@
 
 #include "scene.glsl"
 #include "effectors.glsl"
+#include "turn.glsl"
 
 layout(local_size_x = 64) in;
 
@@ -41,18 +42,6 @@ float Acos(float x) {
     return acos(clamp(x, -1.0, 1.0));
 }
 
-// The turn by twice half_angle about an axis of any length; no turn about no axis.
-vec4 Turn(vec3 axis, float half_angle) {
-    const float length_squared = dot(axis, axis);
-    return length_squared > 0.0
-               ? vec4(axis * inversesqrt(length_squared) * sin(half_angle), cos(half_angle))
-               : vec4(0.0, 0.0, 0.0, 1.0);
-}
-
-vec3 Turned(vec3 v, vec4 turn) {
-    return v + 2.0 * cross(turn.xyz, cross(turn.xyz, v) + turn.w * v);
-}
-
 // Outside the game's clip box, or as far from the eye as blades go.
 bool Culled(vec3 p, mat4 world_view_projection, mat4 world_view, float clip_max) {
     const vec4 clip = world_view_projection * vec4(p, 1.0);
@@ -76,14 +65,8 @@ vec3 BentTip(uint index, vec3 root, vec3 tip) {
     along = Turned(along, Turn(cross(along, instances.instances[index].extra_force.xyz), lean));
     vec3 bent = world_root + blade_length * along;
 
-    const vec4 clip = instances.instances[index].world_view_projection * vec4(tip, 1.0);
-    const float depth = clip.z * instances.instances[index].cluster_scale;
-    const uvec3 cell =
-        min(uvec3(6.0 * clamp(0.5 * clip.x / clip.w + 0.5, 0.0, 1.0),
-                  6.0 * clamp(-0.5 * clip.y / clip.w + 0.5, 0.0, 1.0),
-                  10.0 * clamp(depth, 0.0, 1.0)),
-            uvec3(5u, 5u, 9u));
-    const uint list = ((cell.z * 6u + cell.y) * 6u + cell.x) * GridEntries;
+    const uint list = GridList(instances.instances[index].world_view_projection * vec4(tip, 1.0),
+                               instances.instances[index].cluster_scale);
     const uint spheres = effectors.count;
     for (uint entry = 0u; entry < spheres; entry++) {
         const uint sphere_index = grid.entries[list + entry];

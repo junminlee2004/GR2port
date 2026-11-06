@@ -1,0 +1,180 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's Branch kernel (0x1c1a8d0). Each invocation sways one segment of an instance's branches
+// and shakes it while effector spheres of its grid cell touch it, into the instance's copy of the
+// vertices. The workgroup's y is the instance.
+
+#version 460
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+#include "effectors.glsl"
+#include "turn.glsl"
+
+layout(local_size_x = 64) in;
+
+// Scene::BranchJob.
+struct BranchJob {
+    mat4 world;
+    mat4 world_inverse;
+    mat4 world_view_projection;
+    uint64_t source;
+    uint64_t destination;
+    uint64_t state;
+    uint segments;
+    float cycle;
+    float cluster_scale;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer BranchJobs {
+    BranchJob jobs[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer ControlPoints {
+    float values[];
+};
+
+// A timer, a phase and a word unused, per segment.
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer SegmentState {
+    float values[];
+};
+
+layout(push_constant) uniform Constants {
+    BranchJobs scene_jobs;
+    Effectors scene_effectors;
+    Grid scene_grid;
+};
+
+const uint PointFloats = 4u;
+const uint PatchPoints = 3u;
+const uint StateFloats = 3u;
+// The sphere mask's bit of the spheres that shake branches without stopping.
+const uint MaskSteady = 8u;
+const float QuietSway = 0.03;
+const float ShakenSway = 0.1;
+const float ShakeSeconds = 7.1;
+
+vec3 Point(Words words, uint point) {
+    const uint first = point * PointFloats;
+    return uintBitsToFloat(
+        uvec3(words.words[first], words.words[first + 1u], words.words[first + 2u]));
+}
+
+// Whether a segment from a to b passes through a sphere around a point.
+bool Touches(vec3 point, vec3 a, vec3 b, float radius_squared) {
+    const vec3 span = b - a;
+    const float span_squared = dot(span, span);
+    const vec3 to_point = point - a;
+    if (dot(to_point, to_point) <= radius_squared) {
+        return true;
+    }
+    if (span_squared < 1e-4) {
+        return false;
+    }
+    const vec3 from_point = b - point;
+    if (dot(from_point, from_point) <= radius_squared) {
+        return true;
+    }
+    const float t = dot(span, to_point) / span_squared;
+    if (t < 0.0 || t > 1.0) {
+        return false;
+    }
+    const vec3 gap = span * t - to_point;
+    return dot(gap, gap) <= radius_squared;
+}
+
+// 2 when a steady sphere of the list touches the segment, else 1 when another does, else 0. A
+// sphere also touches where its motion would carry it in five frames.
+uint Hit(uint list, vec3 a, vec3 b) {
+    Effectors effectors = scene_effectors;
+    Grid grid = scene_grid;
+    const uint spheres = effectors.count;
+    uint hit = 0u;
+    for (uint entry = 0u; entry < spheres; entry++) {
+        const uint sphere_index = grid.entries[list + entry];
+        if (sphere_index == 0xffffffffu) {
+            break;
+        }
+        const uvec4 sphere = effectors.spheres[2u * sphere_index];
+        const uvec4 motion = effectors.spheres[2u * sphere_index + 1u];
+        const bool steady = (motion.w & MaskSteady) != 0u;
+        if (!steady && hit != 0u) {
+            continue;
+        }
+        const vec3 center = uintBitsToFloat(sphere.xyz);
+        const vec3 ahead = center + 5.0 * (center - uintBitsToFloat(motion.xyz));
+        const float radius = unpackHalf2x16(sphere.w).x;
+        const float radius_squared = radius * radius;
+        if (Touches(center, a, b, radius_squared) || Touches(ahead, a, b, radius_squared)) {
+            if (steady) {
+                return 2u;
+            }
+            hit = 1u;
+        }
+    }
+    return hit;
+}
+
+void main() {
+    BranchJobs jobs = scene_jobs;
+    const uint index = gl_WorkGroupID.y;
+    const uint segment = gl_GlobalInvocationID.x;
+    if (segment >= jobs.jobs[index].segments) {
+        return;
+    }
+    Words source = Words(jobs.jobs[index].source +
+                         uint64_t(segment) * PatchPoints * PointFloats * 4u);
+    const vec3 base = Point(source, 0u);
+    const vec3 middle = Point(source, 1u);
+    const vec3 end = Point(source, 2u);
+    const mat4 world = jobs.jobs[index].world;
+    const vec3 world_base = (world * vec4(base, 1.0)).xyz;
+    const vec4 world_end = world * vec4(end, 1.0);
+    const vec3 span = world_end.xyz - world_base;
+    const float span_squared = dot(span, span);
+    if (span_squared == 0.0) {
+        return;
+    }
+    const uint hit = Hit(GridList(jobs.jobs[index].world_view_projection * vec4(end, 1.0),
+                                  jobs.jobs[index].cluster_scale),
+                         world_base, world_end.xyz);
+
+    SegmentState state = SegmentState(jobs.jobs[index].state);
+    const uint first_state = segment * StateFloats;
+    float timer = state.values[first_state];
+    float phase = state.values[first_state + 1u];
+    float sway = QuietSway;
+    if (hit == 2u) {
+        phase += 0.75;
+    } else if (timer >= 1.0) {
+        timer -= 1.0;
+        phase += 1.5;
+        sway = ShakenSway;
+    } else if (timer != 0.0) {
+        phase = 0.0;
+        timer = hit == 0u ? 0.0 : timer;
+    } else if (hit == 1u) {
+        timer = ShakeSeconds;
+        phase += 1.5;
+        sway = ShakenSway;
+    }
+    state.values[first_state] = timer;
+    state.values[first_state + 1u] = phase;
+
+    const float half_angle =
+        0.5 * sway * (1.0 + cos(base.x + phase + jobs.jobs[index].cycle + base.z));
+    const vec3 along = span * inversesqrt(span_squared);
+    const vec3 turned = Turned(along, Turn(vec3(0.0, along.z, -along.y), half_angle));
+    const vec3 new_end = (jobs.jobs[index].world_inverse *
+                          vec4(world_base + sqrt(span_squared) * turned, world_end.w))
+                             .xyz;
+    const vec3 new_middle = middle + 0.5 * (new_end - end);
+    ControlPoints points = ControlPoints(jobs.jobs[index].destination +
+                                         uint64_t(segment) * PatchPoints * PointFloats * 4u);
+    for (uint axis = 0u; axis < 3u; axis++) {
+        points.values[PointFloats + axis] = new_middle[axis];
+        points.values[2u * PointFloats + axis] = new_end[axis];
+    }
+}

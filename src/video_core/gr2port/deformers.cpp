@@ -172,15 +172,16 @@ u64 VertexBytes(const Meshes::Mesh& mesh) {
     return Aligned(mesh.vertex_bytes);
 }
 
-u64 StateBytes(const Meshes::Mesh& mesh) {
+u64 StateBytes(const Meshes::Mesh& mesh, u64 state_bytes) {
     return mesh.particle_count != 0
                ? Aligned(StateHeaderBytes + u64{mesh.particle_count} * ParticleStateBytes)
-               : 0;
+               : Aligned(state_bytes);
 }
 
 // Gives an instance its copy at once: the frame being captured can already use it, because the
 // render thread fills the copy before it runs that frame's jobs and draws.
-Copy Register(VAddr object, VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame) {
+Copy Register(VAddr object, VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame,
+              u64 extra_state_bytes) {
     if (Load<u16>(object + InstanceKind) != KindDeformed ||
         Load<VAddr>(object + InstanceShape) != shape || !SameLayout(vertex_buffer, shape, mesh)) {
         Stamp(object, UnsupportedStamp(shape));
@@ -188,7 +189,7 @@ Copy Register(VAddr object, VAddr vertex_buffer, VAddr shape, const Meshes::Mesh
         return {};
     }
     const u64 vertex_bytes = VertexBytes(mesh);
-    const u64 state_bytes = StateBytes(mesh);
+    const u64 state_bytes = StateBytes(mesh, extra_state_bytes);
     Range range{.size = vertex_bytes + state_bytes};
     std::scoped_lock lock{g_mutex};
     if (g_free.empty() && g_unused == Capacity) {
@@ -255,7 +256,7 @@ void Retire(u64 frame, u64 completed, u64 game_frame) {
 
 } // namespace
 
-Copy Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame) {
+Copy Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame, u64 state_bytes) {
     const VAddr object = vertex_buffer - InstanceVertexBuffer;
     const u32 handle = Load<u32>(object + InstanceHandle);
     if (handle < Capacity) {
@@ -268,7 +269,7 @@ Copy Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame) 
     } else if (handle == UnsupportedStamp(shape)) {
         return {};
     }
-    return Register(object, vertex_buffer, shape, mesh, frame);
+    return Register(object, vertex_buffer, shape, mesh, frame, state_bytes);
 }
 
 bool Start(const Device& device, Memory& memory) {
@@ -322,11 +323,11 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame) {
             continue;
         }
         Meshes::CopyVertices(cmd, mesh, g_arena.buffer, range.offset);
-        const u64 state_bytes = StateBytes(mesh);
+        const u64 state_bytes = range.size - VertexBytes(mesh);
         if (state_bytes != 0) {
             // No particle holds a position yet: the simulate pass resets them.
-            cmd.fillBuffer(g_arena.buffer, range.offset + VertexBytes(mesh), StateHeaderBytes, 0,
-                           dl);
+            cmd.fillBuffer(g_arena.buffer, range.offset + VertexBytes(mesh),
+                           mesh.particle_count != 0 ? StateHeaderBytes : state_bytes, 0, dl);
         }
         if (g_logged < LoggedInstances) {
             g_logged++;
@@ -353,7 +354,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
     const bool skins = header.skin_jobs != 0 && header.skin_jobs <= Scene::MaxSkinJobs;
     const bool cloth =
         header.soft_body_jobs != 0 && header.soft_body_jobs <= Scene::MaxSoftBodyJobs;
-    const bool grid = cloth || header.grass != 0;
+    const bool grid = cloth || header.grass != 0 || header.branch_jobs != 0;
     if (!skins && !grid) {
         return;
     }

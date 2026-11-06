@@ -263,6 +263,30 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Le
     Leaf leaves[];
 };
 
+// A branch ribbon: the game's branch constants of each stage, then the instance's vertices.
+struct Branch {
+    mat4 world_view_projection;
+    vec4 eye;
+    vec4 uv_range;
+    vec4 tip_color;
+    vec4 root_color;
+    uint64_t vertices;
+    uint stride;
+    uint segments;
+    uint texture;
+    float tip_width;
+    float root_width;
+    float alpha_reference;
+    float translucency;
+    float roughness;
+    float metallic;
+    float punch_through;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Branches {
+    Branch branches[];
+};
+
 // A grass instance: what the game's grass kernel reads, then what its draw reads.
 struct Grass {
     mat4 world;

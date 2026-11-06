@@ -44,6 +44,9 @@ inline constexpr u32 MaxGrass = 256;
 inline constexpr u32 MaxBlades = 131072;
 /// A blade in the renderer's buffer: root, fade, tip, instance. See shaders/scene.glsl.
 inline constexpr u32 BladeBytes = 32;
+/// Branch instances the kernel sways per packet, and branch ribbon draws.
+inline constexpr u32 MaxBranchJobs = 512;
+inline constexpr u32 MaxBranches = 512;
 /// The effector grid: 6 x 6 x 10 cells of the view, each listing up to 127 spheres and an end
 /// marker.
 inline constexpr u32 GridCells = 360;
@@ -182,6 +185,13 @@ struct Header {
     u32 grass;
     u32 grass_groups;
     u32 dropped_grass;
+    /// BranchJob records written, the workgroups in x of their kernel, and Branch records not run
+    /// (no mesh, copy or room); Branch records' ribbons written and ribbon items not drawn.
+    u32 branch_jobs;
+    u32 branch_groups;
+    u32 dropped_branch_jobs;
+    u32 branches;
+    u32 dropped_branches;
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
@@ -454,6 +464,52 @@ struct Leaf {
     u32 padding[3];
 };
 static_assert(sizeof(Leaf) == 304);
+
+/// A Branch instance the renderer's kernel sways as the game's does, in its copy of the vertices,
+/// from its shape's. The kernel writes the state, a timer and a phase per segment. Matrices are as
+/// in Draw.
+struct BranchJob {
+    float world[16];
+    float world_inverse[16];
+    float world_view_projection[16];
+    u64 source;
+    u64 destination;
+    u64 state;
+    u32 segments;
+    /// The sway's place in its cycle.
+    float cycle;
+    /// Clip depth to the effector grid's depth.
+    float cluster_scale;
+    u32 padding[3];
+};
+static_assert(sizeof(BranchJob) == 240);
+
+/// A branch ribbon: each three vertices are a quadratic Bezier curve, drawn as a ribbon of segments
+/// that faces the eye, as the game's branch programs build it. Matrices are as in Draw.
+struct Branch {
+    float world_view_projection[16];
+    /// In model space.
+    float eye[4];
+    /// The texture's offset in xy and its repeat in zw, across and along the ribbon.
+    float uv_range[4];
+    float tip_color[4];
+    float root_color[4];
+    /// The instance's copy of the vertices, or the shape's; RGB32 FLOAT positions at offset 0.
+    u64 vertices;
+    u32 stride;
+    u32 segments;
+    /// The texture's handle.
+    u32 texture;
+    float tip_width;
+    float root_width;
+    float alpha_reference;
+    float translucency;
+    float roughness;
+    float metallic;
+    /// The screen door's threshold.
+    float punch_through;
+};
+static_assert(sizeof(Branch) == 176);
 
 /// A grass instance, whose tufts the renderer's kernel grows into blades as the game's grass
 /// kernels do, and which its draw shades as the game's grass programs do. Matrices are as in Draw.
@@ -747,7 +803,10 @@ inline constexpr u64 LayerMaterialsOffset =
 inline constexpr u64 GrassOffset = LayerMaterialsOffset + MaxLayerMaterials * sizeof(LayerMaterial);
 /// The one draw of all blades. The renderer's kernel counts its vertices.
 inline constexpr u64 GrassCommandOffset = GrassOffset + MaxGrass * sizeof(Grass);
-inline constexpr u64 PacketBytes = GrassCommandOffset + sizeof(VertexCommand);
+inline constexpr u64 BranchJobsOffset = GrassCommandOffset + 16;
+inline constexpr u64 BranchesOffset = BranchJobsOffset + MaxBranchJobs * sizeof(BranchJob);
+inline constexpr u64 BranchCommandsOffset = BranchesOffset + MaxBranches * sizeof(Branch);
+inline constexpr u64 PacketBytes = BranchCommandsOffset + MaxBranches * sizeof(VertexCommand);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -755,6 +814,8 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               GradeOffset % 16 == 0 && LightOffset % 16 == 0 && FogOffset % 16 == 0 &&
               MaterialsOffset % 16 == 0 && CharactersOffset % 16 == 0 && ContoursOffset % 16 == 0 &&
               LeavesOffset % 16 == 0 && LeafCommandsOffset % 16 == 0 &&
-              LayerMaterialsOffset % 16 == 0 && GrassOffset % 16 == 0);
+              LayerMaterialsOffset % 16 == 0 && GrassOffset % 16 == 0 &&
+              GrassCommandOffset % 16 == 0 && BranchJobsOffset % 16 == 0 &&
+              BranchesOffset % 16 == 0 && BranchCommandsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

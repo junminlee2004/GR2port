@@ -27,8 +27,9 @@ namespace Gr2Port::Deformers {
 inline constexpr u32 Capacity = 4096;
 
 /// The renderer's copy of a deformed instance: the device addresses of its vertex data and, when
-/// its shape has cloth, of its particles' state (a u32 the write pass sets once the particles
-/// hold positions, padding to 32 bytes, then a float4 position and previous position each).
+/// it has any, of its state. A shape with cloth holds its particles' state there (a u32 the write
+/// pass sets once the particles hold positions, padding to 32 bytes, then a float4 position and
+/// previous position each).
 struct Copy {
     u64 vertices = 0;
     u64 state = 0;
@@ -37,8 +38,9 @@ struct Copy {
 /// Capture thread: the renderer's copy of the deformed instance whose vertex buffer object is at
 /// vertex_buffer, a copy of mesh's shape, usable from the frame being captured; zeros when the
 /// buffer has no room or the instance's layout is not its shape's. The capture's frame marks the
-/// instance used.
-Copy Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame);
+/// instance used. A shape without cloth gets state_bytes of zeroed state with its first copy.
+Copy Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame,
+         u64 state_bytes = 0);
 
 /// Render thread: creates the deformer pipelines, the buffer the copies share and the effector
 /// grid.
@@ -53,7 +55,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame);
 /// in the game's order, and makes the copies visible to vertex shaders. The packet is at address.
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address);
 
-/// The device address of the effector grid that Record fills for a packet with cloth or grass.
+/// The device address of the effector grid that Record fills for a packet with cloth or vegetation.
 u64 GridAddress();
 
 struct Stats {

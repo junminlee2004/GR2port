@@ -25,3 +25,12 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Ef
 layout(buffer_reference, std430, buffer_reference_align = 4) buffer Grid {
     uint entries[];
 };
+
+// The first entry of the grid cell that holds a point of the game's clip space.
+uint GridList(vec4 clip, float cluster_scale) {
+    const uvec3 cell = min(uvec3(6.0 * clamp(0.5 * clip.x / clip.w + 0.5, 0.0, 1.0),
+                                 6.0 * clamp(-0.5 * clip.y / clip.w + 0.5, 0.0, 1.0),
+                                 10.0 * clamp(clip.z * cluster_scale, 0.0, 1.0)),
+                           uvec3(5u, 5u, 9u));
+    return ((cell.z * 6u + cell.y) * 6u + cell.x) * GridEntries;
+}
