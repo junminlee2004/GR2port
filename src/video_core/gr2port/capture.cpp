@@ -291,6 +291,7 @@ struct Category {
     u64 decal = None;
     bool main_material = false;
     bool character = false;
+    bool interior = false;
 };
 constexpr Category MainCategory{15, 0x60, 0x38, 0x68, 0x00, 0x20, None, true}; // G2_BG_Main
 // The world's other opaque categories, drawn into the surfaces after G2_BG_Main.
@@ -304,6 +305,12 @@ constexpr std::array<Category, 6> WorldCategories{{
 }};
 // G2_CH_Main: colour texture t1, decal texture t6.
 constexpr Category CharacterCategory{8, 0x68, 0x30, 0x70, 0xa0, None, 0x50, false, true};
+// G2_CH_Interior: its vertex constants are World and WorldViewProj; its pixel constants take 0xb0
+// bytes; the texture objects of its two cube maps are at +0x30 and +0x38.
+constexpr Category InteriorCategory{13, 0x40, None, 0x48, None, None, None, false, false, true};
+constexpr u64 InteriorCube0 = 0x30;
+constexpr u64 InteriorCube1 = 0x38;
+constexpr u64 InteriorPixelBytes = 0xb0;
 // G2_CH_Contour: the constants of its vertex, geometry and pixel programs. The submesh holds the
 // range of its adjacency indices at +0x50, when it has more than 2 ranges.
 constexpr u32 ContourCategory = 11;
@@ -506,10 +513,19 @@ public:
             }
             material_index = AddCharacter(item, constants, material);
         }
+        if (category.interior) {
+            if (material == 0 || header.characters == Scene::MaxCharacters) {
+                header.dropped_characters += material != 0;
+                header.dropped++;
+                return;
+            }
+            material_index = AddInterior(item, material);
+        }
         const Scene::DrawList list =
-            category.character ? Scene::DrawList::Character
-            : alpha_tested     ? (culled ? Scene::DrawList::AlphaCulled : Scene::DrawList::Alpha)
-                               : (culled ? Scene::DrawList::OpaqueCulled : Scene::DrawList::Opaque);
+            category.interior    ? Scene::DrawList::Interior
+            : category.character ? Scene::DrawList::Character
+            : alpha_tested       ? (culled ? Scene::DrawList::AlphaCulled : Scene::DrawList::Alpha)
+                           : (culled ? Scene::DrawList::OpaqueCulled : Scene::DrawList::Opaque);
         const u32 i = header.draws++;
         // The fields are written in order: the packet is write-combined.
         Scene::Draw& draw = draws[i];
@@ -897,6 +913,23 @@ private:
         out.normal_map = handle(CharacterNormalMap);
         out.reflection = handle(CharacterReflection);
         out.detail = handle(CharacterDetail);
+        return ++header.characters;
+    }
+
+    // Writes a G2_CH_Interior item's constants and cube maps to a Character and returns its index
+    // plus 1. A cube map not converted yet has handle 0.
+    u32 AddInterior(VAddr item, VAddr pixel_constants) {
+        const auto cube = [item](u64 field) {
+            const VAddr object = Load<VAddr>(item + field);
+            return object != 0 ? Textures::GetCube(object) : 0;
+        };
+        // The fields are written in order: the packet is write-combined.
+        Scene::Character& out = characters[header.characters];
+        std::memcpy(out.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
+                    InteriorPixelBytes);
+        out.bend_bias = 0.0f;
+        out.normal_map = cube(InteriorCube0);
+        out.reflection = cube(InteriorCube1);
         return ++header.characters;
     }
 
@@ -1423,6 +1456,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     }
     writer.EndPart(Scene::CapturePart::World);
     add_category(CharacterCategory);
+    add_category(InteriorCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + ContourCategory * 4), ContourVertexConstants,
                 None, keyed(ContourCategory), [&](VAddr item) { writer.AddContour(item); });
     writer.CopyCommands();

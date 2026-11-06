@@ -156,6 +156,23 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Ch
     Character characters[];
 };
 
+const uint CharacterBytes = 656u;
+
+// The start of a G2_CH_Interior draw's Character: the game's pixel constants.
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer InteriorConstants {
+    mat4 rotation;
+    vec4 view;
+    vec4 center;
+    vec4 reflectance;
+    // xyz scale the cube map's colour by 1 + xyz in a band of its alpha around w.
+    vec4 band[2];
+    vec3 fresnel_floor;
+    float roughness;
+    float fresnel_bias;
+    float fresnel_scale;
+    float size_squared[2];
+};
+
 // A character's outline: the game's G2_CH_Contour constants of each stage, then its mesh.
 struct Contour {
     mat4 world_view;

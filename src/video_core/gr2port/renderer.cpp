@@ -36,6 +36,7 @@
 #include "video_core/gr2port/shaders/character_depth_frag.h"
 #include "video_core/gr2port/shaders/character_frag.h"
 #include "video_core/gr2port/shaders/character_vert.h"
+#include "video_core/gr2port/shaders/interior_frag.h"
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
@@ -162,7 +163,7 @@ private:
     void LogShadows(const Scene::Header& header, const SceneRing::Packet& packet);
     void LogDecals(const Scene::Header& header, const SceneRing::Packet& packet);
     void LogLight(const SceneRing::Packet& packet);
-    void DrawCharacters(vk::CommandBuffer cmd, const Pipeline& pipeline,
+    void DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const Pipeline& pipeline,
                         std::span<const vk::DescriptorSet> sets, const Scene::Header& header,
                         const SceneRing::Packet& packet, u64 offset);
     void RecordSnapshot(vk::CommandBuffer cmd, vk::Image image);
@@ -181,6 +182,8 @@ private:
     Image character_depth;
     Pipeline character_pipeline;
     Pipeline character_depth_pipeline;
+    Pipeline interior_pipeline;
+    Pipeline interior_depth_pipeline;
     u32 next = 0;
     // The number of the next frame to submit; frames up to frame - FramesInFlight are done once
     // the frame's slot is free.
@@ -282,7 +285,30 @@ bool Thread::Init() {
                                       .push_constant_bytes = sizeof(CharacterPush),
                                       .set_layouts = depth_set_layouts,
                                   });
-    if (!character_pipeline.pipeline || !character_depth_pipeline.pipeline) {
+    interior_pipeline =
+        CreateGraphicsPipeline(d, {
+                                      .vertex = CHARACTER_VERT,
+                                      .fragment = INTERIOR_FRAG,
+                                      .color = Look::SceneFormat,
+                                      .depth = DepthFormat,
+                                      .cull = vk::CullModeFlagBits::eBack,
+                                      .depth_test = true,
+                                      .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                      .push_constant_bytes = sizeof(CharacterPush),
+                                      .set_layouts = set_layouts,
+                                  });
+    interior_depth_pipeline =
+        CreateGraphicsPipeline(d, {
+                                      .vertex = CHARACTER_VERT,
+                                      .depth = DepthFormat,
+                                      .cull = vk::CullModeFlagBits::eBack,
+                                      .depth_test = true,
+                                      .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                      .push_constant_bytes = sizeof(CharacterPush),
+                                      .set_layouts = depth_set_layouts,
+                                  });
+    if (!character_pipeline.pipeline || !character_depth_pipeline.pipeline ||
+        !interior_pipeline.pipeline || !interior_depth_pipeline.pipeline) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -313,13 +339,14 @@ bool Thread::Recreate() {
     return !needs_swapchain;
 }
 
-// Inside a rendering at the swapchain's size: draws the packet's character draws with pipeline.
-void Thread::DrawCharacters(vk::CommandBuffer cmd, const Pipeline& pipeline,
+// Inside a rendering at the swapchain's size: draws the packet's draws of a character list with
+// pipeline.
+void Thread::DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const Pipeline& pipeline,
                             std::span<const vk::DescriptorSet> sets, const Scene::Header& header,
                             const SceneRing::Packet& packet, u64 offset) {
     const auto& dl = d.dispatch;
-    const u32 character_draws = header.draw_commands[static_cast<u32>(Scene::DrawList::Character)];
-    if (character_draws == 0) {
+    const u32 count = header.draw_commands[static_cast<u32>(list)];
+    if (count == 0) {
         return;
     }
     const vk::Extent2D extent = swapchain->Extent();
@@ -350,9 +377,8 @@ void Thread::DrawCharacters(vk::CommandBuffer cmd, const Pipeline& pipeline,
     cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
     cmd.drawIndexedIndirect(scene_ring.buffer,
                             offset + Scene::CommandsOffset +
-                                u64{Scene::FirstCommand(header, Scene::DrawList::Character)} *
-                                    sizeof(Scene::Command),
-                            character_draws, sizeof(Scene::Command), dl);
+                                u64{Scene::FirstCommand(header, list)} * sizeof(Scene::Command),
+                            count, sizeof(Scene::Command), dl);
 }
 
 void Thread::ReadTimes(u32 slot_index) {
@@ -649,8 +675,11 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                             .layerCount = 1,
                             .pDepthAttachment = &characters},
                            dl);
-        DrawCharacters(cmd, character_depth_pipeline, std::array{Textures::Set()}, header, packet,
-                       offset);
+        const std::array depth_sets{Textures::Set()};
+        DrawCharacters(cmd, Scene::DrawList::Character, character_depth_pipeline, depth_sets,
+                       header, packet, offset);
+        DrawCharacters(cmd, Scene::DrawList::Interior, interior_depth_pipeline, depth_sets, header,
+                       packet, offset);
         cmd.endRendering(dl);
         Barrier(d, cmd, character_depth.image, vk::ImageLayout::eDepthStencilAttachmentOptimal,
                 vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
@@ -728,8 +757,11 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     };
     cmd.beginRendering(rendering, dl);
     if (drawn) {
-        DrawCharacters(cmd, character_pipeline, std::array{Textures::Set(), Shadows::Set()}, header,
-                       packet, offset);
+        const std::array sets{Textures::Set(), Shadows::Set()};
+        DrawCharacters(cmd, Scene::DrawList::Character, character_pipeline, sets, header, packet,
+                       offset);
+        DrawCharacters(cmd, Scene::DrawList::Interior, interior_pipeline, sets, header, packet,
+                       offset);
     }
     if (header.sky != 0) {
         Look::RecordSky(cmd, packet.address);

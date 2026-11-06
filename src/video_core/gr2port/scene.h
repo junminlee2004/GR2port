@@ -65,6 +65,10 @@ enum class DrawList : u32 {
     Alpha,
     /// Character draws.
     Character,
+    /// G2_CH_Interior draws. world_view holds their world matrix. material names a Character whose
+    /// pixel_constants start with the game's 44 words, with their cube maps in normal_map and
+    /// reflection and a bend_bias of 0.
+    Interior,
     Count,
 };
 
