@@ -117,9 +117,9 @@ void main() {
     if (color.a < color_scale.w) {
         discard;
     }
-    // A screen door fades the surface in.
+    // A screen door fades the surface in. The game's depth runs the other way from this one.
     const float seed = 256.0 * (0.0771356 * gl_FragCoord.x + 0.00888381 * gl_FragCoord.y) *
-                           gl_FragCoord.z +
+                           (1.0 - gl_FragCoord.z) +
                        1e-7;
     if (table.materials[index].punch_through < fract(fract(123456792.0 / seed) * seed)) {
         discard;
