@@ -43,6 +43,10 @@ constexpr u64 RetireFrames = 600;
 // device's memory; a copy starts at a multiple of CopyAlignment.
 constexpr u64 ArenaBytes = 16_MB;
 constexpr u64 CopyAlignment = 256;
+// A cloth instance's state follows its vertex data: a header, then a position and previous
+// position per particle.
+constexpr u64 StateHeaderBytes = 32;
+constexpr u64 ParticleStateBytes = 32;
 constexpr u32 LoggedInstances = 4;
 static_assert(Capacity <= 0x80000000u);
 
@@ -51,6 +55,10 @@ T Load(VAddr address) {
     T value;
     std::memcpy(&value, reinterpret_cast<const void*>(address), sizeof(T));
     return value;
+}
+
+u64 Aligned(u64 bytes) {
+    return (bytes + CopyAlignment - 1) & ~(CopyAlignment - 1);
 }
 
 void Stamp(VAddr object, u32 value) {
@@ -72,7 +80,7 @@ struct Instance {
     // Written by the capture before it publishes object.
     const Meshes::Mesh* mesh = nullptr;
     // Written by the render thread before it publishes ready.
-    u64 address = 0;
+    Copy copy;
 };
 
 // Guards the handle lists.
@@ -94,11 +102,11 @@ Pipeline g_skin;
 Buffer g_arena;
 // Free ranges of the arena: offset to size.
 std::map<u64, u64> g_free_ranges;
-struct Copy {
+struct Range {
     u64 offset = 0;
     u64 size = 0;
 };
-std::array<Copy, Capacity> g_copies;
+std::array<Range, Capacity> g_ranges;
 std::vector<u32> g_live;
 std::vector<u32> g_waiting;
 std::vector<Retiring> g_retiring;
@@ -207,11 +215,11 @@ void Retire(u64 frame, u64 completed, u64 game_frame) {
         if (completed < r.frame) {
             return false;
         }
-        Copy& copy = g_copies[r.handle];
-        g_stats.resident_bytes -= copy.size;
+        Range& range = g_ranges[r.handle];
+        g_stats.resident_bytes -= range.size;
         g_stats.instances--;
-        Release(copy.offset, copy.size);
-        copy = {};
+        Release(range.offset, range.size);
+        range = {};
         std::scoped_lock lock{g_mutex};
         g_free.push_back(r.handle);
         return true;
@@ -220,7 +228,7 @@ void Retire(u64 frame, u64 completed, u64 game_frame) {
 
 } // namespace
 
-u64 Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame) {
+Copy Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame) {
     const VAddr object = vertex_buffer - InstanceVertexBuffer;
     const u32 handle = Load<u32>(object + InstanceHandle);
     if (handle < Capacity) {
@@ -228,13 +236,13 @@ u64 Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame) {
         if (instance.object.load(std::memory_order_acquire) == object &&
             instance.shape.load(std::memory_order_relaxed) == shape) {
             instance.used.store(frame, std::memory_order_relaxed);
-            return instance.ready.load(std::memory_order_acquire) ? instance.address : 0;
+            return instance.ready.load(std::memory_order_acquire) ? instance.copy : Copy{};
         }
     } else if (handle == UnsupportedStamp(shape)) {
-        return 0;
+        return {};
     }
     Register(object, vertex_buffer, shape, mesh, frame);
-    return 0;
+    return {};
 }
 
 bool Start(const Device& device, Memory& memory) {
@@ -267,8 +275,13 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame) {
             Free(handle);
             return true;
         }
-        Copy copy{.size = (u64{mesh.vertex_bytes} + CopyAlignment - 1) & ~(CopyAlignment - 1)};
-        if (!Allocate(copy.size, copy.offset)) {
+        const u64 vertex_bytes = Aligned(mesh.vertex_bytes);
+        const u64 state_bytes =
+            mesh.particle_count != 0
+                ? Aligned(StateHeaderBytes + u64{mesh.particle_count} * ParticleStateBytes)
+                : 0;
+        Range range{.size = vertex_bytes + state_bytes};
+        if (!Allocate(range.size, range.offset)) {
             return false;
         }
         if (created.empty()) {
@@ -281,7 +294,11 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame) {
             };
             cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &uploaded}, dl);
         }
-        Meshes::CopyVertices(cmd, mesh, g_arena.buffer, copy.offset);
+        Meshes::CopyVertices(cmd, mesh, g_arena.buffer, range.offset);
+        if (state_bytes != 0) {
+            // No particle holds a position yet: the simulate pass resets them.
+            cmd.fillBuffer(g_arena.buffer, range.offset + vertex_bytes, StateHeaderBytes, 0, dl);
+        }
         if (g_logged < LoggedInstances) {
             g_logged++;
             LOG_INFO(Render_Vulkan,
@@ -290,10 +307,14 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame) {
                      instance.shape.load(std::memory_order_relaxed), mesh.vertex_bytes,
                      mesh.stride);
         }
-        instance.address = g_arena.address + copy.offset;
-        g_copies[handle] = copy;
+        const u64 address = g_arena.address + range.offset;
+        instance.copy = {
+            .vertices = address,
+            .state = state_bytes != 0 ? address + vertex_bytes : 0,
+        };
+        g_ranges[handle] = range;
         g_stats.instances++;
-        g_stats.resident_bytes += copy.size;
+        g_stats.resident_bytes += range.size;
         created.push_back(handle);
         return true;
     });
@@ -302,7 +323,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame) {
         return;
     }
     const vk::MemoryBarrier2 copied{
-        .srcStageMask = vk::PipelineStageFlagBits2::eCopy,
+        .srcStageMask = vk::PipelineStageFlagBits2::eCopy | vk::PipelineStageFlagBits2::eClear,
         .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
         .dstStageMask =
             vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eVertexShader,

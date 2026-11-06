@@ -188,7 +188,7 @@ public:
         const VAddr vertex_buffer = Load<VAddr>(item + ItemVertexBuffer);
         if (vertex_buffer != shape + ShapeVertexBuffer) {
             // The game's compute has deformed the vertices; the renderer's copy holds its own.
-            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame);
+            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame).vertices;
             if (vertices == 0) {
                 header.deformed_waiting++;
                 return;
@@ -282,7 +282,7 @@ public:
         u64 vertices = mesh->vertices;
         const VAddr vertex_buffer = Load<VAddr>(item + ItemVertexBuffer);
         if (vertex_buffer != shape + ShapeVertexBuffer) {
-            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame);
+            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame).vertices;
             if (vertices == 0) {
                 header.dropped_casters++;
                 return;
@@ -360,7 +360,7 @@ public:
             header.dropped_skins++;
             return;
         }
-        const u64 output = Deformers::Get(vertex_buffer, shape, *mesh, frame);
+        const u64 output = Deformers::Get(vertex_buffer, shape, *mesh, frame).vertices;
         u64 palette_address = 0;
         if (output == 0 || !CopyPalette(palette, bones, palette_address)) {
             header.dropped_skins++;

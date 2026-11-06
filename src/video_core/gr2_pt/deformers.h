@@ -26,11 +26,18 @@ namespace Gr2Pt::Deformers {
 
 inline constexpr u32 Capacity = 4096;
 
-/// Capture thread: the device address of the renderer's copy of the deformed instance whose
-/// vertex buffer object is at vertex_buffer, a copy of mesh's shape; 0 while the copy is not
-/// ready or when the instance's layout is not its shape's. The capture's frame marks the
-/// instance used.
-u64 Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame);
+/// The renderer's copy of a deformed instance: the device addresses of its vertex data and, when
+/// its shape has cloth, of its particles' state (a u32 the write pass sets once the particles
+/// hold positions, padding to 32 bytes, then a float4 position and previous position each).
+struct Copy {
+    u64 vertices = 0;
+    u64 state = 0;
+};
+
+/// Capture thread: the renderer's copy of the deformed instance whose vertex buffer object is at
+/// vertex_buffer, a copy of mesh's shape; zeros while the copy is not ready or when the
+/// instance's layout is not its shape's. The capture's frame marks the instance used.
+Copy Get(VAddr vertex_buffer, VAddr shape, const Meshes::Mesh& mesh, u64 frame);
 
 /// Render thread: creates the skinning pipeline and the buffer the copies share.
 bool Start(const Device& device, Memory& memory);
