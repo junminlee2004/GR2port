@@ -53,6 +53,9 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed, u64 game_frame);
 /// in the game's order, and makes the copies visible to vertex shaders. The packet is at address.
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address);
 
+/// The device address of the effector grid that Record fills for a packet with cloth or grass.
+u64 GridAddress();
+
 struct Stats {
     /// Instances with a copy, and the bytes of the copies.
     u32 instances;

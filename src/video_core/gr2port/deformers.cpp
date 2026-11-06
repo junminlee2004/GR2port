@@ -353,7 +353,8 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
     const bool skins = header.skin_jobs != 0 && header.skin_jobs <= Scene::MaxSkinJobs;
     const bool cloth =
         header.soft_body_jobs != 0 && header.soft_body_jobs <= Scene::MaxSoftBodyJobs;
-    if (!skins && !cloth) {
+    const bool grid = cloth || header.grass != 0;
+    if (!skins && !grid) {
         return;
     }
     const auto& dl = g_device->dispatch;
@@ -382,7 +383,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
         cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(cloth_push),
                           cloth_push.data(), dl);
     };
-    if (cloth) {
+    if (grid) {
         bind(g_effector);
         cmd.dispatch(1, 1, GridSlices, dl);
     }
@@ -408,6 +409,10 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
         .dstAccessMask = vk::AccessFlagBits2::eShaderStorageRead,
     };
     cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &skinned}, dl);
+}
+
+u64 GridAddress() {
+    return g_grid.address;
 }
 
 Stats TakeStats() {

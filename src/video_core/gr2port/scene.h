@@ -39,6 +39,11 @@ inline constexpr u32 MaxOccluders = 64;
 inline constexpr u32 MaxLeaves = 2048;
 /// World draws of four mixed layers per packet.
 inline constexpr u32 MaxLayerMaterials = 1024;
+/// Grass instances per packet, and the blades of all of them, the limit of the game's kernel.
+inline constexpr u32 MaxGrass = 256;
+inline constexpr u32 MaxBlades = 131072;
+/// A blade in the renderer's buffer: root, fade, tip, instance. See shaders/scene.glsl.
+inline constexpr u32 BladeBytes = 32;
 /// The effector grid: 6 x 6 x 10 cells of the view, each listing up to 127 spheres and an end
 /// marker.
 inline constexpr u32 GridCells = 360;
@@ -172,6 +177,11 @@ struct Header {
     u32 dropped_leaves;
     /// LayerMaterial records written; past MaxLayerMaterials draws count in dropped_materials.
     u32 layer_materials;
+    /// Grass records written, the workgroups in x of their kernel, and grass items not drawn (no
+    /// record, mesh, texture or room).
+    u32 grass;
+    u32 grass_groups;
+    u32 dropped_grass;
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
@@ -445,6 +455,57 @@ struct Leaf {
 };
 static_assert(sizeof(Leaf) == 304);
 
+/// A grass instance, whose tufts the renderer's kernel grows into blades as the game's grass
+/// kernels do, and which its draw shades as the game's grass programs do. Matrices are as in Draw.
+struct Grass {
+    float world[16];
+    float world_inverse[16];
+    float world_view[16];
+    /// By the view's own clip matrix, as the kernels read it.
+    float world_view_projection[16];
+    /// A direction, and in w the instance's speed: blades lean around the axis across it.
+    float extra_force[4];
+    /// The device address of the tufts: 64 bytes each, in the shape's vertices.
+    u64 tufts;
+    u32 tuft_count;
+    /// The eye's distance where blades start to thin and where they end.
+    float clip_min;
+    float clip_max;
+    /// The game's blade shape: how far blades scatter from their tuft's direction, how far from
+    /// its root, how they sink with that, and how far they may lean from up.
+    float coherency;
+    float range_min;
+    float range_max;
+    float height_offset;
+    float offset_curve;
+    float normal_lerp;
+    float normal_limit;
+    /// Clip depth to the effector grid's depth.
+    float cluster_scale;
+    /// The wind's place in its cycle.
+    float phase;
+    u32 padding[2];
+    /// As the draw reads it.
+    float draw_world_view_projection[16];
+    /// In model space.
+    float eye[4];
+    float tip_color[4];
+    float root_color[4];
+    float width;
+    float alpha_reference;
+    float translucency;
+    float roughness;
+    float metallic;
+    /// The screen door's threshold.
+    float punch_through;
+    float normal_scale;
+    /// Texture handles. A normal map of 0 means the draw has none.
+    u32 color_map;
+    u32 normal_map;
+    u32 draw_padding[3];
+};
+static_assert(sizeof(Grass) == 496);
+
 /// The frame's sky, as the game's sky pixel programs read it. Rays run in the sky's space, which
 /// the view's sky rotation sets. Matrices are as in Draw.
 struct Sky {
@@ -683,7 +744,10 @@ inline constexpr u64 LeafShadowCommandsOffset =
     LeafCommandsOffset + MaxLeaves * sizeof(VertexCommand);
 inline constexpr u64 LayerMaterialsOffset =
     LeafShadowCommandsOffset + Cascades * MaxLeaves * sizeof(VertexCommand);
-inline constexpr u64 PacketBytes = LayerMaterialsOffset + MaxLayerMaterials * sizeof(LayerMaterial);
+inline constexpr u64 GrassOffset = LayerMaterialsOffset + MaxLayerMaterials * sizeof(LayerMaterial);
+/// The one draw of all blades. The renderer's kernel counts its vertices.
+inline constexpr u64 GrassCommandOffset = GrassOffset + MaxGrass * sizeof(Grass);
+inline constexpr u64 PacketBytes = GrassCommandOffset + sizeof(VertexCommand);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -691,6 +755,6 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               GradeOffset % 16 == 0 && LightOffset % 16 == 0 && FogOffset % 16 == 0 &&
               MaterialsOffset % 16 == 0 && CharactersOffset % 16 == 0 && ContoursOffset % 16 == 0 &&
               LeavesOffset % 16 == 0 && LeafCommandsOffset % 16 == 0 &&
-              LayerMaterialsOffset % 16 == 0);
+              LayerMaterialsOffset % 16 == 0 && GrassOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

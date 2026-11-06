@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <span>
 #include <utility>
 
 #include "video_core/gr2port/capture.h"
@@ -413,6 +414,37 @@ constexpr u64 LeafShadowWorld = 0x40;
 constexpr u64 LeafShadowShape = 0xc0;
 constexpr u32 LeafShapeValues = 5;
 constexpr u32 LeafPixelCount = 5;
+// Grass, deformer kind 5: a record holds its shape +0x38, the indirect arguments object it shares
+// with its item +0x50 and its kernel's constants +0x58: World and its inverse, the extra force
+// +0x100, the vertex count +0x110, the clip range +0x118 and the blade shape from +0x124.
+constexpr u32 KindGrass = 5;
+constexpr u64 GrassRecordShape = 0x38;
+constexpr u64 GrassRecordArguments = 0x50;
+constexpr u64 GrassRecordConstants = 0x58;
+constexpr u64 GrassExtraForce = 0x100;
+constexpr u64 GrassVertexCount = 0x110;
+constexpr u64 GrassClipRange = 0x118;
+constexpr u64 GrassShapeValues = 0x124;
+constexpr u32 GrassShapeValueCount = 7;
+constexpr u32 GrassVertexBytes = 32;
+constexpr u32 GrassGroupSize = 64;
+// The game advances an instance's wind while it moves faster than this.
+constexpr float GrassMovingForce = 1.5f;
+constexpr float FullTurn = 6.2831855f;
+// A grass item: the indirect arguments object +0x30, the texture objects of its colour +0x38 and
+// normal map +0x40, the constants of its geometry program +0x48 {WVP, the last frame's WVP, eye
+// +0x80, width +0x90} and of its pixel program +0x50 {tip colour, root colour, alpha reference,
+// translucency, roughness, metallic, screen door, normal scale}.
+constexpr u32 GrassCategory = 31;
+constexpr u64 GrassArguments = 0x30;
+constexpr u64 GrassColor = 0x38;
+constexpr u64 GrassNormal = 0x40;
+constexpr u64 GrassGeometryConstants = 0x48;
+constexpr u64 GrassPixelConstants = 0x50;
+constexpr u64 GrassEye = 0x80;
+constexpr u64 GrassWidth = 0x90;
+constexpr u64 GrassPixelValues = 0x20;
+constexpr u32 GrassPixelCount = 6;
 constexpr u32 PatchVertices = 3;
 // CH_Main's vertex constants hold the decals' positions and targets, then their scales, which are
 // 0 when a material has no decals. Its pixel constants hold GradationColor and the alpha step flag.
@@ -439,6 +471,9 @@ alignas(64) std::array<Scene::Command, Scene::MaxContours> g_contour_commands;
 alignas(64) std::array<Scene::VertexCommand, Scene::MaxLeaves> g_leaf_commands;
 alignas(
     64) std::array<Scene::VertexCommand, Scene::Cascades * Scene::MaxLeaves> g_leaf_shadow_commands;
+// The wind's place in its cycle. The game keeps one per instance; only its rate shows, and only on
+// instances that move fast.
+float g_grass_phase = 0.0f;
 
 // The simulate constants the game's SoftBody pass sets on its draw thread after the capture: the
 // grid matrix (the view's clip matrix with z over GridFar + n), the sphere count and the depth
@@ -455,6 +490,30 @@ T Load(VAddr address) {
     std::memcpy(&value, reinterpret_cast<const void*>(address), sizeof(T));
     return value;
 }
+
+using Matrix = std::array<float, 16>;
+
+// a * b for the game's row-major matrices.
+Matrix Multiply(const Matrix& a, const Matrix& b) {
+    Matrix result{};
+    for (u32 row = 0; row < 4; row++) {
+        for (u32 column = 0; column < 4; column++) {
+            for (u32 i = 0; i < 4; i++) {
+                result[row * 4 + column] += a[row * 4 + i] * b[i * 4 + column];
+            }
+        }
+    }
+    return result;
+}
+
+// What the game's grass pass sets on its draw thread after the capture: the view and clip matrices
+// that a grass instance's constants multiply, and the clip depth's scale to the effector grid.
+struct GrassView {
+    Matrix view;
+    Matrix view_projection;
+    float cluster_scale;
+    float time_step;
+};
 
 // Writes the draws of a packet. The packet's memory is write-combined, where reads are slow:
 // the writer only stores to it, and counts in its own members.
@@ -475,7 +534,8 @@ public:
           contours{reinterpret_cast<Scene::Contour*>(packet + Scene::ContoursOffset)},
           leaves{reinterpret_cast<Scene::Leaf*>(packet + Scene::LeavesOffset)},
           layer_materials{
-              reinterpret_cast<Scene::LayerMaterial*>(packet + Scene::LayerMaterialsOffset)} {}
+              reinterpret_cast<Scene::LayerMaterial*>(packet + Scene::LayerMaterialsOffset)},
+          grass{reinterpret_cast<Scene::Grass*>(packet + Scene::GrassOffset)} {}
 
     // Ends a part of the capture's time.
     void EndPart(Scene::CapturePart part) {
@@ -512,6 +572,10 @@ public:
                             c * Scene::MaxLeaves * VertexBytes,
                         g_leaf_shadow_commands.data() + c * Scene::MaxLeaves,
                         header.leaf_shadow_commands[c] * VertexBytes);
+        }
+        if (header.grass != 0) {
+            const Scene::VertexCommand grass_command{.instance_count = 1};
+            std::memcpy(packet + Scene::GrassCommandOffset, &grass_command, sizeof(grass_command));
         }
     }
 
@@ -813,6 +877,83 @@ public:
                 .first_instance = i,
             };
         }
+    }
+
+    // Remembers a Grass deformer record for the item that shares its indirect arguments.
+    void AddGrassRecord(VAddr record) {
+        if (grass_record_count < grass_records.size()) {
+            grass_records[grass_record_count++] = record;
+        }
+    }
+
+    // A grass item and its deformer record: the constants of the kernel, with those the game's
+    // grass pass sets after the capture, then those of the draw. The kernel reads the shape's copy
+    // of the tufts.
+    void AddGrass(VAddr item, const GrassView& view) {
+        const VAddr arguments = Load<VAddr>(item + GrassArguments);
+        const VAddr geometry = Load<VAddr>(item + GrassGeometryConstants);
+        const VAddr pixel = Load<VAddr>(item + GrassPixelConstants);
+        const VAddr color = Load<VAddr>(item + GrassColor);
+        const VAddr normal = Load<VAddr>(item + GrassNormal);
+        const auto records = std::span{grass_records}.first(grass_record_count);
+        const auto record = std::ranges::find_if(records, [arguments](VAddr candidate) {
+            return Load<VAddr>(candidate + GrassRecordArguments) == arguments;
+        });
+        if (record == records.end() || geometry == 0 || pixel == 0 || color == 0 ||
+            header.grass == Scene::MaxGrass) {
+            header.dropped_grass++;
+            return;
+        }
+        const VAddr constants = Load<VAddr>(*record + GrassRecordConstants);
+        const Meshes::Mesh* mesh = Meshes::Get(Load<VAddr>(*record + GrassRecordShape));
+        const u32 vertices = constants != 0 ? Load<u32>(constants + GrassVertexCount) : 0;
+        const u32 color_map = Textures::Get(color);
+        if (mesh == nullptr || mesh->stride != GrassVertexBytes || vertices < 2 ||
+            u64{vertices} * GrassVertexBytes > mesh->vertex_bytes || color_map == 0) {
+            header.dropped_grass++;
+            return;
+        }
+        const Matrix world = Load<Matrix>(constants);
+        const Matrix world_view = Multiply(world, view.view);
+        const Matrix world_view_projection = Multiply(world, view.view_projection);
+        const float speed = Load<float>(constants + GrassExtraForce + 12);
+        const bool moving = speed > GrassMovingForce;
+        if (moving) {
+            grass_advance = std::max(grass_advance, 2.0f * speed * view.time_step);
+        }
+        const u32 tufts = vertices / 2;
+        // The fields are written in order: the packet is write-combined.
+        Scene::Grass& out = grass[header.grass];
+        std::memcpy(out.world, reinterpret_cast<const void*>(constants), 2 * MatrixBytes);
+        std::memcpy(out.world_view, world_view.data(), MatrixBytes);
+        std::memcpy(out.world_view_projection, world_view_projection.data(), MatrixBytes);
+        std::memcpy(out.extra_force, reinterpret_cast<const void*>(constants + GrassExtraForce),
+                    sizeof(out.extra_force));
+        out.tufts = mesh->vertices;
+        out.tuft_count = tufts;
+        std::memcpy(&out.clip_min, reinterpret_cast<const void*>(constants + GrassClipRange),
+                    2 * sizeof(float));
+        std::memcpy(&out.coherency, reinterpret_cast<const void*>(constants + GrassShapeValues),
+                    GrassShapeValueCount * sizeof(float));
+        out.cluster_scale = view.cluster_scale;
+        out.phase = moving ? g_grass_phase : 0.0f;
+        std::memcpy(out.draw_world_view_projection, reinterpret_cast<const void*>(geometry),
+                    MatrixBytes);
+        std::memcpy(out.eye, reinterpret_cast<const void*>(geometry + GrassEye), sizeof(out.eye));
+        std::memcpy(out.tip_color, reinterpret_cast<const void*>(pixel),
+                    sizeof(out.tip_color) + sizeof(out.root_color));
+        out.width = Load<float>(geometry + GrassWidth);
+        std::memcpy(&out.alpha_reference, reinterpret_cast<const void*>(pixel + GrassPixelValues),
+                    GrassPixelCount * sizeof(float));
+        out.color_map = color_map;
+        out.normal_map = normal != 0 ? Textures::Get(normal) : 0;
+        header.grass++;
+        header.grass_groups =
+            std::max(header.grass_groups, (tufts + GrassGroupSize - 1) / GrassGroupSize);
+    }
+
+    void AdvanceGrassPhase() {
+        g_grass_phase = std::fmod(g_grass_phase + grass_advance, FullTurn);
     }
 
     // The game draws a caster in each cascade its mask names, with the index range of the
@@ -1233,6 +1374,10 @@ private:
     Scene::Contour* contours;
     Scene::Leaf* leaves;
     Scene::LayerMaterial* layer_materials;
+    Scene::Grass* grass;
+    std::array<VAddr, Scene::MaxGrass> grass_records;
+    u32 grass_record_count = 0;
+    float grass_advance = 0.0f;
     u32 hatching = 0;
     VAddr last_palette = 0;
     u32 last_bones = 0;
@@ -1324,21 +1469,6 @@ void WriteShadows(VAddr view, u8* packet, Writer& writer) {
     std::memcpy(shadows->light_direction, direction.data(), sizeof(direction));
     std::memcpy(shadows->key_light_color, reinterpret_cast<const void*>(view + ViewKeyLight),
                 sizeof(shadows->key_light_color) + sizeof(shadows->key_light_direction));
-}
-
-using Matrix = std::array<float, 16>;
-
-// a * b for the game's row-major matrices.
-Matrix Multiply(const Matrix& a, const Matrix& b) {
-    Matrix result{};
-    for (u32 row = 0; row < 4; row++) {
-        for (u32 column = 0; column < 4; column++) {
-            for (u32 i = 0; i < 4; i++) {
-                result[row * 4 + column] += a[row * 4 + i] * b[i * 4 + column];
-            }
-        }
-    }
-    return result;
 }
 
 // A's inverse.
@@ -1841,12 +1971,18 @@ void OnFrame(VAddr frame_graph, VAddr view) {
             writer.AddSkin(record(e));
         }
         const auto [first_soft_body, end_soft_body] = range(KindSoftBody);
-        if (first_soft_body < end_soft_body) {
+        const auto [first_grass, end_grass] = range(KindGrass);
+        if (first_soft_body < end_soft_body || first_grass < end_grass) {
             WriteEffectors(view, packet, writer);
+        }
+        if (first_soft_body < end_soft_body) {
             const GridConstants grid = ReadGridConstants(view);
             for (u32 e = first_soft_body; e < end_soft_body; e++) {
                 writer.AddSoftBody(record(e), grid);
             }
+        }
+        for (u32 e = first_grass; e < end_grass; e++) {
+            writer.AddGrassRecord(record(e));
         }
     }
     writer.EndPart(Scene::CapturePart::Deformers);
@@ -1892,6 +2028,18 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     }
     ForEachItem(Load<s32>(view + ViewCategoryCount + LeafCategory * 4), LeafDomainConstants,
                 LeafPixelConstants, keyed(LeafCategory), [&](VAddr item) { writer.AddLeaf(item); });
+    const s32 grass_items = Load<s32>(view + ViewCategoryCount + GrassCategory * 4);
+    if (grass_items > 0) {
+        const GrassView grass_view{
+            .view = Load<Matrix>(view + ViewMatrix),
+            .view_projection = Load<Matrix>(view + ViewGridMatrix),
+            .cluster_scale = 1.0f / (Load<float>(view + ViewGridNear) + GridFar),
+            .time_step = Load<float>(view + ViewTimeStep),
+        };
+        ForEachItem(grass_items, GrassGeometryConstants, GrassPixelConstants, keyed(GrassCategory),
+                    [&](VAddr item) { writer.AddGrass(item, grass_view); });
+        writer.AdvanceGrassPhase();
+    }
     writer.EndPart(Scene::CapturePart::World);
     add_category(CharacterCategory);
     add_category(InteriorCategory);

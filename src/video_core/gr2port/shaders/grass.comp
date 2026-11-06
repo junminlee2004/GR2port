@@ -1,0 +1,186 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The game's grass kernels (0x1c1cef4, 0x1c1b74c). Each invocation grows one tuft of an instance
+// into blades, in a buffer for all instances, and counts them in the frame's draw. The workgroup's
+// y is the instance.
+
+#version 460
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+#include "effectors.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer BladeOutput {
+    Blade blades[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer VertexCount {
+    uint vertices;
+};
+
+layout(push_constant) uniform Constants {
+    GrassInstances scene_grass;
+    BladeOutput scene_blades;
+    Effectors scene_effectors;
+    Grid scene_grid;
+    VertexCount scene_count;
+};
+
+const uint TuftWords = 16u;
+
+vec3 Point(Words words, uint first) {
+    return uintBitsToFloat(
+        uvec3(words.words[first], words.words[first + 1u], words.words[first + 2u]));
+}
+
+float Acos(float x) {
+    return acos(clamp(x, -1.0, 1.0));
+}
+
+// The turn by twice half_angle about an axis of any length; no turn about no axis.
+vec4 Turn(vec3 axis, float half_angle) {
+    const float length_squared = dot(axis, axis);
+    return length_squared > 0.0
+               ? vec4(axis * inversesqrt(length_squared) * sin(half_angle), cos(half_angle))
+               : vec4(0.0, 0.0, 0.0, 1.0);
+}
+
+vec3 Turned(vec3 v, vec4 turn) {
+    return v + 2.0 * cross(turn.xyz, cross(turn.xyz, v) + turn.w * v);
+}
+
+// Outside the game's clip box, or as far from the eye as blades go.
+bool Culled(vec3 p, mat4 world_view_projection, mat4 world_view, float clip_max) {
+    const vec4 clip = world_view_projection * vec4(p, 1.0);
+    return any(greaterThan(abs(clip.xyz), vec3(clip.w))) ||
+           length((world_view * vec4(p, 1.0)).xyz) >= clip_max;
+}
+
+// A near blade's tip in model space: the blade leans with the wind in world space, then away from
+// the first effector sphere of its grid cell that holds the tip.
+vec3 BentTip(uint index, vec3 root, vec3 tip) {
+    GrassInstances instances = scene_grass;
+    Effectors effectors = scene_effectors;
+    Grid grid = scene_grid;
+    const mat4 world = instances.instances[index].world;
+    const vec3 world_root = (world * vec4(root, 1.0)).xyz;
+    const vec4 world_tip = world * vec4(tip, 1.0);
+    const float blade_length = length(world_tip.xyz - world_root);
+    vec3 along = (world_tip.xyz - world_root) / blade_length;
+    const float lean =
+        0.035 + 0.035 * cos(instances.instances[index].phase + root.x + root.z);
+    along = Turned(along, Turn(cross(along, instances.instances[index].extra_force.xyz), lean));
+    vec3 bent = world_root + blade_length * along;
+
+    const vec4 clip = instances.instances[index].world_view_projection * vec4(tip, 1.0);
+    const float depth = clip.z * instances.instances[index].cluster_scale;
+    const uvec3 cell =
+        min(uvec3(6.0 * clamp(0.5 * clip.x / clip.w + 0.5, 0.0, 1.0),
+                  6.0 * clamp(-0.5 * clip.y / clip.w + 0.5, 0.0, 1.0),
+                  10.0 * clamp(depth, 0.0, 1.0)),
+            uvec3(5u, 5u, 9u));
+    const uint list = ((cell.z * 6u + cell.y) * 6u + cell.x) * GridEntries;
+    const uint spheres = effectors.count;
+    for (uint entry = 0u; entry < spheres; entry++) {
+        const uint sphere_index = grid.entries[list + entry];
+        if (sphere_index == 0xffffffffu) {
+            break;
+        }
+        const uvec4 sphere = effectors.spheres[2u * sphere_index];
+        const vec3 center = uintBitsToFloat(sphere.xyz);
+        const float radius = unpackHalf2x16(sphere.w).x;
+        const vec3 away = bent - center;
+        const float gap = length(away);
+        if (gap < radius) {
+            const vec3 shell =
+                gap < 1e-6 ? center - vec3(0.0, radius, 0.0) : center + away * radius / gap;
+            const vec3 to_shell = normalize(shell - world_root);
+            along = Turned(along, Turn(cross(along, to_shell),
+                                       min(0.3, 0.5 * Acos(dot(along, to_shell)))));
+            bent = world_root + blade_length * along;
+            break;
+        }
+    }
+    return (instances.instances[index].world_inverse * vec4(bent, world_tip.w)).xyz;
+}
+
+void main() {
+    GrassInstances instances = scene_grass;
+    BladeOutput output_blades = scene_blades;
+    VertexCount count_out = scene_count;
+    const uint index = gl_WorkGroupID.y;
+    const uint tuft = gl_GlobalInvocationID.x;
+    if (tuft >= instances.instances[index].tuft_count) {
+        return;
+    }
+    Words words = Words(instances.instances[index].tufts + uint64_t(tuft) * TuftWords * 4u);
+    const vec3 root = Point(words, 0u);
+    const vec3 tip = Point(words, 8u);
+    const mat4 world_view_projection = instances.instances[index].world_view_projection;
+    const mat4 world_view = instances.instances[index].world_view;
+    const float clip_max = instances.instances[index].clip_max;
+    if (Culled(root, world_view_projection, world_view, clip_max) &&
+        Culled(tip, world_view_projection, world_view, clip_max)) {
+        return;
+    }
+    const float seed = uintBitsToFloat(words.words[3u]);
+    const float blade_count = uintBitsToFloat(words.words[7u]);
+    const uint count = uint(floor(blade_count));
+    if (count == 0u) {
+        return;
+    }
+    const uint first = atomicAdd(count_out.vertices, 3u * count) / 3u;
+    if (first >= MaxBlades) {
+        return;
+    }
+    const uint written = min(count, MaxBlades - first);
+
+    const vec3 span = tip - root;
+    const float inverse_length = inversesqrt(dot(span, span));
+    const vec3 up = span * inverse_length;
+    const vec4 to_tuft = Turn(vec3(up.z, 0.0, -up.x), 0.5 * Acos(up.y));
+    const float fade =
+        clamp((clip_max - length((world_view * vec4(root, 1.0)).xyz)) /
+                  (clip_max - instances.instances[index].clip_min),
+              0.0, 1.0);
+    const float seed_floor = floor(seed);
+    const float coherency = instances.instances[index].coherency;
+    const float range_min = instances.instances[index].range_min;
+    const float range_max = instances.instances[index].range_max;
+    const float curve = instances.instances[index].offset_curve / range_max;
+    const float height_offset = instances.instances[index].height_offset;
+    const float normal_lerp = instances.instances[index].normal_lerp;
+    const float normal_limit = instances.instances[index].normal_limit;
+    for (uint blade = 0u; blade < written; blade++) {
+        const float position =
+            count == 1u ? blade_count : blade_count * float(blade) / float(count - 1u);
+        const float r = fract(0.001 * (seed * seed_floor * position + seed));
+        const float phi = seed_floor * sin(r * position + r);
+        const float radius = range_min + r * (range_max - range_min);
+        const vec3 offset = Turned(vec3(cos(phi) * radius, -(curve * radius + height_offset),
+                                        sin(phi) * radius),
+                                   to_tuft);
+        vec3 direction = span;
+        if (coherency > 0.0) {
+            const float spin_sin = sin(phi * phi);
+            const float spin_cos = cos(phi * phi);
+            const vec3 axis = vec3(spin_sin * up.y, spin_cos * up.z - spin_sin * up.x,
+                                   -spin_cos * up.y);
+            direction = Turned(span, Turn(axis, 0.5 * coherency));
+        }
+        const vec3 leaning = direction * inverse_length;
+        const float tilt = Acos(leaning.y);
+        direction = Turned(direction, Turn(vec3(leaning.z, 0.0, -leaning.x),
+                                           0.5 * (min(normal_limit, normal_lerp * tilt) - tilt)));
+        const vec3 blade_root = root + offset;
+        vec3 blade_tip = blade_root + direction;
+        if (fade > 0.9) {
+            blade_tip = BentTip(index, blade_root, blade_tip);
+        }
+        output_blades.blades[first + blade] = Blade(blade_root, fade, blade_tip, index);
+    }
+}

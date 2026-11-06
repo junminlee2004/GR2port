@@ -148,6 +148,8 @@ struct Stats {
     u64 leaves = 0;
     u64 leaf_shadows = 0;
     u64 dropped_leaves = 0;
+    u64 grass = 0;
+    u64 dropped_grass = 0;
     u64 palette_rows = 0;
     std::array<u64, Scene::ItemCategories> category_items{};
     u64 casters = 0;
@@ -274,7 +276,7 @@ bool Thread::Init() {
         !World::Start(d, *memory, DepthFormat, Look::SceneFormat) ||
         !Contours::Start(d, Look::SceneFormat, DepthFormat) ||
         !Fog::Start(d, *memory, Look::SceneFormat) ||
-        !Vegetation::Start(d, World::SurfaceFormats, DepthFormat, Shadows::DepthFormat)) {
+        !Vegetation::Start(d, *memory, World::SurfaceFormats, DepthFormat, Shadows::DepthFormat)) {
         return false;
     }
     const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout()};
@@ -620,6 +622,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     }
     if (drawn) {
         Deformers::Record(cmd, header, packet.address);
+        Vegetation::RecordGrass(cmd, header, packet.address);
     }
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
@@ -887,6 +890,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         stats.leaf_shadows += commands;
     }
     stats.dropped_leaves += header.dropped_leaves;
+    stats.grass += header.grass;
+    stats.dropped_grass += header.dropped_grass;
     stats.dropped += header.dropped;
     stats.capture_ns += header.capture_ns;
     for (u32 part = 0; part < stats.capture_parts_ns.size(); part++) {
@@ -1114,10 +1119,12 @@ void Thread::Report() {
         static_cast<double>(stats.dropped_casters) / frames);
     LOG_INFO(Render_Vulkan,
              "GR2port vegetation: per frame {:.1f} leaf draws, {:.1f} leaf shadow draws, {:.1f} "
-             "leaf items not drawn",
+             "leaf items not drawn, {:.1f} grass instances, {:.1f} grass items not drawn",
              static_cast<double>(stats.leaves) / frames,
              static_cast<double>(stats.leaf_shadows) / frames,
-             static_cast<double>(stats.dropped_leaves) / frames);
+             static_cast<double>(stats.dropped_leaves) / frames,
+             static_cast<double>(stats.grass) / frames,
+             static_cast<double>(stats.dropped_grass) / frames);
     std::string categories;
     for (u32 c = 0; c < Scene::ItemCategories; c++) {
         if (stats.category_items[c] != 0) {

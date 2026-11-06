@@ -263,6 +263,61 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Le
     Leaf leaves[];
 };
 
+// A grass instance: what the game's grass kernel reads, then what its draw reads.
+struct Grass {
+    mat4 world;
+    mat4 world_inverse;
+    mat4 world_view;
+    mat4 world_view_projection;
+    vec4 extra_force;
+    uint64_t tufts;
+    uint tuft_count;
+    float clip_min;
+    float clip_max;
+    float coherency;
+    float range_min;
+    float range_max;
+    float height_offset;
+    float offset_curve;
+    float normal_lerp;
+    float normal_limit;
+    float cluster_scale;
+    float phase;
+    uint grass_padding[2];
+    mat4 draw_world_view_projection;
+    vec4 eye;
+    vec4 tip_color;
+    vec4 root_color;
+    float width;
+    float alpha_reference;
+    float translucency;
+    float roughness;
+    float metallic;
+    float punch_through;
+    float normal_scale;
+    uint color_map;
+    uint normal_map;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer GrassInstances {
+    Grass instances[];
+};
+
+// A blade of grass in its instance's model space: how far its root is inside the fade, and the
+// instance's index.
+struct Blade {
+    vec3 root;
+    float fade;
+    vec3 tip;
+    uint instance;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Blades {
+    Blade blades[];
+};
+
+const uint MaxBlades = 131072u;
+
 // Material flags.
 const uint MaterialLayered = 1u;
 const uint MaterialGradation = 2u;

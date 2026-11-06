@@ -4,6 +4,7 @@
 // A world surface's pixel, for world.frag and, with ALPHA_TEST, world_alpha.frag.
 
 #include "scene.glsl"
+#include "surface.glsl"
 
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
@@ -31,11 +32,6 @@ vec4 Sample(uint handle, vec2 uv) {
 
 vec2 Transformed(vec4 transform, vec2 uv) {
     return transform.xy + transform.zw * uv;
-}
-
-// The game's packed normal: the direction of xy, with the length sqrt(0.5 - 0.5 z).
-vec2 PackNormal(vec3 n) {
-    return n.xy * inversesqrt(max(dot(n.xy, n.xy), 1e-6)) * sqrt(abs(0.5 - 0.5 * n.z));
 }
 
 // Parallax occlusion mapping through the normal map's alpha, in the normal map's coordinates: 8 to
@@ -85,16 +81,6 @@ vec3 TurnedNormal(vec3 n, vec3 tangent_normal) {
     const vec3 surface_normal = normalize(tangent_normal);
     return normalize(t * surface_normal.x + b * surface_normal.y + n * surface_normal.z);
 }
-
-#ifdef ALPHA_TEST
-// A screen door fades a surface in. The game's depth runs the other way from this one.
-bool ScreenDoorShut(float threshold) {
-    const float seed = 256.0 * (0.0771356 * gl_FragCoord.x + 0.00888381 * gl_FragCoord.y) *
-                           (1.0 - gl_FragCoord.z) +
-                       1e-7;
-    return threshold < fract(fract(123456792.0 / seed) * seed);
-}
-#endif
 
 // A layer's scaled normal in tangent space. A layer without a normal map is flat.
 vec3 LayerNormal(LayerMaterials table, uint index, int layer, vec2 uv) {

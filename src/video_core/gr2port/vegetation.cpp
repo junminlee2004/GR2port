@@ -3,7 +3,12 @@
 
 #include <array>
 
+#include "video_core/gr2port/deformers.h"
+#include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/pipeline.h"
+#include "video_core/gr2port/shaders/grass_comp.h"
+#include "video_core/gr2port/shaders/grass_frag.h"
+#include "video_core/gr2port/shaders/grass_vert.h"
 #include "video_core/gr2port/shaders/leaf_frag.h"
 #include "video_core/gr2port/shaders/leaf_geom.h"
 #include "video_core/gr2port/shaders/leaf_shadow_geom.h"
@@ -29,11 +34,27 @@ struct ShadowPush {
     u32 padding;
 };
 
+struct KernelPush {
+    u64 grass;
+    u64 blades;
+    u64 effectors;
+    u64 grid;
+    u64 vertex_count;
+};
+
+struct GrassPush {
+    u64 grass;
+    u64 blades;
+};
+
 const Device* g_device = nullptr;
+Buffer g_blades;
+Pipeline g_kernel;
+Pipeline g_grass;
 Pipeline g_leaves;
 Pipeline g_leaf_shadows;
 
-void BindLeaves(vk::CommandBuffer cmd, const Pipeline& pipeline, const void* push, u32 push_bytes) {
+void Bind(vk::CommandBuffer cmd, const Pipeline& pipeline, const void* push, u32 push_bytes) {
     const auto& dl = g_device->dispatch;
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, Textures::Set(),
@@ -44,13 +65,28 @@ void BindLeaves(vk::CommandBuffer cmd, const Pipeline& pipeline, const void* pus
 
 } // namespace
 
-bool Start(const Device& device, std::span<const vk::Format> surface_formats,
+bool Start(const Device& device, Memory& memory, std::span<const vk::Format> surface_formats,
            vk::Format depth_format, vk::Format shadow_format) {
     g_device = &device;
+    const std::array texture_set{Textures::SetLayout()};
+    g_blades = memory.CreateBuffer(u64{Scene::MaxBlades} * Scene::BladeBytes,
+                                   vk::BufferUsageFlagBits::eStorageBuffer, Placement::Device);
+    g_kernel = CreateComputePipeline(device, GRASS_COMP, sizeof(KernelPush));
+    g_grass = CreateGraphicsPipeline(device, {
+                                                 .vertex = GRASS_VERT,
+                                                 .fragment = GRASS_FRAG,
+                                                 .colors = surface_formats,
+                                                 .depth = depth_format,
+                                                 .depth_test = true,
+                                                 .push_constant_bytes = sizeof(GrassPush),
+                                                 .set_layouts = texture_set,
+                                             });
+    if (!g_blades.buffer || !g_kernel.pipeline || !g_grass.pipeline) {
+        return false;
+    }
     if (!device.tessellation_shaders || !device.geometry_shaders) {
         return true;
     }
-    const std::array texture_set{Textures::SetLayout()};
     g_leaves = CreateGraphicsPipeline(device, {
                                                   .vertex = LEAF_VERT,
                                                   .tessellation_control = LEAF_TESC,
@@ -82,13 +118,59 @@ bool Start(const Device& device, std::span<const vk::Format> surface_formats,
     return g_leaves.pipeline && g_leaf_shadows.pipeline;
 }
 
+void RecordGrass(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
+    if (header.grass == 0) {
+        return;
+    }
+    const auto& dl = g_device->dispatch;
+    // The grid was just computed, and earlier frames wrote and drew the blades.
+    const vk::MemoryBarrier2 before{
+        .srcStageMask =
+            vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eVertexShader,
+        .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
+        .dstStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+        .dstAccessMask =
+            vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite,
+    };
+    cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &before}, dl);
+    const KernelPush push{
+        .grass = address + Scene::GrassOffset,
+        .blades = g_blades.address,
+        .effectors = address + Scene::EffectorsOffset,
+        .grid = Deformers::GridAddress(),
+        .vertex_count = address + Scene::GrassCommandOffset,
+    };
+    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_kernel.pipeline, dl);
+    cmd.pushConstants(g_kernel.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(push), &push,
+                      dl);
+    cmd.dispatch(header.grass_groups, header.grass, 1, dl);
+    const vk::MemoryBarrier2 after{
+        .srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+        .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
+        .dstStageMask =
+            vk::PipelineStageFlagBits2::eDrawIndirect | vk::PipelineStageFlagBits2::eVertexShader,
+        .dstAccessMask =
+            vk::AccessFlagBits2::eIndirectCommandRead | vk::AccessFlagBits2::eShaderStorageRead,
+    };
+    cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &after}, dl);
+}
+
 void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, u64 address,
                     vk::Buffer buffer, u64 offset) {
+    if (header.grass != 0) {
+        const GrassPush push{
+            .grass = address + Scene::GrassOffset,
+            .blades = g_blades.address,
+        };
+        Bind(cmd, g_grass, &push, sizeof(push));
+        cmd.drawIndirect(buffer, offset + Scene::GrassCommandOffset, 1,
+                         sizeof(Scene::VertexCommand), g_device->dispatch);
+    }
     if (!g_leaves.pipeline || header.leaf_commands == 0) {
         return;
     }
     const u64 leaves = address + Scene::LeavesOffset;
-    BindLeaves(cmd, g_leaves, &leaves, sizeof(leaves));
+    Bind(cmd, g_leaves, &leaves, sizeof(leaves));
     cmd.drawIndirect(buffer, offset + Scene::LeafCommandsOffset, header.leaf_commands,
                      sizeof(Scene::VertexCommand), g_device->dispatch);
 }
@@ -104,7 +186,7 @@ void RecordShadows(vk::CommandBuffer cmd, const Scene::Header& header, u64 addre
         .shadows = address + Scene::ShadowsOffset,
         .cascade = cascade,
     };
-    BindLeaves(cmd, g_leaf_shadows, &push, sizeof(push));
+    Bind(cmd, g_leaf_shadows, &push, sizeof(push));
     constexpr u64 Bytes = sizeof(Scene::VertexCommand);
     cmd.drawIndirect(
         buffer, offset + Scene::LeafShadowCommandsOffset + u64{cascade} * Scene::MaxLeaves * Bytes,
