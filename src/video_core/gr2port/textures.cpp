@@ -61,9 +61,12 @@ constexpr std::array<AmdGpu::TileMode, 4> TileModes{
 constexpr std::array<u32, 5> BlockBits{8, 16, 32, 64, 128};
 
 constexpr u64 UploadBudget = 64_MB;
-// Beside the emulated GPU's renderer, which keeps its own copy of every texture, device memory
-// holds only part of them: images start at the first level no larger than this.
-constexpr u32 MaxExtent = 512;
+// Beside the emulated GPU's renderer, which keeps its own copy of every texture, a device with a
+// budget below SmallDeviceBudget holds only part of them: images start at the first level no larger
+// than SmallDeviceExtent. Other devices hold every level: LargeDeviceExtent exceeds any image.
+constexpr u64 SmallDeviceBudget = 6_GB;
+constexpr u32 SmallDeviceExtent = 512;
+constexpr u32 LargeDeviceExtent = 1u << 16;
 constexpr u32 LoggedTextures = 8;
 // The detile parameters lead each staging buffer; the texture data follows.
 constexpr u64 ParamsBytes = 256;
@@ -210,14 +213,14 @@ bool Convertible(const AmdGpu::Image& sharp) {
            ValidSwizzle(select.a);
 }
 
-Layout ReadLayout(const AmdGpu::Image& sharp) {
+Layout ReadLayout(const AmdGpu::Image& sharp, u32 max_extent) {
     Layout layout{};
     layout.format = SurfaceFormat(sharp);
     layout.mapping = LiverpoolToVK::ComponentMapping(sharp.DstSelect());
     layout.extent = {static_cast<u32>(sharp.width) + 1, static_cast<u32>(sharp.height) + 1};
     layout.data_levels = sharp.NumLevels();
     while (layout.first + 1 < layout.data_levels &&
-           std::max(layout.extent.width, layout.extent.height) >> layout.first > MaxExtent) {
+           std::max(layout.extent.width, layout.extent.height) >> layout.first > max_extent) {
         layout.first++;
     }
     layout.image_extent = {std::max(layout.extent.width >> layout.first, 1u),
@@ -675,6 +678,8 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
     // Layouts live until the copies are recorded, at the end of this call.
     std::deque<Layout> layouts;
     u64 budget = UploadBudget;
+    const u32 max_extent =
+        g_memory->DeviceBudget().budget < SmallDeviceBudget ? SmallDeviceExtent : LargeDeviceExtent;
     {
         std::scoped_lock lock{g_mutex};
         while (!g_pending.empty() && budget != 0) {
@@ -686,7 +691,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                 continue;
             }
             const Source& source = g_sources[handle];
-            const Layout& layout = layouts.emplace_back(ReadLayout(source.sharp));
+            const Layout& layout = layouts.emplace_back(ReadLayout(source.sharp, max_extent));
             const VAddr data = source.sharp.Address();
             if (data + layout.size > source.end || layout.size == 0) {
                 g_stats.too_large++;
