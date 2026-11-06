@@ -118,7 +118,7 @@ void main() {
         discard;
     }
     // A screen door fades the surface in.
-    const float seed = 256.0 * (0.07705 * gl_FragCoord.x + 0.00888 * gl_FragCoord.y) *
+    const float seed = 256.0 * (0.0771356 * gl_FragCoord.x + 0.00888381 * gl_FragCoord.y) *
                            gl_FragCoord.z +
                        1e-7;
     if (table.materials[index].punch_through < fract(fract(123456792.0 / seed) * seed)) {

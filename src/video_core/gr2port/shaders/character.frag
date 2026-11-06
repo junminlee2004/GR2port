@@ -109,7 +109,7 @@ void main() {
     // A screen door fades instances in, each with its own pattern.
     const vec2 punch = table.characters[index].punch_through;
     const float seed =
-        256.0 * punch.x * (0.07705 * gl_FragCoord.x + 0.00888 * gl_FragCoord.y) + 1e-7;
+        256.0 * punch.x * (0.0771356 * gl_FragCoord.x + 0.00888381 * gl_FragCoord.y) + 1e-7;
     if (punch.y < fract(fract(abs(123456792.0 / seed)) * abs(seed))) {
         discard;
     }
