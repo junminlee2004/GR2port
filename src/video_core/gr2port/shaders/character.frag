@@ -166,17 +166,18 @@ void main() {
     const vec3 toon = mix(mix(lit_tone, line, min(2.0 - 2.0 * diffuse, 1.0)), ambient_color,
                           2.0 * max(0.5 - diffuse, 0.0));
 
-    // The surface colour, with its decal.
-    vec3 albedo = color_map.rgb * table.characters[index].color_scale.rgb;
+    // The surface colour, drawn to the gradation where the vertex colour's z is low, with its
+    // decal. A material without a decal file holds a white constant texture.
+    const vec4 gradation = table.characters[index].gradation_color;
+    vec3 albedo = mix(color_map.rgb * table.characters[index].color_scale.rgb, gradation.rgb,
+                      gradation.a * (1.0 - vertex_color.z));
+    vec4 decal = vec4(1.0);
     const uint decal_index = scene_draws.draws[draw_index].decal;
     if (decal_index != 0u) {
         const uint handle = scene_decals.decals[decal_index - 1u].texture;
-        const vec4 decal =
-            texture(sampler2D(textures[nonuniformEXT(handle)], clamp_sampler), decal_texcoord);
-        const vec4 gradation = table.characters[index].gradation_color;
-        const vec3 decal_color = mix(decal.rgb, gradation.rgb, gradation.a * vertex_color.z);
-        albedo *= mix(vec3(1.0), decal_color, decal.a * mask);
+        decal = texture(sampler2D(textures[nonuniformEXT(handle)], clamp_sampler), decal_texcoord);
     }
+    albedo *= mix(vec3(1.0), mix(decal.rgb, gradation.rgb, gradation.a), decal.a * mask);
 
     // In shadow, the shadow colour carries a share of the surface's colour.
     const vec3 shadow_color = table.characters[index].shadow_color.rgb;
