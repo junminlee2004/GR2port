@@ -67,10 +67,10 @@ public:
     Buffer CreateBuffer(u64 size, vk::BufferUsageFlags usage, Placement placement);
     void Destroy(Buffer& buffer);
 
-    /// A 2D image with one mip level and layers layers, and a view of all of it (an array view
+    /// A 2D image with layers layers of levels mip levels, and a view of all of it (an array view
     /// when there are several layers).
     Image CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsageFlags usage,
-                      vk::ImageAspectFlags aspect, u32 layers = 1);
+                      vk::ImageAspectFlags aspect, u32 layers = 1, u32 levels = 1);
     /// A sampled 2D image with levels mip levels, which copies fill, and a view of all of it
     /// with mapping. A cube has six layers and a cube view.
     Image CreateTexture(vk::Format format, vk::Extent2D extent, u32 levels,

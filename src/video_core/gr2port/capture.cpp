@@ -156,7 +156,8 @@ constexpr u64 ViewSaturation = 0xa70;
 // w is the distance shadows end at; the highlights' fade +0x830; the occluder direction +0x7f0; the
 // contour's colour +0x800, its blend near and past its fade +0x838 and +0x83c, and the fade's
 // distances +0x840 and +0x844; the hatching's strength +0x84c; the toning +0x888, the ambient
-// strength +0x88c; the gradation's distances +0x9c4 and +0x9c8 and colours +0x9cc (three of 3
+// strength +0x88c; the ambient occlusion's strength +0x894 and the value that picks its program
+// +0x89c; the gradation's distances +0x9c4 and +0x9c8 and colours +0x9cc (three of 3
 // floats); the background's distances +0x9f0 and +0x9f4, strength +0x9f8 and level +0x9fc; the
 // occluders +0xc40 with their count +0xc48 and a mode +0xc4c; the ambient light's list +0xc60 with
 // its count +0xc68.
@@ -175,6 +176,8 @@ constexpr u64 ViewContourEnd = 0x844;
 constexpr u64 ViewHatching = 0x84c;
 constexpr u64 ViewToning = 0x888;
 constexpr u64 ViewAmbient = 0x88c;
+constexpr u64 ViewOcclusion = 0x894;
+constexpr u64 ViewOcclusionSelect = 0x89c;
 constexpr u64 ViewGradationStart = 0x9c4;
 constexpr u64 ViewGradationEnd = 0x9c8;
 constexpr u64 ViewGradation = 0x9cc;
@@ -234,6 +237,8 @@ constexpr float LensOutwardShape = 1.4281480f; // tan(55 degrees)
 constexpr float LensInwardBend = 6.0f;
 // The game's adaption rate counts seconds at 30 frames per second.
 constexpr float AdaptionFrame = 1.0f / 30.0f;
+// The game's SSAO scales the view's strength by this (FUN_0142ec00).
+constexpr float OcclusionScale = 0.0863267f;
 constexpr u64 CasterTableBytes = 0x18;
 // Shadow caster items: flags +4 (0x08 culls back faces, 0x10 and 0x20 pick a view-projection
 // table), cascade mask +5, world matrix +0x30. Alpha-tested casters hold pixel constants {alpha
@@ -1270,6 +1275,8 @@ void WriteLight(VAddr frame_graph, VAddr view, u8* packet) {
     light.background_intensity = number(ViewBackgroundIntensity);
     light.background_lod = number(ViewBackgroundLod);
     light.hatching_intensity = 2.0f * number(ViewHatching);
+    light.occlusion_intensity = OcclusionScale * number(ViewOcclusion);
+    light.occlusion_select = number(ViewOcclusionSelect);
     light.toning = number(ViewToning) + 1.0f;
     const auto& occluder =
         Load<s32>(view + ViewOccluderMode) > 0 ? OccluderModeConstants : OccluderConstants;

@@ -1,0 +1,127 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform sampler2D scene_depth;
+layout(set = 0, binding = 1) uniform sampler2D depth_levels;
+layout(set = 0, binding = 2) uniform sampler2D surface_normal;
+layout(set = 0, binding = 3) uniform sampler2D history;
+layout(set = 0, binding = 4, rgba16f) uniform writeonly image2D occlusion;
+
+layout(push_constant) uniform Constants {
+    Light light;
+    int frame;
+};
+
+// The game's SSAO constants: the sample radius and its square, the bias and softening of a
+// sample's angle, the weight of the sum, and the history's depth test and length.
+const float Radius = 1.4;
+const float RadiusSquared = 1.96;
+const float Bias = 0.05;
+const float Softening = 0.01;
+const float SumWeight = 1.25;
+const float DepthThreshold = 0.065;
+const float MaxFrames = 26.0;
+const float SamplesPerFrame = 4.0;
+// The disk's size in pixels at distance 1 per unit of radius, at the game's 1080 lines.
+const float DiskPixels = 500.0;
+const float GameLines = 1080.0;
+const float TurnsPerRadian = 0.15915494;
+const float TwoPi = 6.2831853;
+// The pyramid holds the levels from 1 to this one.
+const int TopLevel = 5;
+const float Shares[4] = float[4](0.125, 0.375, 0.625, 0.875);
+const float Turns[4] = float[4](0.8745564, 2.6236691, 4.3727822, 6.1218953);
+
+float DistanceOf(float depth) {
+    return 1.0 / (light.inverse_projection.z * (1.0 - 2.0 * depth) + light.inverse_projection.w);
+}
+
+// The game's SSAO (CS 0x1c31e4c above occlusion_select 0.9, else 0x1c32a8c): four samples on a
+// disk that turns per pixel and frame, read from depth levels that grow with the disk, averaged
+// over frames with the camera's reprojection. A pixel holds its occlusion, its distance over the
+// depth range and the samples it has averaged. Only the world is in the depth here.
+void main() {
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 size = textureSize(scene_depth, 0);
+    if (any(greaterThanEqual(pixel, size))) {
+        return;
+    }
+    const float depth = texelFetch(scene_depth, pixel, 0).r;
+    if (depth <= 0.0) {
+        imageStore(occlusion, pixel, vec4(0.0, 1.0, 0.0, 0.0));
+        return;
+    }
+    const vec2 inverse_size = 1.0 / vec2(size);
+    const vec2 center = vec2(pixel) + 0.5;
+    const vec2 ndc =
+        vec2(2.0 * center.x * inverse_size.x - 1.0, 1.0 - 2.0 * center.y * inverse_size.y);
+    const float distance_to_eye = DistanceOf(depth);
+    const vec3 position =
+        vec3(light.inverse_projection.xy * distance_to_eye * ndc, -distance_to_eye);
+    const vec2 packed_normal = texelFetch(surface_normal, pixel, 0).rg;
+    const float packed_squared = dot(packed_normal, packed_normal);
+    const vec3 normal = vec3(2.0 * packed_normal * sqrt(max(1.0 - packed_squared, 0.0)),
+                             1.0 - 2.0 * packed_squared);
+
+    const bool world_samples = light.occlusion_select > 0.9;
+    const float seed = float(uint((pixel.x * 3) ^ (frame + pixel.y + pixel.x * pixel.y)) * 3u);
+    const float disk = DiskPixels * (float(size.y) / GameLines) * Radius / distance_to_eye;
+    float sum = 0.0;
+    for (int i = 0; i < 4; i++) {
+        const float turn = TwoPi * fract(fma(seed, TurnsPerRadian, Turns[i]));
+        const float reach = Shares[i] * disk;
+        const ivec2 tap = pixel + ivec2(vec2(sin(turn), cos(turn)) * reach);
+        if (any(lessThan(tap, ivec2(0))) || any(greaterThanEqual(tap, size))) {
+            continue;
+        }
+        if (world_samples && texelFetch(scene_depth, tap, 0).r <= 0.0) {
+            continue;
+        }
+        const int level = clamp(int(floor(log2(reach))) - 3, 0, TopLevel);
+        const ivec2 texel = tap >> level;
+        float tap_depth;
+        if (level == 0) {
+            tap_depth = texelFetch(scene_depth, tap, 0).r;
+        } else if (all(lessThan(texel, textureSize(depth_levels, level - 1)))) {
+            tap_depth = texelFetch(depth_levels, texel, level - 1).r;
+        } else {
+            continue;
+        }
+        const float tap_distance = DistanceOf(tap_depth);
+        const vec2 tap_ndc = vec2(2.0 * float(tap.x) * inverse_size.x - 1.0,
+                                  1.0 - 2.0 * float(tap.y) * inverse_size.y);
+        const vec3 v = vec3(light.inverse_projection.xy * tap_distance * tap_ndc - position.xy,
+                            distance_to_eye - tap_distance);
+        const float squared = dot(v, v);
+        const float falloff = max(RadiusSquared - squared, 0.0);
+        sum += falloff * falloff * falloff *
+               max((dot(v, normal) - Bias) / (squared + Softening), 0.0);
+    }
+    const float occluded = 1.0 - max(1.0 - SumWeight * light.occlusion_intensity * sum, 0.0);
+
+    const vec4 previous = light.view_to_previous * vec4(position, 1.0);
+    const vec2 motion = previous.xy / previous.w - ndc;
+    const vec2 history_pixel = center + 0.5 * vec2(motion.x, -motion.y) * vec2(size);
+    const float scaled_distance = distance_to_eye / light.depth_range;
+    const vec4 restart = vec4(occluded, scaled_distance, SamplesPerFrame, 0.0);
+    if (any(lessThan(history_pixel, vec2(0.0))) || any(greaterThan(history_pixel, vec2(size)))) {
+        imageStore(occlusion, pixel, restart);
+        return;
+    }
+    const vec3 past = textureLod(history, history_pixel * inverse_size, 0.0).rgb;
+    if (abs(1.0 - scaled_distance / max(past.g, 1e-6)) >= DepthThreshold) {
+        imageStore(occlusion, pixel, restart);
+        return;
+    }
+    const float samples = past.b + SamplesPerFrame;
+    imageStore(occlusion, pixel,
+               vec4(clamp((past.b * past.r + SamplesPerFrame * occluded) / samples, 0.0, 1.0),
+                    scaled_distance, min(samples, SamplesPerFrame * MaxFrames), 0.0));
+}

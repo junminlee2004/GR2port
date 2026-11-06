@@ -327,7 +327,8 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Li
     uint irradiance[2];
     float ibl_blend;
     float depth_range;
-    uint padding[2];
+    float occlusion_intensity;
+    float occlusion_select;
     vec4 occluder_spheres[MaxOccluders];
     vec4 sh[7];
 };

@@ -5,6 +5,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstring>
 #include <memory>
 #include <span>
@@ -46,24 +47,27 @@ namespace {
 
 constexpr u32 FramesInFlight = 2;
 // GPU timestamps per frame: the start, after the uploads, after the deformers, after each cascade,
-// after the surfaces, the lines, the light, the forward draws and the meter, and the end.
-constexpr u32 Timestamps = 9 + Scene::Cascades;
+// after the surfaces, the lines, the occlusion, the light, the forward draws and the meter, and the
+// end.
+constexpr u32 Timestamps = 10 + Scene::Cascades;
 constexpr u32 SurfacesTimestamp = 3 + Scene::Cascades;
 constexpr u32 LinesTimestamp = SurfacesTimestamp + 1;
-constexpr u32 LightTimestamp = SurfacesTimestamp + 2;
-constexpr u32 ForwardTimestamp = SurfacesTimestamp + 3;
-constexpr u32 MeterTimestamp = SurfacesTimestamp + 4;
+constexpr u32 OcclusionTimestamp = SurfacesTimestamp + 2;
+constexpr u32 LightTimestamp = SurfacesTimestamp + 3;
+constexpr u32 ForwardTimestamp = SurfacesTimestamp + 4;
+constexpr u32 MeterTimestamp = SurfacesTimestamp + 5;
 // GPU intervals per frame: the whole frame, the deformers, each cascade, the surfaces, the lines,
-// the light, the forward draws, the meter and the picture.
-constexpr u32 Intervals = 8 + Scene::Cascades;
+// the occlusion, the light, the forward draws, the meter and the picture.
+constexpr u32 Intervals = 9 + Scene::Cascades;
 constexpr u32 DeformerInterval = 1;
 constexpr u32 FirstCascadeInterval = 2;
 constexpr u32 SurfacesInterval = FirstCascadeInterval + Scene::Cascades;
 constexpr u32 LinesInterval = SurfacesInterval + 1;
-constexpr u32 LightInterval = SurfacesInterval + 2;
-constexpr u32 ForwardInterval = SurfacesInterval + 3;
-constexpr u32 MeterInterval = SurfacesInterval + 4;
-constexpr u32 PictureInterval = SurfacesInterval + 5;
+constexpr u32 OcclusionInterval = SurfacesInterval + 2;
+constexpr u32 LightInterval = SurfacesInterval + 3;
+constexpr u32 ForwardInterval = SurfacesInterval + 4;
+constexpr u32 MeterInterval = SurfacesInterval + 5;
+constexpr u32 PictureInterval = SurfacesInterval + 6;
 constexpr u32 ReportFrames = 600;
 constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
 // A frame with more indices than this is not drawn: its items are not what the capture expects.
@@ -431,12 +435,16 @@ void Thread::LogLight(const SceneRing::Packet& packet) {
     const float* toward = shadows.light_direction;
     const float* color = shadows.key_light_color;
     const float* key = shadows.key_light_direction;
+    std::array<float, 2> occlusion;
+    std::memcpy(occlusion.data(),
+                packet.data + Scene::LightOffset + offsetof(Scene::Light, occlusion_intensity),
+                sizeof(occlusion));
     LOG_INFO(Render_Vulkan,
              "GR2port light: toward the light ({:.3f} {:.3f} {:.3f}); the game's key light "
              "colour ({:.3f} {:.3f} {:.3f} {:.3f}) direction of travel ({:.3f} {:.3f} {:.3f} "
-             "{:.3f})",
+             "{:.3f}); occlusion strength {:.4f}, program value {:.3f}",
              toward[0], toward[1], toward[2], color[0], color[1], color[2], color[3], key[0],
-             key[1], key[2], key[3]);
+             key[1], key[2], key[3], occlusion[0], occlusion[1]);
 }
 
 // Logs the cascades and the first casters of the first packet with casters.
@@ -559,6 +567,13 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + LinesTimestamp, dl);
+    }
+    if (drawn) {
+        World::RecordOcclusion(cmd, packet.address);
+    }
+    if (timestamps) {
+        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
+                            Timestamps * slot_index + OcclusionTimestamp, dl);
     }
     // The last frame sampled the scene's colour in its meter and its picture.
     Barrier(d, cmd, Look::SceneImage(), vk::ImageLayout::eUndefined,
@@ -857,21 +872,22 @@ void Thread::Report() {
              "GR2port renderer: {:.1f} game frames/s, {} drawn in {:.1f} s, {} game frames "
              "skipped, per frame {:.3f} ms of render thread work, {:.3f} ms waiting for a "
              "frame slot and a swapchain image, {:.3f} ms on the GPU (deformers {:.3f}, cascades "
-             "{:.3f} {:.3f} {:.3f}, surfaces {:.3f}, lines {:.3f}, light {:.3f}, forward {:.3f}, "
-             "meter {:.3f}, picture {:.3f}; shortest {:.3f}, deformers {:.3f}, cascades {:.3f} "
-             "{:.3f} {:.3f}, surfaces {:.3f}, lines {:.3f}, light {:.3f}, forward {:.3f}, meter "
-             "{:.3f}, picture {:.3f})",
+             "{:.3f} {:.3f} {:.3f}, surfaces {:.3f}, lines {:.3f}, occlusion {:.3f}, light {:.3f}, "
+             "forward {:.3f}, meter {:.3f}, picture {:.3f}; shortest {:.3f}, deformers {:.3f}, "
+             "cascades {:.3f} {:.3f} {:.3f}, surfaces {:.3f}, lines {:.3f}, occlusion {:.3f}, "
+             "light {:.3f}, forward {:.3f}, meter {:.3f}, picture {:.3f})",
              game_fps, stats.frames, seconds, skipped - stats.skipped, stats.work_ms / frames,
              stats.wait_ms / frames, gpu_ms, stats.gpu_ms[DeformerInterval] / timed,
              stats.gpu_ms[FirstCascadeInterval] / timed,
              stats.gpu_ms[FirstCascadeInterval + 1] / timed,
              stats.gpu_ms[FirstCascadeInterval + 2] / timed, stats.gpu_ms[SurfacesInterval] / timed,
-             stats.gpu_ms[LinesInterval] / timed, stats.gpu_ms[LightInterval] / timed,
-             stats.gpu_ms[ForwardInterval] / timed, stats.gpu_ms[MeterInterval] / timed,
-             stats.gpu_ms[PictureInterval] / timed, stats.gpu_min_ms[0],
-             stats.gpu_min_ms[DeformerInterval], stats.gpu_min_ms[FirstCascadeInterval],
-             stats.gpu_min_ms[FirstCascadeInterval + 1], stats.gpu_min_ms[FirstCascadeInterval + 2],
-             stats.gpu_min_ms[SurfacesInterval], stats.gpu_min_ms[LinesInterval],
+             stats.gpu_ms[LinesInterval] / timed, stats.gpu_ms[OcclusionInterval] / timed,
+             stats.gpu_ms[LightInterval] / timed, stats.gpu_ms[ForwardInterval] / timed,
+             stats.gpu_ms[MeterInterval] / timed, stats.gpu_ms[PictureInterval] / timed,
+             stats.gpu_min_ms[0], stats.gpu_min_ms[DeformerInterval],
+             stats.gpu_min_ms[FirstCascadeInterval], stats.gpu_min_ms[FirstCascadeInterval + 1],
+             stats.gpu_min_ms[FirstCascadeInterval + 2], stats.gpu_min_ms[SurfacesInterval],
+             stats.gpu_min_ms[LinesInterval], stats.gpu_min_ms[OcclusionInterval],
              stats.gpu_min_ms[LightInterval], stats.gpu_min_ms[ForwardInterval],
              stats.gpu_min_ms[MeterInterval], stats.gpu_min_ms[PictureInterval]);
     LOG_INFO(

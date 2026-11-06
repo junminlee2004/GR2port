@@ -463,7 +463,10 @@ struct Light {
     float ibl_blend;
     /// The distance the world's lines measure depth against.
     float depth_range;
-    u32 padding[2];
+    /// The strength of the ambient occlusion, and the value that picks its program: above 0.9 its
+    /// samples skip pixels that are not the world's.
+    float occlusion_intensity;
+    float occlusion_select;
     /// Occluders in view space: centre, radius.
     float occluder_spheres[MaxOccluders][4];
     /// The ambient light's spherical harmonics for characters: Ar, Ag, Ab, Br, Bg, Bb, Cc.

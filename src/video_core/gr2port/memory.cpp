@@ -120,13 +120,13 @@ void Memory::Destroy(Buffer& buffer) {
 }
 
 Image Memory::CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsageFlags usage,
-                          vk::ImageAspectFlags aspect, u32 layers) {
+                          vk::ImageAspectFlags aspect, u32 layers, u32 levels) {
     const VkImageCreateInfo image_info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = static_cast<VkFormat>(format),
         .extent = {extent.width, extent.height, 1},
-        .mipLevels = 1,
+        .mipLevels = levels,
         .arrayLayers = layers,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
@@ -152,7 +152,7 @@ Image Memory::CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsage
         .image = image.image,
         .viewType = layers > 1 ? vk::ImageViewType::e2DArray : vk::ImageViewType::e2D,
         .format = format,
-        .subresourceRange = {aspect, 0, 1, 0, layers},
+        .subresourceRange = {aspect, 0, levels, 0, layers},
     };
     image.view = d.device.createImageView(view_info, nullptr, d.dispatch).value;
     return image;

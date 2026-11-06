@@ -18,6 +18,7 @@ layout(set = 2, binding = 1) uniform sampler2D surface_albedo;
 layout(set = 2, binding = 2) uniform sampler2D surface_normal;
 layout(set = 2, binding = 3) uniform sampler2D surface_material;
 layout(set = 2, binding = 4) uniform sampler2D world_lines;
+layout(set = 2, binding = 5) uniform sampler2D occlusion;
 
 layout(push_constant) uniform Constants {
     Light light;
@@ -32,6 +33,9 @@ const float ShadowFadeRange = 0.1;
 const float ThicknessOffsets[2] = float[2](0.012, 0.08);
 const float TranslucencyRange = 1.2;
 const float AmbientTranslucency = 2.0;
+// The ambient occlusion fades out from this distance, over the inverse of the range.
+const float OcclusionStart = 100.0;
+const float OcclusionRange = 1.0 / 60.0;
 
 vec3 ShadowCoord(uint cascade, vec3 position) {
     const vec4 coord = light.shadow_projection[cascade] * vec4(position, 1.0);
@@ -133,8 +137,8 @@ vec3 Tone(vec3 c) {
     return mix(t, t - f + f2 * f2, step(vec3(1.0), t)) / light.toning;
 }
 
-// The game's LightPass (key light only), IBL and Resolve programs in one pass, without ambient
-// occlusion and screen-space shadows.
+// The game's LightPass (key light only), IBL and Resolve programs in one pass, without
+// screen-space shadows.
 void main() {
     const ivec2 pixel = ivec2(gl_FragCoord.xy);
     const float depth = texelFetch(scene_depth, pixel, 0).r;
@@ -153,6 +157,13 @@ void main() {
     const vec2 packed_normal = texelFetch(surface_normal, pixel, 0).rg;
     const vec4 surface = texelFetch(surface_material, pixel, 0);
     const float translucency = surface.b;
+    // What the ambient occlusion leaves of the key light, where thin surfaces lose less, and of
+    // the ambient light.
+    const float occluded =
+        texelFetch(occlusion, pixel, 0).r *
+        (1.0 - clamp((distance_to_eye - OcclusionStart) * OcclusionRange, 0.0, 1.0));
+    const float key_open = 1.0 - min(occluded * max(1.0 - 4.0 * translucency, 0.0), 1.0);
+    const float ambient_open = 1.0 - min(occluded, 1.0);
 
     const float packed_squared = dot(packed_normal, packed_normal);
     const vec3 normal =
@@ -189,8 +200,9 @@ void main() {
     const float visibility =
         1.0 / ((n_dot_v + sqrt(a2 + (1.0 - a2) * n_dot_v * n_dot_v)) *
                (n_dot_l + sqrt(a2 + (1.0 - a2) * n_dot_l * n_dot_l)));
-    const vec3 highlight = (reflectance + (1.0 - reflectance) * fresnel) * ggx * visibility;
-    vec3 lit = light.light_color.rgb * visible * n_dot_l * (highlight + diffuse / Pi);
+    const vec3 highlight =
+        key_open * (reflectance + (1.0 - reflectance) * fresnel) * ggx * visibility;
+    vec3 lit = light.light_color.rgb * visible * key_open * n_dot_l * (highlight + diffuse / Pi);
 
     // Light through thin surfaces, from behind them.
     if (translucency > 0.0) {
@@ -203,7 +215,7 @@ void main() {
 
     // Ambient light from the sky's cube maps.
     const vec3 sky_normal = normalize(mat3(light.view_to_sky) * normal);
-    vec3 ambient = diffuse * Irradiance(sky_normal);
+    vec3 ambient = ambient_open * diffuse * Irradiance(sky_normal);
     if (translucency > 0.0) {
         ambient += AmbientTranslucency * translucency * diffuse * Irradiance(-sky_normal);
     }
@@ -218,7 +230,8 @@ void main() {
     const float scale = 1.04 - 0.572 * rough - 1.04 * a004;
     const float bias = (0.022 * rough - 0.04 + 1.04 * a004) *
                        clamp(50.0 * reflectance.g, 0.0, 1.0);
-    ambient += (reflectance * scale + bias) * Radiance(reflect(sky_ray, sky_normal), lod);
+    ambient += ambient_open * ambient_open * (reflectance * scale + bias) *
+               Radiance(reflect(sky_ray, sky_normal), lod);
 
     // Comic shading: the occluders' shade, bands, then the fades to the gradation and background.
     ambient *= light.ibl_intensity;
@@ -240,10 +253,15 @@ void main() {
                                     .rgb;
         shaded = mix(shaded, background, background_amount);
     }
-    // The lines darken or lighten by the contour colour, with distance by another share.
+    // The lines and the hatching in occluded places darken or lighten by the contour colour, with
+    // distance by another share.
     const float line_share = mix(
         light.contour_blend, light.contour_distant_blend,
         clamp((distance_to_eye - light.contour_start) * light.contour_range, 0.0, 1.0));
-    const float line = clamp(texelFetch(world_lines, pixel, 0).r, 0.0, 1.0) * line_share;
+    const float key_occluded = 1.0 - key_open;
+    const float hatching =
+        light.hatching_intensity * key_occluded * key_occluded * (1.0 - albedo_hatching.a);
+    const float line =
+        clamp(max(texelFetch(world_lines, pixel, 0).r, hatching), 0.0, 1.0) * line_share;
     color = vec4(shaded * (1.0 + (2.0 * light.contour_color.rgb - 1.0) * line), 1.0);
 }
