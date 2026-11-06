@@ -53,6 +53,8 @@ constexpr u32 GroupPixels = 64;
 // faster, for 32 frames.
 constexpr std::array<u32, 8> TileOffsets{0, 7, 6, 3, 1, 5, 2, 4};
 constexpr u32 TileOffsetFrames = 32;
+// The word of a character's pixel constants that holds its self-translucency.
+constexpr u32 SelfTranslucencyConstant = 0x87;
 
 const Device* g_device = nullptr;
 Memory* g_memory = nullptr;
@@ -342,6 +344,24 @@ void LogAndReadMeter(vk::CommandBuffer cmd, const u8* packet) {
              projection[5], projection[6], projection[7], projection[8], projection[9],
              projection[10], projection[11], projection[12], projection[13], projection[14],
              projection[15]);
+    u32 without_normal_map = 0;
+    u32 without_detail = 0;
+    u32 without_reflection = 0;
+    u32 translucent = 0;
+    for (u32 i = 0; i < header.characters; i++) {
+        Scene::Character character;
+        std::memcpy(&character, packet + Scene::CharactersOffset + i * sizeof(character),
+                    sizeof(character));
+        without_normal_map += character.normal_map == 0;
+        without_detail += character.detail == 0;
+        without_reflection += character.reflection == 0;
+        translucent += character.pixel_constants[SelfTranslucencyConstant] != 0;
+    }
+    LOG_INFO(Render_Vulkan,
+             "GR2port characters: {} draws, {} without a normal map, {} without a detail map, {} "
+             "without a reflection map, {} with self-translucency",
+             header.characters, without_normal_map, without_detail, without_reflection,
+             translucent);
     if (!g_meter_cleared) {
         return;
     }

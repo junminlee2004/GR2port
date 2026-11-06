@@ -31,6 +31,8 @@ inline constexpr u32 MaxSpheres = 256;
 inline constexpr u32 MaxDecals = 1024;
 /// World draws with a material per packet, and the spheres that shade the world's ambient light.
 inline constexpr u32 MaxMaterials = 8192;
+/// Character draws per packet.
+inline constexpr u32 MaxCharacters = 1024;
 inline constexpr u32 MaxOccluders = 64;
 /// The effector grid: 6 x 6 x 10 cells of the view, each listing up to 127 spheres and an end
 /// marker.
@@ -89,6 +91,9 @@ struct Header {
     /// Draws with a material, and draws past MaxMaterials, which lose theirs.
     u32 materials;
     u32 dropped_materials;
+    /// Character draws, and those past MaxCharacters, which are not drawn.
+    u32 characters;
+    u32 dropped_characters;
     /// The draws are in three runs: world draws without alpha test from index 0, forward draws
     /// after them, and alpha-tested world draws from the end of the array down.
     u32 world_draws;
@@ -161,7 +166,8 @@ struct Draw {
     u32 normal;
     u32 tangent;
     u32 vertex_color;
-    /// The index of the draw's material in the packet, plus 1; 0 for none.
+    /// The index of the draw's material or, for a character's draw, its Character in the packet,
+    /// plus 1; 0 for none.
     u32 material;
 };
 static_assert(sizeof(Draw) == 224);
@@ -298,6 +304,21 @@ inline constexpr u32 MaterialLayered = 1;
 /// The material's gradation applies.
 inline constexpr u32 MaterialGradation = 2;
 
+/// What a character draw reads: the game's G2_CH_Main pixel constants, then the normal bend of its
+/// vertex constants and the item's texture objects. shaders/scene.glsl names the constants.
+struct Character {
+    u32 pixel_constants[152];
+    float bend_position[4];
+    float bend_range;
+    float bend_bias;
+    /// Texture handles; 0 is white. A normal map of 0 means the draw has none.
+    u32 normal_map;
+    u32 reflection;
+    u32 detail;
+    u32 padding[3];
+};
+static_assert(sizeof(Character) == 656);
+
 /// The frame's sky, as the game's sky pixel programs read it. Rays run in the sky's space, which
 /// the view's sky rotation sets. Matrices are as in Draw.
 struct Sky {
@@ -396,6 +417,8 @@ struct Light {
     u32 padding[3];
     /// Occluders in view space: centre, radius.
     float occluder_spheres[MaxOccluders][4];
+    /// The ambient light's spherical harmonics for characters: Ar, Ag, Ab, Br, Bg, Bb, Cc.
+    float sh[7][4];
 };
 static_assert(sizeof(Light) % 16 == 0);
 
@@ -427,11 +450,13 @@ inline constexpr u64 SkyOffset = DecalsOffset + MaxDecals * sizeof(Decal);
 inline constexpr u64 GradeOffset = SkyOffset + sizeof(Sky);
 inline constexpr u64 LightOffset = GradeOffset + sizeof(Grade);
 inline constexpr u64 MaterialsOffset = LightOffset + sizeof(Light);
-inline constexpr u64 PacketBytes = MaterialsOffset + MaxMaterials * sizeof(Material);
+inline constexpr u64 CharactersOffset = MaterialsOffset + MaxMaterials * sizeof(Material);
+inline constexpr u64 PacketBytes = CharactersOffset + MaxCharacters * sizeof(Character);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
               SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0 && SkyOffset % 16 == 0 &&
-              GradeOffset % 16 == 0 && LightOffset % 16 == 0 && MaterialsOffset % 16 == 0);
+              GradeOffset % 16 == 0 && LightOffset % 16 == 0 && MaterialsOffset % 16 == 0 &&
+              CharactersOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

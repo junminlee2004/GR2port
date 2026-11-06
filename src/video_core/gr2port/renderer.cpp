@@ -30,8 +30,8 @@
 #include "video_core/gr2port/renderer.h"
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/scene_ring.h"
-#include "video_core/gr2port/shaders/mesh_frag.h"
-#include "video_core/gr2port/shaders/mesh_vert.h"
+#include "video_core/gr2port/shaders/character_frag.h"
+#include "video_core/gr2port/shaders/character_vert.h"
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
@@ -66,6 +66,14 @@ constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
 constexpr u64 MaxFrameIndices = 48u << 20;
 
 static_assert(Scene::PacketBytes <= SceneRing::SlotBytes);
+
+struct CharacterPush {
+    u64 draws;
+    u64 characters;
+    u64 decals;
+    u64 light;
+    std::array<float, 2> target_inverse;
+};
 
 struct Slot {
     vk::CommandPool pool;
@@ -152,7 +160,7 @@ private:
     std::array<Slot, FramesInFlight> slots;
     vk::QueryPool timestamps;
     Image depth;
-    Pipeline mesh_pipeline;
+    Pipeline character_pipeline;
     u32 next = 0;
     // The number of the next frame to submit; frames up to frame - FramesInFlight are done once
     // the frame's slot is free.
@@ -231,16 +239,16 @@ bool Thread::Init() {
         return false;
     }
     const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout()};
-    mesh_pipeline = CreateGraphicsPipeline(d, {
-                                                  .vertex = MESH_VERT,
-                                                  .fragment = MESH_FRAG,
-                                                  .color = Look::SceneFormat,
-                                                  .depth = DepthFormat,
-                                                  .depth_test = true,
-                                                  .push_constant_bytes = 3 * sizeof(u64),
-                                                  .set_layouts = set_layouts,
-                                              });
-    if (!mesh_pipeline.pipeline) {
+    character_pipeline = CreateGraphicsPipeline(d, {
+                                                       .vertex = CHARACTER_VERT,
+                                                       .fragment = CHARACTER_FRAG,
+                                                       .color = Look::SceneFormat,
+                                                       .depth = DepthFormat,
+                                                       .depth_test = true,
+                                                       .push_constant_bytes = sizeof(CharacterPush),
+                                                       .set_layouts = set_layouts,
+                                                   });
+    if (!character_pipeline.pipeline) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -608,17 +616,23 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
             .maxDepth = 1.0f,
         };
         const vk::Rect2D scissor{{0, 0}, extent};
-        const std::array<u64, 3> addresses{
-            packet.address + Scene::DrawsOffset + u64{header.world_draws} * sizeof(Scene::Draw),
-            packet.address + Scene::ShadowsOffset, packet.address + Scene::DecalsOffset};
+        const CharacterPush push{
+            .draws =
+                packet.address + Scene::DrawsOffset + u64{header.world_draws} * sizeof(Scene::Draw),
+            .characters = packet.address + Scene::CharactersOffset,
+            .decals = packet.address + Scene::DecalsOffset,
+            .light = packet.address + Scene::LightOffset,
+            .target_inverse = {1.0f / static_cast<float>(extent.width),
+                               -1.0f / static_cast<float>(extent.height)},
+        };
         const std::array sets{Textures::Set(), Shadows::Set()};
-        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, mesh_pipeline.pipeline, dl);
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mesh_pipeline.layout, 0, sets, {},
-                               dl);
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, character_pipeline.pipeline, dl);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, character_pipeline.layout, 0, sets,
+                               {}, dl);
         cmd.setViewport(0, viewport, dl);
         cmd.setScissor(0, scissor, dl);
-        cmd.pushConstants(mesh_pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
-                          sizeof(addresses), addresses.data(), dl);
+        cmd.pushConstants(character_pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
+                          sizeof(push), &push, dl);
         cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
         cmd.drawIndexedIndirect(scene_ring.buffer,
                                 offset + Scene::CommandsOffset +

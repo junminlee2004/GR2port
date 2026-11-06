@@ -197,8 +197,10 @@ constexpr float ShadowEndFade = 10.0f;
 // The occluders' strength, penumbra and range, and the same in the view's other mode.
 constexpr std::array<float, 3> OccluderConstants{0.65f, 5.0f, 1.25f};
 constexpr std::array<float, 3> OccluderModeConstants{0.3f, 14.0f, 2.2222223f};
-// The frame graph holds the hatching texture object at +0x91b8.
+// The frame graph holds the hatching texture object at +0x91b8, and at +0x1f20 the ambient light's
+// spherical harmonics, which the frame draws after the capture sets from the view's ambient lights.
 constexpr u64 FrameGraphHatching = 0x91b8;
+constexpr u64 FrameGraphSh = 0x1f20;
 // A G2_BG_Main item: material flags +0x30, the texture objects of its layered colour +0x40, normal
 // map +0x48, layered normal map +0x50 and mask +0x58. Its vertex constants hold the gradation at
 // +0xc0; its pixel constants, the head of a Scene::Material, take 0xa0 bytes.
@@ -213,6 +215,14 @@ constexpr u64 MainPunchThrough = 0x70;
 constexpr u32 MainFlagAlpha = 0x2;
 constexpr u32 MainFlagNoHatching = 0x10;
 constexpr u32 MainFlagGradation = 0x40;
+// A G2_CH_Main item: the texture objects of its normal map +0x38, reflection +0x40 and detail
+// +0x48. Its vertex constants hold the normal bend's point at +0x140 and its range and bias at
+// +0x1c8.
+constexpr u64 CharacterNormalMap = 0x38;
+constexpr u64 CharacterReflection = 0x40;
+constexpr u64 CharacterDetail = 0x48;
+constexpr u64 CharacterBendPosition = 0x140;
+constexpr u64 CharacterBend = 0x1c8;
 // The game's Composite pass takes these from a view's values.
 constexpr u32 CurveKnots = 7;
 constexpr float LensOutwardScale = 1.3f;
@@ -271,6 +281,7 @@ struct Category {
     u64 texcoord_transform;
     u64 decal = None;
     bool main_material = false;
+    bool character = false;
 };
 constexpr Category MainCategory{15, 0x60, 0x38, 0x68, 0x00, 0x20, None, true}; // G2_BG_Main
 // The world's other opaque categories, drawn into the surfaces after G2_BG_Main.
@@ -283,7 +294,7 @@ constexpr std::array<Category, 6> WorldCategories{{
     {23, 0x30, None, None, None, None}, // Far: untextured
 }};
 // G2_CH_Main: colour texture t1, decal texture t6.
-constexpr Category CharacterCategory{8, 0x68, 0x30, 0x70, 0xa0, None, 0x50};
+constexpr Category CharacterCategory{8, 0x68, 0x30, 0x70, 0xa0, None, 0x50, false, true};
 // CH_Main's vertex constants hold the decals' positions and targets, then their scales, which are
 // 0 when a material has no decals. Its pixel constants hold GradationColor and the alpha step flag.
 constexpr u64 DecalPositions = 0x150;
@@ -330,7 +341,8 @@ public:
           skin_jobs{reinterpret_cast<Scene::SkinJob*>(packet + Scene::SkinJobsOffset)},
           soft_body_jobs{reinterpret_cast<Scene::SoftBodyJob*>(packet + Scene::SoftBodyJobsOffset)},
           decals{reinterpret_cast<Scene::Decal*>(packet + Scene::DecalsOffset)},
-          materials{reinterpret_cast<Scene::Material*>(packet + Scene::MaterialsOffset)} {}
+          materials{reinterpret_cast<Scene::Material*>(packet + Scene::MaterialsOffset)},
+          characters{reinterpret_cast<Scene::Character*>(packet + Scene::CharactersOffset)} {}
 
     void SetCascades(u32 mask) {
         header.cascades = mask;
@@ -434,6 +446,14 @@ public:
             alpha_tested =
                 (flags & MainFlagAlpha) != 0 || Load<float>(material + MainPunchThrough) < 1.0f;
             material_index = AddMainMaterial(item, flags, constants, material, *mesh);
+        }
+        if (category.character) {
+            if (material == 0 || header.characters == Scene::MaxCharacters) {
+                header.dropped_characters += material != 0;
+                header.dropped++;
+                return;
+            }
+            material_index = AddCharacter(item, constants, material);
         }
         const u32 i = alpha_tested ? Scene::MaxDraws - 1 - header.alpha_draws++ : header.draws++;
         // The fields are written in order: the packet is write-combined.
@@ -739,6 +759,27 @@ private:
         return ++header.materials;
     }
 
+    // Writes a G2_CH_Main item's constants to the packet and returns their index plus 1.
+    u32 AddCharacter(VAddr item, VAddr vertex_constants, VAddr pixel_constants) {
+        const auto handle = [item](u64 field) {
+            const VAddr object = Load<VAddr>(item + field);
+            return object != 0 ? Textures::Get(object) : 0;
+        };
+        // The fields are written in order: the packet is write-combined.
+        Scene::Character& out = characters[header.characters];
+        std::memcpy(out.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
+                    sizeof(out.pixel_constants));
+        std::memcpy(out.bend_position,
+                    reinterpret_cast<const void*>(vertex_constants + CharacterBendPosition),
+                    sizeof(out.bend_position));
+        out.bend_range = Load<float>(vertex_constants + CharacterBend);
+        out.bend_bias = Load<float>(vertex_constants + CharacterBend + 4);
+        out.normal_map = handle(CharacterNormalMap);
+        out.reflection = handle(CharacterReflection);
+        out.detail = handle(CharacterDetail);
+        return ++header.characters;
+    }
+
     // Copies a palette into the packet once for each run of users that share it.
     bool CopyPalette(VAddr palette, u32 bones, u64& address) {
         if (palette != last_palette || bones != last_bones) {
@@ -791,6 +832,7 @@ private:
     Scene::SoftBodyJob* soft_body_jobs;
     Scene::Decal* decals;
     Scene::Material* materials;
+    Scene::Character* characters;
     u32 hatching = 0;
     VAddr last_palette = 0;
     u32 last_bones = 0;
@@ -1049,7 +1091,7 @@ void WriteGrade(VAddr view, u8* packet) {
 
 // The values the game's LightPass, IBL and Resolve passes set up on the draw thread after the
 // capture, from the view. The cascades' projections take view space to their texture coordinates.
-void WriteLight(VAddr view, u8* packet) {
+void WriteLight(VAddr frame_graph, VAddr view, u8* packet) {
     Scene::Light light{};
     const auto number = [view](u64 field) { return Load<float>(view + field); };
     const auto copy = [view](float* out, u64 field, size_t bytes) {
@@ -1121,6 +1163,8 @@ void WriteLight(VAddr view, u8* packet) {
         const float second_weight = Load<float>(second + AmbientLightWeight);
         light.ibl_blend = second_weight / (second_weight + Load<float>(first + AmbientLightWeight));
     }
+    std::memcpy(light.sh, reinterpret_cast<const void*>(frame_graph + FrameGraphSh),
+                sizeof(light.sh));
     std::memcpy(packet + Scene::LightOffset, &light, sizeof(light));
 }
 
@@ -1171,7 +1215,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     WriteShadows(view, packet, writer);
     WriteSky(frame_graph, view, packet, writer);
     WriteGrade(view, packet);
-    WriteLight(view, packet);
+    WriteLight(frame_graph, view, packet);
     const VAddr hatching = Load<VAddr>(frame_graph + FrameGraphHatching);
     writer.SetHatching(hatching != 0 ? Textures::Get(hatching) : 0);
     const VAddr records = Load<VAddr>(view + ViewDeformers);

@@ -75,6 +75,87 @@ struct Material {
     uint flags;
 };
 
+// The game's G2_CH_Main pixel constants, then what its programs take from elsewhere.
+struct Character {
+    mat4 view_inverse;
+    vec4 split_depths;
+    vec4 highlight_color;
+    vec4 diffuse_color;
+    vec4 ambient_color;
+    vec4 shadow_color;
+    vec4 specular_color;
+    vec4 color_scale;
+    vec4 gradation_color;
+    vec4 light_color;
+    vec4 light_direction;
+    vec4 camera_light_color;
+    vec4 target_size_inverse;
+    vec4 sh_unset[7];
+    vec2 normal_repeat;
+    vec2 normal_offset;
+    vec2 reflection_offset;
+    vec2 inverse_z;
+    vec2 punch_through;
+    uint point_lights;
+    float highlight_border;
+    float highlight_smooth;
+    float highlight_fresnel;
+    float diffuse_border;
+    float diffuse_smooth;
+    float diffuse_line;
+    float shadow_border;
+    float shadow_smooth;
+    float shadow_fresnel;
+    float shadow_gradation;
+    float specular_border;
+    float specular_smooth;
+    float specular_fresnel;
+    float rim_smooth;
+    float rim_border;
+    float mask_density;
+    int reflection_mode;
+    float reflection_blend;
+    float reflection_repeat;
+    float reflection_distortion;
+    float detail_border;
+    float detail_blend;
+    float detail_repeat;
+    float detail_mask;
+    uint alpha_step;
+    float alpha_reference;
+    float light_intensity_scale;
+    float shadow_influence;
+    float camera_light_attenuation;
+    float camera_light_inner;
+    float camera_light_outer;
+    float camera_light_directivity;
+    float self_translucency;
+    float self_translucency_start;
+    float self_translucency_depth;
+    float self_translucency_offset;
+    float self_translucency_power;
+    float self_translucency_scale;
+    uint self_translucency_mode;
+    uint bloom_fresnel_mode;
+    float bloom_fresnel_border;
+    float bloom_fresnel_smooth;
+    float ibl_blend;
+    float vertex_shadow;
+    float rim_lighting;
+    float rim_intensity;
+    float padding[3];
+    vec4 bend_position;
+    float bend_range;
+    float bend_bias;
+    uint normal_map;
+    uint reflection;
+    uint detail;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Characters {
+    Character characters[];
+};
+
 // Material flags.
 const uint MaterialLayered = 1u;
 const uint MaterialGradation = 2u;
@@ -211,4 +292,5 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Li
     float ibl_blend;
     uint padding[3];
     vec4 occluder_spheres[MaxOccluders];
+    vec4 sh[7];
 };
