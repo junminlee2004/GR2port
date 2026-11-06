@@ -17,7 +17,7 @@
 #include "core/module.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/tls.h"
-#include "video_core/gr2_pt/gr2_pt.h"
+#include "video_core/gr2port/gr2port.h"
 
 namespace Core {
 
@@ -439,7 +439,7 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
         }
     }
 #endif
-    Gr2Pt::Install(base_virtual_addr);
+    Gr2Port::Install(base_virtual_addr);
 }
 
 void Module::LoadDynamicInfo() {
