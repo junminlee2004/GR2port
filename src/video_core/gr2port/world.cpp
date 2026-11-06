@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
 
 #include "common/logging/log.h"
@@ -63,8 +64,8 @@ std::array<Image, LineImages> g_lines;
 bool g_lines_cleared = false;
 u32 g_lines_image = 0;
 s32 g_lines_frame = 0;
-Pipeline g_opaque;
-Pipeline g_alpha;
+// The surface pipelines, in the order of the draw lists.
+std::array<Pipeline, 4> g_surface_pipelines;
 Pipeline g_light;
 Pipeline g_lines_pipeline;
 
@@ -145,7 +146,7 @@ bool CreateSet(const Device& d) {
 }
 
 Pipeline CreateSurfacePipeline(const Device& d, vk::Format depth_format,
-                               std::span<const u32> fragment) {
+                               std::span<const u32> fragment, vk::CullModeFlags cull) {
     const std::array texture_set{Textures::SetLayout()};
     return CreateGraphicsPipeline(d, {
                                          .vertex = WORLD_VERT,
@@ -153,6 +154,7 @@ Pipeline CreateSurfacePipeline(const Device& d, vk::Format depth_format,
                                          .colors = SurfaceFormats,
                                          .depth = depth_format,
                                          .depth_test = true,
+                                         .cull = cull,
                                          .push_constant_bytes = sizeof(SurfacePush),
                                          .set_layouts = texture_set,
                                      });
@@ -167,8 +169,12 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
         LOG_ERROR(Render_Vulkan, "GR2port: the surfaces' set failed");
         return false;
     }
-    g_opaque = CreateSurfacePipeline(device, depth_format, WORLD_FRAG);
-    g_alpha = CreateSurfacePipeline(device, depth_format, WORLD_ALPHA_FRAG);
+    constexpr auto Back = vk::CullModeFlagBits::eBack;
+    constexpr auto None = vk::CullModeFlagBits::eNone;
+    g_surface_pipelines = {CreateSurfacePipeline(device, depth_format, WORLD_FRAG, Back),
+                           CreateSurfacePipeline(device, depth_format, WORLD_FRAG, None),
+                           CreateSurfacePipeline(device, depth_format, WORLD_ALPHA_FRAG, Back),
+                           CreateSurfacePipeline(device, depth_format, WORLD_ALPHA_FRAG, None)};
     const std::array light_sets{Textures::SetLayout(), Shadows::SetLayout(), g_set_layout};
     g_light = CreateGraphicsPipeline(device, {
                                                  .vertex = FULLSCREEN_VERT,
@@ -180,7 +186,9 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
     const std::array line_sets{g_lines_layout};
     g_lines_pipeline =
         CreateComputePipeline(device, WORLD_LINES_COMP, sizeof(LinesPush), line_sets);
-    return g_opaque.pipeline && g_alpha.pipeline && g_light.pipeline && g_lines_pipeline.pipeline;
+    return std::ranges::all_of(g_surface_pipelines,
+                               [](const Pipeline& pipeline) { return !!pipeline.pipeline; }) &&
+           g_light.pipeline && g_lines_pipeline.pipeline;
 }
 
 bool Resize(vk::Extent2D extent, vk::ImageView depth) {
@@ -303,30 +311,25 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, bool dra
     cmd.setViewport(0, viewport, dl);
     cmd.setScissor(0, vk::Rect2D{{0, 0}, g_extent}, dl);
     cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
-    SurfacePush push{
+    const SurfacePush push{
         .draws = address + Scene::DrawsOffset,
         .materials = address + Scene::MaterialsOffset,
     };
-    if (drawn && header.world_draws != 0) {
-        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_opaque.pipeline, dl);
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_opaque.layout, 0,
-                               Textures::Set(), {}, dl);
-        cmd.pushConstants(g_opaque.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
-                          &push, dl);
-        cmd.drawIndexedIndirect(buffer, offset + Scene::CommandsOffset, header.world_draws,
-                                sizeof(Scene::Command), dl);
-    }
-    if (drawn && header.alpha_draws != 0) {
-        const u64 first = Scene::MaxDraws - header.alpha_draws;
-        push.draws += first * sizeof(Scene::Draw);
-        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_alpha.pipeline, dl);
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_alpha.layout, 0, Textures::Set(),
-                               {}, dl);
-        cmd.pushConstants(g_alpha.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
-                          &push, dl);
-        cmd.drawIndexedIndirect(buffer,
-                                offset + Scene::CommandsOffset + first * sizeof(Scene::Command),
-                                header.alpha_draws, sizeof(Scene::Command), dl);
+    u64 first = 0;
+    for (u32 list = 0; drawn && list < g_surface_pipelines.size(); list++) {
+        const u32 count = header.draw_commands[list];
+        if (count != 0) {
+            const Pipeline& pipeline = g_surface_pipelines[list];
+            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0,
+                                   Textures::Set(), {}, dl);
+            cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
+                              sizeof(push), &push, dl);
+            cmd.drawIndexedIndirect(buffer,
+                                    offset + Scene::CommandsOffset + first * sizeof(Scene::Command),
+                                    count, sizeof(Scene::Command), dl);
+        }
+        first += count;
     }
     cmd.endRendering(dl);
     for (vk::ImageMemoryBarrier2& barrier : barriers) {

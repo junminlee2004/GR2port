@@ -55,6 +55,19 @@ enum class SoftBodyDrop : u32 {
     Count,
 };
 
+/// The command lists of a frame's draws.
+enum class DrawList : u32 {
+    /// World draws without alpha test, that cull back faces and that cull nothing.
+    OpaqueCulled,
+    Opaque,
+    /// Alpha-tested world draws, that cull back faces and that cull nothing.
+    AlphaCulled,
+    Alpha,
+    /// Character draws.
+    Character,
+    Count,
+};
+
 /// The parts of the capture's time.
 enum class CapturePart : u32 {
     /// The frame's constants: shadows, sky, exposure, light.
@@ -112,10 +125,8 @@ struct Header {
     /// Outlines, and those that cannot be drawn.
     u32 contours;
     u32 dropped_contours;
-    /// The draws are in three runs: world draws without alpha test from index 0, forward draws
-    /// after them, and alpha-tested world draws from the end of the array down.
-    u32 world_draws;
-    u32 alpha_draws;
+    /// The commands of each draw list, which follow each other in the packet.
+    u32 draw_commands[static_cast<u32>(DrawList::Count)];
     /// Shadow casters written, of them skinned ones; casters with no drawable mesh or palette, or
     /// past MaxCasters.
     u32 casters;
@@ -154,8 +165,8 @@ struct Shadows {
 };
 static_assert(sizeof(Shadows) == 688);
 
-/// A draw of a mesh, read by the vertex shader at gl_DrawID. Matrices are the game's: row-major,
-/// positions multiply from the left, OpenGL clip space.
+/// A draw of a mesh, read by the vertex shader at gl_InstanceIndex. Matrices are the game's:
+/// row-major, positions multiply from the left, OpenGL clip space.
 struct Draw {
     float world_view[16];
     float world_view_projection[16];
@@ -460,8 +471,7 @@ struct Light {
 };
 static_assert(sizeof(Light) % 16 == 0);
 
-/// The indirect command of a draw, at the same index as the draw. A caster's command gives the
-/// caster's index as its first instance.
+/// The indirect command of a draw or a caster, which gives its index as the first instance.
 struct Command {
     u32 index_count;
     u32 instance_count;
@@ -470,6 +480,15 @@ struct Command {
     u32 first_instance;
 };
 static_assert(sizeof(Command) == 20);
+
+/// The index of a draw list's first command in the packet's commands.
+inline u32 FirstCommand(const Header& header, DrawList list) {
+    u32 first = 0;
+    for (u32 i = 0; i < static_cast<u32>(list); i++) {
+        first += header.draw_commands[i];
+    }
+    return first;
+}
 
 inline constexpr u64 ShadowsOffset = 512;
 inline constexpr u64 DrawsOffset = 1280;

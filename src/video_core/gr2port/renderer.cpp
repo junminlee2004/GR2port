@@ -255,6 +255,7 @@ bool Thread::Init() {
                                                        .color = Look::SceneFormat,
                                                        .depth = DepthFormat,
                                                        .depth_test = true,
+                                                       .cull = vk::CullModeFlagBits::eBack,
                                                        .push_constant_bytes = sizeof(CharacterPush),
                                                        .set_layouts = set_layouts,
                                                    });
@@ -386,12 +387,13 @@ void Thread::LogScene(const Scene::Header& header, const SceneRing::Packet& pack
     const auto* commands =
         reinterpret_cast<const Scene::Command*>(packet.data + Scene::CommandsOffset);
     for (u32 i = 0; i < std::min(header.draws, 4u); i++) {
-        const float* wvp = draws[i].world_view_projection;
+        const Scene::Draw& draw = draws[commands[i].first_instance];
+        const float* wvp = draw.world_view_projection;
         LOG_INFO(Render_Vulkan,
                  "GR2port: draw {}: vertices {:#x} stride {} position {:#x}, indices {} from {}, "
                  "WVP rows ({:.3f} {:.3f} {:.3f} {:.3f}) ({:.3f} {:.3f} {:.3f} {:.3f}) "
                  "({:.3f} {:.3f} {:.3f} {:.3f}) ({:.3f} {:.3f} {:.3f} {:.3f})",
-                 i, draws[i].vertices, draws[i].stride, draws[i].position, commands[i].index_count,
+                 i, draw.vertices, draw.stride, draw.position, commands[i].index_count,
                  commands[i].first_index, wvp[0], wvp[1], wvp[2], wvp[3], wvp[4], wvp[5], wvp[6],
                  wvp[7], wvp[8], wvp[9], wvp[10], wvp[11], wvp[12], wvp[13], wvp[14], wvp[15]);
     }
@@ -494,7 +496,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     Textures::Update(cmd, frame, frame - FramesInFlight);
     Deformers::Update(cmd, frame, frame - FramesInFlight, header.frame);
     LogScene(header, packet);
-    const bool drawn = header.draws + header.alpha_draws != 0 && header.indices <= MaxFrameIndices;
+    const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices;
     stats.refused += header.indices > MaxFrameIndices;
     const u64 offset = u64{packet.slot} * SceneRing::SlotBytes;
     if (timestamps) {
@@ -623,8 +625,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         .pDepthAttachment = &depth_attachment,
     };
     cmd.beginRendering(rendering, dl);
-    const u32 forward_draws = header.draws - header.world_draws;
-    if (drawn && forward_draws != 0) {
+    const u32 character_draws = header.draw_commands[static_cast<u32>(Scene::DrawList::Character)];
+    if (drawn && character_draws != 0) {
         // A negative height keeps the game's y-up clip space.
         const vk::Viewport viewport{
             .x = 0.0f,
@@ -636,8 +638,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         };
         const vk::Rect2D scissor{{0, 0}, extent};
         const CharacterPush push{
-            .draws =
-                packet.address + Scene::DrawsOffset + u64{header.world_draws} * sizeof(Scene::Draw),
+            .draws = packet.address + Scene::DrawsOffset,
             .characters = packet.address + Scene::CharactersOffset,
             .decals = packet.address + Scene::DecalsOffset,
             .light = packet.address + Scene::LightOffset,
@@ -655,8 +656,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
         cmd.drawIndexedIndirect(scene_ring.buffer,
                                 offset + Scene::CommandsOffset +
-                                    u64{header.world_draws} * sizeof(Scene::Command),
-                                forward_draws, sizeof(Scene::Command), dl);
+                                    u64{Scene::FirstCommand(header, Scene::DrawList::Character)} *
+                                        sizeof(Scene::Command),
+                                character_draws, sizeof(Scene::Command), dl);
     }
     if (header.sky != 0) {
         Look::RecordSky(cmd, packet.address);
@@ -707,7 +709,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         RecordSnapshot(cmd, swapchain->Image(index));
         slot.snapshot = snapshot.mapped != nullptr;
     }
-    stats.draws += header.draws + header.alpha_draws;
+    stats.draws += header.draws;
     stats.materials += header.materials;
     stats.dropped_materials += header.dropped_materials;
     stats.contours += header.contours;

@@ -216,6 +216,7 @@ constexpr u64 MainGradation = 0xc0;
 constexpr u64 MainPixelConstantBytes = 0xa0;
 constexpr u64 MainPunchThrough = 0x70;
 constexpr u32 MainFlagAlpha = 0x2;
+constexpr u32 MainFlagCull = 0x4;
 constexpr u32 MainFlagNoHatching = 0x10;
 constexpr u32 MainFlagGradation = 0x40;
 // A G2_CH_Main item: the texture objects of its normal map +0x38, reflection +0x40 and detail
@@ -323,7 +324,8 @@ std::atomic<u64> g_frames{0};
 
 // The frame's commands, which reach the packet in one go. Written item by item, they would leave
 // half-full write-combined lines in several places for the reads between items to evict.
-alignas(64) std::array<Scene::Command, Scene::MaxDraws> g_commands;
+alignas(64) std::array<std::array<Scene::Command, Scene::MaxDraws>,
+                       static_cast<u32>(Scene::DrawList::Count)> g_commands;
 alignas(64) std::array<Scene::Command,
                        Scene::Cascades * Scene::CasterLists * Scene::MaxCasters> g_caster_commands;
 alignas(64) std::array<Scene::Command, Scene::MaxContours> g_contour_commands;
@@ -373,10 +375,12 @@ public:
     // Writes the frame's commands to the packet.
     void CopyCommands() {
         constexpr u64 Bytes = sizeof(Scene::Command);
-        std::memcpy(packet + Scene::CommandsOffset, g_commands.data(), header.draws * Bytes);
-        const u32 alpha_first = Scene::MaxDraws - header.alpha_draws;
-        std::memcpy(packet + Scene::CommandsOffset + alpha_first * Bytes,
-                    g_commands.data() + alpha_first, header.alpha_draws * Bytes);
+        u8* out = packet + Scene::CommandsOffset;
+        for (u32 list = 0; list < g_commands.size(); list++) {
+            const u64 bytes = header.draw_commands[list] * Bytes;
+            std::memcpy(out, g_commands[list].data(), bytes);
+            out += bytes;
+        }
         for (u32 c = 0; c < Scene::Cascades; c++) {
             for (u32 list = 0; list < Scene::CasterLists; list++) {
                 const u32 first = (c * Scene::CasterLists + list) * Scene::MaxCasters;
@@ -401,11 +405,6 @@ public:
         hatching = handle;
     }
 
-    // The draws so far are the world's opaque draws.
-    void EndWorld() {
-        header.world_draws = header.draws;
-    }
-
     void SetSky(u32 cube, const std::array<float, 3>& background) {
         header.sky = cube;
         std::memcpy(header.background, background.data(), sizeof(header.background));
@@ -426,8 +425,7 @@ public:
         const VAddr constants = Load<VAddr>(item + category.constants);
         const VAddr shape = index_buffer - ShapeIndexBuffer;
         if (submesh == 0 || index_buffer == 0 || constants == 0 ||
-            Load<u16>(submesh + SubmeshRanges) == 0 ||
-            header.draws + header.alpha_draws == Scene::MaxDraws) {
+            Load<u16>(submesh + SubmeshRanges) == 0 || header.draws == Scene::MaxDraws) {
             header.dropped++;
             return;
         }
@@ -486,8 +484,11 @@ public:
         }
         u32 material_index = 0;
         bool alpha_tested = false;
+        // The game's world passes cull back faces; G2_BG_Main does by the material's flag.
+        bool culled = true;
         if (category.main_material && material != 0) {
             const u32 flags = Load<u32>(item + MainFlags);
+            culled = (flags & MainFlagCull) != 0;
             alpha_tested =
                 (flags & MainFlagAlpha) != 0 || Load<float>(material + MainPunchThrough) < 1.0f;
             material_index = AddMainMaterial(item, flags, constants, material, *mesh);
@@ -500,7 +501,11 @@ public:
             }
             material_index = AddCharacter(item, constants, material);
         }
-        const u32 i = alpha_tested ? Scene::MaxDraws - 1 - header.alpha_draws++ : header.draws++;
+        const Scene::DrawList list =
+            category.character ? Scene::DrawList::Character
+            : alpha_tested     ? (culled ? Scene::DrawList::AlphaCulled : Scene::DrawList::Alpha)
+                               : (culled ? Scene::DrawList::OpaqueCulled : Scene::DrawList::Opaque);
+        const u32 i = header.draws++;
         // The fields are written in order: the packet is write-combined.
         Scene::Draw& draw = draws[i];
         std::memcpy(draw.world_view, reinterpret_cast<const void*>(constants), 2 * MatrixBytes);
@@ -519,12 +524,13 @@ public:
         draw.tangent = mesh->tangent;
         draw.vertex_color = mesh->vertex_color;
         draw.material = material_index;
-        g_commands[i] = {
+        u32& commands = header.draw_commands[static_cast<u32>(list)];
+        g_commands[static_cast<u32>(list)][commands++] = {
             .index_count = count,
             .instance_count = 1,
             .first_index = mesh->first_index + first,
             .vertex_offset = 0,
-            .first_instance = 0,
+            .first_instance = i,
         };
     }
 
@@ -1408,7 +1414,6 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     for (const Category& category : WorldCategories) {
         add_category(category);
     }
-    writer.EndWorld();
     writer.EndPart(Scene::CapturePart::World);
     add_category(CharacterCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + ContourCategory * 4), ContourVertexConstants,
