@@ -41,6 +41,13 @@ struct Mesh {
     /// The device address of the skin stream (four RGBA16 FLOAT weights, then four RGBA16 SINT
     /// bone indices, 16 bytes a vertex), 0 when the shape is not skinned.
     u64 skin = 0;
+    /// Shapes with cloth: the device addresses of the SoftBody particle records (8 bytes each),
+    /// constraints (4 bytes each) and vertex to particle map (a u16 per vertex), and the particle
+    /// count; 0 for other shapes.
+    u64 particles = 0;
+    u64 constraints = 0;
+    u64 particle_map = 0;
+    u32 particle_count = 0;
 };
 
 /// Installs the hooks on the builder and on the model unload.
@@ -66,8 +73,11 @@ void CopyVertices(vk::CommandBuffer cmd, const Mesh& mesh, vk::Buffer destinatio
 
 struct Stats {
     u32 meshes;
-    /// Of those, skinned meshes.
+    /// Of those, skinned meshes and meshes with cloth.
     u32 skinned;
+    u32 cloth;
+    /// Shapes whose cloth data names particles, vertices or constraints it does not have.
+    u32 bad_cloth;
     u32 pending;
     /// Shapes the shaders cannot draw, or with no room.
     u32 skipped;

@@ -40,6 +40,14 @@ constexpr u64 ShapeVertexBuffer = 0x60;
 constexpr u64 ShapeHandle = 0x184;
 constexpr u64 ShapeIndexBuffer = 0x188;
 constexpr u64 ShapeSkin = 0x1a8;
+constexpr u64 ShapeSoftBody = 0x1b0;
+// SoftBody object: particle count +0x30, the buffer objects of the particle records +0x88, the
+// constraints +0xa0 and the vertex to particle map +0xb8, each a MemBlock* then a V#.
+constexpr u64 SoftBodyParticleCount = 0x30;
+constexpr u64 SoftBodyParticles = 0x88;
+constexpr u64 SoftBodyConstraints = 0xa0;
+constexpr u64 SoftBodyMap = 0xb8;
+constexpr u32 ParticleBytes = 8;
 // Skin object: the vertex buffer object of the skin stream at +0x68.
 constexpr u64 SkinVertexBuffer = 0x68;
 constexpr u32 SkinStride = 16;
@@ -68,6 +76,7 @@ constexpr bool TexcoordFormat(u32 format) {
 constexpr u64 UploadBudget = 64_MB;
 constexpr u32 LoggedUploads = 8;
 constexpr u32 LoggedSkins = 4;
+constexpr u32 LoggedCloth = 4;
 constexpr u64 IndexCapacity = 64ull << 20;
 
 template <typename T>
@@ -92,6 +101,7 @@ struct Resident {
     u32 first_index = 0;
     u32 indices = 0;
     bool skinned = false;
+    bool cloth = false;
 };
 struct Retiring {
     u32 handle;
@@ -223,7 +233,61 @@ struct Source {
     u32 texcoord;
     VAddr skin = 0;
     u32 skin_bytes = 0;
+    VAddr particles = 0;
+    u32 particle_bytes = 0;
+    VAddr constraints = 0;
+    u32 constraint_bytes = 0;
+    VAddr particle_map = 0;
+    u32 map_bytes = 0;
+    u32 particle_count = 0;
 };
+
+// The shape's cloth data, when it has some.
+void ReadSoftBody(VAddr shape, Source& source) {
+    const VAddr soft_body = Load<VAddr>(shape + ShapeSoftBody);
+    if (soft_body == 0) {
+        return;
+    }
+    const auto block = [soft_body](u64 object, VAddr& data, u32& bytes) {
+        const VAddr memory = Load<VAddr>(soft_body + object);
+        data = memory != 0 ? Load<VAddr>(memory) : 0;
+        bytes = memory != 0 ? Load<u32>(memory + BlockSize) : 0;
+    };
+    block(SoftBodyParticles, source.particles, source.particle_bytes);
+    block(SoftBodyConstraints, source.constraints, source.constraint_bytes);
+    block(SoftBodyMap, source.particle_map, source.map_bytes);
+    source.particle_count = Load<u32>(soft_body + SoftBodyParticleCount);
+}
+
+// Whether the shaders can run the cloth data without reading past it: every anchor names a
+// vertex, every constraint range lies in the constraints, and every constraint and map entry names
+// a particle. The game's copy is read once, at upload.
+bool ValidSoftBody(const Source& source, u32 vertex_count) {
+    const u32 count = source.particle_count;
+    const u32 constraint_count = source.constraint_bytes / 4;
+    if (source.particles == 0 || source.constraints == 0 || source.particle_map == 0 ||
+        count == 0 || u64{count} * ParticleBytes > source.particle_bytes ||
+        u64{vertex_count} * 2 > source.map_bytes) {
+        return false;
+    }
+    const auto* particles = reinterpret_cast<const u32*>(source.particles);
+    for (u32 i = 0; i < count; i++) {
+        const u32 anchor = particles[2 * i] & 0xffff;
+        const u32 first = particles[2 * i] >> 16;
+        const u32 links = particles[2 * i + 1] & 0xffff;
+        if (anchor >= vertex_count || first + links > constraint_count) {
+            return false;
+        }
+    }
+    const auto* constraints = reinterpret_cast<const u32*>(source.constraints);
+    for (u32 i = 0; i < constraint_count; i++) {
+        if ((constraints[i] & 0xffff) >= count) {
+            return false;
+        }
+    }
+    const auto* map = reinterpret_cast<const u16*>(source.particle_map);
+    return std::all_of(map, map + vertex_count, [count](u16 p) { return p < count; });
+}
 
 // Logs the elements of the first skin streams.
 void LogSkin(VAddr shape, VAddr vb) {
@@ -301,6 +365,7 @@ bool ReadShape(VAddr shape, Source& source) {
             return false;
         }
     }
+    ReadSoftBody(shape, source);
     return source.vertices != 0 && source.indices != 0 && source.vertex_bytes != 0 &&
            source.index_bytes >= 2 && PositionFormat(format) && source.stride % 4 == 0 &&
            offset % 4 == 0;
@@ -328,6 +393,7 @@ void Retire(u64 frame, u64 completed) {
             FreeIndices(resident.first_index, resident.indices);
             g_stats.meshes--;
             g_stats.skinned -= resident.skinned;
+            g_stats.cloth -= resident.cloth;
         }
         resident = {};
         std::scoped_lock lock{g_mutex};
@@ -416,10 +482,21 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                 g_stats.skipped++;
                 continue;
             }
-            // The skin stream follows the vertex data in the mesh's buffer.
-            const u32 skin_offset = (source.vertex_bytes + 15) & ~15u;
-            const u32 vertex_region =
+            // The skin stream, then the cloth data, follow the vertex data in the mesh's buffer.
+            const u32 vertex_count = source.vertex_bytes / std::max(source.stride, 1u);
+            const bool cloth = source.particles != 0 && source.stride != 0;
+            const bool valid_cloth = cloth && ValidSoftBody(source, vertex_count);
+            g_stats.bad_cloth += cloth && !valid_cloth;
+            const auto align = [](u32 offset) { return (offset + 15) & ~15u; };
+            const u32 skin_offset = align(source.vertex_bytes);
+            const u32 skin_end =
                 source.skin != 0 ? skin_offset + source.skin_bytes : source.vertex_bytes;
+            const u32 particles_offset = align(skin_end);
+            const u32 constraints_offset = align(particles_offset + source.particle_bytes);
+            const u32 map_offset = align(constraints_offset + source.constraint_bytes);
+            // The shaders read the map as u32s.
+            const u32 vertex_region =
+                valid_cloth ? map_offset + ((source.map_bytes + 3) & ~3u) : skin_end;
             const u64 bytes = u64{vertex_region} + source.index_bytes;
             if (!g_memory->Reserve(vertex_region)) {
                 FreeIndices(first_index, source.index_bytes / 2);
@@ -449,6 +526,15 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                 std::memcpy(staging.buffer.mapped + skin_offset,
                             reinterpret_cast<const void*>(source.skin), source.skin_bytes);
             }
+            if (valid_cloth) {
+                std::memcpy(staging.buffer.mapped + particles_offset,
+                            reinterpret_cast<const void*>(source.particles), source.particle_bytes);
+                std::memcpy(staging.buffer.mapped + constraints_offset,
+                            reinterpret_cast<const void*>(source.constraints),
+                            source.constraint_bytes);
+                std::memcpy(staging.buffer.mapped + map_offset,
+                            reinterpret_cast<const void*>(source.particle_map), source.map_bytes);
+            }
             std::memcpy(staging.buffer.mapped + vertex_region,
                         reinterpret_cast<const void*>(source.indices), source.index_bytes);
             // Every index must name a vertex inside the copied vertex data. The game's copy is
@@ -456,7 +542,6 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             const auto* index_data = reinterpret_cast<const u16*>(source.indices);
             const u32 max_index =
                 *std::max_element(index_data, index_data + source.index_bytes / 2);
-            const u32 vertex_count = source.vertex_bytes / std::max(source.stride, 1u);
             if (g_stats.uploads_logged < LoggedUploads) {
                 g_stats.uploads_logged++;
                 LOG_INFO(Render_Vulkan,
@@ -491,13 +576,26 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             mesh.position = source.position;
             mesh.texcoord = source.texcoord;
             mesh.skin = source.skin != 0 ? vertices.address + skin_offset : 0;
+            mesh.particles = valid_cloth ? vertices.address + particles_offset : 0;
+            mesh.constraints = valid_cloth ? vertices.address + constraints_offset : 0;
+            mesh.particle_map = valid_cloth ? vertices.address + map_offset : 0;
+            mesh.particle_count = valid_cloth ? source.particle_count : 0;
+            if (valid_cloth && g_stats.cloth < LoggedCloth) {
+                LOG_INFO(Render_Vulkan,
+                         "GR2 PT: cloth of mesh {:#x}: {} particles, {} constraints, {} map "
+                         "entries for {} vertices",
+                         shape, source.particle_count, source.constraint_bytes / 4,
+                         source.map_bytes / 2, vertex_count);
+            }
             g_stats.no_texcoord += source.texcoord == 0;
             g_stats.skinned += source.skin != 0;
+            g_stats.cloth += valid_cloth;
             g_resident[handle] = {
                 .vertices = vertices,
                 .first_index = first_index,
                 .indices = source.index_bytes / 2,
                 .skinned = source.skin != 0,
+                .cloth = valid_cloth,
             };
             g_staging.push_back(staging);
             g_stats.meshes++;
@@ -516,8 +614,9 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
     const vk::MemoryBarrier2 barrier{
         .srcStageMask = vk::PipelineStageFlagBits2::eCopy,
         .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-        .dstStageMask =
-            vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eIndexInput,
+        .dstStageMask = vk::PipelineStageFlagBits2::eVertexShader |
+                        vk::PipelineStageFlagBits2::eIndexInput |
+                        vk::PipelineStageFlagBits2::eComputeShader,
         .dstAccessMask = vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eIndexRead,
     };
     cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &barrier},
@@ -536,6 +635,7 @@ Stats TakeStats() {
     g_stats.uploaded_bytes = 0;
     g_stats.skipped = 0;
     g_stats.bad_indices = 0;
+    g_stats.bad_cloth = 0;
     return stats;
 }
 
