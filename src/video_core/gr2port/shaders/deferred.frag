@@ -11,6 +11,8 @@ layout(set = 0, binding = 0) uniform textureCube cubes[];
 layout(set = 0, binding = 2) uniform sampler clamp_sampler;
 layout(set = 1, binding = 0) uniform sampler2DArrayShadow shadow_map;
 layout(set = 1, binding = 1) uniform sampler2DArray shadow_depth;
+layout(set = 1, binding = 2) uniform sampler2DShadow last_shadow_map;
+layout(set = 1, binding = 3) uniform sampler2D last_shadow_depth;
 layout(set = 2, binding = 0) uniform sampler2D scene_depth;
 layout(set = 2, binding = 1) uniform sampler2D surface_albedo;
 layout(set = 2, binding = 2) uniform sampler2D surface_normal;
@@ -37,6 +39,9 @@ vec3 ShadowCoord(uint cascade, vec3 position) {
 }
 
 float ShadowTap(uint cascade, vec3 coord, vec2 offset) {
+    if (cascade == 2u) {
+        return texture(last_shadow_map, vec3(coord.xy + offset, coord.z));
+    }
     return texture(shadow_map, vec4(coord.xy + offset, float(cascade), coord.z));
 }
 
@@ -56,7 +61,9 @@ float KeyShadow(uint cascade, vec3 position) {
 float Thickness(uint cascade, vec3 position, vec3 normal) {
     const float offset = ThicknessOffsets[min(cascade, 1u)];
     const vec3 coord = ShadowCoord(cascade, position - offset * normal);
-    const float depth = textureLod(shadow_depth, vec3(coord.xy, float(cascade)), 0.0).r;
+    const float depth = cascade == 2u
+                            ? textureLod(last_shadow_depth, coord.xy, 0.0).r
+                            : textureLod(shadow_depth, vec3(coord.xy, float(cascade)), 0.0).r;
     const vec4 caster =
         light.inverse_shadow_projection[cascade] * vec4(coord.xy, depth, 1.0);
     return length(caster.xyz / caster.w - position);

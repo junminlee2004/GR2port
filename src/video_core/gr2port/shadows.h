@@ -23,8 +23,9 @@ bool Start(const Device& device, Memory& memory);
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
             u64 offset, vk::QueryPool timestamps, u32 first_query);
 
-/// The set with the cascades for fragment shaders: at binding 0 a sampler2DArrayShadow, at binding
-/// 1 a sampler2DArray of their depth.
+/// The set with the cascades for fragment shaders: the first two cascades at binding 0 as a
+/// sampler2DArrayShadow and at 1 as a sampler2DArray of their depth; the last cascade at binding 2
+/// as a sampler2DShadow and at 3 as a sampler2D.
 vk::DescriptorSetLayout SetLayout();
 vk::DescriptorSet Set();
 

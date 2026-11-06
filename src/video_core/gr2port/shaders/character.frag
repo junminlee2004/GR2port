@@ -11,6 +11,7 @@ layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
 layout(set = 0, binding = 2) uniform sampler clamp_sampler;
 layout(set = 1, binding = 0) uniform sampler2DArrayShadow shadow_map;
+layout(set = 1, binding = 2) uniform sampler2DShadow last_shadow_map;
 
 layout(push_constant) uniform Constants {
     Draws scene_draws;
@@ -44,6 +45,9 @@ vec4 Sample(uint handle, vec2 uv) {
 }
 
 float CascadeTap(uint cascade, vec3 coord, vec2 offset) {
+    if (cascade == 2u) {
+        return texture(last_shadow_map, vec3(coord.xy + offset, coord.z));
+    }
     return texture(shadow_map, vec4(coord.xy + offset, float(cascade), coord.z));
 }
 
