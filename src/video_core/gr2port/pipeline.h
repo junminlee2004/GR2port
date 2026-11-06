@@ -11,6 +11,11 @@ namespace Gr2Port {
 
 struct GraphicsPipelineInfo {
     std::span<const u32> vertex;
+    /// None for no tessellation stages; with them, the topology is a list of patches of
+    /// patch_control_points.
+    std::span<const u32> tessellation_control;
+    std::span<const u32> tessellation_evaluation;
+    u32 patch_control_points = 0;
     /// None for no geometry stage.
     std::span<const u32> geometry;
     /// None for a depth-only pipeline.

@@ -18,19 +18,12 @@
 #include "video_core/gr2port/shaders/world_vert.h"
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/vegetation.h"
 #include "video_core/gr2port/world.h"
 
 namespace Gr2Port::World {
 
 namespace {
-
-// Albedo with the hatching in alpha, the packed normal, and roughness, metallic, translucency and
-// emissive.
-constexpr std::array<vk::Format, 3> SurfaceFormats{
-    vk::Format::eR8G8B8A8Srgb,
-    vk::Format::eR16G16Sfloat,
-    vk::Format::eR8G8B8A8Unorm,
-};
 
 struct SurfacePush {
     u64 draws;
@@ -439,6 +432,9 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, bool dra
                                     count, sizeof(Scene::Command), dl);
         }
         first += count;
+    }
+    if (drawn) {
+        Vegetation::RecordSurfaces(cmd, header, address, buffer, offset);
     }
     cmd.endRendering(dl);
     for (vk::ImageMemoryBarrier2& barrier : barriers) {

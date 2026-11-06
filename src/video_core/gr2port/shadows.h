@@ -14,6 +14,9 @@ class Memory;
 // renderer's own depth maps with the game's cascade matrices and depth bias.
 namespace Gr2Port::Shadows {
 
+/// The game's cascade maps are all D16.
+inline constexpr vk::Format DepthFormat = vk::Format::eD16Unorm;
+
 /// Render thread: creates the cascade maps, their sampler and set, and the caster pipelines.
 bool Start(const Device& device, Memory& memory);
 

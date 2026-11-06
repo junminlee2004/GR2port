@@ -41,11 +41,29 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
         info.fragment.empty() ? vk::ShaderModule{} : CreateModule(d, info.fragment);
     const vk::ShaderModule geometry =
         info.geometry.empty() ? vk::ShaderModule{} : CreateModule(d, info.geometry);
+    const bool tessellated =
+        !info.tessellation_control.empty() && !info.tessellation_evaluation.empty();
+    const vk::ShaderModule control =
+        tessellated ? CreateModule(d, info.tessellation_control) : vk::ShaderModule{};
+    const vk::ShaderModule evaluation =
+        tessellated ? CreateModule(d, info.tessellation_evaluation) : vk::ShaderModule{};
     std::vector<vk::PipelineShaderStageCreateInfo> stages{{
         .stage = vk::ShaderStageFlagBits::eVertex,
         .module = vertex,
         .pName = "main",
     }};
+    if (tessellated) {
+        stages.push_back({
+            .stage = vk::ShaderStageFlagBits::eTessellationControl,
+            .module = control,
+            .pName = "main",
+        });
+        stages.push_back({
+            .stage = vk::ShaderStageFlagBits::eTessellationEvaluation,
+            .module = evaluation,
+            .pName = "main",
+        });
+    }
     if (geometry) {
         stages.push_back({
             .stage = vk::ShaderStageFlagBits::eGeometry,
@@ -61,7 +79,10 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
         });
     }
     const vk::PipelineVertexInputStateCreateInfo vertex_input{};
-    const vk::PipelineInputAssemblyStateCreateInfo input_assembly{.topology = info.topology};
+    const vk::PipelineInputAssemblyStateCreateInfo input_assembly{
+        .topology = tessellated ? vk::PrimitiveTopology::ePatchList : info.topology};
+    const vk::PipelineTessellationStateCreateInfo tessellation{.patchControlPoints =
+                                                                   info.patch_control_points};
     const vk::PipelineViewportStateCreateInfo viewport{.viewportCount = 1, .scissorCount = 1};
     const vk::PipelineRasterizationStateCreateInfo rasterization{
         .polygonMode = vk::PolygonMode::eFill,
@@ -118,6 +139,7 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
         .pStages = stages.data(),
         .pVertexInputState = &vertex_input,
         .pInputAssemblyState = &input_assembly,
+        .pTessellationState = tessellated ? &tessellation : nullptr,
         .pViewportState = &viewport,
         .pRasterizationState = &rasterization,
         .pMultisampleState = &multisample,
@@ -134,6 +156,10 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
     }
     if (geometry) {
         d.device.destroyShaderModule(geometry, nullptr, dl);
+    }
+    if (tessellated) {
+        d.device.destroyShaderModule(control, nullptr, dl);
+        d.device.destroyShaderModule(evaluation, nullptr, dl);
     }
     if (pipeline_result != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "GR2port: no pipeline: {}", vk::to_string(pipeline_result));

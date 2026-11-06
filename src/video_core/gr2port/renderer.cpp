@@ -41,6 +41,7 @@
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/vegetation.h"
 #include "video_core/gr2port/window.h"
 #include "video_core/gr2port/world.h"
 
@@ -144,6 +145,9 @@ struct Stats {
     u64 dropped_materials = 0;
     u64 contours = 0;
     u64 dropped_contours = 0;
+    u64 leaves = 0;
+    u64 leaf_shadows = 0;
+    u64 dropped_leaves = 0;
     u64 palette_rows = 0;
     std::array<u64, Scene::ItemCategories> category_items{};
     u64 casters = 0;
@@ -269,7 +273,8 @@ bool Thread::Init() {
         !Deformers::Start(d, *memory) || !Look::Start(d, *memory, DepthFormat) ||
         !World::Start(d, *memory, DepthFormat, Look::SceneFormat) ||
         !Contours::Start(d, Look::SceneFormat, DepthFormat) ||
-        !Fog::Start(d, *memory, Look::SceneFormat)) {
+        !Fog::Start(d, *memory, Look::SceneFormat) ||
+        !Vegetation::Start(d, World::SurfaceFormats, DepthFormat, Shadows::DepthFormat)) {
         return false;
     }
     const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout()};
@@ -877,6 +882,11 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.dropped_materials += header.dropped_materials;
     stats.contours += header.contours;
     stats.dropped_contours += header.dropped_contours;
+    stats.leaves += header.leaf_commands;
+    for (const u32 commands : header.leaf_shadow_commands) {
+        stats.leaf_shadows += commands;
+    }
+    stats.dropped_leaves += header.dropped_leaves;
     stats.dropped += header.dropped;
     stats.capture_ns += header.capture_ns;
     for (u32 part = 0; part < stats.capture_parts_ns.size(); part++) {
@@ -1102,6 +1112,12 @@ void Thread::Report() {
         static_cast<double>(stats.caster_indices[1]) / frames,
         static_cast<double>(stats.caster_indices[2]) / frames,
         static_cast<double>(stats.dropped_casters) / frames);
+    LOG_INFO(Render_Vulkan,
+             "GR2port vegetation: per frame {:.1f} leaf draws, {:.1f} leaf shadow draws, {:.1f} "
+             "leaf items not drawn",
+             static_cast<double>(stats.leaves) / frames,
+             static_cast<double>(stats.leaf_shadows) / frames,
+             static_cast<double>(stats.dropped_leaves) / frames);
     std::string categories;
     for (u32 c = 0; c < Scene::ItemCategories; c++) {
         if (stats.category_items[c] != 0) {

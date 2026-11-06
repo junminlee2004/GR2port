@@ -12,14 +12,13 @@
 #include "video_core/gr2port/shaders/shadow_vert.h"
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/vegetation.h"
 
 namespace Gr2Port::Shadows {
 
 namespace {
 
-// The game's cascade maps, all D16: a 2048x2048 map for each of the first two cascades and a
-// 4096x4096 map for the last.
-constexpr vk::Format Format = vk::Format::eD16Unorm;
+// A 2048x2048 map for each of the first two cascades and a 4096x4096 map for the last.
 constexpr u32 LastCascade = Scene::Cascades - 1;
 constexpr u32 ArraySize = 2048;
 constexpr u32 LastSize = 4096;
@@ -60,7 +59,7 @@ bool CullsBackFaces(u32 list) {
 
 bool CreateSet(const Device& d) {
     const auto& dl = d.dispatch;
-    const auto features = d.gpu.getFormatProperties(Format, dl).optimalTilingFeatures;
+    const auto features = d.gpu.getFormatProperties(DepthFormat, dl).optimalTilingFeatures;
     const vk::Filter filter = (features & vk::FormatFeatureFlagBits::eSampledImageFilterLinear)
                                   ? vk::Filter::eLinear
                                   : vk::Filter::eNearest;
@@ -164,9 +163,9 @@ bool Start(const Device& device, Memory& memory) {
     const auto& dl = device.dispatch;
     const vk::ImageUsageFlags usage =
         vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
-    g_maps = memory.CreateImage(Format, vk::Extent2D{ArraySize, ArraySize}, usage,
+    g_maps = memory.CreateImage(DepthFormat, vk::Extent2D{ArraySize, ArraySize}, usage,
                                 vk::ImageAspectFlagBits::eDepth, LastCascade);
-    g_last_map = memory.CreateImage(Format, vk::Extent2D{LastSize, LastSize}, usage,
+    g_last_map = memory.CreateImage(DepthFormat, vk::Extent2D{LastSize, LastSize}, usage,
                                     vk::ImageAspectFlagBits::eDepth);
     if (!g_maps.image || !g_last_map.image) {
         return false;
@@ -176,7 +175,7 @@ bool Start(const Device& device, Memory& memory) {
         const vk::ImageViewCreateInfo info{
             .image = g_maps.image,
             .viewType = vk::ImageViewType::e2D,
-            .format = Format,
+            .format = DepthFormat,
             .subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, c, 1},
         };
         g_layers[c] = device.device.createImageView(info, nullptr, dl).value;
@@ -195,7 +194,7 @@ bool Start(const Device& device, Memory& memory) {
                                        : std::span<const u32>{SHADOW_VERT},
                 .fragment =
                     alpha_tested ? std::span<const u32>{SHADOW_ALPHA_FRAG} : std::span<const u32>{},
-                .depth = Format,
+                .depth = DepthFormat,
                 .cull = CullsBackFaces(list) ? vk::CullModeFlagBits::eBack
                                              : vk::CullModeFlagBits::eNone,
                 .depth_test = true,
@@ -248,6 +247,9 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
         };
         cmd.beginRendering({.renderArea = scissor, .layerCount = 1, .pDepthAttachment = &depth},
                            dl);
+        cmd.setViewport(0, viewport, dl);
+        cmd.setScissor(0, scissor, dl);
+        cmd.setDepthBias(header.depth_bias[c][0], 0.0f, header.depth_bias[c][1] * SlopeScale, dl);
         push.cascade = c;
         for (u32 list = 0; list < Scene::CasterLists; list++) {
             const u32 count = header.caster_commands[c][list];
@@ -260,10 +262,6 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
                 cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0,
                                        Textures::Set(), {}, dl);
             }
-            cmd.setViewport(0, viewport, dl);
-            cmd.setScissor(0, scissor, dl);
-            cmd.setDepthBias(header.depth_bias[c][0], 0.0f, header.depth_bias[c][1] * SlopeScale,
-                             dl);
             cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
                               sizeof(push), &push, dl);
             cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
@@ -272,6 +270,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
                 buffer, offset + Scene::CasterCommandsOffset + first * sizeof(Scene::Command),
                 count, sizeof(Scene::Command), dl);
         }
+        Vegetation::RecordShadows(cmd, header, address, buffer, offset, c);
         cmd.endRendering(dl);
         if (timestamps) {
             cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,

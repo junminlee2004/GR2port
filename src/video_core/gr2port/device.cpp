@@ -154,10 +154,12 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     };
     const vk::PhysicalDeviceFeatures supported = d.gpu.getFeatures(d.dispatch);
     d.geometry_shaders = supported.geometryShader != VK_FALSE;
+    d.tessellation_shaders = supported.tessellationShader != VK_FALSE;
     d.storage_extended_formats = supported.shaderStorageImageExtendedFormats != VK_FALSE;
     vk::PhysicalDeviceFeatures2 features{
         .pNext = &features11,
         .features = {.geometryShader = d.geometry_shaders,
+                     .tessellationShader = d.tessellation_shaders,
                      .multiDrawIndirect = true,
                      .drawIndirectFirstInstance = true,
                      .samplerAnisotropy = true,

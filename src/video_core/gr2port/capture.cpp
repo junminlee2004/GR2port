@@ -385,6 +385,28 @@ constexpr u64 ContourGeometryConstants = 0x38;
 constexpr u64 ContourPixelConstants = 0x40;
 constexpr u64 SubmeshAdjacencyRange = 0x50;
 constexpr u32 ContourMinRanges = 3;
+// Branch leaves: the texture object +0x30, the constants of the hull program +0x38 {segments,
+// leaves}, of the domain program +0x40 {WVP, the last frame's WVP, World, VP, then direction,
+// twist, width, gravity, length} and of the pixel program +0x48 {tip colour, base colour, alpha
+// reference, translucency, roughness, metallic, screen door}, and the vertex count +0x50, drawn
+// as patches of three. Leaf shadow items, with the casters' mask, keep World and the shape values
+// at +0x40 and +0xc0 of their domain constants, and {alpha reference, screen door} as pixel
+// constants.
+constexpr u32 LeafCategory = 29;
+constexpr u32 LeafShadowCategory = 30;
+constexpr u64 LeafTexture = 0x30;
+constexpr u64 LeafHullConstants = 0x38;
+constexpr u64 LeafDomainConstants = 0x40;
+constexpr u64 LeafPixelConstants = 0x48;
+constexpr u64 LeafVertexCount = 0x50;
+constexpr u64 LeafWorld = 0x80;
+constexpr u64 LeafShape = 0x100;
+constexpr u64 LeafPixelValues = 0x20;
+constexpr u64 LeafShadowWorld = 0x40;
+constexpr u64 LeafShadowShape = 0xc0;
+constexpr u32 LeafShapeValues = 5;
+constexpr u32 LeafPixelCount = 5;
+constexpr u32 PatchVertices = 3;
 // CH_Main's vertex constants hold the decals' positions and targets, then their scales, which are
 // 0 when a material has no decals. Its pixel constants hold GradationColor and the alpha step flag.
 constexpr u64 DecalPositions = 0x150;
@@ -407,6 +429,9 @@ alignas(64) std::array<std::array<Scene::Command, Scene::MaxDraws>,
 alignas(64) std::array<Scene::Command,
                        Scene::Cascades * Scene::CasterLists * Scene::MaxCasters> g_caster_commands;
 alignas(64) std::array<Scene::Command, Scene::MaxContours> g_contour_commands;
+alignas(64) std::array<Scene::VertexCommand, Scene::MaxLeaves> g_leaf_commands;
+alignas(
+    64) std::array<Scene::VertexCommand, Scene::Cascades * Scene::MaxLeaves> g_leaf_shadow_commands;
 
 // The simulate constants the game's SoftBody pass sets on its draw thread after the capture: the
 // grid matrix (the view's clip matrix with z over GridFar + n), the sphere count and the depth
@@ -440,7 +465,8 @@ public:
           decals{reinterpret_cast<Scene::Decal*>(packet + Scene::DecalsOffset)},
           materials{reinterpret_cast<Scene::Material*>(packet + Scene::MaterialsOffset)},
           characters{reinterpret_cast<Scene::Character*>(packet + Scene::CharactersOffset)},
-          contours{reinterpret_cast<Scene::Contour*>(packet + Scene::ContoursOffset)} {}
+          contours{reinterpret_cast<Scene::Contour*>(packet + Scene::ContoursOffset)},
+          leaves{reinterpret_cast<Scene::Leaf*>(packet + Scene::LeavesOffset)} {}
 
     // Ends a part of the capture's time.
     void EndPart(Scene::CapturePart part) {
@@ -469,6 +495,15 @@ public:
         }
         std::memcpy(packet + Scene::ContourCommandsOffset, g_contour_commands.data(),
                     header.contours * Bytes);
+        constexpr u64 VertexBytes = sizeof(Scene::VertexCommand);
+        std::memcpy(packet + Scene::LeafCommandsOffset, g_leaf_commands.data(),
+                    header.leaf_commands * VertexBytes);
+        for (u32 c = 0; c < Scene::Cascades; c++) {
+            std::memcpy(packet + Scene::LeafShadowCommandsOffset +
+                            c * Scene::MaxLeaves * VertexBytes,
+                        g_leaf_shadow_commands.data() + c * Scene::MaxLeaves,
+                        header.leaf_shadow_commands[c] * VertexBytes);
+        }
     }
 
     void SetCascades(u32 mask) {
@@ -683,6 +718,88 @@ public:
             .vertex_offset = 0,
             .first_instance = 0,
         };
+    }
+
+    // A Branch leaf item: the shape's vertices as patches of three, with the item's constants. The
+    // leaves grow from the shape's rest pose: the renderer does not run the game's Branch deformer.
+    void AddLeaf(VAddr item) {
+        const VAddr hull = Load<VAddr>(item + LeafHullConstants);
+        const VAddr domain = Load<VAddr>(item + LeafDomainConstants);
+        const VAddr pixel = Load<VAddr>(item + LeafPixelConstants);
+        const Meshes::Mesh* mesh = nullptr;
+        u32 vertices = 0;
+        u32 texture = 0;
+        if (hull == 0 || domain == 0 || pixel == 0 ||
+            !ReadLeafItem(item, mesh, vertices, texture)) {
+            header.dropped_leaves++;
+            return;
+        }
+        const u32 i = header.leaves++;
+        // The fields are written in order: the packet is write-combined.
+        Scene::Leaf& leaf = leaves[i];
+        std::memcpy(leaf.world_view_projection, reinterpret_cast<const void*>(domain), MatrixBytes);
+        std::memcpy(leaf.world, reinterpret_cast<const void*>(domain + LeafWorld), 2 * MatrixBytes);
+        std::memcpy(leaf.tip_color, reinterpret_cast<const void*>(pixel),
+                    sizeof(leaf.tip_color) + sizeof(leaf.root_color));
+        leaf.vertices = mesh->vertices;
+        leaf.stride = mesh->stride;
+        leaf.position = mesh->position;
+        leaf.texture = texture;
+        std::memcpy(&leaf.tessellation, reinterpret_cast<const void*>(hull), 2 * sizeof(float));
+        std::memcpy(&leaf.direction, reinterpret_cast<const void*>(domain + LeafShape),
+                    LeafShapeValues * sizeof(float));
+        std::memcpy(&leaf.alpha_reference, reinterpret_cast<const void*>(pixel + LeafPixelValues),
+                    LeafPixelCount * sizeof(float));
+        g_leaf_commands[header.leaf_commands++] = {
+            .vertex_count = vertices,
+            .instance_count = 1,
+            .first_vertex = 0,
+            .first_instance = i,
+        };
+    }
+
+    // A leaf shadow item, drawn in each cascade its mask names as the casters are.
+    void AddLeafShadow(VAddr item) {
+        const u32 mask = Load<u8>(item + CasterMask) & header.cascades;
+        if (mask == 0) {
+            return;
+        }
+        const VAddr hull = Load<VAddr>(item + LeafHullConstants);
+        const VAddr domain = Load<VAddr>(item + LeafDomainConstants);
+        const VAddr pixel = Load<VAddr>(item + LeafPixelConstants);
+        const Meshes::Mesh* mesh = nullptr;
+        u32 vertices = 0;
+        u32 texture = 0;
+        if (hull == 0 || domain == 0 || pixel == 0 ||
+            !ReadLeafItem(item, mesh, vertices, texture)) {
+            header.dropped_leaves++;
+            return;
+        }
+        const u32 i = header.leaves++;
+        // The fields the shadow stages read, in order: the packet is write-combined.
+        Scene::Leaf& leaf = leaves[i];
+        std::memcpy(leaf.world, reinterpret_cast<const void*>(domain + LeafShadowWorld),
+                    MatrixBytes);
+        leaf.vertices = mesh->vertices;
+        leaf.stride = mesh->stride;
+        leaf.position = mesh->position;
+        leaf.texture = texture;
+        std::memcpy(&leaf.tessellation, reinterpret_cast<const void*>(hull), 2 * sizeof(float));
+        std::memcpy(&leaf.direction, reinterpret_cast<const void*>(domain + LeafShadowShape),
+                    LeafShapeValues * sizeof(float));
+        leaf.alpha_reference = Load<float>(pixel);
+        leaf.punch_through = Load<float>(pixel + 4);
+        for (u32 c = 0; c < Scene::Cascades; c++) {
+            if ((mask >> c & 1) == 0) {
+                continue;
+            }
+            g_leaf_shadow_commands[c * Scene::MaxLeaves + header.leaf_shadow_commands[c]++] = {
+                .vertex_count = vertices,
+                .instance_count = 1,
+                .first_vertex = 0,
+                .first_instance = i,
+            };
+        }
     }
 
     // The game draws a caster in each cascade its mask names, with the index range of the
@@ -1039,6 +1156,24 @@ private:
         return true;
     }
 
+    // The mesh, whole patches of vertices and texture of a leaf item. False when the item cannot
+    // be drawn: an untextured leaf would fill its quad with white.
+    bool ReadLeafItem(VAddr item, const Meshes::Mesh*& mesh, u32& vertices, u32& texture) {
+        const VAddr index_buffer = Load<VAddr>(item + ItemIndexBuffer);
+        const VAddr object = Load<VAddr>(item + LeafTexture);
+        vertices = Load<u32>(item + LeafVertexCount) / PatchVertices * PatchVertices;
+        if (index_buffer == 0 || object == 0 || vertices == 0 ||
+            header.leaves == Scene::MaxLeaves) {
+            return false;
+        }
+        mesh = Meshes::Get(index_buffer - ShapeIndexBuffer);
+        if (mesh == nullptr || mesh->stride == 0 || vertices > mesh->vertex_bytes / mesh->stride) {
+            return false;
+        }
+        texture = Textures::Get(object);
+        return texture != 0;
+    }
+
     Scene::Header header{};
     u64 frame;
     std::chrono::steady_clock::time_point part_start;
@@ -1053,6 +1188,7 @@ private:
     Scene::Material* materials;
     Scene::Character* characters;
     Scene::Contour* contours;
+    Scene::Leaf* leaves;
     u32 hatching = 0;
     VAddr last_palette = 0;
     u32 last_bones = 0;
@@ -1685,6 +1821,9 @@ void OnFrame(VAddr frame_graph, VAddr view) {
         ForEachItem(count, CasterWorld, None, keyed(category.index),
                     [&](VAddr item) { writer.AddCaster(item, category); });
     }
+    ForEachItem(Load<s32>(view + ViewCategoryCount + LeafShadowCategory * 4), LeafDomainConstants,
+                LeafPixelConstants, keyed(LeafShadowCategory),
+                [&](VAddr item) { writer.AddLeafShadow(item); });
     writer.EndPart(Scene::CapturePart::Casters);
     const auto add_category = [&](const Category& category) {
         const s32 count = std::min(Load<s32>(view + ViewCategoryCount + category.index * 4),
@@ -1707,6 +1846,8 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     for (const Category& category : WorldCategories) {
         add_category(category);
     }
+    ForEachItem(Load<s32>(view + ViewCategoryCount + LeafCategory * 4), LeafDomainConstants,
+                LeafPixelConstants, keyed(LeafCategory), [&](VAddr item) { writer.AddLeaf(item); });
     writer.EndPart(Scene::CapturePart::World);
     add_category(CharacterCategory);
     add_category(InteriorCategory);

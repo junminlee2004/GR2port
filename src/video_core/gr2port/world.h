@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <array>
+
 #include "video_core/gr2port/device.h"
 #include "video_core/gr2port/scene.h"
 
@@ -14,6 +16,14 @@ class Memory;
 // normal and material images), the screen-space ink lines and ambient occlusion drawn from them,
 // and the pass that lights them from the depth into the scene's colour.
 namespace Gr2Port::World {
+
+/// The surfaces: albedo with the hatching in alpha, the packed normal, and roughness, metallic,
+/// translucency and emissive.
+inline constexpr std::array<vk::Format, 3> SurfaceFormats{
+    vk::Format::eR8G8B8A8Srgb,
+    vk::Format::eR16G16Sfloat,
+    vk::Format::eR8G8B8A8Unorm,
+};
 
 /// After Textures::Start and Shadows::Start: creates the pipelines and the surfaces' set.
 bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Format scene_format);

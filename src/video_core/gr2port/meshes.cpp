@@ -140,6 +140,10 @@ std::vector<Staging> g_staging;
 Stats g_stats{};
 
 bool AllocateIndices(u32 count, u32& first) {
+    if (count == 0) {
+        first = 0;
+        return true;
+    }
     for (auto it = g_free_indices.begin(); it != g_free_indices.end(); ++it) {
         if (it->second < count) {
             continue;
@@ -156,6 +160,9 @@ bool AllocateIndices(u32 count, u32& first) {
 }
 
 void FreeIndices(u32 first, u32 count) {
+    if (count == 0) {
+        return;
+    }
     auto [it, inserted] = g_free_indices.emplace(first, count);
     const auto next = std::next(it);
     if (next != g_free_indices.end() && it->first + it->second == next->first) {
@@ -376,13 +383,15 @@ u32 ReadTexcoord(VAddr vb) {
     return texcoord;
 }
 
-// Reads a shape's streams; false when the shaders cannot draw it.
+// Reads a shape's streams; false when the shaders cannot draw it. A shape without indices, as the
+// game's Branch shapes, which it draws as patches of their vertices, gets no indices.
 bool ReadShape(VAddr shape, Source& source) {
     const VAddr vb = shape + ShapeVertexBuffer;
     const VAddr vb_block = Load<VAddr>(vb);
     const VAddr ib = shape + ShapeIndexBuffer;
     const VAddr ib_block = Load<VAddr>(ib);
-    if (vb_block == 0 || ib_block == 0 || Load<u32>(ib + IndexSizeFlag) != 0) {
+    const bool indexed = ib_block != 0 && Load<VAddr>(ib_block) != 0;
+    if (vb_block == 0 || (indexed && Load<u32>(ib + IndexSizeFlag) != 0)) {
         return false;
     }
     const u32 element = Load<u8>(vb + VertexSemanticElement + SemanticPosition);
@@ -394,8 +403,8 @@ bool ReadShape(VAddr shape, Source& source) {
     source = {
         .vertices = Load<VAddr>(vb_block),
         .vertex_bytes = Load<u32>(vb_block + BlockSize),
-        .indices = Load<VAddr>(ib_block),
-        .index_bytes = Load<u32>(ib_block + BlockSize),
+        .indices = indexed ? Load<VAddr>(ib_block) : 0,
+        .index_bytes = indexed ? Load<u32>(ib_block + BlockSize) : 0,
         .stride = Load<u16>(vb + VertexStride),
         .position = offset | format << 8,
         .texcoord = ReadTexcoord(vb),
@@ -419,9 +428,9 @@ bool ReadShape(VAddr shape, Source& source) {
         }
     }
     ReadSoftBody(shape, source);
-    return source.vertices != 0 && source.indices != 0 && source.vertex_bytes != 0 &&
-           source.index_bytes >= 2 && PositionFormat(format) && source.stride % 4 == 0 &&
-           offset % 4 == 0;
+    return source.vertices != 0 && source.vertex_bytes != 0 &&
+           (!indexed || source.index_bytes >= 2) && PositionFormat(format) &&
+           source.stride % 4 == 0 && offset % 4 == 0;
 }
 
 void Retire(u64 frame, u64 completed) {
@@ -588,13 +597,15 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                 std::memcpy(staging.buffer.mapped + map_offset,
                             reinterpret_cast<const void*>(source.particle_map), source.map_bytes);
             }
-            std::memcpy(staging.buffer.mapped + vertex_region,
-                        reinterpret_cast<const void*>(source.indices), source.index_bytes);
             // Every index must name a vertex inside the copied vertex data. The game's copy is
             // read, as the staging memory is write-combined.
-            const auto* index_data = reinterpret_cast<const u16*>(source.indices);
-            const u32 max_index =
-                *std::max_element(index_data, index_data + source.index_bytes / 2);
+            u32 max_index = 0;
+            if (source.index_bytes != 0) {
+                std::memcpy(staging.buffer.mapped + vertex_region,
+                            reinterpret_cast<const void*>(source.indices), source.index_bytes);
+                const auto* index_data = reinterpret_cast<const u16*>(source.indices);
+                max_index = *std::max_element(index_data, index_data + source.index_bytes / 2);
+            }
             if (g_stats.uploads_logged < LoggedUploads) {
                 g_stats.uploads_logged++;
                 LOG_INFO(Render_Vulkan,
@@ -614,13 +625,15 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             }
             const vk::BufferCopy vertex_copy{.size = vertex_region};
             cmd.copyBuffer(staging.buffer.buffer, vertices.buffer, vertex_copy, g_device->dispatch);
-            const vk::BufferCopy index_copy{
-                .srcOffset = vertex_region,
-                .dstOffset = 2ull * first_index,
-                .size = source.index_bytes & ~1u,
-            };
-            cmd.copyBuffer(staging.buffer.buffer, g_index_buffer.buffer, index_copy,
-                           g_device->dispatch);
+            if (source.index_bytes != 0) {
+                const vk::BufferCopy index_copy{
+                    .srcOffset = vertex_region,
+                    .dstOffset = 2ull * first_index,
+                    .size = source.index_bytes & ~1u,
+                };
+                cmd.copyBuffer(staging.buffer.buffer, g_index_buffer.buffer, index_copy,
+                               g_device->dispatch);
+            }
             mesh.vertices = vertices.address;
             mesh.first_index = first_index;
             mesh.indices = source.index_bytes / 2;

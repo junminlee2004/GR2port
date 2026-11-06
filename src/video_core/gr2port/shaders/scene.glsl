@@ -208,6 +208,35 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Co
     Contour contours[];
 };
 
+// A tree's leaves: the game's leaf constants of each stage, then the shape's vertices.
+struct Leaf {
+    mat4 world_view_projection;
+    mat4 world;
+    mat4 view_projection;
+    vec4 tip_color;
+    vec4 root_color;
+    uint64_t vertices;
+    uint stride;
+    uint position;
+    uint texture;
+    float tessellation;
+    float isolines;
+    float direction;
+    float twist;
+    float width;
+    float gravity;
+    float leaf_length;
+    float alpha_reference;
+    float translucency;
+    float roughness;
+    float metallic;
+    float punch_through;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Leaves {
+    Leaf leaves[];
+};
+
 // Material flags.
 const uint MaterialLayered = 1u;
 const uint MaterialGradation = 2u;

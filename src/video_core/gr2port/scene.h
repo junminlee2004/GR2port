@@ -35,6 +35,8 @@ inline constexpr u32 MaxMaterials = 8192;
 inline constexpr u32 MaxCharacters = 1024;
 inline constexpr u32 MaxContours = 512;
 inline constexpr u32 MaxOccluders = 64;
+/// Leaf draws and leaf shadow draws per packet, together.
+inline constexpr u32 MaxLeaves = 2048;
 /// The effector grid: 6 x 6 x 10 cells of the view, each listing up to 127 spheres and an end
 /// marker.
 inline constexpr u32 GridCells = 360;
@@ -160,6 +162,12 @@ struct Header {
     /// The guest addresses of the fog's two noise volumes, Perlin then fbm: 64^3 bytes each, x
     /// fastest. 0 until the game has made them.
     u64 fog_noise[2];
+    /// Leaf records written; the commands of the leaves and of each cascade's leaf shadows; leaf
+    /// items not drawn (no mesh, texture or room).
+    u32 leaves;
+    u32 leaf_commands;
+    u32 leaf_shadow_commands[Cascades];
+    u32 dropped_leaves;
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
@@ -383,6 +391,43 @@ struct Contour {
 };
 static_assert(sizeof(Contour) == 288);
 
+/// A tree's leaves, from the game's Branch draws: each patch of three vertices is a quadratic
+/// Bezier curve that grows isolines leaves, as the game's leaf hull, domain, geometry and pixel
+/// programs build them. Shadow casters use world, the shape values, texture, alpha_reference and
+/// the tessellation with their cascade's view-projection. Matrices are as in Draw.
+struct Leaf {
+    float world_view_projection[16];
+    float world[16];
+    float view_projection[16];
+    /// The colour at the tip of a leaf and at its base.
+    float tip_color[4];
+    float root_color[4];
+    /// The shape's vertices; the position element as in Draw.
+    u64 vertices;
+    u32 stride;
+    u32 position;
+    /// The leaf texture's handle.
+    u32 texture;
+    /// Segments along each leaf, and leaves on each patch.
+    float tessellation;
+    float isolines;
+    /// How far a leaf turns from the branch (the cosine of the angle), how far its width twists
+    /// along it, its width, how far it droops and its length.
+    float direction;
+    float twist;
+    float width;
+    float gravity;
+    float leaf_length;
+    float alpha_reference;
+    float translucency;
+    float roughness;
+    float metallic;
+    /// The screen door's threshold.
+    float punch_through;
+    u32 padding[3];
+};
+static_assert(sizeof(Leaf) == 304);
+
 /// The frame's sky, as the game's sky pixel programs read it. Rays run in the sky's space, which
 /// the view's sky rotation sets. Matrices are as in Draw.
 struct Sky {
@@ -575,6 +620,15 @@ struct Command {
 };
 static_assert(sizeof(Command) == 20);
 
+/// The indirect command of a draw without indices, which gives its index as the first instance.
+struct VertexCommand {
+    u32 vertex_count;
+    u32 instance_count;
+    u32 first_vertex;
+    u32 first_instance;
+};
+static_assert(sizeof(VertexCommand) == 16);
+
 /// The index of a draw list's first command in the packet's commands.
 inline u32 FirstCommand(const Header& header, DrawList list) {
     u32 first = 0;
@@ -605,12 +659,19 @@ inline constexpr u64 MaterialsOffset = FogOffset + sizeof(Fog);
 inline constexpr u64 CharactersOffset = MaterialsOffset + MaxMaterials * sizeof(Material);
 inline constexpr u64 ContoursOffset = CharactersOffset + MaxCharacters * sizeof(Character);
 inline constexpr u64 ContourCommandsOffset = ContoursOffset + MaxContours * sizeof(Contour);
-inline constexpr u64 PacketBytes = ContourCommandsOffset + MaxContours * sizeof(Command);
+inline constexpr u64 LeavesOffset = ContourCommandsOffset + MaxContours * sizeof(Command);
+inline constexpr u64 LeafCommandsOffset = LeavesOffset + MaxLeaves * sizeof(Leaf);
+/// MaxLeaves commands per cascade, at cascade * MaxLeaves.
+inline constexpr u64 LeafShadowCommandsOffset =
+    LeafCommandsOffset + MaxLeaves * sizeof(VertexCommand);
+inline constexpr u64 PacketBytes =
+    LeafShadowCommandsOffset + Cascades * MaxLeaves * sizeof(VertexCommand);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
               SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0 && SkyOffset % 16 == 0 &&
               GradeOffset % 16 == 0 && LightOffset % 16 == 0 && FogOffset % 16 == 0 &&
-              MaterialsOffset % 16 == 0 && CharactersOffset % 16 == 0 && ContoursOffset % 16 == 0);
+              MaterialsOffset % 16 == 0 && CharactersOffset % 16 == 0 && ContoursOffset % 16 == 0 &&
+              LeavesOffset % 16 == 0 && LeafCommandsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene
