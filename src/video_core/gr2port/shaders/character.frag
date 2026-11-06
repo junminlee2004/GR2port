@@ -124,7 +124,8 @@ void main() {
     // The normal map's strength follows the detail map.
     const float strength =
         table.characters[index].detail_border * (100.0 * detail_value - 50.0) + 1.0;
-    vec4 normal_texel = vec4(0.5, 0.5, 1.0, 1.0);
+    // A material without a normal map holds a constant texture.
+    vec4 normal_texel = vec4(128.0 / 255.0, 128.0 / 255.0, 1.0, 1.0);
     if (normal_handle != 0u) {
         normal_texel = Sample(normal_handle, uv);
     }
@@ -217,7 +218,10 @@ void main() {
         reflection_mode == 0
             ? table.characters[index].reflection_offset + repeat * (model_xy + distortion)
             : repeat * (distortion + gl_FragCoord.xy * target_inverse);
-    const vec3 reflection = Sample(table.characters[index].reflection, reflection_uv).rgb;
+    // A material without a reflection map holds a black constant texture.
+    const uint reflection_map = table.characters[index].reflection;
+    const vec3 reflection =
+        reflection_map != 0u ? Sample(reflection_map, reflection_uv).rgb : vec3(0.0);
     const float reflection_share =
         light_scale * table.characters[index].reflection_blend * mask * detail_mask;
     if (reflection_mode == 1) {
