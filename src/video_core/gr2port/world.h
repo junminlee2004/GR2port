@@ -11,7 +11,8 @@ class Memory;
 }
 
 // The deferred world, on the render thread: the surfaces of the game's world materials (albedo,
-// normal and material images) and the pass that lights them from the depth into the scene's colour.
+// normal and material images), the screen-space ink lines drawn from them, and the pass that lights
+// them from the depth into the scene's colour.
 namespace Gr2Port::World {
 
 /// After Textures::Start and Shadows::Start: creates the pipelines and the surfaces' set.
@@ -27,7 +28,10 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth);
 void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, bool drawn, u64 address,
                     vk::Buffer buffer, u64 offset, vk::ImageView depth);
 
-/// Inside a rendering into the scene's colour, with the surfaces and depth readable: lights them.
+/// Outside rendering, with the surfaces and depth readable: draws the world's ink lines from them.
+void RecordLines(vk::CommandBuffer cmd, u64 address);
+
+/// Inside a rendering into the scene's colour, after RecordLines: lights the surfaces.
 void RecordLight(vk::CommandBuffer cmd, u64 address);
 
 } // namespace Gr2Port::World

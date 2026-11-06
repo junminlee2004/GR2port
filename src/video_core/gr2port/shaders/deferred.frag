@@ -15,6 +15,7 @@ layout(set = 2, binding = 0) uniform sampler2D scene_depth;
 layout(set = 2, binding = 1) uniform sampler2D surface_albedo;
 layout(set = 2, binding = 2) uniform sampler2D surface_normal;
 layout(set = 2, binding = 3) uniform sampler2D surface_material;
+layout(set = 2, binding = 4) uniform sampler2D world_lines;
 
 layout(push_constant) uniform Constants {
     Light light;
@@ -126,7 +127,7 @@ vec3 Tone(vec3 c) {
 }
 
 // The game's LightPass (key light only), IBL and Resolve programs in one pass, without ambient
-// occlusion, screen-space shadows and contour lines.
+// occlusion and screen-space shadows.
 void main() {
     const ivec2 pixel = ivec2(gl_FragCoord.xy);
     const float depth = texelFetch(scene_depth, pixel, 0).r;
@@ -232,5 +233,10 @@ void main() {
                                     .rgb;
         shaded = mix(shaded, background, background_amount);
     }
-    color = vec4(shaded, 1.0);
+    // The lines darken or lighten by the contour colour, with distance by another share.
+    const float line_share = mix(
+        light.contour_blend, light.contour_distant_blend,
+        clamp((distance_to_eye - light.contour_start) * light.contour_range, 0.0, 1.0));
+    const float line = clamp(texelFetch(world_lines, pixel, 0).r, 0.0, 1.0) * line_share;
+    color = vec4(shaded * (1.0 + (2.0 * light.contour_color.rgb - 1.0) * line), 1.0);
 }

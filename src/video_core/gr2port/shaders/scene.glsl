@@ -294,6 +294,7 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Li
     mat4 shadow_projection[Cascades];
     mat4 inverse_shadow_projection[Cascades];
     mat4 view_to_sky;
+    mat4 view_to_previous;
     vec4 inverse_projection;
     vec4 split_depths;
     vec4 light_color;
@@ -325,7 +326,8 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Li
     uint radiance[2];
     uint irradiance[2];
     float ibl_blend;
-    uint padding[3];
+    float depth_range;
+    uint padding[2];
     vec4 occluder_spheres[MaxOccluders];
     vec4 sh[7];
 };

@@ -394,8 +394,9 @@ struct Light {
     /// View space to each cascade's texture coordinates and depth, and back.
     float shadow_projection[Cascades][16];
     float inverse_shadow_projection[Cascades][16];
-    /// View space to the sky's space.
+    /// View space to the sky's space, and to the clip space of the last frame.
     float view_to_sky[16];
+    float view_to_previous[16];
     /// A depth d from 0 to 1 gives the distance 1 / (z (2d - 1) + w), and a pixel's view position
     /// from x and y.
     float inverse_projection[4];
@@ -435,7 +436,9 @@ struct Light {
     u32 radiance[2];
     u32 irradiance[2];
     float ibl_blend;
-    u32 padding[3];
+    /// The distance the world's lines measure depth against.
+    float depth_range;
+    u32 padding[2];
     /// Occluders in view space: centre, radius.
     float occluder_spheres[MaxOccluders][4];
     /// The ambient light's spherical harmonics for characters: Ar, Ag, Ab, Br, Bg, Bb, Cc.

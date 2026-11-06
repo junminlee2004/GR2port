@@ -1,0 +1,86 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform sampler2D scene_depth;
+layout(set = 0, binding = 1) uniform sampler2D surface_normal;
+layout(set = 0, binding = 2) uniform sampler2D history;
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D lines;
+
+layout(push_constant) uniform Constants {
+    Light light;
+    int frame;
+};
+
+// The strength of the lines, the length of the samples' walk in pixels, how far a pixel's distance
+// may change before its history is dropped, and the frames the history averages.
+const float Intensity = 1.7;
+const float WalkPixels = 1.6;
+const float DepthThreshold = 0.065;
+const float MaxFrames = 26.0;
+const float SamplesPerFrame = 4.0;
+const float TwoPi = 6.2831853;
+
+// The surface's facing, from the game's packed normal.
+float Facing(vec2 packed_normal) {
+    return 1.0 - 2.0 * dot(packed_normal, packed_normal);
+}
+
+// The game's Contour program: how much a surface's facing differs from four samples along a random
+// direction, averaged over frames with the camera's reprojection. A pixel holds its line, its
+// distance over the depth range and the frames it has averaged. The game's velocity pass does the
+// reprojection; surfaces that move on their own count as the camera's motion.
+void main() {
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 size = textureSize(scene_depth, 0);
+    if (any(greaterThanEqual(pixel, size))) {
+        return;
+    }
+    const float depth = texelFetch(scene_depth, pixel, 0).r;
+    if (depth <= 0.0) {
+        imageStore(lines, pixel, vec4(0.0));
+        return;
+    }
+    const vec2 inverse_size = 1.0 / vec2(size);
+    const vec2 center = vec2(pixel) + 0.5;
+    const vec2 uv = center * inverse_size;
+    const vec2 ndc = vec2(2.0 * uv.x - 1.0, 1.0 - 2.0 * uv.y);
+    // Reverse depth to the game's OpenGL depth.
+    const float distance_to_eye =
+        1.0 / (light.inverse_projection.z * (1.0 - 2.0 * depth) + light.inverse_projection.w);
+    const vec3 position =
+        vec3(light.inverse_projection.xy * distance_to_eye * ndc, -distance_to_eye);
+    const vec4 previous = light.view_to_previous * vec4(position, 1.0);
+    const vec2 motion = previous.xy / previous.w - ndc;
+    const vec2 history_pixel = center + 0.5 * vec2(motion.x, -motion.y) * vec2(size);
+    const float scaled_distance = distance_to_eye / light.depth_range;
+    if (any(lessThan(history_pixel, vec2(0.0))) || any(greaterThan(history_pixel, vec2(size)))) {
+        imageStore(lines, pixel, vec4(0.0, scaled_distance, 0.0, 0.0));
+        return;
+    }
+    const vec3 past = textureLod(history, history_pixel * inverse_size, 0.0).rgb;
+    if (abs(1.0 - scaled_distance / max(past.g, 1e-6)) >= DepthThreshold) {
+        imageStore(lines, pixel, vec4(0.0, scaled_distance, 0.0, 0.0));
+        return;
+    }
+    const float seed = float(int(uint((pixel.x * 3) ^ (frame + pixel.y + pixel.x * pixel.y)) * 3u));
+    const float angle = TwoPi * fract(abs(seed / TwoPi));
+    const vec2 walk = -WalkPixels * vec2(sin(angle), cos(angle));
+    float around = 0.0;
+    for (float t = 0.25; t <= 1.0; t += 0.25) {
+        const vec2 sample_uv = (center + t * walk) * inverse_size;
+        around += Facing(textureLod(surface_normal, sample_uv, 0.0).rg);
+    }
+    const float facing = Facing(texelFetch(surface_normal, pixel, 0).rg);
+    const float line = Intensity * (SamplesPerFrame * facing - around);
+    const float frames = past.b + SamplesPerFrame;
+    imageStore(lines, pixel,
+               vec4((past.r * past.b + SamplesPerFrame * line) / frames, scaled_distance,
+                    min(frames, SamplesPerFrame * MaxFrames), 0.0));
+}

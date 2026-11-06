@@ -151,8 +151,9 @@ constexpr u64 ViewLens = 0x20c;
 constexpr u64 ViewTime = 0x1078;
 constexpr u64 ViewCurves = 0xa00;
 constexpr u64 ViewSaturation = 0xa70;
-// View: the projection terms of a depth +0x820, the cascades' split depths +0x730, where w is the
-// distance shadows end at; the highlights' fade +0x830; the occluder direction +0x7f0; the
+// View: the last frame's view-projection +0x320, the distance the world's lines measure depth
+// against +0x124, the projection terms of a depth +0x820, the cascades' split depths +0x730, where
+// w is the distance shadows end at; the highlights' fade +0x830; the occluder direction +0x7f0; the
 // contour's colour +0x800, its blend near and past its fade +0x838 and +0x83c, and the fade's
 // distances +0x840 and +0x844; the hatching's strength +0x84c; the toning +0x888, the ambient
 // strength +0x88c; the gradation's distances +0x9c4 and +0x9c8 and colours +0x9cc (three of 3
@@ -160,6 +161,8 @@ constexpr u64 ViewSaturation = 0xa70;
 // occluders +0xc40 with their count +0xc48 and a mode +0xc4c; the ambient light's list +0xc60 with
 // its count +0xc68.
 constexpr u64 ViewProjectionTerms = 0x820;
+constexpr u64 ViewPreviousViewProjection = 0x320;
+constexpr u64 ViewDepthRange = 0x124;
 constexpr u64 ViewSplitDepths = 0x730;
 constexpr u64 ViewShadowEnd = 0x73c;
 constexpr u64 ViewSpecularFade = 0x830;
@@ -1184,6 +1187,10 @@ void WriteLight(VAddr frame_graph, VAddr view, u8* packet) {
     }
     const Matrix view_to_sky = Multiply(inverse_view, Load<Matrix>(view + ViewSkyRotation));
     std::memcpy(light.view_to_sky, view_to_sky.data(), sizeof(view_to_sky));
+    const Matrix view_to_previous =
+        Multiply(inverse_view, Load<Matrix>(view + ViewPreviousViewProjection));
+    std::memcpy(light.view_to_previous, view_to_previous.data(), sizeof(view_to_previous));
+    light.depth_range = number(ViewDepthRange);
     copy(light.inverse_projection, ViewProjectionTerms, sizeof(light.inverse_projection));
     copy(light.split_depths, ViewSplitDepths, sizeof(light.split_depths));
     copy(light.light_color, ViewKeyLight, sizeof(light.light_color));
