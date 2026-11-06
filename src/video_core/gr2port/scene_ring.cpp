@@ -59,6 +59,8 @@ u64 Address(const u8* data) {
 }
 
 void Publish(u64 frame) {
+    // Empties the CPU's write-combining buffers: a plain store could pass the packet's last writes.
+    std::atomic_thread_fence(std::memory_order_seq_cst);
     Slot& slot = g_slots[g_writing];
     slot.frame.store(frame, std::memory_order_relaxed);
     slot.state.store(Ready, std::memory_order_release);
