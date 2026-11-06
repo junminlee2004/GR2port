@@ -49,18 +49,19 @@ namespace {
 
 constexpr u32 FramesInFlight = 2;
 // GPU timestamps per frame: the start, after the uploads, after the deformers, after each cascade,
-// after the surfaces, the lines, the occlusion, the light, the forward draws and the meter, and the
-// end.
-constexpr u32 Timestamps = 10 + Scene::Cascades;
+// after the surfaces, the lines, the occlusion, the light, the forward draws, the meter and the
+// bloom, and the end.
+constexpr u32 Timestamps = 11 + Scene::Cascades;
 constexpr u32 SurfacesTimestamp = 3 + Scene::Cascades;
 constexpr u32 LinesTimestamp = SurfacesTimestamp + 1;
 constexpr u32 OcclusionTimestamp = SurfacesTimestamp + 2;
 constexpr u32 LightTimestamp = SurfacesTimestamp + 3;
 constexpr u32 ForwardTimestamp = SurfacesTimestamp + 4;
 constexpr u32 MeterTimestamp = SurfacesTimestamp + 5;
+constexpr u32 BloomTimestamp = SurfacesTimestamp + 6;
 // GPU intervals per frame: the whole frame, the deformers, each cascade, the surfaces, the lines,
-// the occlusion, the light, the forward draws, the meter and the picture.
-constexpr u32 Intervals = 9 + Scene::Cascades;
+// the occlusion, the light, the forward draws, the meter, the bloom and the picture.
+constexpr u32 Intervals = 10 + Scene::Cascades;
 constexpr u32 DeformerInterval = 1;
 constexpr u32 FirstCascadeInterval = 2;
 constexpr u32 SurfacesInterval = FirstCascadeInterval + Scene::Cascades;
@@ -69,7 +70,8 @@ constexpr u32 OcclusionInterval = SurfacesInterval + 2;
 constexpr u32 LightInterval = SurfacesInterval + 3;
 constexpr u32 ForwardInterval = SurfacesInterval + 4;
 constexpr u32 MeterInterval = SurfacesInterval + 5;
-constexpr u32 PictureInterval = SurfacesInterval + 6;
+constexpr u32 BloomInterval = SurfacesInterval + 6;
+constexpr u32 PictureInterval = SurfacesInterval + 7;
 constexpr u32 ReportFrames = 600;
 constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
 // A frame with more indices than this is not drawn: its items are not what the capture expects.
@@ -334,7 +336,7 @@ bool Thread::Recreate() {
                                      vk::ImageAspectFlagBits::eDepth);
     }
     needs_swapchain = !depth.image || !character_depth.image ||
-                      !Look::Resize(swapchain->Extent(), swapchain->Format()) ||
+                      !Look::Resize(swapchain->Extent(), swapchain->Format(), depth.view) ||
                       !World::Resize(swapchain->Extent(), depth.view, character_depth.view);
     return !needs_swapchain;
 }
@@ -637,8 +639,10 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                                                 vk::PipelineStageFlagBits2::eLateFragmentTests;
     const vk::AccessFlags2 depth_writes = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
                                           vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+    // The last frame's bloom read the depth.
     depth_barrier(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
-                  depth_tests, vk::AccessFlagBits2::eNone, depth_tests, depth_writes);
+                  depth_tests | vk::PipelineStageFlagBits2::eFragmentShader,
+                  vk::AccessFlagBits2::eNone, depth_tests, depth_writes);
     World::RecordSurfaces(cmd, header, drawn, packet.address, scene_ring.buffer, offset,
                           depth.view);
     if (timestamps) {
@@ -746,7 +750,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         .imageView = depth.view,
         .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
         .loadOp = vk::AttachmentLoadOp::eLoad,
-        .storeOp = vk::AttachmentStoreOp::eDontCare,
+        .storeOp = vk::AttachmentStoreOp::eStore,
     };
     const vk::RenderingInfo rendering{
         .renderArea = {{0, 0}, extent},
@@ -785,6 +789,15 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + MeterTimestamp, dl);
+    }
+    depth_barrier(vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                  vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
+                  vk::PipelineStageFlagBits2::eFragmentShader,
+                  vk::AccessFlagBits2::eShaderSampledRead);
+    Look::RecordBloom(cmd, header.bloom, packet.address);
+    if (timestamps) {
+        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
+                            Timestamps * slot_index + BloomTimestamp, dl);
     }
 
     const vk::Image image = swapchain->Image(index);
@@ -961,9 +974,10 @@ void Thread::Report() {
              "skipped, per frame {:.3f} ms of render thread work, {:.3f} ms waiting for a "
              "frame slot and a swapchain image, {:.3f} ms on the GPU (deformers {:.3f}, cascades "
              "{:.3f} {:.3f} {:.3f}, surfaces {:.3f}, lines {:.3f}, occlusion {:.3f}, light {:.3f}, "
-             "forward {:.3f}, meter {:.3f}, picture {:.3f}; shortest {:.3f}, deformers {:.3f}, "
-             "cascades {:.3f} {:.3f} {:.3f}, surfaces {:.3f}, lines {:.3f}, occlusion {:.3f}, "
-             "light {:.3f}, forward {:.3f}, meter {:.3f}, picture {:.3f})",
+             "forward {:.3f}, meter {:.3f}, bloom {:.3f}, picture {:.3f}; shortest {:.3f}, "
+             "deformers {:.3f}, cascades {:.3f} {:.3f} {:.3f}, surfaces {:.3f}, lines {:.3f}, "
+             "occlusion {:.3f}, light {:.3f}, forward {:.3f}, meter {:.3f}, bloom {:.3f}, picture "
+             "{:.3f})",
              game_fps, stats.frames, seconds, skipped - stats.skipped, stats.work_ms / frames,
              stats.wait_ms / frames, gpu_ms, stats.gpu_ms[DeformerInterval] / timed,
              stats.gpu_ms[FirstCascadeInterval] / timed,
@@ -971,13 +985,14 @@ void Thread::Report() {
              stats.gpu_ms[FirstCascadeInterval + 2] / timed, stats.gpu_ms[SurfacesInterval] / timed,
              stats.gpu_ms[LinesInterval] / timed, stats.gpu_ms[OcclusionInterval] / timed,
              stats.gpu_ms[LightInterval] / timed, stats.gpu_ms[ForwardInterval] / timed,
-             stats.gpu_ms[MeterInterval] / timed, stats.gpu_ms[PictureInterval] / timed,
-             stats.gpu_min_ms[0], stats.gpu_min_ms[DeformerInterval],
-             stats.gpu_min_ms[FirstCascadeInterval], stats.gpu_min_ms[FirstCascadeInterval + 1],
-             stats.gpu_min_ms[FirstCascadeInterval + 2], stats.gpu_min_ms[SurfacesInterval],
-             stats.gpu_min_ms[LinesInterval], stats.gpu_min_ms[OcclusionInterval],
-             stats.gpu_min_ms[LightInterval], stats.gpu_min_ms[ForwardInterval],
-             stats.gpu_min_ms[MeterInterval], stats.gpu_min_ms[PictureInterval]);
+             stats.gpu_ms[MeterInterval] / timed, stats.gpu_ms[BloomInterval] / timed,
+             stats.gpu_ms[PictureInterval] / timed, stats.gpu_min_ms[0],
+             stats.gpu_min_ms[DeformerInterval], stats.gpu_min_ms[FirstCascadeInterval],
+             stats.gpu_min_ms[FirstCascadeInterval + 1], stats.gpu_min_ms[FirstCascadeInterval + 2],
+             stats.gpu_min_ms[SurfacesInterval], stats.gpu_min_ms[LinesInterval],
+             stats.gpu_min_ms[OcclusionInterval], stats.gpu_min_ms[LightInterval],
+             stats.gpu_min_ms[ForwardInterval], stats.gpu_min_ms[MeterInterval],
+             stats.gpu_min_ms[BloomInterval], stats.gpu_min_ms[PictureInterval]);
     LOG_INFO(
         Render_Vulkan,
         "GR2port scene: per frame {:.0f} draws ({:.0f} skinned, {:.0f} deformed, {:.1f} with "

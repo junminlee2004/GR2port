@@ -149,10 +149,14 @@ struct Header {
     /// starts from, which shows where no sky is drawn.
     u32 sky;
     float background[3];
+    /// BloomOn when the game runs bloom, with BloomFeedback when it blends the last frame's in.
+    u32 bloom;
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
 static_assert(sizeof(Header) <= 512);
+inline constexpr u32 BloomOn = 1;
+inline constexpr u32 BloomFeedback = 2;
 
 /// The frame's shadow cascades. Matrices are as in Draw.
 struct Shadows {
@@ -414,8 +418,24 @@ struct Grade {
     float saturation;
     /// 1 when the lens and the wobble apply.
     u32 distorted;
+    /// The bloom's bright pass: per channel, then for luma in w, the levels where it starts and
+    /// where it is full.
+    float bloom_low[4];
+    float bloom_high[4];
+    /// The bright pass's power, the power its depth term takes, and the depth term's near and far
+    /// scales.
+    float bloom_correction[4];
+    /// The depth term's near fade (x to y) and far fade (z to w).
+    float bloom_depths[4];
+    /// The bloom's strength per channel after the tone curve; w is 1 when the game runs bloom.
+    float bloom_strength[4];
+    /// The depth term's range that picks the blur's width, and the share of the last frame's bloom
+    /// that stays.
+    float bloom_width[2];
+    float bloom_feedback;
+    float bloom_padding;
 };
-static_assert(sizeof(Grade) == 144);
+static_assert(sizeof(Grade) == 240);
 
 /// The key light, ambient light and comic shading of the world, as the game's LightPass, IBL and
 /// Resolve programs read them. Matrices are as in Draw.

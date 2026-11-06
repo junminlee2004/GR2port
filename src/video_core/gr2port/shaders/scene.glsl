@@ -295,6 +295,14 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Gr
     vec2 fluctuation;
     float saturation;
     uint distorted;
+    vec4 bloom_low;
+    vec4 bloom_high;
+    vec4 bloom_correction;
+    vec4 bloom_depths;
+    vec4 bloom_strength;
+    vec2 bloom_width;
+    float bloom_feedback;
+    float bloom_padding;
 };
 
 // The meter's state, which lasts from frame to frame: the frame's sum of log luminance in units of

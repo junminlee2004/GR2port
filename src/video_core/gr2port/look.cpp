@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 
@@ -9,6 +10,8 @@
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/scene.h"
+#include "video_core/gr2port/shaders/bloom_blur_frag.h"
+#include "video_core/gr2port/shaders/bloom_extract_frag.h"
 #include "video_core/gr2port/shaders/composite_frag.h"
 #include "video_core/gr2port/shaders/exposure_comp.h"
 #include "video_core/gr2port/shaders/fullscreen_vert.h"
@@ -46,6 +49,26 @@ struct CompositePush {
     u64 meter;
 };
 
+struct ExtractPush {
+    u64 grade;
+    std::array<float, 2> scene_pixel;
+};
+
+struct BlurPush {
+    u64 grade;
+    std::array<float, 2> step;
+    u32 feedback;
+    u32 padding;
+};
+
+// The bloom's images, a quarter of the scene's size, in a ring: a frame's bright pass and second
+// blur write the current one, its first blur the next, and the last frame's result is the third.
+constexpr u32 BloomImages = 3;
+constexpr u32 BloomDivisor = 4;
+// The sets: the scene's colour; for each image as the current one, the composite's, the first
+// blur's and the second blur's; and the bright pass's.
+constexpr u32 Sets = 1 + 3 * BloomImages + 1;
+
 // The game's luminance pass reads one pixel of each 8x8 tile in groups of 8x8 tiles.
 constexpr u32 TilePixels = 8;
 constexpr u32 GroupPixels = 64;
@@ -61,13 +84,28 @@ Memory* g_memory = nullptr;
 Image g_scene;
 vk::Extent2D g_extent;
 vk::Sampler g_scene_sampler;
+vk::Sampler g_depth_sampler;
 vk::DescriptorSetLayout g_scene_layout;
+// Two images with their own samplers, for the bloom and the composite.
+vk::DescriptorSetLayout g_pair_layout;
 vk::DescriptorPool g_pool;
 vk::DescriptorSet g_scene_set;
+vk::DescriptorSet g_extract_set;
+// Each indexed by the current bloom image.
+std::array<vk::DescriptorSet, BloomImages> g_composite_sets;
+std::array<vk::DescriptorSet, BloomImages> g_across_sets;
+std::array<vk::DescriptorSet, BloomImages> g_down_sets;
+std::array<Image, BloomImages> g_bloom;
+bool g_bloom_cleared = false;
+// The image that holds the last bloom, and whether the last frame ran bloom.
+u32 g_bloom_image = 0;
+bool g_bloom_ran = false;
 Pipeline g_sky;
 Pipeline g_luminance;
 Pipeline g_exposure;
 Pipeline g_composite;
+Pipeline g_extract;
+Pipeline g_blur;
 vk::Format g_picture_format = vk::Format::eUndefined;
 Buffer g_meter;
 Buffer g_meter_read;
@@ -85,27 +123,127 @@ bool CreateSceneSet(const Device& d) {
         .addressModeW = vk::SamplerAddressMode::eClampToEdge,
     };
     g_scene_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
+    vk::SamplerCreateInfo depth_info = sampler_info;
+    depth_info.magFilter = vk::Filter::eNearest;
+    depth_info.minFilter = vk::Filter::eNearest;
+    g_depth_sampler = d.device.createSampler(depth_info, nullptr, dl).value;
     const vk::DescriptorSetLayoutBinding binding{
         0, vk::DescriptorType::eCombinedImageSampler, 1,
         vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute, &g_scene_sampler};
     g_scene_layout =
         d.device.createDescriptorSetLayout({.bindingCount = 1, .pBindings = &binding}, nullptr, dl)
             .value;
-    const vk::DescriptorPoolSize size{vk::DescriptorType::eCombinedImageSampler, 1};
+    const std::array<vk::DescriptorSetLayoutBinding, 2> pair{{
+        {0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment},
+        {1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment},
+    }};
+    g_pair_layout = d.device
+                        .createDescriptorSetLayout({.bindingCount = static_cast<u32>(pair.size()),
+                                                    .pBindings = pair.data()},
+                                                   nullptr, dl)
+                        .value;
+    const vk::DescriptorPoolSize size{vk::DescriptorType::eCombinedImageSampler, 2 * Sets};
     g_pool = d.device
-                 .createDescriptorPool({.maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &size},
+                 .createDescriptorPool({.maxSets = Sets, .poolSizeCount = 1, .pPoolSizes = &size},
                                        nullptr, dl)
                  .value;
-    if (!g_scene_sampler || !g_scene_layout || !g_pool) {
+    if (!g_scene_sampler || !g_depth_sampler || !g_scene_layout || !g_pair_layout || !g_pool) {
         return false;
     }
+    std::array<vk::DescriptorSetLayout, Sets> layouts;
+    layouts.fill(g_pair_layout);
+    layouts[0] = g_scene_layout;
     const auto [result, sets] = d.device.allocateDescriptorSets(
-        {.descriptorPool = g_pool, .descriptorSetCount = 1, .pSetLayouts = &g_scene_layout}, dl);
+        {.descriptorPool = g_pool, .descriptorSetCount = Sets, .pSetLayouts = layouts.data()}, dl);
     if (result != vk::Result::eSuccess) {
         return false;
     }
-    g_scene_set = sets.front();
+    g_scene_set = sets[0];
+    for (u32 i = 0; i < BloomImages; i++) {
+        g_composite_sets[i] = sets[1 + i];
+        g_across_sets[i] = sets[1 + BloomImages + i];
+        g_down_sets[i] = sets[1 + 2 * BloomImages + i];
+    }
+    g_extract_set = sets[Sets - 1];
     return true;
+}
+
+// Points a pair set's bindings at two images, each read with a sampler.
+void WritePair(vk::DescriptorSet set, vk::ImageView first, vk::Sampler first_sampler,
+               vk::ImageLayout first_layout, vk::ImageView second, vk::Sampler second_sampler,
+               vk::ImageLayout second_layout) {
+    const std::array<vk::DescriptorImageInfo, 2> infos{{
+        {first_sampler, first, first_layout},
+        {second_sampler, second, second_layout},
+    }};
+    std::array<vk::WriteDescriptorSet, 2> writes;
+    for (u32 b = 0; b < writes.size(); b++) {
+        writes[b] = {
+            .dstSet = set,
+            .dstBinding = b,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+            .pImageInfo = &infos[b],
+        };
+    }
+    g_device->device.updateDescriptorSets(writes, {}, g_device->dispatch);
+}
+
+void ImageBarrier(vk::CommandBuffer cmd, vk::Image image, vk::ImageLayout from, vk::ImageLayout to,
+                  vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
+                  vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) {
+    const vk::ImageMemoryBarrier2 barrier{
+        .srcStageMask = src_stage,
+        .srcAccessMask = src_access,
+        .dstStageMask = dst_stage,
+        .dstAccessMask = dst_access,
+        .oldLayout = from,
+        .newLayout = to,
+        .image = image,
+        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+    };
+    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier},
+                         g_device->dispatch);
+}
+
+// Draws one full-screen bloom pass into target and leaves it for fragment shaders to read.
+void BloomPass(vk::CommandBuffer cmd, const Image& target, const Pipeline& pipeline,
+               vk::DescriptorSet set, const void* push, u32 push_bytes) {
+    const auto& dl = g_device->dispatch;
+    ImageBarrier(cmd, target.image, vk::ImageLayout::eUndefined,
+                 vk::ImageLayout::eColorAttachmentOptimal,
+                 vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eNone,
+                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                 vk::AccessFlagBits2::eColorAttachmentWrite);
+    const vk::RenderingAttachmentInfo color{
+        .imageView = target.view,
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eDontCare,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+    };
+    cmd.beginRendering({.renderArea = {{0, 0}, target.extent},
+                        .layerCount = 1,
+                        .colorAttachmentCount = 1,
+                        .pColorAttachments = &color},
+                       dl);
+    const vk::Viewport viewport{
+        .width = static_cast<float>(target.extent.width),
+        .height = static_cast<float>(target.extent.height),
+        .maxDepth = 1.0f,
+    };
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, set, {}, dl);
+    cmd.setViewport(0, viewport, dl);
+    cmd.setScissor(0, vk::Rect2D{{0, 0}, target.extent}, dl);
+    cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, push_bytes, push,
+                      dl);
+    cmd.draw(3, 1, 0, 0, dl);
+    cmd.endRendering(dl);
+    ImageBarrier(
+        cmd, target.image, vk::ImageLayout::eColorAttachmentOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::AccessFlagBits2::eShaderSampledRead);
 }
 
 void MeterBarrier(vk::CommandBuffer cmd, vk::PipelineStageFlags2 src_stage,
@@ -155,10 +293,26 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format) {
                                            });
     g_luminance = CreateComputePipeline(device, LUMINANCE_COMP, sizeof(LuminancePush), scene_set);
     g_exposure = CreateComputePipeline(device, EXPOSURE_COMP, sizeof(ExposurePush));
-    return g_sky.pipeline && g_luminance.pipeline && g_exposure.pipeline;
+    const std::array pair_set{g_pair_layout};
+    g_extract = CreateGraphicsPipeline(device, {
+                                                   .vertex = FULLSCREEN_VERT,
+                                                   .fragment = BLOOM_EXTRACT_FRAG,
+                                                   .color = SceneFormat,
+                                                   .push_constant_bytes = sizeof(ExtractPush),
+                                                   .set_layouts = pair_set,
+                                               });
+    g_blur = CreateGraphicsPipeline(device, {
+                                                .vertex = FULLSCREEN_VERT,
+                                                .fragment = BLOOM_BLUR_FRAG,
+                                                .color = SceneFormat,
+                                                .push_constant_bytes = sizeof(BlurPush),
+                                                .set_layouts = pair_set,
+                                            });
+    return g_sky.pipeline && g_luminance.pipeline && g_exposure.pipeline && g_extract.pipeline &&
+           g_blur.pipeline;
 }
 
-bool Resize(vk::Extent2D extent, vk::Format picture_format) {
+bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth) {
     const auto& dl = g_device->dispatch;
     g_memory->Destroy(g_scene);
     g_scene = g_memory->CreateImage(SceneFormat, extent,
@@ -181,8 +335,35 @@ bool Resize(vk::Extent2D extent, vk::Format picture_format) {
         .pImageInfo = &info,
     };
     g_device->device.updateDescriptorSets(write, {}, dl);
+    const vk::Extent2D bloom_extent{std::max(extent.width / BloomDivisor, 1u),
+                                    std::max(extent.height / BloomDivisor, 1u)};
+    for (Image& image : g_bloom) {
+        g_memory->Destroy(image);
+        image = g_memory->CreateImage(SceneFormat, bloom_extent,
+                                      vk::ImageUsageFlagBits::eColorAttachment |
+                                          vk::ImageUsageFlagBits::eSampled |
+                                          vk::ImageUsageFlagBits::eTransferDst,
+                                      vk::ImageAspectFlagBits::eColor);
+        if (!image.image) {
+            return false;
+        }
+    }
+    g_bloom_cleared = false;
+    g_bloom_ran = false;
+    constexpr auto Read = vk::ImageLayout::eShaderReadOnlyOptimal;
+    WritePair(g_extract_set, g_scene.view, g_scene_sampler, Read, depth, g_depth_sampler,
+              vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+    for (u32 i = 0; i < BloomImages; i++) {
+        const vk::ImageView current = g_bloom[i].view;
+        const vk::ImageView next = g_bloom[(i + 1) % BloomImages].view;
+        const vk::ImageView last = g_bloom[(i + 2) % BloomImages].view;
+        WritePair(g_composite_sets[i], g_scene.view, g_scene_sampler, Read, current,
+                  g_scene_sampler, Read);
+        WritePair(g_across_sets[i], current, g_scene_sampler, Read, last, g_scene_sampler, Read);
+        WritePair(g_down_sets[i], next, g_scene_sampler, Read, last, g_scene_sampler, Read);
+    }
     if (g_picture_format != picture_format) {
-        const std::array scene_set{g_scene_layout};
+        const std::array scene_set{g_pair_layout};
         DestroyPipeline(*g_device, g_composite);
         g_composite =
             CreateGraphicsPipeline(*g_device, {
@@ -273,6 +454,55 @@ void RecordMeter(vk::CommandBuffer cmd, u64 packet_address) {
         vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite);
 }
 
+void RecordBloom(vk::CommandBuffer cmd, u32 bloom, u64 packet_address) {
+    const auto& dl = g_device->dispatch;
+    if (!g_bloom_cleared) {
+        g_bloom_cleared = true;
+        const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        for (const Image& image : g_bloom) {
+            ImageBarrier(cmd, image.image, vk::ImageLayout::eUndefined,
+                         vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits2::eNone,
+                         vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eClear,
+                         vk::AccessFlagBits2::eTransferWrite);
+            cmd.clearColorImage(image.image, vk::ImageLayout::eTransferDstOptimal,
+                                vk::ClearColorValue{.float32 = std::array<float, 4>{}}, range, dl);
+            ImageBarrier(cmd, image.image, vk::ImageLayout::eTransferDstOptimal,
+                         vk::ImageLayout::eShaderReadOnlyOptimal,
+                         vk::PipelineStageFlagBits2::eClear, vk::AccessFlagBits2::eTransferWrite,
+                         vk::PipelineStageFlagBits2::eFragmentShader,
+                         vk::AccessFlagBits2::eShaderSampledRead);
+        }
+    }
+    if ((bloom & Scene::BloomOn) == 0) {
+        g_bloom_ran = false;
+        return;
+    }
+    // As the game: the image after the last bloom's, or the first after a frame without bloom.
+    const u32 current = g_bloom_ran ? (g_bloom_image + 1) % BloomImages : 0;
+    const u32 next = (current + 1) % BloomImages;
+    const u64 grade = packet_address + Scene::GradeOffset;
+    const ExtractPush extract{
+        .grade = grade,
+        .scene_pixel = {1.0f / static_cast<float>(g_extent.width),
+                        1.0f / static_cast<float>(g_extent.height)},
+    };
+    BloomPass(cmd, g_bloom[current], g_extract, g_extract_set, &extract, sizeof(extract));
+    const vk::Extent2D size = g_bloom[current].extent;
+    const BlurPush across{
+        .grade = grade,
+        .step = {1.0f / static_cast<float>(size.width), 0.0f},
+    };
+    BloomPass(cmd, g_bloom[next], g_blur, g_across_sets[current], &across, sizeof(across));
+    const BlurPush down{
+        .grade = grade,
+        .step = {0.0f, 1.0f / static_cast<float>(size.height)},
+        .feedback = g_bloom_ran && (bloom & Scene::BloomFeedback) != 0 ? 1u : 0u,
+    };
+    BloomPass(cmd, g_bloom[current], g_blur, g_down_sets[current], &down, sizeof(down));
+    g_bloom_image = current;
+    g_bloom_ran = true;
+}
+
 void RecordComposite(vk::CommandBuffer cmd, u64 packet_address) {
     const auto& dl = g_device->dispatch;
     const vk::Viewport viewport{
@@ -288,8 +518,8 @@ void RecordComposite(vk::CommandBuffer cmd, u64 packet_address) {
         .meter = g_meter.address,
     };
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_composite.pipeline, dl);
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_composite.layout, 0, g_scene_set, {},
-                           dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_composite.layout, 0,
+                           g_composite_sets[g_bloom_image], {}, dl);
     cmd.setViewport(0, viewport, dl);
     cmd.setScissor(0, vk::Rect2D{{0, 0}, g_extent}, dl);
     cmd.pushConstants(g_composite.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
@@ -315,6 +545,18 @@ void LogAndReadMeter(vk::CommandBuffer cmd, const u8* packet) {
              grade.exposure, grade.adaption_range, grade.adaption_speed, grade.key_value,
              meter.exposure, meter.adapted, grade.saturation, grade.distorted, knots[0], knots[1],
              knots[2], knots[3], knots[4], knots[5], knots[6]);
+    LOG_INFO(Render_Vulkan,
+             "GR2port bloom: flags {}, low ({:.3f} {:.3f} {:.3f} {:.3f}), high ({:.3f} {:.3f} "
+             "{:.3f} {:.3f}), correction ({:.3f} {:.3f} {:.3f} {:.3f}), depths ({:.3f} {:.3f} "
+             "{:.3f} {:.3f}), strength ({:.3f} {:.3f} {:.3f}), width ({:.3f} {:.3f}), feedback "
+             "{:.3f}",
+             header.bloom, grade.bloom_low[0], grade.bloom_low[1], grade.bloom_low[2],
+             grade.bloom_low[3], grade.bloom_high[0], grade.bloom_high[1], grade.bloom_high[2],
+             grade.bloom_high[3], grade.bloom_correction[0], grade.bloom_correction[1],
+             grade.bloom_correction[2], grade.bloom_correction[3], grade.bloom_depths[0],
+             grade.bloom_depths[1], grade.bloom_depths[2], grade.bloom_depths[3],
+             grade.bloom_strength[0], grade.bloom_strength[1], grade.bloom_strength[2],
+             grade.bloom_width[0], grade.bloom_width[1], grade.bloom_feedback);
     if (header.sky == 0) {
         LOG_INFO(Render_Vulkan, "GR2port sky: none, background ({:.3f} {:.3f} {:.3f})",
                  header.background[0], header.background[1], header.background[2]);

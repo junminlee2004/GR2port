@@ -10,8 +10,8 @@ class Memory;
 }
 
 // The passes that give a frame GR2's look, on the render thread: the sky behind the scene, the
-// meter that sets the exposure, and the game's Tonemap and Composite programs, which turn the
-// scene's HDR colour into the picture.
+// meter that sets the exposure, the bloom, and the game's Tonemap and Composite programs, which
+// turn the scene's HDR colour into the picture.
 namespace Gr2Port::Look {
 
 inline constexpr vk::Format SceneFormat = vk::Format::eR16G16B16A16Sfloat;
@@ -19,9 +19,9 @@ inline constexpr vk::Format SceneFormat = vk::Format::eR16G16B16A16Sfloat;
 /// After Textures::Start: creates the pipelines and the meter. depth_format is the scene's.
 bool Start(const Device& device, Memory& memory, vk::Format depth_format);
 
-/// With the GPU idle: creates the scene's colour image at extent, and the picture's pipeline for
-/// picture_format.
-bool Resize(vk::Extent2D extent, vk::Format picture_format);
+/// With the GPU idle: creates the scene's colour image at extent, the bloom's images, and the
+/// picture's pipeline for picture_format. depth is the scene's depth, for the bloom to read.
+bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth);
 
 vk::Image SceneImage();
 vk::ImageView SceneView();
@@ -33,7 +33,11 @@ void RecordSky(vk::CommandBuffer cmd, u64 packet_address);
 /// exposure.
 void RecordMeter(vk::CommandBuffer cmd, u64 packet_address);
 
-/// Inside the picture's rendering: draws the scene's colour as the picture.
+/// Outside rendering, with the scene's colour and depth readable: draws the game's bloom when the
+/// header's bloom flags say it runs.
+void RecordBloom(vk::CommandBuffer cmd, u32 bloom, u64 packet_address);
+
+/// Inside the picture's rendering: draws the scene's colour and the bloom as the picture.
 void RecordComposite(vk::CommandBuffer cmd, u64 packet_address);
 
 /// Outside rendering, once per report: logs the frame's look and the meter's last read state, and

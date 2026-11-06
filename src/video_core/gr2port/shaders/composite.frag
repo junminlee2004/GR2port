@@ -7,6 +7,7 @@
 #include "scene.glsl"
 
 layout(set = 0, binding = 0) uniform sampler2D scene;
+layout(set = 0, binding = 1) uniform sampler2D bloom;
 
 layout(push_constant) uniform Constants {
     Grade grade;
@@ -31,11 +32,15 @@ vec2 Distort(vec2 texcoord) {
     return lens + (0.002 * coarse + 0.001 * fine) * grade.fluctuation.y * (1.0 - edge * edge);
 }
 
-// The game's Tonemap program without bloom: a filmic curve scaled so a white of 11.2 maps to 1.
-vec3 Tonemap(vec3 scene_color) {
-    const vec3 x = max(scene_color, vec3(0.0)) * meter.exposure;
+// The game's Tonemap program: a filmic curve scaled so a white of 11.2 maps to 1, then the bloom.
+vec3 Tonemap(vec2 texcoord) {
+    const vec3 x = max(texture(scene, texcoord).rgb, vec3(0.0)) * meter.exposure;
     const vec3 curve = ((0.22 * x + 0.03) * x + 0.002) / ((0.22 * x + 0.3) * x + 0.06);
-    return 2.3060 * curve - 0.07687;
+    vec3 toned = 2.3060 * curve - 0.07687;
+    if (grade.bloom_strength.w != 0.0) {
+        toned += grade.bloom_strength.rgb * texture(bloom, texcoord).rgb;
+    }
+    return toned;
 }
 
 // A channel's Catmull-Rom curve through its knots, with the end knots repeated.
@@ -72,5 +77,5 @@ void main() {
     if (grade.distorted != 0u) {
         texcoord = Distort(texcoord);
     }
-    color = vec4(Composite(Tonemap(texture(scene, texcoord).rgb)), 1.0);
+    color = vec4(Composite(Tonemap(texcoord)), 1.0);
 }

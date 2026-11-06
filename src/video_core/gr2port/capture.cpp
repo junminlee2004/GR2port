@@ -151,6 +151,18 @@ constexpr u64 ViewLens = 0x20c;
 constexpr u64 ViewTime = 0x1078;
 constexpr u64 ViewCurves = 0xa00;
 constexpr u64 ViewSaturation = 0xa70;
+// View: the bloom's bright pass levels +0xa74 and +0xa84 (4 floats each), the power of its colour
+// +0xa94, the power of depth and the near and far scales +0xa98, the depth fades +0xaa4, the blur's
+// width range +0xab4, the share of the last frame +0xabc, the colour +0xac0 and strength +0xacc.
+constexpr u64 ViewBloomLow = 0xa74;
+constexpr u64 ViewBloomHigh = 0xa84;
+constexpr u64 ViewBloomPower = 0xa94;
+constexpr u64 ViewBloomCorrection = 0xa98;
+constexpr u64 ViewBloomDepths = 0xaa4;
+constexpr u64 ViewBloomWidth = 0xab4;
+constexpr u64 ViewBloomFeedback = 0xabc;
+constexpr u64 ViewBloomColor = 0xac0;
+constexpr u64 ViewBloomStrength = 0xacc;
 // View: the last frame's view-projection +0x320, the distance the world's lines measure depth
 // against +0x124, the projection terms of a depth +0x820, the cascades' split depths +0x730, where
 // w is the distance shadows end at; the highlights' fade +0x830; the occluder direction +0x7f0; the
@@ -237,6 +249,9 @@ constexpr float LensOutwardShape = 1.4281480f; // tan(55 degrees)
 constexpr float LensInwardBend = 6.0f;
 // The game's adaption rate counts seconds at 30 frames per second.
 constexpr float AdaptionFrame = 1.0f / 30.0f;
+// The game moves a bloom level that equals its start up by this, and so the blur's width range.
+constexpr float BloomLevelStep = 1.0f / 255.0f;
+constexpr float BloomWidthStep = 0.0001f;
 // The game's SSAO scales the view's strength by this (FUN_0142ec00).
 constexpr float OcclusionScale = 0.0863267f;
 constexpr u64 CasterTableBytes = 0x18;
@@ -1254,6 +1269,29 @@ void WriteGrade(VAddr view, u8* packet) {
     grade.fluctuation[1] = std::max(0.0f, fluctuation * 2.0f);
     grade.saturation = Load<float>(view + ViewSaturation);
     grade.distorted = lens > 0.0f || fluctuation > 0.0f ? 1 : 0;
+    const auto low = Load<std::array<float, 4>>(view + ViewBloomLow);
+    const auto high = Load<std::array<float, 4>>(view + ViewBloomHigh);
+    for (u32 i = 0; i < 4; i++) {
+        grade.bloom_low[i] = low[i];
+        grade.bloom_high[i] = high[i] == low[i] ? high[i] + BloomLevelStep : high[i];
+    }
+    grade.bloom_correction[0] = 1.0f / Load<float>(view + ViewBloomPower);
+    std::memcpy(&grade.bloom_correction[1],
+                reinterpret_cast<const void*>(view + ViewBloomCorrection), 3 * sizeof(float));
+    std::memcpy(grade.bloom_depths, reinterpret_cast<const void*>(view + ViewBloomDepths),
+                sizeof(grade.bloom_depths));
+    const float strength = Load<float>(view + ViewBloomStrength);
+    const auto color = Load<std::array<float, 3>>(view + ViewBloomColor);
+    for (u32 i = 0; i < 3; i++) {
+        grade.bloom_strength[i] = strength * color[i];
+    }
+    grade.bloom_strength[3] = strength != 0.0f ? 1.0f : 0.0f;
+    grade.bloom_width[0] = Load<float>(view + ViewBloomWidth);
+    grade.bloom_width[1] = Load<float>(view + ViewBloomWidth + 4);
+    if (grade.bloom_width[1] == grade.bloom_width[0]) {
+        grade.bloom_width[1] += BloomWidthStep;
+    }
+    grade.bloom_feedback = Load<float>(view + ViewBloomFeedback);
     std::memcpy(packet + Scene::GradeOffset, &grade, sizeof(grade));
 }
 
@@ -1463,6 +1501,8 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     writer.EndPart(Scene::CapturePart::Characters);
     Scene::Header header = writer.Header();
     header.frame = frame;
+    header.bloom = (Load<float>(view + ViewBloomStrength) != 0.0f ? Scene::BloomOn : 0) |
+                   (Load<float>(view + ViewBloomFeedback) > 0.0f ? Scene::BloomFeedback : 0);
     for (u32 c = 0; c < Scene::ItemCategories; c++) {
         const s32 count = Load<s32>(view + ViewCategoryCount + c * 4);
         header.category_items[c] = static_cast<u16>(std::clamp(count, 0, 0xffff));
