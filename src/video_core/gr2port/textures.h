@@ -18,7 +18,8 @@ class Memory;
 // The game's GNF textures (InitTextureFromGnf 0x1618ca0) converted into the renderer's images once,
 // when the game builds them: detiled on the renderer's GPU, block-compressed formats kept. Each
 // texture object holds its handle at +0x6c, which no game code reads or writes. Shaders sample
-// every texture through one array indexed by handle; handle 0 is a white texture.
+// every texture through one array indexed by handle, as a 2D texture or a cube map by the texture's
+// kind; handle 0 is a white 2D texture.
 namespace Gr2Port::Textures {
 
 inline constexpr u32 Capacity = 1u << 15;
@@ -26,8 +27,12 @@ inline constexpr u32 Capacity = 1u << 15;
 /// Installs the hooks on the GNF texture init and on the texture destroy.
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 
-/// The handle of texture, the game's texture object, when it is ready, else 0. Any thread.
+/// The handle of texture, the game's texture object, when it is a 2D texture and ready, else 0.
+/// Any thread.
 u32 Get(VAddr texture);
+
+/// As Get, for a cube map.
+u32 GetCube(VAddr texture);
 
 /// Render thread: creates the texture array, its sampler and the detile pipelines.
 bool Start(const Device& device, Memory& memory);
@@ -37,15 +42,16 @@ bool Start(const Device& device, Memory& memory);
 /// done. Frames up to completed are done on the GPU.
 void Update(vk::CommandBuffer cmd, u64 frame, u64 completed);
 
-/// The set with the texture array at binding 0 and the sampler at binding 1, for fragment shaders.
+/// The set with the texture array at binding 0, a repeating sampler at binding 1 and a clamping one
+/// at binding 2, for fragment shaders.
 vk::DescriptorSetLayout SetLayout();
 vk::DescriptorSet Set();
 
 struct Stats {
     u32 textures;
     u32 pending;
-    /// Textures not converted: not a single 2D image, a tiling or format the renderer does not
-    /// convert, a layout larger than the GNF data, or no memory.
+    /// Textures not converted: not a single 2D image or cube map, a tiling or format the renderer
+    /// does not convert, a layout larger than the GNF data, or no memory.
     u32 not_2d;
     u32 unsupported;
     u32 too_large;

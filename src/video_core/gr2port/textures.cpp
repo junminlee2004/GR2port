@@ -91,6 +91,7 @@ T Load(VAddr address) {
 struct Texture {
     std::atomic<VAddr> object{0};
     std::atomic<bool> ready{false};
+    std::atomic<bool> cube{false};
 };
 
 // What a texture object holds when it is built: its T# and the end of its GNF data.
@@ -121,12 +122,13 @@ struct Layout {
     vk::Extent2D extent;
     vk::Extent2D image_extent;
     // The levels of the data; the data level the image starts at, its offset and the bytes from
-    // it on; the image's levels (at most a full chain).
+    // it on; the image's levels (at most a full chain) and layers.
     u32 data_levels;
     u32 first;
     u32 base;
     u32 bytes;
     u32 levels;
+    u32 layers;
     u32 bits;
     bool block;
     AmdGpu::TileMode tile_mode;
@@ -154,7 +156,7 @@ struct Upload {
 const Device* g_device = nullptr;
 Memory* g_memory = nullptr;
 vk::Sampler g_sampler;
-vk::Sampler g_decal_sampler;
+vk::Sampler g_clamp_sampler;
 vk::DescriptorSetLayout g_set_layout;
 vk::DescriptorPool g_pool;
 vk::DescriptorSet g_set;
@@ -188,11 +190,17 @@ bool Tiled(AmdGpu::TileMode tile_mode) {
     return tile_mode != AmdGpu::TileMode::DisplayLinearAligned;
 }
 
-// The checks on a T# that need no layout: a single 2D image with a tiling and format the
-// renderer converts.
-bool Single2D(const AmdGpu::Image& sharp) {
-    return sharp.GetType() == AmdGpu::ImageType::Color2D && sharp.base_level == 0 &&
-           sharp.alt_tile_mode == 0 && sharp.NumLayers() == 1 && sharp.Address() != 0;
+bool IsCube(const AmdGpu::Image& sharp) {
+    return sharp.GetType() == AmdGpu::ImageType::Cube;
+}
+
+// The checks on a T# that need no layout: a single 2D image or a single cube, with a tiling and
+// format the renderer converts.
+bool SingleImage(const AmdGpu::Image& sharp) {
+    const bool single =
+        IsCube(sharp) ? sharp.depth == 0
+                      : sharp.GetType() == AmdGpu::ImageType::Color2D && sharp.NumLayers() == 1;
+    return single && sharp.base_level == 0 && sharp.alt_tile_mode == 0 && sharp.Address() != 0;
 }
 
 bool Convertible(const AmdGpu::Image& sharp) {
@@ -229,12 +237,14 @@ Layout ReadLayout(const AmdGpu::Image& sharp, u32 max_extent) {
     layout.levels = std::min<u32>(
         layout.data_levels - layout.first,
         std::bit_width(std::max(layout.image_extent.width, layout.image_extent.height)));
+    layout.layers = IsCube(sharp) ? 6 : 1;
     layout.bits = AmdGpu::NumBitsPerBlock(sharp.GetDataFmt());
     layout.block = AmdGpu::IsBlockCoded(sharp.GetDataFmt());
     layout.tile_mode = sharp.GetTileMode();
-    VideoCore::ComputeImageSize(sharp.Pitch(), layout.extent.height, 1, layout.data_levels, 1,
-                                layout.bits, 1, layout.block, sharp.pow2pad != 0, false,
-                                layout.tile_mode, AmdGpu::GetArrayMode(layout.tile_mode),
+    // The data can hold more layers than the image: padding rounds their count to a power of 2.
+    VideoCore::ComputeImageSize(sharp.Pitch(), layout.extent.height, 1, layout.data_levels,
+                                sharp.NumLayers(), layout.bits, 1, layout.block, sharp.pow2pad != 0,
+                                false, layout.tile_mode, AmdGpu::GetArrayMode(layout.tile_mode),
                                 &layout.size, &layout.micro_tiled_mips, layout.mips.data());
     layout.base = layout.mips[layout.first].offset;
     layout.bytes = layout.size - layout.base;
@@ -274,9 +284,9 @@ void PS4_SYSV_ABI OnInit(u32, const Hooks::Arguments* arguments, u64) {
         g_missed_destroys++;
     }
     u32 handle = 0;
-    if (!Single2D(sharp)) {
+    if (!SingleImage(sharp)) {
         g_not_2d++;
-        LogSkip(texture, sharp, "not a single 2D image");
+        LogSkip(texture, sharp, "not a single 2D image or cube");
     } else if (blob == 0 || !Convertible(sharp)) {
         g_unsupported++;
         LogSkip(texture, sharp, "tiling or format");
@@ -293,6 +303,7 @@ void PS4_SYSV_ABI OnInit(u32, const Hooks::Arguments* arguments, u64) {
     const VAddr stream = blob + BlobContents + Load<u32>(blob + BlobContentsSize);
     g_sources[handle] = {.sharp = sharp, .end = stream + Load<u32>(blob + BlobStreamSize)};
     g_textures[handle].ready.store(false, std::memory_order_relaxed);
+    g_textures[handle].cube.store(IsCube(sharp), std::memory_order_relaxed);
     g_textures[handle].object.store(texture, std::memory_order_release);
     g_pending.push_back(handle);
 }
@@ -553,15 +564,15 @@ bool CreateSet(const Device& d) {
         .maxLod = VK_LOD_CLAMP_NONE,
     };
     g_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
-    // The game clamps its decal textures to their edges.
+    // The game clamps its decal textures and cube maps to their edges.
     sampler_info.addressModeU = vk::SamplerAddressMode::eClampToEdge;
     sampler_info.addressModeV = vk::SamplerAddressMode::eClampToEdge;
     sampler_info.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-    g_decal_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
+    g_clamp_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
     const std::array<vk::DescriptorSetLayoutBinding, 3> bindings{{
         {0, vk::DescriptorType::eSampledImage, Capacity, vk::ShaderStageFlagBits::eFragment},
         {1, vk::DescriptorType::eSampler, 1, vk::ShaderStageFlagBits::eFragment, &g_sampler},
-        {2, vk::DescriptorType::eSampler, 1, vk::ShaderStageFlagBits::eFragment, &g_decal_sampler},
+        {2, vk::DescriptorType::eSampler, 1, vk::ShaderStageFlagBits::eFragment, &g_clamp_sampler},
     }};
     const std::array<vk::DescriptorBindingFlags, 3> binding_flags{
         vk::DescriptorBindingFlagBits::ePartiallyBound |
@@ -593,7 +604,7 @@ bool CreateSet(const Device& d) {
                                         .pPoolSizes = sizes.data()},
                                        nullptr, dl)
                  .value;
-    if (!g_sampler || !g_decal_sampler || !g_set_layout || !g_pool) {
+    if (!g_sampler || !g_clamp_sampler || !g_set_layout || !g_pool) {
         return false;
     }
     const auto [result, sets] = d.device.allocateDescriptorSets(
@@ -646,17 +657,30 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     return true;
 }
 
-u32 Get(VAddr texture) {
+namespace {
+
+u32 GetOfKind(VAddr texture, bool cube) {
     const u32 handle = Load<u32>(texture + TextureHandle);
     if (handle == 0 || handle >= Capacity) {
         return 0;
     }
     const Texture& t = g_textures[handle];
     if (!t.ready.load(std::memory_order_acquire) ||
-        t.object.load(std::memory_order_relaxed) != texture) {
+        t.object.load(std::memory_order_relaxed) != texture ||
+        t.cube.load(std::memory_order_relaxed) != cube) {
         return 0;
     }
     return handle;
+}
+
+} // namespace
+
+u32 Get(VAddr texture) {
+    return GetOfKind(texture, false);
+}
+
+u32 GetCube(VAddr texture) {
+    return GetOfKind(texture, true);
 }
 
 bool Start(const Device& device, Memory& memory) {
@@ -738,7 +762,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                                                         Placement::Device);
             }
             Image image = g_memory->CreateTexture(layout.format, layout.image_extent, layout.levels,
-                                                  layout.mapping);
+                                                  layout.mapping, layout.layers != 1);
             if (staging.buffer.mapped == nullptr || (tiled && !scratch.buffer.buffer) ||
                 !image.image) {
                 g_memory->Destroy(staging.buffer);
@@ -798,7 +822,8 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             .oldLayout = vk::ImageLayout::eUndefined,
             .newLayout = vk::ImageLayout::eTransferDstOptimal,
             .image = upload.image.image,
-            .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, upload.layout->levels, 0, 1},
+            .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, upload.layout->levels, 0,
+                                 upload.layout->layers},
         });
     }
     const vk::MemoryBarrier2 detiled{
@@ -826,7 +851,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                 .bufferOffset = upload.source_offset + info.offset - layout.base,
                 .bufferRowLength = info.pitch,
                 .bufferImageHeight = info.height,
-                .imageSubresource = {vk::ImageAspectFlagBits::eColor, mip, 0, 1},
+                .imageSubresource = {vk::ImageAspectFlagBits::eColor, mip, 0, layout.layers},
                 .imageExtent = {info.pitch != 0 ? std::min<u32>(info.pitch, width) : width,
                                 info.height != 0 ? std::min<u32>(info.height, height) : height, 1},
             });

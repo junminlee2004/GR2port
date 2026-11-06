@@ -159,14 +159,16 @@ Image Memory::CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsage
 }
 
 Image Memory::CreateTexture(vk::Format format, vk::Extent2D extent, u32 levels,
-                            vk::ComponentMapping mapping) {
+                            vk::ComponentMapping mapping, bool cube) {
+    const u32 layers = cube ? 6 : 1;
     const VkImageCreateInfo image_info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .flags = cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : VkImageCreateFlags{0},
         .imageType = VK_IMAGE_TYPE_2D,
         .format = static_cast<VkFormat>(format),
         .extent = {extent.width, extent.height, 1},
         .mipLevels = levels,
-        .arrayLayers = 1,
+        .arrayLayers = layers,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
@@ -185,10 +187,10 @@ Image Memory::CreateTexture(vk::Format format, vk::Extent2D extent, u32 levels,
     image.size = result.size;
     const vk::ImageViewCreateInfo view_info{
         .image = image.image,
-        .viewType = vk::ImageViewType::e2D,
+        .viewType = cube ? vk::ImageViewType::eCube : vk::ImageViewType::e2D,
         .format = format,
         .components = mapping,
-        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, levels, 0, 1},
+        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, levels, 0, layers},
     };
     image.view = d.device.createImageView(view_info, nullptr, d.dispatch).value;
     return image;

@@ -72,9 +72,9 @@ public:
     Image CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsageFlags usage,
                       vk::ImageAspectFlags aspect, u32 layers = 1);
     /// A sampled 2D image with levels mip levels, which copies fill, and a view of all of it
-    /// with mapping.
+    /// with mapping. A cube has six layers and a cube view.
     Image CreateTexture(vk::Format format, vk::Extent2D extent, u32 levels,
-                        vk::ComponentMapping mapping);
+                        vk::ComponentMapping mapping, bool cube = false);
     void Destroy(Image& image);
 
 private:
