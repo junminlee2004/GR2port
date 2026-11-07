@@ -9,6 +9,7 @@
 #include <SDL3/SDL_video.h>
 
 #include "common/logging/log.h"
+#include "video_core/gr2port/capture.h"
 #include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/window.h"
 
@@ -36,6 +37,9 @@ bool SDLCALL WatchEvents(void*, SDL_Event* event) {
     }
     if (event->type == SDL_EVENT_KEY_DOWN && event->key.key == SDLK_F3 && !event->key.repeat) {
         EmulatedGpu::Toggle();
+    }
+    if (event->type == SDL_EVENT_KEY_DOWN && event->key.key == SDLK_F2 && !event->key.repeat) {
+        Capture::ToggleCapture();
     }
     return true;
 }

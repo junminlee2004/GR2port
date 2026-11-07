@@ -504,6 +504,8 @@ constexpr u32 BatchedCategory = 15;
 constexpr u64 MatrixBytes = 64;
 
 std::atomic<u64> g_frames{0};
+// Whether frames are captured.
+std::atomic<bool> g_capturing{true};
 
 // The frame's commands, which reach the packet in one go. Written item by item, they would leave
 // half-full write-combined lines in several places for the reads between items to evict.
@@ -2155,6 +2157,10 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     const auto start = std::chrono::steady_clock::now();
     const u64 frame = g_frames.load(std::memory_order_relaxed) + 1;
     g_frames.store(frame, std::memory_order_relaxed);
+    const bool capturing = g_capturing.load(std::memory_order_relaxed);
+    if (!capturing) {
+        return;
+    }
     u8* const packet = SceneRing::Begin();
     if (packet == nullptr) {
         return;
@@ -2303,6 +2309,10 @@ void OnFrame(VAddr frame_graph, VAddr view) {
 
 u64 Frames() {
     return g_frames.load(std::memory_order_relaxed);
+}
+
+void ToggleCapture() {
+    g_capturing.store(!g_capturing.load(std::memory_order_relaxed), std::memory_order_relaxed);
 }
 
 } // namespace Gr2Port::Capture

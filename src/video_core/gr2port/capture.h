@@ -15,4 +15,7 @@ void OnFrame(VAddr frame_graph, VAddr view);
 /// The frames the game has started.
 u64 Frames();
 
+/// Any thread: stops or restarts the capture, so that the game runs without the renderer's work.
+void ToggleCapture();
+
 } // namespace Gr2Port::Capture
