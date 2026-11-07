@@ -13,6 +13,8 @@
 #include "video_core/gr2port/shaders/occlusion_comp.h"
 #include "video_core/gr2port/shaders/occlusion_depth_comp.h"
 #include "video_core/gr2port/shaders/world_alpha_frag.h"
+#include "video_core/gr2port/shaders/world_decal_frag.h"
+#include "video_core/gr2port/shaders/world_decal_vert.h"
 #include "video_core/gr2port/shaders/world_frag.h"
 #include "video_core/gr2port/shaders/world_lines_comp.h"
 #include "video_core/gr2port/shaders/world_vert.h"
@@ -29,6 +31,11 @@ struct SurfacePush {
     u64 draws;
     u64 materials;
     u64 layer_materials;
+};
+
+struct DecalPush {
+    u64 decals;
+    u64 light;
 };
 
 // The light block, and the frame's place in the game's cycle of 26 frames.
@@ -48,6 +55,8 @@ constexpr u32 LinesGroupPixels = 8;
 constexpr vk::Format DepthLevelFormat = vk::Format::eR32Sfloat;
 constexpr u32 DepthLevels = 5;
 constexpr u32 DepthLevelMinSize = 1u << DepthLevels;
+// A decal's box, as twelve triangles.
+constexpr u32 DecalBoxVertices = 36;
 
 const Device* g_device = nullptr;
 Memory* g_memory = nullptr;
@@ -74,6 +83,7 @@ std::array<vk::ImageView, DepthLevels> g_depth_level_views;
 std::array<vk::DescriptorSet, DepthLevels> g_depth_level_sets;
 // The surface pipelines, in the order of the draw lists.
 std::array<Pipeline, 4> g_surface_pipelines;
+Pipeline g_decals;
 Pipeline g_light;
 Pipeline g_lines_pipeline;
 Pipeline g_occlusion_pipeline;
@@ -199,6 +209,66 @@ Pipeline CreateSurfacePipeline(const Device& d, vk::Format depth_format,
                                      });
 }
 
+// The game's Decal pass, with the surfaces drawn so far as attachments and depth readable: the back
+// faces of each decal's box cover its pixels once, and blend the decal into what the box holds.
+void RecordDecals(vk::CommandBuffer cmd, u32 decals, u64 address, vk::Image depth,
+                  std::span<const vk::RenderingAttachmentInfo> colors) {
+    const auto& dl = g_device->dispatch;
+    const vk::PipelineStageFlags2 depth_tests = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                                                vk::PipelineStageFlagBits2::eLateFragmentTests;
+    const vk::AccessFlags2 depth_writes = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                                          vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+    const vk::MemoryBarrier2 surfaces_written{
+        .srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        .srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
+        .dstStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        .dstAccessMask =
+            vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite,
+    };
+    vk::ImageMemoryBarrier2 depth_barrier{
+        .srcStageMask = depth_tests,
+        .srcAccessMask = depth_writes,
+        .dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader,
+        .dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead,
+        .oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
+        .newLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+        .image = depth,
+        .subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1},
+    };
+    cmd.pipelineBarrier2({.memoryBarrierCount = 1,
+                          .pMemoryBarriers = &surfaces_written,
+                          .imageMemoryBarrierCount = 1,
+                          .pImageMemoryBarriers = &depth_barrier},
+                         dl);
+    cmd.beginRendering({.renderArea = {{0, 0}, g_extent},
+                        .layerCount = 1,
+                        .colorAttachmentCount = static_cast<u32>(colors.size()),
+                        .pColorAttachments = colors.data()},
+                       dl);
+    const std::array sets{Textures::Set(), g_sets[0]};
+    const DecalPush push{
+        .decals = address + Scene::WorldDecalsOffset,
+        .light = address + Scene::LightOffset,
+    };
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_decals.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_decals.layout, 0, sets, {}, dl);
+    cmd.pushConstants(g_decals.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
+                      &push, dl);
+    cmd.draw(DecalBoxVertices, decals, 0, 0, dl);
+    cmd.endRendering(dl);
+    depth_barrier.srcStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+    depth_barrier.srcAccessMask = vk::AccessFlagBits2::eNone;
+    depth_barrier.dstStageMask = depth_tests;
+    depth_barrier.dstAccessMask = depth_writes;
+    depth_barrier.oldLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+    depth_barrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+    cmd.pipelineBarrier2({.memoryBarrierCount = 1,
+                          .pMemoryBarriers = &surfaces_written,
+                          .imageMemoryBarrierCount = 1,
+                          .pImageMemoryBarriers = &depth_barrier},
+                         dl);
+}
+
 } // namespace
 
 bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Format scene_format) {
@@ -214,6 +284,17 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
                            CreateSurfacePipeline(device, depth_format, WORLD_FRAG, None),
                            CreateSurfacePipeline(device, depth_format, WORLD_ALPHA_FRAG, Back),
                            CreateSurfacePipeline(device, depth_format, WORLD_ALPHA_FRAG, None)};
+    const std::array decal_sets{Textures::SetLayout(), g_set_layout};
+    g_decals = CreateGraphicsPipeline(device, {
+                                                  .vertex = WORLD_DECAL_VERT,
+                                                  .fragment = WORLD_DECAL_FRAG,
+                                                  .colors = SurfaceFormats,
+                                                  .cull = vk::CullModeFlagBits::eFront,
+                                                  .alpha_blend = true,
+                                                  .keep_target_alpha = true,
+                                                  .push_constant_bytes = sizeof(DecalPush),
+                                                  .set_layouts = decal_sets,
+                                              });
     const std::array light_sets{Textures::SetLayout(), Shadows::SetLayout(), g_set_layout};
     g_light = CreateGraphicsPipeline(device, {
                                                  .vertex = FULLSCREEN_VERT,
@@ -233,8 +314,8 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
         CreateComputePipeline(device, OCCLUSION_DEPTH_COMP, sizeof(s32), depth_level_sets);
     return std::ranges::all_of(g_surface_pipelines,
                                [](const Pipeline& pipeline) { return !!pipeline.pipeline; }) &&
-           g_light.pipeline && g_lines_pipeline.pipeline && g_occlusion_pipeline.pipeline &&
-           g_depth_level_pipeline.pipeline;
+           g_decals.pipeline && g_light.pipeline && g_lines_pipeline.pipeline &&
+           g_occlusion_pipeline.pipeline && g_depth_level_pipeline.pipeline;
 }
 
 bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_depth) {
@@ -361,7 +442,7 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_de
 }
 
 void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, bool drawn, u64 address,
-                    vk::Buffer buffer, u64 offset, vk::ImageView depth) {
+                    vk::Buffer buffer, u64 offset, const Image& depth) {
     const auto& dl = g_device->dispatch;
     std::array<vk::ImageMemoryBarrier2, SurfaceFormats.size()> barriers;
     std::array<vk::RenderingAttachmentInfo, SurfaceFormats.size()> colors;
@@ -389,8 +470,8 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, bool dra
     cmd.pipelineBarrier2({.imageMemoryBarrierCount = static_cast<u32>(barriers.size()),
                           .pImageMemoryBarriers = barriers.data()},
                          dl);
-    const vk::RenderingAttachmentInfo depth_attachment{
-        .imageView = depth,
+    vk::RenderingAttachmentInfo depth_attachment{
+        .imageView = depth.view,
         .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
         .loadOp = vk::AttachmentLoadOp::eClear,
         .storeOp = vk::AttachmentStoreOp::eStore,
@@ -434,6 +515,21 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, bool dra
                                     count, sizeof(Scene::Command), dl);
         }
         first += count;
+    }
+    // The game's stencil keeps vegetation out of its decals: here, the vegetation draws after them.
+    if (drawn && header.world_decals != 0) {
+        cmd.endRendering(dl);
+        for (vk::RenderingAttachmentInfo& color : colors) {
+            color.loadOp = vk::AttachmentLoadOp::eLoad;
+        }
+        RecordDecals(cmd, header.world_decals, address, depth.image, colors);
+        depth_attachment.loadOp = vk::AttachmentLoadOp::eLoad;
+        cmd.beginRendering({.renderArea = {{0, 0}, g_extent},
+                            .layerCount = 1,
+                            .colorAttachmentCount = static_cast<u32>(colors.size()),
+                            .pColorAttachments = colors.data(),
+                            .pDepthAttachment = &depth_attachment},
+                           dl);
     }
     if (drawn) {
         Vegetation::RecordSurfaces(cmd, header, address, buffer, offset);

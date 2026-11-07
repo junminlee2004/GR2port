@@ -263,6 +263,27 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Le
     Leaf leaves[];
 };
 
+// A box of the world that blends a decal into the surfaces inside it.
+struct WorldDecal {
+    mat4 world_view;
+    mat4 world_view_projection;
+    mat4 view_to_decal;
+    vec4 color_scale;
+    vec4 normal_scale;
+    vec4 color_transform;
+    vec4 normal_transform;
+    vec4 parallax;
+    float roughness;
+    float metallic;
+    float translucency;
+    uint color_map;
+    uint normal_map;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer WorldDecals {
+    WorldDecal decals[];
+};
+
 // A branch ribbon: the game's branch constants of each stage, then the instance's vertices.
 struct Branch {
     mat4 world_view_projection;

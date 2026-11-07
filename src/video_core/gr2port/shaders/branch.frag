@@ -8,9 +8,6 @@
 #include "scene.glsl"
 #include "surface.glsl"
 
-layout(set = 0, binding = 0) uniform texture2D textures[];
-layout(set = 0, binding = 1) uniform sampler texture_sampler;
-
 layout(push_constant) uniform Constants {
     Branches scene_branches;
 };
@@ -29,9 +26,7 @@ layout(location = 2) out vec4 g_surface;
 // Its albedo alpha, which holds the world's hatching, is 1.
 void main() {
     Branches branches = scene_branches;
-    const vec4 texel = texture(
-        sampler2D(textures[nonuniformEXT(branches.branches[branch].texture)], texture_sampler),
-        surface.zw);
+    const vec4 texel = Sample(branches.branches[branch].texture, surface.zw);
     if (ScreenDoorShut(branches.branches[branch].punch_through) ||
         texel.a <= branches.branches[branch].alpha_reference) {
         discard;

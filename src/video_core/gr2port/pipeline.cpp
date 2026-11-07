@@ -100,13 +100,14 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
         .depthCompareOp = info.depth_compare,
     };
     const bool premultiplied = info.premultiplied_blend;
+    const bool keep_alpha = premultiplied || info.keep_target_alpha;
     const vk::PipelineColorBlendAttachmentState blend_attachment{
         .blendEnable = info.alpha_blend || premultiplied,
         .srcColorBlendFactor = premultiplied ? vk::BlendFactor::eOne : vk::BlendFactor::eSrcAlpha,
         .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
         .colorBlendOp = vk::BlendOp::eAdd,
-        .srcAlphaBlendFactor = premultiplied ? vk::BlendFactor::eZero : vk::BlendFactor::eOne,
-        .dstAlphaBlendFactor = premultiplied ? vk::BlendFactor::eOne : vk::BlendFactor::eZero,
+        .srcAlphaBlendFactor = keep_alpha ? vk::BlendFactor::eZero : vk::BlendFactor::eOne,
+        .dstAlphaBlendFactor = keep_alpha ? vk::BlendFactor::eOne : vk::BlendFactor::eZero,
         .alphaBlendOp = vk::BlendOp::eAdd,
         .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
                           vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,

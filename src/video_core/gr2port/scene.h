@@ -44,6 +44,8 @@ inline constexpr u32 MaxGrass = 256;
 inline constexpr u32 MaxBlades = 131072;
 /// A blade in the renderer's buffer: root, fade, tip, instance. See shaders/scene.glsl.
 inline constexpr u32 BladeBytes = 32;
+/// Decals of the world per packet, the game's limit.
+inline constexpr u32 MaxWorldDecals = 1024;
 /// Branch instances the kernel sways per packet, and branch ribbon draws.
 inline constexpr u32 MaxBranchJobs = 512;
 inline constexpr u32 MaxBranches = 512;
@@ -192,6 +194,9 @@ struct Header {
     u32 dropped_branch_jobs;
     u32 branches;
     u32 dropped_branches;
+    /// WorldDecal records written, and decals not drawn (no colour map).
+    u32 world_decals;
+    u32 dropped_world_decals;
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
@@ -464,6 +469,31 @@ struct Leaf {
     u32 padding[3];
 };
 static_assert(sizeof(Leaf) == 304);
+
+/// A decal of the world: a box whose back faces blend the decal into the surfaces inside it, as the
+/// game's Decal pass does. Matrices are as in Draw.
+struct WorldDecal {
+    /// The box's space, x and y from -1 to 1 and z from 0 to 1, to view and clip space.
+    float world_view[16];
+    float world_view_projection[16];
+    /// View space to the decal's: the box's, with x from 1 to 0 and y from 0 to -1.
+    float view_to_decal[16];
+    float color_scale[4];
+    float normal_scale[4];
+    /// Texture coordinates are xy + zw * the decal's xy.
+    float color_transform[4];
+    float normal_transform[4];
+    /// The direction away from the box's z in view space, and the parallax depth.
+    float parallax[4];
+    float roughness;
+    float metallic;
+    float translucency;
+    /// Texture handles. A normal map of 0 means the decal has none.
+    u32 color_map;
+    u32 normal_map;
+    u32 padding[3];
+};
+static_assert(sizeof(WorldDecal) == 304);
 
 /// A Branch instance the renderer's kernel sways as the game's does, in its copy of the vertices,
 /// from its shape's. The kernel writes the state, a timer and a phase per segment. Matrices are as
@@ -806,7 +836,8 @@ inline constexpr u64 GrassCommandOffset = GrassOffset + MaxGrass * sizeof(Grass)
 inline constexpr u64 BranchJobsOffset = GrassCommandOffset + 16;
 inline constexpr u64 BranchesOffset = BranchJobsOffset + MaxBranchJobs * sizeof(BranchJob);
 inline constexpr u64 BranchCommandsOffset = BranchesOffset + MaxBranches * sizeof(Branch);
-inline constexpr u64 PacketBytes = BranchCommandsOffset + MaxBranches * sizeof(VertexCommand);
+inline constexpr u64 WorldDecalsOffset = BranchCommandsOffset + MaxBranches * sizeof(VertexCommand);
+inline constexpr u64 PacketBytes = WorldDecalsOffset + MaxWorldDecals * sizeof(WorldDecal);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -816,6 +847,7 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               LeavesOffset % 16 == 0 && LeafCommandsOffset % 16 == 0 &&
               LayerMaterialsOffset % 16 == 0 && GrassOffset % 16 == 0 &&
               GrassCommandOffset % 16 == 0 && BranchJobsOffset % 16 == 0 &&
-              BranchesOffset % 16 == 0 && BranchCommandsOffset % 16 == 0);
+              BranchesOffset % 16 == 0 && BranchCommandsOffset % 16 == 0 &&
+              WorldDecalsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

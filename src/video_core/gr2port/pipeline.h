@@ -35,6 +35,8 @@ struct GraphicsPipelineInfo {
     bool depth_bias = false;
     /// Colour blends over the target by the fragment's alpha.
     bool alpha_blend = false;
+    /// With alpha_blend, the target keeps its alpha.
+    bool keep_target_alpha = false;
     /// Colour adds to the target scaled by one minus the fragment's alpha; the target keeps its
     /// alpha.
     bool premultiplied_blend = false;

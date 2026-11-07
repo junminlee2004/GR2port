@@ -8,9 +8,6 @@
 #include "scene.glsl"
 #include "surface.glsl"
 
-layout(set = 0, binding = 0) uniform texture2D textures[];
-layout(set = 0, binding = 1) uniform sampler texture_sampler;
-
 layout(push_constant) uniform Constants {
     GrassInstances scene_grass;
 };
@@ -24,10 +21,6 @@ layout(location = 2) flat in uint instance;
 layout(location = 0) out vec4 g_albedo;
 layout(location = 1) out vec2 g_normal;
 layout(location = 2) out vec4 g_surface;
-
-vec4 Sample(uint handle, vec2 uv) {
-    return texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), uv);
-}
 
 // The game's grass pixel program without its velocity: the texture over the colour from the tip to
 // the root, cut out by its alpha and a screen door, with a normal map in the blade's frame. Its

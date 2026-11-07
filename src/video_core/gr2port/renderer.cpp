@@ -154,6 +154,8 @@ struct Stats {
     u64 dropped_branch_jobs = 0;
     u64 branches = 0;
     u64 dropped_branches = 0;
+    u64 world_decals = 0;
+    u64 dropped_world_decals = 0;
     u64 palette_rows = 0;
     std::array<u64, Scene::ItemCategories> category_items{};
     u64 casters = 0;
@@ -672,8 +674,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     depth_barrier(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
                   depth_tests | vk::PipelineStageFlagBits2::eFragmentShader,
                   vk::AccessFlagBits2::eNone, depth_tests, depth_writes);
-    World::RecordSurfaces(cmd, header, drawn, packet.address, scene_ring.buffer, offset,
-                          depth.view);
+    World::RecordSurfaces(cmd, header, drawn, packet.address, scene_ring.buffer, offset, depth);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + SurfacesTimestamp, dl);
@@ -900,6 +901,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.dropped_branch_jobs += header.dropped_branch_jobs;
     stats.branches += header.branches;
     stats.dropped_branches += header.dropped_branches;
+    stats.world_decals += header.world_decals;
+    stats.dropped_world_decals += header.dropped_world_decals;
     stats.dropped += header.dropped;
     stats.capture_ns += header.capture_ns;
     for (u32 part = 0; part < stats.capture_parts_ns.size(); part++) {
@@ -1139,6 +1142,9 @@ void Thread::Report() {
              static_cast<double>(stats.dropped_branch_jobs) / frames,
              static_cast<double>(stats.branches) / frames,
              static_cast<double>(stats.dropped_branches) / frames);
+    LOG_INFO(Render_Vulkan, "GR2port world decals: per frame {:.1f} drawn, {:.1f} not drawn",
+             static_cast<double>(stats.world_decals) / frames,
+             static_cast<double>(stats.dropped_world_decals) / frames);
     std::string categories;
     for (u32 c = 0; c < Scene::ItemCategories; c++) {
         if (stats.category_items[c] != 0) {

@@ -105,6 +105,7 @@ constexpr float GridFadeStart = 32.0f;
 // view-projection tables from +0x748 (a pointer per table and cascade).
 constexpr u64 ViewMatrix = 0x20;
 constexpr u64 ViewInverse = 0x60;
+constexpr u64 ViewProjection = 0xa0;
 constexpr u64 ViewCascades = 0x400;
 constexpr u64 CascadeBytes = 0x110;
 constexpr u64 CascadeBiasConstant = 0x08;
@@ -471,6 +472,20 @@ constexpr u64 BranchItemVertexCount = 0x58;
 constexpr u64 BranchEye = 0x80;
 constexpr u64 BranchWidths = 0xc0;
 constexpr u32 BranchPixelCount = 5;
+// The view's decals of the world. A record holds its box to world, its colour and normal maps, the
+// scales and texture transforms of both, its material and its parallax depth.
+constexpr u64 ViewWorldDecals = 0xc20;
+constexpr u64 ViewWorldDecalCount = 0xc28;
+constexpr u64 WorldDecalBytes = 0xb0;
+constexpr u64 WorldDecalColor = 0x40;
+constexpr u64 WorldDecalNormal = 0x48;
+constexpr u64 WorldDecalScales = 0x50;
+constexpr u64 WorldDecalRoughness = 0x90;
+constexpr u64 WorldDecalMetallic = 0x94;
+constexpr u64 WorldDecalParallax = 0x98;
+constexpr u64 WorldDecalTranslucency = 0x9c;
+// The game's Decal pass scales a record's parallax depth by this.
+constexpr float WorldDecalParallaxScale = 0.3f;
 // CH_Main's vertex constants hold the decals' positions and targets, then their scales, which are
 // 0 when a material has no decals. Its pixel constants hold GradationColor and the alpha step flag.
 constexpr u64 DecalPositions = 0x150;
@@ -532,6 +547,52 @@ Matrix Multiply(const Matrix& a, const Matrix& b) {
     return result;
 }
 
+// A's inverse.
+Matrix Invert(const Matrix& a) {
+    const float s0 = a[0] * a[5] - a[4] * a[1];
+    const float s1 = a[0] * a[6] - a[4] * a[2];
+    const float s2 = a[0] * a[7] - a[4] * a[3];
+    const float s3 = a[1] * a[6] - a[5] * a[2];
+    const float s4 = a[1] * a[7] - a[5] * a[3];
+    const float s5 = a[2] * a[7] - a[6] * a[3];
+    const float c5 = a[10] * a[15] - a[14] * a[11];
+    const float c4 = a[9] * a[15] - a[13] * a[11];
+    const float c3 = a[9] * a[14] - a[13] * a[10];
+    const float c2 = a[8] * a[15] - a[12] * a[11];
+    const float c1 = a[8] * a[14] - a[12] * a[10];
+    const float c0 = a[8] * a[13] - a[12] * a[9];
+    const float scale = 1.0f / (s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0);
+    return {
+        (a[5] * c5 - a[6] * c4 + a[7] * c3) * scale,
+        (-a[1] * c5 + a[2] * c4 - a[3] * c3) * scale,
+        (a[13] * s5 - a[14] * s4 + a[15] * s3) * scale,
+        (-a[9] * s5 + a[10] * s4 - a[11] * s3) * scale,
+        (-a[4] * c5 + a[6] * c2 - a[7] * c1) * scale,
+        (a[0] * c5 - a[2] * c2 + a[3] * c1) * scale,
+        (-a[12] * s5 + a[14] * s2 - a[15] * s1) * scale,
+        (a[8] * s5 - a[10] * s2 + a[11] * s1) * scale,
+        (a[4] * c4 - a[5] * c2 + a[7] * c0) * scale,
+        (-a[0] * c4 + a[1] * c2 - a[3] * c0) * scale,
+        (a[12] * s4 - a[13] * s2 + a[15] * s0) * scale,
+        (-a[8] * s4 + a[9] * s2 - a[11] * s0) * scale,
+        (-a[4] * c3 + a[5] * c1 - a[6] * c0) * scale,
+        (a[0] * c3 - a[1] * c1 + a[2] * c0) * scale,
+        (-a[12] * s3 + a[13] * s1 - a[14] * s0) * scale,
+        (a[8] * s3 - a[9] * s1 + a[10] * s0) * scale,
+    };
+}
+
+// What the game's Decal pass multiplies a decal's box by.
+struct DecalView {
+    Matrix view;
+    Matrix inverse_view;
+    Matrix projection;
+};
+
+// The box's x and y, from -1 to 1, to the decal's: x from 1 to 0 and y from 0 to -1.
+constexpr Matrix BoxToDecal{-0.5f, 0.0f, 0.0f, 0.0f, 0.0f, -0.5f, 0.0f, 0.0f,
+                            0.0f,  0.0f, 1.0f, 0.0f, 0.5f, -0.5f, 0.0f, 1.0f};
+
 // What the game's grass pass sets on its draw thread after the capture: the view and clip matrices
 // that a grass instance's constants multiply, and the clip depth's scale to the effector grid.
 struct GrassView {
@@ -563,7 +624,8 @@ public:
               reinterpret_cast<Scene::LayerMaterial*>(packet + Scene::LayerMaterialsOffset)},
           grass{reinterpret_cast<Scene::Grass*>(packet + Scene::GrassOffset)},
           branch_jobs{reinterpret_cast<Scene::BranchJob*>(packet + Scene::BranchJobsOffset)},
-          branches{reinterpret_cast<Scene::Branch*>(packet + Scene::BranchesOffset)} {}
+          branches{reinterpret_cast<Scene::Branch*>(packet + Scene::BranchesOffset)},
+          world_decals{reinterpret_cast<Scene::WorldDecal*>(packet + Scene::WorldDecalsOffset)} {}
 
     // Ends a part of the capture's time.
     void EndPart(Scene::CapturePart part) {
@@ -825,6 +887,40 @@ public:
             .vertex_offset = 0,
             .first_instance = 0,
         };
+    }
+
+    // A record of the view's decals: the matrices the game's Decal pass computes, then the record.
+    void AddWorldDecal(VAddr record, const DecalView& view) {
+        const VAddr color = Load<VAddr>(record + WorldDecalColor);
+        const VAddr normal = Load<VAddr>(record + WorldDecalNormal);
+        const u32 color_map = color != 0 ? Textures::Get(color) : 0;
+        if (color_map == 0) {
+            header.dropped_world_decals++;
+            return;
+        }
+        const Matrix box = Load<Matrix>(record);
+        const Matrix world_view = Multiply(box, view.view);
+        const Matrix world_view_projection = Multiply(world_view, view.projection);
+        const Matrix view_to_decal = Multiply(Multiply(view.inverse_view, Invert(box)), BoxToDecal);
+        const float axis = std::sqrt(world_view[8] * world_view[8] + world_view[9] * world_view[9] +
+                                     world_view[10] * world_view[10]);
+        // The fields are written in order: the packet is write-combined.
+        Scene::WorldDecal& out = world_decals[header.world_decals++];
+        std::memcpy(out.world_view, world_view.data(), MatrixBytes);
+        std::memcpy(out.world_view_projection, world_view_projection.data(), MatrixBytes);
+        std::memcpy(out.view_to_decal, view_to_decal.data(), MatrixBytes);
+        std::memcpy(out.color_scale, reinterpret_cast<const void*>(record + WorldDecalScales),
+                    sizeof(out.color_scale) + sizeof(out.normal_scale) +
+                        sizeof(out.color_transform) + sizeof(out.normal_transform));
+        out.parallax[0] = -world_view[8] / axis;
+        out.parallax[1] = -world_view[9] / axis;
+        out.parallax[2] = -world_view[10] / axis;
+        out.parallax[3] = Load<float>(record + WorldDecalParallax) * WorldDecalParallaxScale;
+        out.roughness = Load<float>(record + WorldDecalRoughness);
+        out.metallic = Load<float>(record + WorldDecalMetallic);
+        out.translucency = Load<float>(record + WorldDecalTranslucency);
+        out.color_map = color_map;
+        out.normal_map = normal != 0 ? Textures::Get(normal) : 0;
     }
 
     // A Branch deformer record: the renderer's kernel sways the instance's copy of the shape's
@@ -1506,6 +1602,7 @@ private:
     Scene::Grass* grass;
     Scene::BranchJob* branch_jobs;
     Scene::Branch* branches;
+    Scene::WorldDecal* world_decals;
     std::array<VAddr, Scene::MaxGrass> grass_records;
     u32 grass_record_count = 0;
     float grass_advance = 0.0f;
@@ -1600,41 +1697,6 @@ void WriteShadows(VAddr view, u8* packet, Writer& writer) {
     std::memcpy(shadows->light_direction, direction.data(), sizeof(direction));
     std::memcpy(shadows->key_light_color, reinterpret_cast<const void*>(view + ViewKeyLight),
                 sizeof(shadows->key_light_color) + sizeof(shadows->key_light_direction));
-}
-
-// A's inverse.
-Matrix Invert(const Matrix& a) {
-    const float s0 = a[0] * a[5] - a[4] * a[1];
-    const float s1 = a[0] * a[6] - a[4] * a[2];
-    const float s2 = a[0] * a[7] - a[4] * a[3];
-    const float s3 = a[1] * a[6] - a[5] * a[2];
-    const float s4 = a[1] * a[7] - a[5] * a[3];
-    const float s5 = a[2] * a[7] - a[6] * a[3];
-    const float c5 = a[10] * a[15] - a[14] * a[11];
-    const float c4 = a[9] * a[15] - a[13] * a[11];
-    const float c3 = a[9] * a[14] - a[13] * a[10];
-    const float c2 = a[8] * a[15] - a[12] * a[11];
-    const float c1 = a[8] * a[14] - a[12] * a[10];
-    const float c0 = a[8] * a[13] - a[12] * a[9];
-    const float scale = 1.0f / (s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0);
-    return {
-        (a[5] * c5 - a[6] * c4 + a[7] * c3) * scale,
-        (-a[1] * c5 + a[2] * c4 - a[3] * c3) * scale,
-        (a[13] * s5 - a[14] * s4 + a[15] * s3) * scale,
-        (-a[9] * s5 + a[10] * s4 - a[11] * s3) * scale,
-        (-a[4] * c5 + a[6] * c2 - a[7] * c1) * scale,
-        (a[0] * c5 - a[2] * c2 + a[3] * c1) * scale,
-        (-a[12] * s5 + a[14] * s2 - a[15] * s1) * scale,
-        (a[8] * s5 - a[10] * s2 + a[11] * s1) * scale,
-        (a[4] * c4 - a[5] * c2 + a[7] * c0) * scale,
-        (-a[0] * c4 + a[1] * c2 - a[3] * c0) * scale,
-        (a[12] * s4 - a[13] * s2 + a[15] * s0) * scale,
-        (-a[8] * s4 + a[9] * s2 - a[11] * s0) * scale,
-        (-a[4] * c3 + a[5] * c1 - a[6] * c0) * scale,
-        (a[0] * c3 - a[1] * c1 + a[2] * c0) * scale,
-        (-a[12] * s3 + a[13] * s1 - a[14] * s0) * scale,
-        (a[8] * s3 - a[9] * s1 + a[10] * s0) * scale,
-    };
 }
 
 // The two heaviest records of a list that accept selects, as the frame graph picks them.
@@ -2178,6 +2240,18 @@ void OnFrame(VAddr frame_graph, VAddr view) {
         ForEachItem(grass_items, GrassGeometryConstants, GrassPixelConstants, keyed(GrassCategory),
                     [&](VAddr item) { writer.AddGrass(item, grass_view); });
         writer.AdvanceGrassPhase();
+    }
+    const u32 world_decals = std::min(Load<u32>(view + ViewWorldDecalCount), Scene::MaxWorldDecals);
+    const VAddr decal_records = Load<VAddr>(view + ViewWorldDecals);
+    if (world_decals != 0 && decal_records != 0) {
+        const DecalView decal_view{
+            .view = Load<Matrix>(view + ViewMatrix),
+            .inverse_view = Load<Matrix>(view + ViewInverse),
+            .projection = Load<Matrix>(view + ViewProjection),
+        };
+        for (u32 i = 0; i < world_decals; i++) {
+            writer.AddWorldDecal(decal_records + i * WorldDecalBytes, decal_view);
+        }
     }
     writer.EndPart(Scene::CapturePart::World);
     add_category(CharacterCategory);

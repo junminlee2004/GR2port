@@ -10,7 +10,8 @@
 
 namespace Gr2Port {
 class Memory;
-}
+struct Image;
+} // namespace Gr2Port
 
 // The deferred world, on the render thread: the surfaces of the game's world materials (albedo,
 // normal and material images), the screen-space ink lines and ambient occlusion drawn from them,
@@ -33,10 +34,10 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
 bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_depth);
 
 /// Outside rendering, with depth ready as an attachment: clears the surfaces and depth and, when
-/// drawn, draws the world's draws of the packet at address, which is at offset in buffer. Leaves
-/// the surfaces readable.
+/// drawn, draws the world's draws and decals of the packet at address, which is at offset in
+/// buffer. Leaves the surfaces readable and depth an attachment.
 void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, bool drawn, u64 address,
-                    vk::Buffer buffer, u64 offset, vk::ImageView depth);
+                    vk::Buffer buffer, u64 offset, const Image& depth);
 
 /// Outside rendering, with the surfaces and depth readable: draws the world's ink lines from them.
 void RecordLines(vk::CommandBuffer cmd, u64 address);

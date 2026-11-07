@@ -8,9 +8,6 @@
 #include "scene.glsl"
 #include "surface.glsl"
 
-layout(set = 0, binding = 0) uniform texture2D textures[];
-layout(set = 0, binding = 1) uniform sampler texture_sampler;
-
 layout(push_constant) uniform Constants {
     Leaves scene_leaves;
 };
@@ -28,9 +25,7 @@ layout(location = 2) out vec4 g_surface;
 // program says. Its albedo alpha, which holds the world's hatching, is 1.
 void main() {
     Leaves leaves = scene_leaves;
-    const vec4 color =
-        texture(sampler2D(textures[nonuniformEXT(leaves.leaves[leaf].texture)], texture_sampler),
-                surface.zw);
+    const vec4 color = Sample(leaves.leaves[leaf].texture, surface.zw);
     if (ScreenDoorShut(leaves.leaves[leaf].punch_through) ||
         color.a <= leaves.leaves[leaf].alpha_reference) {
         discard;

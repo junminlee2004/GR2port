@@ -6,9 +6,6 @@
 #include "scene.glsl"
 #include "surface.glsl"
 
-layout(set = 0, binding = 0) uniform texture2D textures[];
-layout(set = 0, binding = 1) uniform sampler texture_sampler;
-
 layout(push_constant) uniform Constants {
     Draws scene_draws;
     Materials scene_materials;
@@ -25,44 +22,6 @@ layout(location = 5) flat in uint draw_index;
 layout(location = 0) out vec4 g_albedo;
 layout(location = 1) out vec2 g_normal;
 layout(location = 2) out vec4 g_surface;
-
-vec4 Sample(uint handle, vec2 uv) {
-    return texture(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), uv);
-}
-
-vec2 Transformed(vec4 transform, vec2 uv) {
-    return transform.xy + transform.zw * uv;
-}
-
-// Parallax occlusion mapping through the normal map's alpha, in the normal map's coordinates: 8 to
-// 14 steps along the direction by how far the surface turns from the eye, then the intersection of
-// the last two steps' lines.
-vec2 Parallax(uint handle, vec2 start, vec2 direction, float facing) {
-    const int steps = int(14.0 - 6.0 * facing);
-    const float step_size = 1.0 / float(steps);
-    const vec2 dx = dFdx(start);
-    const vec2 dy = dFdy(start);
-    vec2 uv = start;
-    float level = 1.0;
-    float height = 0.0;
-    float last_height = 1.0;
-    for (int i = 0; i < steps; i++) {
-        uv -= direction * step_size;
-        height =
-            textureGrad(sampler2D(textures[nonuniformEXT(handle)], texture_sampler), uv, dx, dy).a;
-        level -= step_size;
-        if (height > level) {
-            break;
-        }
-        last_height = height;
-    }
-    const float last_level = level + step_size;
-    const float last_gap = last_level - last_height;
-    const float gap = level - height;
-    const float hit =
-        last_gap != gap ? (level * last_gap - last_level * gap) / (last_gap - gap) : 0.0;
-    return start - direction * (1.0 - hit);
-}
 
 // Half a hard light of the gradation over the colour.
 vec3 Gradate(vec3 color) {
