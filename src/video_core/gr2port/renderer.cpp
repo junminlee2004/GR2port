@@ -89,6 +89,8 @@ constexpr u32 BloomInterval = SurfacesInterval + 7;
 constexpr u32 PictureInterval = SurfacesInterval + 8;
 constexpr u32 ReportFrames = 600;
 constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
+// The game's render size. The picture scales it to the window.
+constexpr vk::Extent2D SceneExtent{1920, 1080};
 // A frame with more indices than this is not drawn: its items are not what the capture expects.
 constexpr u64 MaxFrameIndices = 48u << 20;
 
@@ -379,28 +381,28 @@ bool Thread::Recreate() {
     }
     for (Image* image : {&depth, &character_depth}) {
         memory->Destroy(*image);
-        *image = memory->CreateImage(DepthFormat, swapchain->Extent(),
+        *image = memory->CreateImage(DepthFormat, SceneExtent,
                                      vk::ImageUsageFlagBits::eDepthStencilAttachment |
                                          vk::ImageUsageFlagBits::eSampled |
                                          vk::ImageUsageFlagBits::eTransferSrc,
                                      vk::ImageAspectFlagBits::eDepth);
     }
     needs_swapchain = !depth.image || !character_depth.image ||
-                      !Velocity::Resize(swapchain->Extent(), depth.view, character_depth.view) ||
-                      !Look::Resize(swapchain->Extent(), swapchain->Format(), depth.view) ||
-                      !World::Resize(swapchain->Extent(), depth.view, character_depth.view) ||
-                      !Glass::Resize(swapchain->Extent()) ||
-                      !Water::Resize(swapchain->Extent(), Glass::BehindView()) ||
-                      !SelfTranslucent::Resize(swapchain->Extent());
+                      !Velocity::Resize(SceneExtent, depth.view, character_depth.view) ||
+                      !Look::Resize(SceneExtent, swapchain->Format(), depth.view) ||
+                      !World::Resize(SceneExtent, depth.view, character_depth.view) ||
+                      !Glass::Resize(SceneExtent) ||
+                      !Water::Resize(SceneExtent, Glass::BehindView()) ||
+                      !SelfTranslucent::Resize(SceneExtent);
     if (!needs_swapchain) {
         Fog::Resize(depth.view);
-        needs_swapchain = !Particles::Resize(depth.view, swapchain->Extent());
+        needs_swapchain = !Particles::Resize(depth.view, SceneExtent);
         Effects::Resize(depth.view, Glass::BehindView());
     }
     return !needs_swapchain;
 }
 
-// Inside a rendering at the swapchain's size: draws the packet's draws of a character list with
+// Inside a rendering at the scene's size: draws the packet's draws of a character list with
 // pipeline.
 void Thread::DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const Pipeline& pipeline,
                             std::span<const vk::DescriptorSet> sets, const Scene::Header& header,
@@ -410,7 +412,7 @@ void Thread::DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const P
     if (count == 0) {
         return;
     }
-    const vk::Extent2D extent = swapchain->Extent();
+    const vk::Extent2D extent = SceneExtent;
     // A negative height keeps the game's y-up clip space.
     const vk::Viewport viewport{
         .x = 0.0f,
@@ -757,10 +759,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
             .storeOp = vk::AttachmentStoreOp::eStore,
             .clearValue = {.depthStencil = {.depth = 0.0f}},
         };
-        cmd.beginRendering({.renderArea = {{0, 0}, swapchain->Extent()},
-                            .layerCount = 1,
-                            .pDepthAttachment = &characters},
-                           dl);
+        cmd.beginRendering(
+            {.renderArea = {{0, 0}, SceneExtent}, .layerCount = 1, .pDepthAttachment = &characters},
+            dl);
         const std::array depth_sets{Textures::Set()};
         DrawCharacters(cmd, Scene::DrawList::Character, character_depth_pipeline, depth_sets,
                        header, packet, offset);
@@ -787,7 +788,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                 vk::PipelineStageFlagBits2::eFragmentShader,
             vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             vk::AccessFlagBits2::eColorAttachmentWrite);
-    const vk::Extent2D extent = swapchain->Extent();
+    const vk::Extent2D extent = SceneExtent;
     const vk::RenderingAttachmentInfo lit{
         .imageView = Look::SceneView(),
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -955,13 +956,13 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         .loadOp = vk::AttachmentLoadOp::eDontCare,
         .storeOp = vk::AttachmentStoreOp::eStore,
     };
-    cmd.beginRendering({.renderArea = {{0, 0}, extent},
+    cmd.beginRendering({.renderArea = {{0, 0}, swapchain->Extent()},
                         .layerCount = 1,
                         .colorAttachmentCount = 1,
                         .pColorAttachments = &picture},
                        dl);
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Composite);
-    Look::RecordComposite(cmd, packet.address);
+    Look::RecordComposite(cmd, packet.address, swapchain->Extent());
     cmd.endRendering(dl);
     if (snapshot_wanted) {
         snapshot_wanted = false;

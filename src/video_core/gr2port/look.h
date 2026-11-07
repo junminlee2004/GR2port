@@ -44,8 +44,8 @@ void RecordBloom(vk::CommandBuffer cmd, u32 bloom, u64 packet_address);
 /// runs the game's antialias program on the result.
 void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address);
 
-/// Inside the picture's rendering, after RecordAntialias: draws the picture.
-void RecordComposite(vk::CommandBuffer cmd, u64 packet_address);
+/// Inside the picture's rendering, after RecordAntialias: draws the picture, which fills extent.
+void RecordComposite(vk::CommandBuffer cmd, u64 packet_address, vk::Extent2D extent);
 
 /// Outside rendering, once per report: logs the frame's look and the meter's last read state, and
 /// reads the state again.

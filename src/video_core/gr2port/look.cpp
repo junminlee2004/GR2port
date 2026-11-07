@@ -725,13 +725,13 @@ void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address) {
                  Compute, vk::AccessFlagBits2::eShaderStorageWrite, Compute | Fragment, Read);
 }
 
-void RecordComposite(vk::CommandBuffer cmd, u64 packet_address) {
+void RecordComposite(vk::CommandBuffer cmd, u64 packet_address, vk::Extent2D extent) {
     const auto& dl = g_device->dispatch;
     const vk::Viewport viewport{
         .x = 0.0f,
         .y = 0.0f,
-        .width = static_cast<float>(g_extent.width),
-        .height = static_cast<float>(g_extent.height),
+        .width = static_cast<float>(extent.width),
+        .height = static_cast<float>(extent.height),
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
@@ -743,7 +743,7 @@ void RecordComposite(vk::CommandBuffer cmd, u64 packet_address) {
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_composite.layout, 0,
                            g_picture_sets[g_antialiased_image], {}, dl);
     cmd.setViewport(0, viewport, dl);
-    cmd.setScissor(0, vk::Rect2D{{0, 0}, g_extent}, dl);
+    cmd.setScissor(0, vk::Rect2D{{0, 0}, extent}, dl);
     cmd.pushConstants(g_composite.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
                       &push, dl);
     cmd.draw(3, 1, 0, 0, dl);
