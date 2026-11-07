@@ -11,6 +11,7 @@
 #include "core/libraries/error_codes.h"
 #include "core/memory.h"
 #include "video_core/gr2port/capture.h"
+#include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/gr2port.h"
 #include "video_core/gr2port/hooks.h"
 #include "video_core/gr2port/meshes.h"
@@ -61,6 +62,7 @@ void Install(VAddr module_base) {
         !Textures::Install(module_base, c, StubAreaSize)) {
         return;
     }
+    EmulatedGpu::Install(module_base);
     Renderer::Start();
     LOG_INFO(Render_Vulkan, "GR2port: renderer started");
 }

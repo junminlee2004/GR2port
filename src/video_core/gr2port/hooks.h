@@ -99,4 +99,8 @@ Result Replace(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator& c, s
 /// hold the instructions the entry expects.
 Result Return(VAddr module_base, const Entry& entry);
 
+/// Any thread, while the game runs: makes the function at entry return at once or run its own code
+/// again, by writing its first byte. The other bytes must be the ones the entry expects.
+Result SetReturning(VAddr module_base, const Entry& entry, bool returning);
+
 } // namespace Gr2Port::Hooks

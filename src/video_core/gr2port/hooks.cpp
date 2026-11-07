@@ -15,6 +15,7 @@ namespace {
 // Addresses are GoldHEN patch addresses: the executable's first segment at 0x400000.
 constexpr u64 CodeBase = 0x400000;
 constexpr u32 JmpSize = 5;
+constexpr u8 ReturnOpcode = 0xc3;
 // The longest stub and trampoline.
 constexpr size_t MaxStubBytes = 192;
 
@@ -192,7 +193,21 @@ Result Return(VAddr module_base, const Entry& entry) {
     if (site == nullptr || entry.size == 0) {
         return Result::Mismatch;
     }
-    site[0] = 0xc3;
+    site[0] = ReturnOpcode;
+    return Result::Hooked;
+}
+
+Result SetReturning(VAddr module_base, const Entry& entry, bool returning) {
+    if (entry.address < CodeBase || entry.size == 0 ||
+        entry.address - CodeBase + entry.size > MemoryPatcher::g_eboot_image_size) {
+        return Result::Mismatch;
+    }
+    u8* const site = reinterpret_cast<u8*>(module_base + entry.address - CodeBase);
+    if ((site[0] != entry.bytes[0] && site[0] != ReturnOpcode) ||
+        std::memcmp(site + 1, entry.bytes.data() + 1, entry.size - 1) != 0) {
+        return Result::Mismatch;
+    }
+    site[0] = returning ? ReturnOpcode : entry.bytes[0];
     return Result::Hooked;
 }
 
