@@ -25,6 +25,7 @@
 #include "video_core/gr2port/contours.h"
 #include "video_core/gr2port/deformers.h"
 #include "video_core/gr2port/device.h"
+#include "video_core/gr2port/effects.h"
 #include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/fog.h"
 #include "video_core/gr2port/glass.h"
@@ -303,6 +304,7 @@ bool Thread::Init() {
         !Glass::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !SelfTranslucent::Start(d, *memory) ||
         !Particles::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
+        !Effects::Start(d, Look::SceneFormat, DepthFormat) ||
         !Vegetation::Start(d, *memory, World::SurfaceFormats, DepthFormat, Shadows::DepthFormat)) {
         return false;
     }
@@ -386,6 +388,7 @@ bool Thread::Recreate() {
     if (!needs_swapchain) {
         Fog::Resize(depth.view);
         needs_swapchain = !Particles::Resize(depth.view, swapchain->Extent());
+        Effects::Resize(depth.view, Glass::BehindView());
     }
     return !needs_swapchain;
 }
@@ -657,6 +660,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         Vegetation::RecordKernels(cmd, header, packet.address);
         Particles::RecordSimulation(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                     offset);
+        Glass::Prepare(cmd);
         SelfTranslucent::Record(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                 offset);
     }
@@ -836,6 +840,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     }
     cmd.endRendering(dl);
     if (drawn) {
+        Effects::RecordTransparentBg(cmd, header, packet.data, packet.address, scene_ring.buffer,
+                                     offset, Look::SceneView(), depth, extent);
         Glass::Record(cmd, header, packet.address, scene_ring.buffer, offset, depth, extent);
     }
     if (timestamps) {
@@ -848,6 +854,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                   vk::PipelineStageFlagBits2::eFragmentShader,
                   vk::AccessFlagBits2::eShaderSampledRead);
     if (drawn) {
+        Effects::RecordTransparentFg(cmd, header, packet.data, packet.address, scene_ring.buffer,
+                                     offset, Look::SceneView(), depth.view, extent);
         // The fog blends over the forward draws' colour.
         const vk::MemoryBarrier2 forward_barrier{
             .srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
@@ -873,6 +881,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         // The game's particle passes, after its fog.
         Particles::RecordDraws(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
                                Look::SceneView(), depth, extent);
+        Effects::RecordTopMost(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
+                               Look::SceneView(), depth.view, extent);
     }
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,

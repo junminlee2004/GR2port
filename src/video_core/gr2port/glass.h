@@ -21,9 +21,15 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
 /// With the GPU idle: creates the scene's copy at extent.
 bool Resize(vk::Extent2D extent);
 
+/// The scene's copy, for what else refracts it. Readable after Prepare.
+vk::ImageView BehindView();
+
+/// Outside rendering, on the first frame after a resize: leaves the copy clear and readable.
+void Prepare(vk::CommandBuffer cmd);
+
 /// Outside rendering, with the scene's colour and depth as attachments: when the packet at address,
-/// which is at offset in buffer, has glass, copies the scene and draws the panes into it. Leaves
-/// the scene's colour and depth as attachments.
+/// which is at offset in buffer, has glass or an effect that reads the copy, copies the scene,
+/// and draws the panes into it. Leaves the scene's colour and depth as attachments.
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
             u64 offset, const Image& depth, vk::Extent2D extent);
 

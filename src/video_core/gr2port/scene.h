@@ -66,6 +66,9 @@ inline constexpr u32 ParticleSceneWords = 72;
 inline constexpr u32 ParticlePoolWord = 46;
 /// A draw's first_instance holds its index above this bit, and the game's instance below it.
 inline constexpr u32 ParticleDrawShift = 20;
+/// G2_EF_Main draws per packet, and the game's sorted lists they come from.
+inline constexpr u32 MaxEffectDraws = 256;
+inline constexpr u32 EffectLists = 7;
 /// Materials of G2_BG_Glass draws per packet.
 inline constexpr u32 MaxGlassMaterials = 256;
 /// Branch instances the kernel sways per packet, and branch ribbon draws.
@@ -206,6 +209,17 @@ struct ParticleHeader {
     u32 dropped_samples;
 };
 
+struct EffectHeader {
+    u32 draws;
+    u32 runs;
+    /// Entries of the game's lists not drawn, and those of categories not ported.
+    u32 dropped;
+    u32 unported;
+    /// A bit per list that holds draws, and one per list with a draw that reads the scene's copy.
+    u32 lists;
+    u32 background;
+};
+
 /// The start of each packet.
 struct Header {
     u64 frame;
@@ -310,6 +324,7 @@ struct Header {
     u32 glass_materials;
     u32 dropped_glass;
     ParticleHeader particles;
+    EffectHeader effects;
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
@@ -681,6 +696,24 @@ struct ParticleRun {
     u32 indexed;
 };
 
+/// A G2_EF_Main draw: the constants of the game's programs, then its mesh.
+struct EffectDraw {
+    u32 vertex_constants[104];
+    u32 pixel_constants[72];
+    EffectMesh mesh;
+};
+static_assert(sizeof(EffectDraw) == 784);
+
+/// Consecutive effect draws of one list and one state.
+struct EffectRun {
+    u32 list;
+    u32 blend;
+    u32 depth_mode;
+    u32 skinned;
+    u32 first;
+    u32 count;
+};
+
 /// A Branch instance the renderer's kernel sways as the game's does, in its copy of the vertices,
 /// from its shape's. The kernel writes the state, a timer and a phase per segment. Matrices are as
 /// in Draw.
@@ -1048,7 +1081,11 @@ inline constexpr u64 ParticleEffectsOffset = ParticleOwnersOffset + MaxParticleO
 inline constexpr u64 ParticleSamplesOffset = ParticleEffectsOffset + MaxParticleEffectBytes;
 inline constexpr u64 ParticleSamplePalettesOffset =
     ParticleSamplesOffset + MaxParticleSamples * sizeof(ParticleSample);
-inline constexpr u64 PacketBytes = ParticleSamplePalettesOffset + MaxParticleSamplePaletteBytes;
+inline constexpr u64 EffectDrawsOffset =
+    ParticleSamplePalettesOffset + MaxParticleSamplePaletteBytes;
+inline constexpr u64 EffectCommandsOffset = EffectDrawsOffset + MaxEffectDraws * sizeof(EffectDraw);
+inline constexpr u64 EffectRunsOffset = EffectCommandsOffset + MaxEffectDraws * sizeof(Command);
+inline constexpr u64 PacketBytes = EffectRunsOffset + MaxEffectDraws * sizeof(EffectRun);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -1061,6 +1098,6 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               BranchesOffset % 16 == 0 && BranchCommandsOffset % 16 == 0 &&
               WorldDecalsOffset % 16 == 0 && GlassMaterialsOffset % 16 == 0 &&
               ParticleSceneOffset % 16 == 0 && ParticleDrawsOffset % 16 == 0 &&
-              ParticleEffectsOffset % 16 == 0);
+              ParticleEffectsOffset % 16 == 0 && EffectDrawsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

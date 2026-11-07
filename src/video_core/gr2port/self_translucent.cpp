@@ -3,6 +3,7 @@
 
 #include <array>
 
+#include "video_core/gr2port/effects.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/particles.h"
@@ -229,6 +230,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
                                             sizeof(Scene::Command),
                                     count, sizeof(Scene::Command), dl);
         }
+        Effects::RecordHidden(cmd, header, packet, address, buffer, offset);
         Particles::RecordSelfTranslucent(cmd, header, packet, address, buffer, offset);
     }
     cmd.endRendering(dl);

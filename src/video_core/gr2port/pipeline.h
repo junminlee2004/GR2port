@@ -46,6 +46,8 @@ struct GraphicsPipelineInfo {
     /// Colour adds to the target scaled by one minus the fragment's alpha; the target keeps its
     /// alpha.
     bool premultiplied_blend = false;
+    /// Replaces the blend options above.
+    const vk::PipelineColorBlendAttachmentState* blend = nullptr;
     /// The cull mode and the depth test and write are dynamic state.
     bool dynamic_depth_and_cull = false;
     u32 push_constant_bytes = 0;

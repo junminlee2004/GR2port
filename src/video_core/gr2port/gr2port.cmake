@@ -15,6 +15,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/emulated_gpu.h
     ${CMAKE_CURRENT_LIST_DIR}/fault_report.cpp
     ${CMAKE_CURRENT_LIST_DIR}/fault_report.h
+    ${CMAKE_CURRENT_LIST_DIR}/effects.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/effects.h
     ${CMAKE_CURRENT_LIST_DIR}/fog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/fog.h
     ${CMAKE_CURRENT_LIST_DIR}/glass.cpp
@@ -137,6 +139,9 @@ gr2port_add_shader(grass.frag grass_frag)
 gr2port_add_shader(branch.comp branch_comp)
 gr2port_add_shader(branch.vert branch_vert)
 gr2port_add_shader(branch.frag branch_frag)
+gr2port_add_shader(pfx/effect.frag effect_frag)
+gr2port_add_shader(pfx/effect_skinned.vert effect_skinned_vert)
+gr2port_add_shader(pfx/effect_unskinned.vert effect_unskinned_vert)
 gr2port_add_shader(pfx/gpu_emitter_spawn.comp gpu_emitter_spawn_comp)
 gr2port_add_shader(pfx/gpu_object_update.comp gpu_object_update_comp)
 gr2port_add_shader(pfx/gpu_particle_clear.comp gpu_particle_clear_comp)

@@ -414,6 +414,31 @@ constexpr Category GlassCategory{18,   0x38,  0x48,  0x40,  None,  None,
 constexpr Category SelfTranslucentCategory{10,    0x38,  None,  0x40,  0x00,  None, None,
                                            false, false, false, false, false, true};
 constexpr u64 SelfTranslucentStencil = 0x30;
+// G2_EF_Main: the game draws these items from sorted lists of the view, whose entries hold the
+// item's key, a group at +4, an id at +6 and a depth at +8. An item holds the texture objects of
+// its displacement map and its colour maps, the constants of its programs, its blend mode and, in
+// the top bits of a byte, its depth mode.
+constexpr u64 ViewEffectLists = 0xd58;
+constexpr u64 ViewEffectListBytes = 0x20;
+constexpr u64 EffectEntryBytes = 12;
+constexpr u32 EffectCategory = 26;
+constexpr u32 ItemKeyCategoryShift = 26;
+constexpr u32 ItemKeyOffsetMask = 0x3fffff;
+constexpr u32 ItemKeyOffsetShift = 6;
+constexpr u64 EffectDisplacement = 0x30;
+constexpr u64 EffectColorMaps = 0x38;
+constexpr u64 EffectVertexConstants = 0x58;
+constexpr u64 EffectPixelConstants = 0x60;
+constexpr u64 EffectBlendMode = 0x68;
+constexpr u64 EffectDepthMode = 0x6a;
+constexpr u32 EffectBlendModes = 8;
+constexpr u32 EffectDepthModeShift = 5;
+// The pixel constants' word that counts point lights, and those of the four layers' blend
+// methods, one of which refracts the scene's copy.
+constexpr u32 EffectPointLightsWord = 0x110 / 4;
+constexpr u32 EffectBlendMethodWord = 4;
+constexpr u32 EffectLayers = 4;
+constexpr u32 EffectBackgroundMethod = 16;
 constexpr u32 ContourCategory = 11;
 constexpr u64 ContourVertexConstants = 0x30;
 constexpr u64 ContourGeometryConstants = 0x38;
@@ -551,6 +576,8 @@ alignas(64) std::array<Scene::VertexCommand, Scene::MaxLeaves> g_leaf_commands;
 alignas(
     64) std::array<Scene::VertexCommand, Scene::Cascades * Scene::MaxLeaves> g_leaf_shadow_commands;
 alignas(64) std::array<Scene::VertexCommand, Scene::MaxBranches> g_branch_commands;
+alignas(64) std::array<Scene::Command, Scene::MaxEffectDraws> g_effect_commands;
+alignas(64) std::array<Scene::EffectRun, Scene::MaxEffectDraws> g_effect_runs;
 // The wind's place in its cycle. The game keeps one per instance; only its rate shows, and only on
 // instances that move fast.
 float g_grass_phase = 0.0f;
@@ -897,6 +924,170 @@ public:
             .first_index = mesh->first_index + first,
             .vertex_offset = 0,
             .first_instance = 0,
+        };
+    }
+
+    // The items of the game's sorted lists, in the order it draws them: by id, group and falling
+    // depth, the entries of an id keeping to the least depth so far, then by falling depth.
+    void AddEffects(VAddr view) {
+        struct Entry {
+            u32 key;
+            u32 group;
+            u32 id;
+            u32 depth;
+        };
+        std::array<Entry, Scene::MaxEffectDraws> entries;
+        const VAddr items = Load<VAddr>(view + ViewItems);
+        for (u32 list = 0; list < Scene::EffectLists; list++) {
+            const VAddr bounds = view + ViewEffectLists + list * ViewEffectListBytes;
+            const VAddr begin = Load<VAddr>(bounds);
+            const VAddr end = Load<VAddr>(bounds + 8);
+            const u64 listed = end > begin ? (end - begin) / EffectEntryBytes : 0;
+            const u32 count = static_cast<u32>(std::min<u64>(listed, entries.size()));
+            header.effects.dropped += static_cast<u32>(listed - count);
+            for (u32 i = 0; i < count; i++) {
+                const VAddr entry = begin + i * EffectEntryBytes;
+                entries[i] = {
+                    .key = Load<u32>(entry),
+                    .group = Load<u8>(entry + 4),
+                    .id = Load<u16>(entry + 6),
+                    .depth = Load<u16>(entry + 8),
+                };
+            }
+            std::sort(entries.begin(), entries.begin() + count, [](const Entry& a, const Entry& b) {
+                if (a.id != b.id) {
+                    return a.id < b.id;
+                }
+                if (a.group != b.group) {
+                    return a.group < b.group;
+                }
+                return a.depth > b.depth;
+            });
+            for (u32 i = 1; i < count; i++) {
+                if (entries[i].id == entries[i - 1].id) {
+                    entries[i].depth = std::min(entries[i].depth, entries[i - 1].depth);
+                }
+            }
+            for (u32 i = 1; i < count; i++) {
+                const Entry entry = entries[i];
+                u32 at = i;
+                for (; at > 0 && entries[at - 1].depth < entry.depth; at--) {
+                    entries[at] = entries[at - 1];
+                }
+                entries[at] = entry;
+            }
+            for (u32 i = 0; i < count; i++) {
+                if (entries[i].key >> ItemKeyCategoryShift != EffectCategory) {
+                    header.effects.unported++;
+                    continue;
+                }
+                const u64 at = static_cast<u64>(entries[i].key & ItemKeyOffsetMask)
+                               << ItemKeyOffsetShift;
+                AddEffect(items + at, list);
+            }
+        }
+        std::memcpy(packet + Scene::EffectCommandsOffset, g_effect_commands.data(),
+                    header.effects.draws * sizeof(Scene::Command));
+        std::memcpy(packet + Scene::EffectRunsOffset, g_effect_runs.data(),
+                    header.effects.runs * sizeof(Scene::EffectRun));
+    }
+
+    // A G2_EF_Main item of one of the game's lists.
+    void AddEffect(VAddr item, u32 list) {
+        Scene::EffectHeader& effects = header.effects;
+        const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
+        const VAddr index_buffer = Load<VAddr>(item + ItemIndexBuffer);
+        const VAddr vertex_constants = Load<VAddr>(item + EffectVertexConstants);
+        const VAddr pixel_constants = Load<VAddr>(item + EffectPixelConstants);
+        const VAddr shape = index_buffer - ShapeIndexBuffer;
+        if (submesh == 0 || index_buffer == 0 || vertex_constants == 0 || pixel_constants == 0 ||
+            Load<u16>(submesh + SubmeshRanges) == 0 || effects.draws == Scene::MaxEffectDraws) {
+            effects.dropped++;
+            return;
+        }
+        const Meshes::Mesh* mesh = Meshes::Get(shape);
+        if (mesh == nullptr) {
+            effects.dropped++;
+            return;
+        }
+        const u32 first =
+            Load<u32>(submesh + SubmeshFirstIndex) + Load<u32>(submesh + SubmeshRange);
+        const u32 count = Load<u32>(submesh + SubmeshRange + 4);
+        if (u64{first} + count > mesh->indices) {
+            effects.dropped++;
+            return;
+        }
+        Skin skin;
+        u64 vertices = mesh->vertices;
+        const VAddr vertex_buffer = Load<VAddr>(item + ItemVertexBuffer);
+        if (vertex_buffer != shape + ShapeVertexBuffer) {
+            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame).vertices;
+            if (vertices == 0) {
+                effects.dropped++;
+                return;
+            }
+        } else if (!ReadSkin(item, shape, *mesh, skin)) {
+            effects.dropped++;
+            return;
+        }
+        const auto handle = [](VAddr object) { return object != 0 ? Textures::Get(object) : 0; };
+        const u32 i = effects.draws++;
+        // The fields are written in order: the packet is write-combined.
+        Scene::EffectDraw& out =
+            reinterpret_cast<Scene::EffectDraw*>(packet + Scene::EffectDrawsOffset)[i];
+        std::memcpy(out.vertex_constants, reinterpret_cast<const void*>(vertex_constants),
+                    sizeof(out.vertex_constants));
+        std::memcpy(out.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
+                    sizeof(out.pixel_constants));
+        // Point lights are not ported: the programs see none.
+        out.pixel_constants[EffectPointLightsWord] = 0;
+        out.mesh.vertices = vertices;
+        out.mesh.skin = skin.stream;
+        out.mesh.palette = skin.palette;
+        out.mesh.stride = mesh->stride;
+        out.mesh.position = mesh->position;
+        out.mesh.texcoord = mesh->texcoord;
+        out.mesh.texcoord1 = mesh->texcoord1;
+        out.mesh.normal = mesh->normal;
+        out.mesh.tangent = mesh->tangent;
+        out.mesh.vertex_color = mesh->vertex_color;
+        out.mesh.displacement = handle(Load<VAddr>(item + EffectDisplacement));
+        for (u32 t = 0; t < 4; t++) {
+            out.mesh.textures[t] = handle(Load<VAddr>(item + EffectColorMaps + t * 8));
+        }
+        g_effect_commands[i] = {
+            .index_count = count,
+            .instance_count = 1,
+            .first_index = mesh->first_index + first,
+            .vertex_offset = 0,
+            .first_instance = i,
+        };
+        const u32 mode = Load<u16>(item + EffectBlendMode);
+        const u32 blend = mode < EffectBlendModes ? mode : 0;
+        const u32 depth_mode = Load<u8>(item + EffectDepthMode) >> EffectDepthModeShift;
+        const u32 skinned = skin.bones != 0 ? 1 : 0;
+        effects.lists |= 1u << list;
+        for (u32 layer = 0; layer < EffectLayers; layer++) {
+            if (Load<u32>(pixel_constants + (EffectBlendMethodWord + layer) * 4) ==
+                EffectBackgroundMethod) {
+                effects.background |= 1u << list;
+            }
+        }
+        if (effects.runs != 0) {
+            Scene::EffectRun& last = g_effect_runs[effects.runs - 1];
+            if (last.list == list && last.blend == blend && last.depth_mode == depth_mode &&
+                last.skinned == skinned) {
+                last.count++;
+                return;
+            }
+        }
+        g_effect_runs[effects.runs++] = {
+            .list = list,
+            .blend = blend,
+            .depth_mode = depth_mode,
+            .skinned = skinned,
+            .first = i,
+            .count = 1,
         };
     }
 
@@ -2349,6 +2540,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     add_category(InteriorCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + ContourCategory * 4), ContourVertexConstants,
                 None, keyed(ContourCategory), [&](VAddr item) { writer.AddContour(item); });
+    writer.AddEffects(view);
     writer.CopyCommands();
     writer.EndPart(Scene::CapturePart::Characters);
     Scene::Header header = writer.Header();

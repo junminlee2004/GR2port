@@ -31,6 +31,7 @@ const Device* g_device = nullptr;
 Memory* g_memory = nullptr;
 // The scene's colour under the fog, which the panes refract.
 Image g_behind;
+bool g_behind_ready = false;
 vk::Sampler g_sampler;
 vk::DescriptorSetLayout g_layout;
 vk::DescriptorPool g_pool;
@@ -109,14 +110,51 @@ bool Resize(vk::Extent2D extent) {
         .pImageInfo = &info,
     };
     g_device->device.updateDescriptorSets(write, {}, g_device->dispatch);
+    g_behind_ready = false;
     return true;
+}
+
+vk::ImageView BehindView() {
+    return g_behind.view;
+}
+
+void Prepare(vk::CommandBuffer cmd) {
+    if (g_behind_ready) {
+        return;
+    }
+    g_behind_ready = true;
+    const auto& dl = g_device->dispatch;
+    constexpr vk::PipelineStageFlags2 Copy = vk::PipelineStageFlagBits2::eCopy;
+    const vk::ImageMemoryBarrier2 to_clear{
+        .dstStageMask = Copy,
+        .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+        .oldLayout = vk::ImageLayout::eUndefined,
+        .newLayout = vk::ImageLayout::eTransferDstOptimal,
+        .image = g_behind.image,
+        .subresourceRange = ColorRange,
+    };
+    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &to_clear}, dl);
+    cmd.clearColorImage(g_behind.image, vk::ImageLayout::eTransferDstOptimal,
+                        vk::ClearColorValue{.float32 = std::array<float, 4>{}}, ColorRange, dl);
+    const vk::ImageMemoryBarrier2 to_read{
+        .srcStageMask = Copy,
+        .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+        .dstStageMask =
+            vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader,
+        .dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead,
+        .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+        .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+        .image = g_behind.image,
+        .subresourceRange = ColorRange,
+    };
+    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &to_read}, dl);
 }
 
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
             u64 offset, const Image& depth, vk::Extent2D extent) {
     constexpr Scene::DrawList List = Scene::DrawList::Glass;
     const u32 count = header.draw_commands[static_cast<u32>(List)];
-    if (count == 0) {
+    if (count == 0 && header.effects.background == 0) {
         return;
     }
     const auto& dl = g_device->dispatch;
@@ -230,6 +268,9 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
     cmd.pipelineBarrier2({.imageMemoryBarrierCount = static_cast<u32>(to_panes.size()),
                           .pImageMemoryBarriers = to_panes.data()},
                          dl);
+    if (count == 0) {
+        return;
+    }
     const vk::RenderingAttachmentInfo scene_attachment{
         .imageView = Look::SceneView(),
         .imageLayout = ColorLayout,

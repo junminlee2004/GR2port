@@ -128,8 +128,8 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
                                                : info.color != vk::Format::eUndefined
                                                    ? std::span<const vk::Format>{&info.color, 1}
                                                    : std::span<const vk::Format>{};
-    const std::vector<vk::PipelineColorBlendAttachmentState> blend_attachments(colors.size(),
-                                                                               blend_attachment);
+    const std::vector<vk::PipelineColorBlendAttachmentState> blend_attachments(
+        colors.size(), info.blend != nullptr ? *info.blend : blend_attachment);
     const u32 color_count = static_cast<u32>(colors.size());
     const vk::PipelineColorBlendStateCreateInfo blend{
         .attachmentCount = color_count,
