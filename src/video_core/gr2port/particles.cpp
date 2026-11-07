@@ -287,6 +287,7 @@ void Build() {
                                               .depth_write = false,
                                               .depth_compare = vk::CompareOp::eGreaterOrEqual,
                                               .premultiplied_blend = true,
+                                              .clear_target_alpha = true,
                                               .dynamic_depth_and_cull = true,
                                               .push_constant_bytes = sizeof(DrawPush),
                                               .set_layouts = draw_sets,

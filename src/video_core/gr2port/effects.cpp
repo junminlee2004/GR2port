@@ -133,10 +133,17 @@ void Build() {
                 .push_constant_bytes = sizeof(DrawPush),
                 .set_layouts = sets,
             };
+            // In the scene, the blend constant's alpha scales the target's alpha.
+            vk::PipelineColorBlendAttachmentState scene_blend = blend;
+            scene_blend.srcAlphaBlendFactor = Factor::eZero;
+            scene_blend.dstAlphaBlendFactor = Factor::eConstantAlpha;
+            scene_blend.alphaBlendOp = Op::eAdd;
             GraphicsPipelineInfo scene = hidden;
             scene.color = g_scene_format;
             scene.depth = g_depth_format;
             scene.stencil_attachment = false;
+            scene.blend = &scene_blend;
+            scene.dynamic_blend_constants = true;
             g_hidden[skinned][mode] = CreateGraphicsPipeline(*g_device, hidden);
             g_scene[skinned][mode] = CreateGraphicsPipeline(*g_device, scene);
             built = built && g_hidden[skinned][mode].pipeline && g_scene[skinned][mode].pipeline;
@@ -234,6 +241,9 @@ void RecordList(vk::CommandBuffer cmd, const Scene::Header& header, const u8* pa
     };
     cmd.setViewport(0, viewport, dl);
     cmd.setScissor(0, vk::Rect2D{{0, 0}, extent}, dl);
+    // The top-most list clears the game's stencil bit 3, which the scene's alpha stands for.
+    const std::array<float, 4> constants{0.0f, 0.0f, 0.0f, list == ListTopMost ? 0.0f : 1.0f};
+    cmd.setBlendConstants(constants.data(), dl);
     DrawRuns(cmd, header.effects, packet, address, buffer, offset, list, list + 1, g_scene, false);
     cmd.endRendering(dl);
 }

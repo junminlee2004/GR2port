@@ -915,6 +915,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                             Timestamps * slot_index + BloomTimestamp, dl);
     }
 
+    Look::RecordAntialias(cmd, packet.address);
+
     const vk::Image image = swapchain->Image(index);
     Barrier(d, cmd, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
             vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eNone,

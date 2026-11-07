@@ -10,6 +10,7 @@
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/scene.h"
+#include "video_core/gr2port/shaders/antialias_comp.h"
 #include "video_core/gr2port/shaders/bloom_blur_frag.h"
 #include "video_core/gr2port/shaders/bloom_extract_frag.h"
 #include "video_core/gr2port/shaders/composite_frag.h"
@@ -17,7 +18,9 @@
 #include "video_core/gr2port/shaders/fullscreen_vert.h"
 #include "video_core/gr2port/shaders/luminance_comp.h"
 #include "video_core/gr2port/shaders/sky_frag.h"
+#include "video_core/gr2port/shaders/tonemap_frag.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/velocity.h"
 
 namespace Gr2Port::Look {
 
@@ -65,9 +68,26 @@ struct BlurPush {
 // blur write the current one, its first blur the next, and the last frame's result is the third.
 constexpr u32 BloomImages = 3;
 constexpr u32 BloomDivisor = 4;
-// The sets: the scene's colour; for each image as the current one, the composite's, the first
-// blur's and the second blur's; and the bright pass's.
-constexpr u32 Sets = 1 + 3 * BloomImages + 1;
+// The game's antialias program: its groups, the two images it swaps each frame for its output and
+// its history, and its constants, as the frame graph sets them. It writes its own sRGB encoding and
+// reads back through sRGB. The source's size over the target's scales the velocity and stencil it
+// reads.
+constexpr u32 AntialiasImages = 2;
+constexpr vk::Format AntialiasFormat = vk::Format::eR8G8B8A8Unorm;
+constexpr vk::Format AntialiasReadFormat = vk::Format::eR8G8B8A8Srgb;
+constexpr u32 AntialiasGroupPixels = 8;
+struct AntialiasConstants {
+    std::array<float, 2> size;
+    std::array<float, 2> inverse_size;
+    std::array<float, 2> source_scale;
+    float low_frequency;
+    float high_frequency;
+};
+constexpr float AntialiasLowFrequency = 1.3f;
+constexpr float AntialiasHighFrequency = 0.6f;
+// The sets: the scene's colour; for each image as the current one, the tonemap's, the first
+// blur's and the second blur's; the bright pass's; and the picture's for each antialias image.
+constexpr u32 Sets = 1 + 3 * BloomImages + 1 + AntialiasImages;
 
 // The game's luminance pass reads one pixel of each 8x8 tile in groups of 8x8 tiles.
 constexpr u32 TilePixels = 8;
@@ -82,6 +102,11 @@ constexpr u32 SelfTranslucencyConstant = 0x87;
 const Device* g_device = nullptr;
 Memory* g_memory = nullptr;
 Image g_scene;
+Image g_toned;
+std::array<Image, AntialiasImages> g_antialiased;
+std::array<vk::ImageView, AntialiasImages> g_antialiased_read;
+u32 g_antialiased_image = 0;
+bool g_antialiased_cleared = false;
 vk::Extent2D g_extent;
 vk::Sampler g_scene_sampler;
 vk::Sampler g_depth_sampler;
@@ -91,6 +116,11 @@ vk::DescriptorSetLayout g_pair_layout;
 vk::DescriptorPool g_pool;
 vk::DescriptorSet g_scene_set;
 vk::DescriptorSet g_extract_set;
+vk::DescriptorSetLayout g_antialias_layout;
+Buffer g_antialias_constants;
+// Each indexed by the antialias image that holds the output.
+std::array<vk::DescriptorSet, AntialiasImages> g_picture_sets;
+std::array<vk::DescriptorSet, AntialiasImages> g_antialias_sets;
 // Each indexed by the current bloom image.
 std::array<vk::DescriptorSet, BloomImages> g_composite_sets;
 std::array<vk::DescriptorSet, BloomImages> g_across_sets;
@@ -104,6 +134,8 @@ Pipeline g_sky;
 Pipeline g_luminance;
 Pipeline g_exposure;
 Pipeline g_composite;
+Pipeline g_tonemap;
+Pipeline g_antialias;
 Pipeline g_extract;
 Pipeline g_blur;
 vk::Format g_picture_format = vk::Format::eUndefined;
@@ -142,12 +174,35 @@ bool CreateSceneSet(const Device& d) {
                                                     .pBindings = pair.data()},
                                                    nullptr, dl)
                         .value;
-    const vk::DescriptorPoolSize size{vk::DescriptorType::eCombinedImageSampler, 2 * Sets};
+    // The toned colour, the sampler, the output, the history, the velocity and the scene.
+    const std::array<vk::DescriptorSetLayoutBinding, 6> antialias{{
+        {0, vk::DescriptorType::eSampledImage, 1, vk::ShaderStageFlagBits::eCompute},
+        {1, vk::DescriptorType::eSampler, 1, vk::ShaderStageFlagBits::eCompute, &g_scene_sampler},
+        {2, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},
+        {3, vk::DescriptorType::eSampledImage, 1, vk::ShaderStageFlagBits::eCompute},
+        {4, vk::DescriptorType::eSampledImage, 1, vk::ShaderStageFlagBits::eCompute},
+        {5, vk::DescriptorType::eSampledImage, 1, vk::ShaderStageFlagBits::eCompute},
+    }};
+    g_antialias_layout =
+        d.device
+            .createDescriptorSetLayout(
+                {.bindingCount = static_cast<u32>(antialias.size()), .pBindings = antialias.data()},
+                nullptr, dl)
+            .value;
+    const std::array<vk::DescriptorPoolSize, 4> sizes{{
+        {vk::DescriptorType::eCombinedImageSampler, 2 * Sets},
+        {vk::DescriptorType::eSampledImage, 4 * AntialiasImages},
+        {vk::DescriptorType::eSampler, AntialiasImages},
+        {vk::DescriptorType::eStorageImage, AntialiasImages},
+    }};
     g_pool = d.device
-                 .createDescriptorPool({.maxSets = Sets, .poolSizeCount = 1, .pPoolSizes = &size},
+                 .createDescriptorPool({.maxSets = Sets + AntialiasImages,
+                                        .poolSizeCount = static_cast<u32>(sizes.size()),
+                                        .pPoolSizes = sizes.data()},
                                        nullptr, dl)
                  .value;
-    if (!g_scene_sampler || !g_depth_sampler || !g_scene_layout || !g_pair_layout || !g_pool) {
+    if (!g_scene_sampler || !g_depth_sampler || !g_scene_layout || !g_pair_layout ||
+        !g_antialias_layout || !g_pool) {
         return false;
     }
     std::array<vk::DescriptorSetLayout, Sets> layouts;
@@ -164,7 +219,21 @@ bool CreateSceneSet(const Device& d) {
         g_across_sets[i] = sets[1 + BloomImages + i];
         g_down_sets[i] = sets[1 + 2 * BloomImages + i];
     }
-    g_extract_set = sets[Sets - 1];
+    g_extract_set = sets[1 + 3 * BloomImages];
+    std::array<vk::DescriptorSetLayout, AntialiasImages> antialias_layouts;
+    antialias_layouts.fill(g_antialias_layout);
+    const auto [antialias_result, antialias_sets] =
+        d.device.allocateDescriptorSets({.descriptorPool = g_pool,
+                                         .descriptorSetCount = AntialiasImages,
+                                         .pSetLayouts = antialias_layouts.data()},
+                                        dl);
+    if (antialias_result != vk::Result::eSuccess) {
+        return false;
+    }
+    for (u32 i = 0; i < AntialiasImages; i++) {
+        g_picture_sets[i] = sets[2 + 3 * BloomImages + i];
+        g_antialias_sets[i] = antialias_sets[i];
+    }
     return true;
 }
 
@@ -206,13 +275,13 @@ void ImageBarrier(vk::CommandBuffer cmd, vk::Image image, vk::ImageLayout from, 
                          g_device->dispatch);
 }
 
-// Draws one full-screen bloom pass into target and leaves it for fragment shaders to read.
-void BloomPass(vk::CommandBuffer cmd, const Image& target, const Pipeline& pipeline,
-               vk::DescriptorSet set, const void* push, u32 push_bytes) {
+// Draws one full-screen pass into target and leaves it for reader's shaders to read.
+void FullscreenPass(vk::CommandBuffer cmd, const Image& target, const Pipeline& pipeline,
+                    vk::DescriptorSet set, const void* push, u32 push_bytes,
+                    vk::PipelineStageFlags2 reader) {
     const auto& dl = g_device->dispatch;
     ImageBarrier(cmd, target.image, vk::ImageLayout::eUndefined,
-                 vk::ImageLayout::eColorAttachmentOptimal,
-                 vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eNone,
+                 vk::ImageLayout::eColorAttachmentOptimal, reader, vk::AccessFlagBits2::eNone,
                  vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                  vk::AccessFlagBits2::eColorAttachmentWrite);
     const vk::RenderingAttachmentInfo color{
@@ -239,11 +308,18 @@ void BloomPass(vk::CommandBuffer cmd, const Image& target, const Pipeline& pipel
                       dl);
     cmd.draw(3, 1, 0, 0, dl);
     cmd.endRendering(dl);
-    ImageBarrier(
-        cmd, target.image, vk::ImageLayout::eColorAttachmentOptimal,
-        vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eFragmentShader,
-        vk::AccessFlagBits2::eShaderSampledRead);
+    ImageBarrier(cmd, target.image, vk::ImageLayout::eColorAttachmentOptimal,
+                 vk::ImageLayout::eShaderReadOnlyOptimal,
+                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                 vk::AccessFlagBits2::eColorAttachmentWrite, reader,
+                 vk::AccessFlagBits2::eShaderSampledRead);
+}
+
+// A bloom pass, which the next bloom pass and the tonemap read.
+void BloomPass(vk::CommandBuffer cmd, const Image& target, const Pipeline& pipeline,
+               vk::DescriptorSet set, const void* push, u32 push_bytes) {
+    FullscreenPass(cmd, target, pipeline, set, push, push_bytes,
+                   vk::PipelineStageFlagBits2::eFragmentShader);
 }
 
 void MeterBarrier(vk::CommandBuffer cmd, vk::PipelineStageFlags2 src_stage,
@@ -308,8 +384,20 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format) {
                                                 .push_constant_bytes = sizeof(BlurPush),
                                                 .set_layouts = pair_set,
                                             });
+    g_tonemap = CreateGraphicsPipeline(device, {
+                                                   .vertex = FULLSCREEN_VERT,
+                                                   .fragment = TONEMAP_FRAG,
+                                                   .color = SceneFormat,
+                                                   .push_constant_bytes = sizeof(CompositePush),
+                                                   .set_layouts = pair_set,
+                                               });
+    const std::array antialias_set{g_antialias_layout};
+    g_antialias = CreateComputePipeline(device, ANTIALIAS_COMP, sizeof(u64), antialias_set);
+    g_antialias_constants = memory.CreateBuffer(
+        sizeof(AntialiasConstants), vk::BufferUsageFlagBits::eStorageBuffer, Placement::Upload);
     return g_sky.pipeline && g_luminance.pipeline && g_exposure.pipeline && g_extract.pipeline &&
-           g_blur.pipeline;
+           g_blur.pipeline && g_tonemap.pipeline && g_antialias.pipeline &&
+           g_antialias_constants.mapped != nullptr;
 }
 
 bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth) {
@@ -352,6 +440,94 @@ bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth)
     g_bloom_cleared = false;
     g_bloom_ran = false;
     constexpr auto Read = vk::ImageLayout::eShaderReadOnlyOptimal;
+    g_memory->Destroy(g_toned);
+    g_toned = g_memory->CreateImage(SceneFormat, extent,
+                                    vk::ImageUsageFlagBits::eColorAttachment |
+                                        vk::ImageUsageFlagBits::eSampled,
+                                    vk::ImageAspectFlagBits::eColor);
+    if (!g_toned.image) {
+        return false;
+    }
+    for (u32 i = 0; i < AntialiasImages; i++) {
+        g_device->device.destroyImageView(g_antialiased_read[i], nullptr, dl);
+        g_memory->Destroy(g_antialiased[i]);
+        g_antialiased[i] = g_memory->CreateImage(
+            AntialiasFormat, extent,
+            vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
+                vk::ImageUsageFlagBits::eTransferDst,
+            vk::ImageAspectFlagBits::eColor, 1, 1, vk::ImageCreateFlagBits::eMutableFormat);
+        if (!g_antialiased[i].image) {
+            return false;
+        }
+        const vk::ImageViewUsageCreateInfo read_usage{.usage = vk::ImageUsageFlagBits::eSampled};
+        g_antialiased_read[i] =
+            g_device->device
+                .createImageView(
+                    {
+                        .pNext = &read_usage,
+                        .image = g_antialiased[i].image,
+                        .viewType = vk::ImageViewType::e2D,
+                        .format = AntialiasReadFormat,
+                        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+                    },
+                    nullptr, dl)
+                .value;
+        if (!g_antialiased_read[i]) {
+            return false;
+        }
+    }
+    g_antialiased_cleared = false;
+    const vk::DescriptorImageInfo toned_info{.imageView = g_toned.view, .imageLayout = Read};
+    const vk::DescriptorImageInfo velocity_info{
+        .imageView = Velocity::View(),
+        .imageLayout = vk::ImageLayout::eGeneral,
+    };
+    const vk::DescriptorImageInfo scene_info{.imageView = g_scene.view, .imageLayout = Read};
+    for (u32 i = 0; i < AntialiasImages; i++) {
+        const vk::DescriptorImageInfo output_info{
+            .imageView = g_antialiased[i].view,
+            .imageLayout = vk::ImageLayout::eGeneral,
+        };
+        const vk::DescriptorImageInfo history_info{
+            .imageView = g_antialiased_read[(i + 1) % AntialiasImages],
+            .imageLayout = Read,
+        };
+        const auto sampled = [&](u32 binding, const vk::DescriptorImageInfo& image_info) {
+            return vk::WriteDescriptorSet{
+                .dstSet = g_antialias_sets[i],
+                .dstBinding = binding,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eSampledImage,
+                .pImageInfo = &image_info,
+            };
+        };
+        const std::array<vk::WriteDescriptorSet, 5> antialias_writes{{
+            sampled(0, toned_info),
+            {
+                .dstSet = g_antialias_sets[i],
+                .dstBinding = 2,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eStorageImage,
+                .pImageInfo = &output_info,
+            },
+            sampled(3, history_info),
+            sampled(4, velocity_info),
+            sampled(5, scene_info),
+        }};
+        g_device->device.updateDescriptorSets(antialias_writes, {}, dl);
+        WritePair(g_picture_sets[i], g_antialiased_read[i], g_scene_sampler, Read,
+                  g_antialiased_read[i], g_scene_sampler, Read);
+    }
+    const float width = static_cast<float>(extent.width);
+    const float height = static_cast<float>(extent.height);
+    const AntialiasConstants antialias_constants{
+        .size = {width, height},
+        .inverse_size = {1.0f / width, 1.0f / height},
+        .source_scale = {1.0f, 1.0f},
+        .low_frequency = AntialiasLowFrequency,
+        .high_frequency = AntialiasHighFrequency,
+    };
+    std::memcpy(g_antialias_constants.mapped, &antialias_constants, sizeof(antialias_constants));
     WritePair(g_extract_set, g_scene.view, g_scene_sampler, Read, depth, g_depth_sampler,
               vk::ImageLayout::eDepthStencilReadOnlyOptimal);
     for (u32 i = 0; i < BloomImages; i++) {
@@ -504,6 +680,51 @@ void RecordBloom(vk::CommandBuffer cmd, u32 bloom, u64 packet_address) {
     g_bloom_ran = true;
 }
 
+void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address) {
+    const auto& dl = g_device->dispatch;
+    constexpr auto Compute = vk::PipelineStageFlagBits2::eComputeShader;
+    constexpr auto Fragment = vk::PipelineStageFlagBits2::eFragmentShader;
+    constexpr auto Read = vk::AccessFlagBits2::eShaderSampledRead;
+    if (!g_antialiased_cleared) {
+        g_antialiased_cleared = true;
+        const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        for (const Image& image : g_antialiased) {
+            ImageBarrier(cmd, image.image, vk::ImageLayout::eUndefined,
+                         vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits2::eNone,
+                         vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eClear,
+                         vk::AccessFlagBits2::eTransferWrite);
+            cmd.clearColorImage(image.image, vk::ImageLayout::eTransferDstOptimal,
+                                vk::ClearColorValue{.float32 = std::array<float, 4>{}}, range, dl);
+            ImageBarrier(cmd, image.image, vk::ImageLayout::eTransferDstOptimal,
+                         vk::ImageLayout::eShaderReadOnlyOptimal,
+                         vk::PipelineStageFlagBits2::eClear, vk::AccessFlagBits2::eTransferWrite,
+                         Compute | Fragment, Read);
+        }
+    }
+    const CompositePush tonemap{
+        .grade = packet_address + Scene::GradeOffset,
+        .meter = g_meter.address,
+    };
+    FullscreenPass(cmd, g_toned, g_tonemap, g_composite_sets[g_bloom_image], &tonemap,
+                   sizeof(tonemap), Compute);
+    g_antialiased_image = (g_antialiased_image + 1) % AntialiasImages;
+    const vk::Image output = g_antialiased[g_antialiased_image].image;
+    // The last frame read this image as its history.
+    ImageBarrier(cmd, output, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral, Compute,
+                 vk::AccessFlagBits2::eNone, Compute, vk::AccessFlagBits2::eShaderStorageWrite);
+    const u64 constants = g_antialias_constants.address;
+    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_antialias.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_antialias.layout, 0,
+                           g_antialias_sets[g_antialiased_image], {}, dl);
+    cmd.pushConstants(g_antialias.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(constants),
+                      &constants, dl);
+    cmd.dispatch((g_extent.width + AntialiasGroupPixels - 1) / AntialiasGroupPixels,
+                 (g_extent.height + AntialiasGroupPixels - 1) / AntialiasGroupPixels, 1, dl);
+    // The picture reads the output, and the next frame reads it as its history.
+    ImageBarrier(cmd, output, vk::ImageLayout::eGeneral, vk::ImageLayout::eShaderReadOnlyOptimal,
+                 Compute, vk::AccessFlagBits2::eShaderStorageWrite, Compute | Fragment, Read);
+}
+
 void RecordComposite(vk::CommandBuffer cmd, u64 packet_address) {
     const auto& dl = g_device->dispatch;
     const vk::Viewport viewport{
@@ -520,7 +741,7 @@ void RecordComposite(vk::CommandBuffer cmd, u64 packet_address) {
     };
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_composite.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_composite.layout, 0,
-                           g_composite_sets[g_bloom_image], {}, dl);
+                           g_picture_sets[g_antialiased_image], {}, dl);
     cmd.setViewport(0, viewport, dl);
     cmd.setScissor(0, vk::Rect2D{{0, 0}, g_extent}, dl);
     cmd.pushConstants(g_composite.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),

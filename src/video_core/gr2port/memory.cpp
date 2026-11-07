@@ -120,9 +120,11 @@ void Memory::Destroy(Buffer& buffer) {
 }
 
 Image Memory::CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsageFlags usage,
-                          vk::ImageAspectFlags aspect, u32 layers, u32 levels) {
+                          vk::ImageAspectFlags aspect, u32 layers, u32 levels,
+                          vk::ImageCreateFlags flags) {
     const VkImageCreateInfo image_info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .flags = static_cast<VkImageCreateFlags>(flags),
         .imageType = VK_IMAGE_TYPE_2D,
         .format = static_cast<VkFormat>(format),
         .extent = {extent.width, extent.height, 1},

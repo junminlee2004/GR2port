@@ -82,6 +82,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
                                                     .depth = depth_format,
                                                     .cull = vk::CullModeFlagBits::eBack,
                                                     .depth_test = true,
+                                                    .keep_target_alpha = true,
                                                     .push_constant_bytes = sizeof(GlassPush),
                                                     .set_layouts = set_layouts,
                                                 });

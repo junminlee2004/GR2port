@@ -112,17 +112,22 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
         .back = stencil_state,
     };
     const bool premultiplied = info.premultiplied_blend;
-    const bool keep_alpha = premultiplied || info.keep_target_alpha;
+    const bool blended = info.alpha_blend || premultiplied;
+    const bool keep_alpha = !info.clear_target_alpha && (premultiplied || info.keep_target_alpha);
+    const vk::ColorComponentFlags color_only = vk::ColorComponentFlagBits::eR |
+                                               vk::ColorComponentFlagBits::eG |
+                                               vk::ColorComponentFlagBits::eB;
     const vk::PipelineColorBlendAttachmentState blend_attachment{
-        .blendEnable = info.alpha_blend || premultiplied,
+        .blendEnable = blended,
         .srcColorBlendFactor = premultiplied ? vk::BlendFactor::eOne : vk::BlendFactor::eSrcAlpha,
         .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
         .colorBlendOp = vk::BlendOp::eAdd,
-        .srcAlphaBlendFactor = keep_alpha ? vk::BlendFactor::eZero : vk::BlendFactor::eOne,
+        .srcAlphaBlendFactor =
+            keep_alpha || info.clear_target_alpha ? vk::BlendFactor::eZero : vk::BlendFactor::eOne,
         .dstAlphaBlendFactor = keep_alpha ? vk::BlendFactor::eOne : vk::BlendFactor::eZero,
         .alphaBlendOp = vk::BlendOp::eAdd,
-        .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+        .colorWriteMask =
+            keep_alpha && !blended ? color_only : color_only | vk::ColorComponentFlagBits::eA,
     };
     const std::span<const vk::Format> colors = !info.colors.empty() ? info.colors
                                                : info.color != vk::Format::eUndefined
@@ -147,6 +152,9 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
         dynamic_states.push_back(vk::DynamicState::eCullMode);
         dynamic_states.push_back(vk::DynamicState::eDepthTestEnable);
         dynamic_states.push_back(vk::DynamicState::eDepthWriteEnable);
+    }
+    if (info.dynamic_blend_constants) {
+        dynamic_states.push_back(vk::DynamicState::eBlendConstants);
     }
     const vk::PipelineDynamicStateCreateInfo dynamic{
         .dynamicStateCount = static_cast<u32>(dynamic_states.size()),

@@ -53,6 +53,7 @@ void Build() {
                                               .cull = vk::CullModeFlagBits::eBack,
                                               .depth_test = true,
                                               .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                              .keep_target_alpha = true,
                                               .push_constant_bytes = sizeof(DrawPush),
                                               .set_layouts = sets,
                                           });

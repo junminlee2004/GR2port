@@ -10,8 +10,11 @@ class Memory;
 }
 
 // The passes that give a frame GR2's look, on the render thread: the sky behind the scene, the
-// meter that sets the exposure, the bloom, and the game's Tonemap and Composite programs, which
-// turn the scene's HDR colour into the picture.
+// meter that sets the exposure, the bloom, and the game's Tonemap, Antialias and Composite
+// programs, which turn the scene's HDR colour into the picture.
+//
+// The scene's alpha stands for the game's stencil bit 3, which keeps a pixel in the antialias
+// program's history: the world and the sky write 1, the passes that clear the bit write 0.
 namespace Gr2Port::Look {
 
 inline constexpr vk::Format SceneFormat = vk::Format::eR16G16B16A16Sfloat;
@@ -37,7 +40,11 @@ void RecordMeter(vk::CommandBuffer cmd, u64 packet_address);
 /// header's bloom flags say it runs.
 void RecordBloom(vk::CommandBuffer cmd, u32 bloom, u64 packet_address);
 
-/// Inside the picture's rendering: draws the scene's colour and the bloom as the picture.
+/// Outside rendering, with the scene's colour readable, after the bloom: tonemaps the scene and
+/// runs the game's antialias program on the result.
+void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address);
+
+/// Inside the picture's rendering, after RecordAntialias: draws the picture.
 void RecordComposite(vk::CommandBuffer cmd, u64 packet_address);
 
 /// Outside rendering, once per report: logs the frame's look and the meter's last read state, and

@@ -55,5 +55,5 @@ void main() {
             max(CloudLayer(sky.cloud_layers[0], plane), CloudLayer(sky.cloud_layers[1], plane));
         result = mix(result, sky.cloud_color.rgb, min(density, 1.0) * sky.cloud_color.a);
     }
-    color = vec4(result, 0.0);
+    color = vec4(result, 1.0);
 }

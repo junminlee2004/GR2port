@@ -70,7 +70,8 @@ public:
     /// A 2D image with layers layers of levels mip levels, and a view of all of it (an array view
     /// when there are several layers).
     Image CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsageFlags usage,
-                      vk::ImageAspectFlags aspect, u32 layers = 1, u32 levels = 1);
+                      vk::ImageAspectFlags aspect, u32 layers = 1, u32 levels = 1,
+                      vk::ImageCreateFlags flags = {});
     /// A 3D image of one mip level, and a 3D view of it.
     Image CreateVolume(vk::Format format, vk::Extent3D extent, vk::ImageUsageFlags usage);
     /// A sampled 2D image with levels mip levels, which copies fill, and a view of all of it

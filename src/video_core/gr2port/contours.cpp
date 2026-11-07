@@ -34,6 +34,7 @@ bool Start(const Device& device, vk::Format color_format, vk::Format depth_forma
                     .depth_write = false,
                     .depth_compare = vk::CompareOp::eGreaterOrEqual,
                     .alpha_blend = true,
+                    .clear_target_alpha = true,
                     .push_constant_bytes = sizeof(u64),
                 });
     return static_cast<bool>(g_pipeline.pipeline);

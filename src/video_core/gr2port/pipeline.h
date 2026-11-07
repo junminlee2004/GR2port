@@ -41,15 +41,19 @@ struct GraphicsPipelineInfo {
     bool stencil_attachment = false;
     /// Colour blends over the target by the fragment's alpha.
     bool alpha_blend = false;
-    /// With alpha_blend, the target keeps its alpha.
+    /// The target keeps its alpha, with or without a blend.
     bool keep_target_alpha = false;
     /// Colour adds to the target scaled by one minus the fragment's alpha; the target keeps its
     /// alpha.
     bool premultiplied_blend = false;
+    /// With a blend, every fragment sets the target's alpha to 0 instead.
+    bool clear_target_alpha = false;
     /// Replaces the blend options above.
     const vk::PipelineColorBlendAttachmentState* blend = nullptr;
     /// The cull mode and the depth test and write are dynamic state.
     bool dynamic_depth_and_cull = false;
+    /// The blend constants are dynamic state.
+    bool dynamic_blend_constants = false;
     u32 push_constant_bytes = 0;
     /// The pipeline's descriptor sets, in set order.
     std::span<const vk::DescriptorSetLayout> set_layouts;

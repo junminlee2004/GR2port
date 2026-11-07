@@ -274,8 +274,6 @@ void main() {
             1.0 - n.z * n.z);
         if (bloom_mode == 1u) {
             result *= glow;
-        } else {
-            mask *= glow;
         }
     }
 
@@ -302,5 +300,5 @@ void main() {
         result = table.characters[index].self_translucency_mode != 0u ? result + share * inside
                                                                       : mix(result, inside, share);
     }
-    color = vec4(result, mask);
+    color = vec4(result, 0.0);
 }

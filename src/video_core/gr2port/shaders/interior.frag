@@ -74,5 +74,5 @@ void main() {
     const vec3 fresnel =
         m.fresnel_floor + (1.0 - m.fresnel_floor) * pow(max(1.0 - n_dot_v, 0.0), 5.0);
     const vec3 share = m.fresnel_scale * max(fresnel - m.fresnel_bias, vec3(0.0));
-    color = vec4(inner + (radiance * env - inner) * share, 1.0);
+    color = vec4(inner + (radiance * env - inner) * share, 0.0);
 }
