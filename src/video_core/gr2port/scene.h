@@ -493,7 +493,7 @@ struct Material {
     u32 mask;
     u32 hatching;
     u32 flags;
-    /// With MaterialLayers, the index of the draw's LayerMaterial.
+    /// With MaterialLayers or MaterialGem, the index of the draw's LayerMaterial.
     u32 layer_material;
     u32 padding;
 };
@@ -504,6 +504,9 @@ inline constexpr u32 MaterialLayered = 1;
 inline constexpr u32 MaterialGradation = 2;
 /// The draw's surface is its LayerMaterial; the material holds only its gradation and hatching.
 inline constexpr u32 MaterialLayers = 4;
+/// The draw is a gem's: its LayerMaterial holds the game's G2_BG_Gem pixel constants, its
+/// colour map first of the colour maps and its normal map first of the normal maps.
+inline constexpr u32 MaterialGem = 8;
 
 /// A surface of four mixed layers: the game's G2_BG_Layer pixel constants, which shaders/scene.glsl
 /// names, then the layers' texture handles; 0 is white. A normal map of 0 means the layer has none.

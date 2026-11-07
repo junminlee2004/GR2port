@@ -106,6 +106,35 @@ void WriteLayers(uint index, uint hatching, vec3 n) {
     g_surface = surface;
 }
 
+// The game's G2_BG_Gem pixel program without its velocity: the colour map shows what the view ray
+// meets after it refracts through the surface, over the gem's own colour by the map's alpha.
+void WriteGem(uint index, vec3 n) {
+    GemMaterials table = GemMaterials(scene_layers);
+#ifdef ALPHA_TEST
+    if (ScreenDoorShut(table.gems[index].punch_through)) {
+        discard;
+    }
+#endif
+    const uint normal_map = table.gems[index].normal_map;
+    vec3 tangent_normal = vec3(0.0, 0.0, 1.0);
+    if (normal_map != 0u) {
+        const vec3 map = Sample(normal_map, texcoord.xy).rgb;
+        tangent_normal = vec3(table.gems[index].normal_scale * (2.0 * map.xy - 1.0), map.z);
+    }
+    const vec3 turned = TurnedNormal(n, tangent_normal);
+    const vec3 ray = refract(normalize(gradation), turned, table.gems[index].refraction);
+    const vec2 place = table.gems[index].projection * ray.xy / -ray.z + table.gems[index].offset;
+    const vec2 lookup = vec2(0.5 + 0.5 * table.gems[index].scale.x * place.x,
+                             0.5 - 0.5 * table.gems[index].scale.y * place.y);
+    const vec4 color = Sample(table.gems[index].color_map, lookup);
+    g_albedo = vec4(mix(table.gems[index].color.rgb, table.gems[index].color_scale.rgb * color.rgb,
+                        color.a),
+                    0.0);
+    g_normal = PackNormal(turned);
+    g_surface = vec4(table.gems[index].roughness, table.gems[index].metallic,
+                     table.gems[index].translucency, table.gems[index].emissive);
+}
+
 // The game's G2_BG_Main pixel programs without their velocity, one program for all their variants.
 void main() {
     const float facing_sign = gl_FrontFacing ? 1.0 : -1.0;
@@ -131,6 +160,10 @@ void main() {
     Materials table = scene_materials;
     if ((table.materials[index].flags & MaterialLayers) != 0u) {
         WriteLayers(table.materials[index].layer_material, table.materials[index].hatching, n);
+        return;
+    }
+    if ((table.materials[index].flags & MaterialGem) != 0u) {
+        WriteGem(table.materials[index].layer_material, n);
         return;
     }
     const bool layered = (table.materials[index].flags & MaterialLayered) != 0u;

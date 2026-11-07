@@ -73,5 +73,9 @@ void main() {
         const vec4 low = scene_materials.materials[index].gradation_low;
         const vec4 high = scene_materials.materials[index].gradation_high;
         gradation = mix(low.rgb, high.rgb, clamp(high.w * (unskinned.y - low.w), 0.0, 1.0));
+        // A gem has no gradation: its pixels refract the view ray instead.
+        if ((scene_materials.materials[index].flags & MaterialGem) != 0u) {
+            gradation = view_position;
+        }
     }
 }

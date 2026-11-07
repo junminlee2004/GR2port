@@ -377,16 +377,18 @@ struct Category {
     bool layers = false;
     bool glass = false;
     bool self_translucent = false;
+    bool gem = false;
 };
 constexpr Category MainCategory{15, 0x60, 0x38, 0x68, 0x00, 0x20, None, true}; // G2_BG_Main
 // The world's other opaque categories, drawn into the surfaces after G2_BG_Main.
 constexpr std::array<Category, 6> WorldCategories{{
     {16, 0x38, 0x48, 0x40, 0x80, 0x00, None, false, false, false, true}, // BG layer
     {17, 0x38, 0x48, 0x40, 0x00, None},                                  // BG single
-    {19, 0x38, 0x48, 0x40, 0x00, None},                                  // BG gem
-    {21, 0x38, 0x48, 0x40, 0x00, None},                                  // BG interior
-    {22, 0x38, 0x48, 0x40, 0x30, 0x00},                                  // BG vein
-    {23, 0x30, None, None, None, None},                                  // Far: untextured
+    {19, 0x38, 0x48, 0x40, None, None, None, false, false, false, false, false, false,
+     true},                             // BG gem
+    {21, 0x38, 0x48, 0x40, 0x00, None}, // BG interior
+    {22, 0x38, 0x48, 0x40, 0x30, 0x00}, // BG vein
+    {23, 0x30, None, None, None, None}, // Far: untextured
 }};
 // G2_CH_Main: colour texture t1, decal texture t6.
 constexpr Category CharacterCategory{8, 0x68, 0x30, 0x70, 0xa0, None, 0x50, false, true};
@@ -396,6 +398,12 @@ constexpr Category InteriorCategory{13, 0x40, None, 0x48, None, None, None, fals
 constexpr u64 InteriorCube0 = 0x30;
 constexpr u64 InteriorCube1 = 0x38;
 constexpr u64 InteriorPixelBytes = 0xb0;
+// G2_BG_Gem: the texture objects of its colour and normal maps, and its pixel constants, whose
+// last word is the screen door's threshold.
+constexpr u64 GemColorMap = 0x48;
+constexpr u64 GemNormalMap = 0x50;
+constexpr u64 GemPixelBytes = 0x60;
+constexpr u64 GemPunchThrough = 0x50;
 // G2_CH_Contour: the constants of its vertex, geometry and pixel programs. The submesh holds the
 // range of its adjacency indices at +0x50, when it has more than 2 ranges.
 // G2_BG_Glass: normal map, and the pixel constants whole.
@@ -746,6 +754,10 @@ public:
             alpha_tested =
                 (flags & MainFlagAlpha) != 0 || Load<float>(material + MainPunchThrough) < 1.0f;
             material_index = AddMainMaterial(item, flags, constants, material, *mesh);
+        }
+        if (category.gem && material != 0) {
+            material_index = AddGem(item, material);
+            alpha_tested = material_index != 0 && Load<float>(material + GemPunchThrough) < 1.0f;
         }
         if (category.layers && material != 0) {
             material_index = AddLayers(item, constants, material);
@@ -1460,6 +1472,30 @@ private:
                     sizeof(out.gradation_low) + sizeof(out.gradation_high));
         out.hatching = (Load<u32>(item + MainFlags) & MainFlagNoHatching) == 0 ? hatching : 0;
         out.flags = Scene::MaterialLayers;
+        out.layer_material = header.layer_materials++;
+        return ++header.materials;
+    }
+
+    // Writes a G2_BG_Gem item's constants and maps to the packet and returns the index of its
+    // Material plus 1.
+    u32 AddGem(VAddr item, VAddr pixel_constants) {
+        if (header.materials == Scene::MaxMaterials ||
+            header.layer_materials == Scene::MaxLayerMaterials) {
+            header.dropped_materials++;
+            return 0;
+        }
+        const auto handle = [item](u64 field) {
+            const VAddr object = Load<VAddr>(item + field);
+            return object != 0 ? Textures::Get(object) : 0;
+        };
+        // The fields are written in order: the packet is write-combined.
+        Scene::LayerMaterial& gem = layer_materials[header.layer_materials];
+        std::memcpy(gem.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
+                    GemPixelBytes);
+        gem.color_maps[0] = handle(GemColorMap);
+        gem.normal_maps[0] = handle(GemNormalMap);
+        Scene::Material& out = materials[header.materials];
+        out.flags = Scene::MaterialGem;
         out.layer_material = header.layer_materials++;
         return ++header.materials;
     }

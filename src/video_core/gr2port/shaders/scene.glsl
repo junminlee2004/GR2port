@@ -101,6 +101,31 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer La
     LayerMaterial layers[];
 };
 
+// The game's G2_BG_Gem pixel constants, then its maps, in the place of a LayerMaterial.
+struct GemMaterial {
+    vec4 color_scale;
+    vec4 color;
+    vec2 projection;
+    vec2 offset;
+    vec2 scale;
+    float normal_scale;
+    float roughness;
+    float metallic;
+    float translucency;
+    float emissive;
+    float refraction;
+    float punch_through;
+    float constants_padding[59];
+    uint color_map;
+    uint color_maps_padding[3];
+    uint normal_map;
+    uint normal_maps_padding[3];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer GemMaterials {
+    GemMaterial gems[];
+};
+
 // The game's G2_CH_Main pixel constants, then what its programs take from elsewhere.
 struct Character {
     mat4 view_inverse;
@@ -386,6 +411,7 @@ const uint MaxBlades = 131072u;
 const uint MaterialLayered = 1u;
 const uint MaterialGradation = 2u;
 const uint MaterialLayers = 4u;
+const uint MaterialGem = 8u;
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Materials {
     Material materials[];
