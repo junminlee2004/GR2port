@@ -26,6 +26,7 @@
 #include "video_core/gr2port/deformers.h"
 #include "video_core/gr2port/device.h"
 #include "video_core/gr2port/fog.h"
+#include "video_core/gr2port/glass.h"
 #include "video_core/gr2port/look.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
@@ -156,6 +157,8 @@ struct Stats {
     u64 dropped_branches = 0;
     u64 world_decals = 0;
     u64 dropped_world_decals = 0;
+    u64 glass_materials = 0;
+    u64 dropped_glass = 0;
     u64 palette_rows = 0;
     std::array<u64, Scene::ItemCategories> category_items{};
     u64 casters = 0;
@@ -282,6 +285,7 @@ bool Thread::Init() {
         !World::Start(d, *memory, DepthFormat, Look::SceneFormat) ||
         !Contours::Start(d, Look::SceneFormat, DepthFormat) ||
         !Fog::Start(d, *memory, Look::SceneFormat) ||
+        !Glass::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !Vegetation::Start(d, *memory, World::SurfaceFormats, DepthFormat, Shadows::DepthFormat)) {
         return false;
     }
@@ -357,7 +361,8 @@ bool Thread::Recreate() {
     }
     needs_swapchain = !depth.image || !character_depth.image ||
                       !Look::Resize(swapchain->Extent(), swapchain->Format(), depth.view) ||
-                      !World::Resize(swapchain->Extent(), depth.view, character_depth.view);
+                      !World::Resize(swapchain->Extent(), depth.view, character_depth.view) ||
+                      !Glass::Resize(swapchain->Extent());
     if (!needs_swapchain) {
         Fog::Resize(depth.view);
     }
@@ -804,6 +809,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         Contours::Record(cmd, header, packet.address, scene_ring.buffer, offset, extent);
     }
     cmd.endRendering(dl);
+    if (drawn) {
+        Glass::Record(cmd, header, packet.address, scene_ring.buffer, offset, depth, extent);
+    }
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + ForwardTimestamp, dl);
@@ -903,6 +911,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.dropped_branches += header.dropped_branches;
     stats.world_decals += header.world_decals;
     stats.dropped_world_decals += header.dropped_world_decals;
+    stats.glass_materials += header.glass_materials;
+    stats.dropped_glass += header.dropped_glass;
     stats.dropped += header.dropped;
     stats.capture_ns += header.capture_ns;
     for (u32 part = 0; part < stats.capture_parts_ns.size(); part++) {
@@ -1145,6 +1155,9 @@ void Thread::Report() {
     LOG_INFO(Render_Vulkan, "GR2port world decals: per frame {:.1f} drawn, {:.1f} not drawn",
              static_cast<double>(stats.world_decals) / frames,
              static_cast<double>(stats.dropped_world_decals) / frames);
+    LOG_INFO(Render_Vulkan, "GR2port glass: per frame {:.1f} drawn, {:.1f} not drawn",
+             static_cast<double>(stats.glass_materials) / frames,
+             static_cast<double>(stats.dropped_glass) / frames);
     std::string categories;
     for (u32 c = 0; c < Scene::ItemCategories; c++) {
         if (stats.category_items[c] != 0) {

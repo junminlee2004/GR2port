@@ -16,6 +16,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/fault_report.h
     ${CMAKE_CURRENT_LIST_DIR}/fog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/fog.h
+    ${CMAKE_CURRENT_LIST_DIR}/glass.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/glass.h
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.cpp
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.h
     ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp
@@ -104,6 +106,8 @@ gr2port_add_shader(world.frag world_frag)
 gr2port_add_shader(world_alpha.frag world_alpha_frag)
 gr2port_add_shader(world_decal.vert world_decal_vert)
 gr2port_add_shader(world_decal.frag world_decal_frag)
+gr2port_add_shader(glass.vert glass_vert)
+gr2port_add_shader(glass.frag glass_frag)
 gr2port_add_shader(world_lines.comp world_lines_comp)
 gr2port_add_shader(occlusion.comp occlusion_comp)
 gr2port_add_shader(occlusion_depth.comp occlusion_depth_comp)

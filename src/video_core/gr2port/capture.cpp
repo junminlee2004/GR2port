@@ -367,6 +367,7 @@ struct Category {
     bool character = false;
     bool interior = false;
     bool layers = false;
+    bool glass = false;
 };
 constexpr Category MainCategory{15, 0x60, 0x38, 0x68, 0x00, 0x20, None, true}; // G2_BG_Main
 // The world's other opaque categories, drawn into the surfaces after G2_BG_Main.
@@ -388,6 +389,9 @@ constexpr u64 InteriorCube1 = 0x38;
 constexpr u64 InteriorPixelBytes = 0xb0;
 // G2_CH_Contour: the constants of its vertex, geometry and pixel programs. The submesh holds the
 // range of its adjacency indices at +0x50, when it has more than 2 ranges.
+// G2_BG_Glass: normal map, and the pixel constants whole.
+constexpr Category GlassCategory{18,   0x38,  0x48,  0x40,  None,  None,
+                                 None, false, false, false, false, true};
 constexpr u32 ContourCategory = 11;
 constexpr u64 ContourVertexConstants = 0x30;
 constexpr u64 ContourGeometryConstants = 0x38;
@@ -625,7 +629,9 @@ public:
           grass{reinterpret_cast<Scene::Grass*>(packet + Scene::GrassOffset)},
           branch_jobs{reinterpret_cast<Scene::BranchJob*>(packet + Scene::BranchJobsOffset)},
           branches{reinterpret_cast<Scene::Branch*>(packet + Scene::BranchesOffset)},
-          world_decals{reinterpret_cast<Scene::WorldDecal*>(packet + Scene::WorldDecalsOffset)} {}
+          world_decals{reinterpret_cast<Scene::WorldDecal*>(packet + Scene::WorldDecalsOffset)},
+          glass_materials{
+              reinterpret_cast<Scene::GlassMaterial*>(packet + Scene::GlassMaterialsOffset)} {}
 
     // Ends a part of the capture's time.
     void EndPart(Scene::CapturePart part) {
@@ -791,8 +797,20 @@ public:
             }
             material_index = AddInterior(item, material);
         }
+        if (category.glass) {
+            if (material == 0 || mesh->normal == 0 || mesh->tangent == 0 ||
+                header.glass_materials == Scene::MaxGlassMaterials) {
+                header.dropped_glass++;
+                header.dropped++;
+                return;
+            }
+            std::memcpy(&glass_materials[header.glass_materials],
+                        reinterpret_cast<const void*>(material), sizeof(Scene::GlassMaterial));
+            material_index = ++header.glass_materials;
+        }
         const Scene::DrawList list =
-            category.interior    ? Scene::DrawList::Interior
+            category.glass       ? Scene::DrawList::Glass
+            : category.interior  ? Scene::DrawList::Interior
             : category.character ? Scene::DrawList::Character
             : alpha_tested       ? (culled ? Scene::DrawList::AlphaCulled : Scene::DrawList::Alpha)
                            : (culled ? Scene::DrawList::OpaqueCulled : Scene::DrawList::Opaque);
@@ -1603,6 +1621,7 @@ private:
     Scene::BranchJob* branch_jobs;
     Scene::Branch* branches;
     Scene::WorldDecal* world_decals;
+    Scene::GlassMaterial* glass_materials;
     std::array<VAddr, Scene::MaxGrass> grass_records;
     u32 grass_record_count = 0;
     float grass_advance = 0.0f;
@@ -2224,6 +2243,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     for (const Category& category : WorldCategories) {
         add_category(category);
     }
+    add_category(GlassCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + BranchCategory * 4), LeafDomainConstants,
                 BranchPixelConstants, keyed(BranchCategory),
                 [&](VAddr item) { writer.AddBranch(item); });

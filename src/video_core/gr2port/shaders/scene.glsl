@@ -263,6 +263,25 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Le
     Leaf leaves[];
 };
 
+// The constants of a G2_BG_Glass pixel program.
+struct GlassMaterial {
+    mat4 view_inverse;
+    vec4 split_depths;
+    vec4 light_color;
+    vec4 light_direction;
+    vec4 normal_transform;
+    vec4 reflectance;
+    vec4 translucency;
+    vec4 refraction;
+    vec2 projection;
+    float roughness;
+    float normal_scale;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer GlassMaterials {
+    GlassMaterial materials[];
+};
+
 // A box of the world that blends a decal into the surfaces inside it.
 struct WorldDecal {
     mat4 world_view;

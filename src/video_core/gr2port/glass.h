@@ -1,0 +1,30 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#pragma once
+
+#include "video_core/gr2port/device.h"
+#include "video_core/gr2port/scene.h"
+
+namespace Gr2Port {
+class Memory;
+struct Image;
+} // namespace Gr2Port
+
+// The game's G2_BG_Glass, after the scene's forward draws and before its fog. A copy of the scene's
+// colour takes the fog, as the game's BackupColorBuffer2 does, and each pane refracts that copy.
+namespace Gr2Port::Glass {
+
+/// After Textures::Start and Shadows::Start: creates the pipeline.
+bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Format depth_format);
+
+/// With the GPU idle: creates the scene's copy at extent.
+bool Resize(vk::Extent2D extent);
+
+/// Outside rendering, with the scene's colour and depth as attachments: when the packet at address,
+/// which is at offset in buffer, has glass, copies the scene and draws the panes into it. Leaves
+/// the scene's colour and depth as attachments.
+void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
+            u64 offset, const Image& depth, vk::Extent2D extent);
+
+} // namespace Gr2Port::Glass

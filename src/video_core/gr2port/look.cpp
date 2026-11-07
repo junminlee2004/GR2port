@@ -317,7 +317,8 @@ bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth)
     g_memory->Destroy(g_scene);
     g_scene = g_memory->CreateImage(SceneFormat, extent,
                                     vk::ImageUsageFlagBits::eColorAttachment |
-                                        vk::ImageUsageFlagBits::eSampled,
+                                        vk::ImageUsageFlagBits::eSampled |
+                                        vk::ImageUsageFlagBits::eTransferSrc,
                                     vk::ImageAspectFlagBits::eColor);
     if (!g_scene.image) {
         return false;

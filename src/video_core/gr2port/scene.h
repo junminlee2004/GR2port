@@ -46,6 +46,8 @@ inline constexpr u32 MaxBlades = 131072;
 inline constexpr u32 BladeBytes = 32;
 /// Decals of the world per packet, the game's limit.
 inline constexpr u32 MaxWorldDecals = 1024;
+/// Materials of G2_BG_Glass draws per packet.
+inline constexpr u32 MaxGlassMaterials = 256;
 /// Branch instances the kernel sways per packet, and branch ribbon draws.
 inline constexpr u32 MaxBranchJobs = 512;
 inline constexpr u32 MaxBranches = 512;
@@ -83,6 +85,8 @@ enum class DrawList : u32 {
     /// pixel_constants start with the game's 44 words, with their cube maps in normal_map and
     /// reflection and a bend_bias of 0.
     Interior,
+    /// G2_BG_Glass draws. material names a GlassMaterial, texture is the normal map.
+    Glass,
     Count,
 };
 
@@ -197,6 +201,9 @@ struct Header {
     /// WorldDecal records written, and decals not drawn (no colour map).
     u32 world_decals;
     u32 dropped_world_decals;
+    /// GlassMaterial records written, and glass items not drawn.
+    u32 glass_materials;
+    u32 dropped_glass;
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
@@ -494,6 +501,15 @@ struct WorldDecal {
     u32 padding[3];
 };
 static_assert(sizeof(WorldDecal) == 304);
+
+/// The constants of a G2_BG_Glass pixel program, the game's 48 words: the view's inverse, the
+/// cascades' split depths, the key light's colour and direction, the normal map's transform, the
+/// reflectance, the translucency, the refraction ratios, the projection's scales, the roughness and
+/// the normal scale. Matrices are as in Draw.
+struct GlassMaterial {
+    float constants[48];
+};
+static_assert(sizeof(GlassMaterial) == 192);
 
 /// A Branch instance the renderer's kernel sways as the game's does, in its copy of the vertices,
 /// from its shape's. The kernel writes the state, a timer and a phase per segment. Matrices are as
@@ -837,7 +853,8 @@ inline constexpr u64 BranchJobsOffset = GrassCommandOffset + 16;
 inline constexpr u64 BranchesOffset = BranchJobsOffset + MaxBranchJobs * sizeof(BranchJob);
 inline constexpr u64 BranchCommandsOffset = BranchesOffset + MaxBranches * sizeof(Branch);
 inline constexpr u64 WorldDecalsOffset = BranchCommandsOffset + MaxBranches * sizeof(VertexCommand);
-inline constexpr u64 PacketBytes = WorldDecalsOffset + MaxWorldDecals * sizeof(WorldDecal);
+inline constexpr u64 GlassMaterialsOffset = WorldDecalsOffset + MaxWorldDecals * sizeof(WorldDecal);
+inline constexpr u64 PacketBytes = GlassMaterialsOffset + MaxGlassMaterials * sizeof(GlassMaterial);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -848,6 +865,6 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               LayerMaterialsOffset % 16 == 0 && GrassOffset % 16 == 0 &&
               GrassCommandOffset % 16 == 0 && BranchJobsOffset % 16 == 0 &&
               BranchesOffset % 16 == 0 && BranchCommandsOffset % 16 == 0 &&
-              WorldDecalsOffset % 16 == 0);
+              WorldDecalsOffset % 16 == 0 && GlassMaterialsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene
