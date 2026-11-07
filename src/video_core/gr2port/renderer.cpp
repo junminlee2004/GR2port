@@ -47,6 +47,7 @@
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
 #include "video_core/gr2port/vegetation.h"
+#include "video_core/gr2port/velocity.h"
 #include "video_core/gr2port/water.h"
 #include "video_core/gr2port/window.h"
 #include "video_core/gr2port/world.h"
@@ -298,7 +299,8 @@ bool Thread::Init() {
                                       Placement::Upload);
     if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
         !Textures::Start(d, *memory) || !Shadows::Start(d, *memory) ||
-        !Deformers::Start(d, *memory) || !Look::Start(d, *memory, DepthFormat) ||
+        !Deformers::Start(d, *memory) || !Velocity::Start(d, *memory) ||
+        !Look::Start(d, *memory, DepthFormat) ||
         !World::Start(d, *memory, DepthFormat, Look::SceneFormat) ||
         !Contours::Start(d, Look::SceneFormat, DepthFormat) ||
         !Fog::Start(d, *memory, Look::SceneFormat) ||
@@ -383,6 +385,7 @@ bool Thread::Recreate() {
                                      vk::ImageAspectFlagBits::eDepth);
     }
     needs_swapchain = !depth.image || !character_depth.image ||
+                      !Velocity::Resize(swapchain->Extent(), depth.view, character_depth.view) ||
                       !Look::Resize(swapchain->Extent(), swapchain->Format(), depth.view) ||
                       !World::Resize(swapchain->Extent(), depth.view, character_depth.view) ||
                       !Glass::Resize(swapchain->Extent()) ||
@@ -759,6 +762,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                 vk::ImageAspectFlagBits::eDepth);
         World::RecordOcclusion(cmd, packet.address);
     }
+    Velocity::Record(cmd, drawn, packet.address);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + OcclusionTimestamp, dl);
