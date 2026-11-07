@@ -25,6 +25,7 @@
 #include "common/decoder.h"
 #include "common/signal_context.h"
 #include "common/types.h"
+#include "core/emulator_settings.h"
 #include "core/signals.h"
 #include "core/tls.h"
 #include "cpu_patches.h"
@@ -44,6 +45,9 @@ using namespace Xbyak::util;
 namespace Core {
 
 static Xbyak::Reg ZydisToXbyakRegister(const ZydisRegister reg) {
+    if (reg >= ZYDIS_REGISTER_AX && reg <= ZYDIS_REGISTER_R15W) {
+        return Xbyak::Reg16(reg - ZYDIS_REGISTER_AX + Xbyak::Operand::AX);
+    }
     if (reg >= ZYDIS_REGISTER_EAX && reg <= ZYDIS_REGISTER_R15D) {
         return Xbyak::Reg32(reg - ZYDIS_REGISTER_EAX + Xbyak::Operand::EAX);
     }
@@ -66,17 +70,21 @@ static Xbyak::Reg ZydisToXbyakRegisterOperand(const ZydisDecodedOperand& operand
     return ZydisToXbyakRegister(operand.reg.value);
 }
 
+/// If bits is not 0, the address has that size. stack_adjust is added to an RSP-relative
+/// displacement, for trampolines that have moved RSP.
 static Xbyak::Address ZydisToXbyakMemoryOperand(void* address,
                                                 const ZydisDecodedInstruction& instruction,
-                                                const ZydisDecodedOperand& operand) {
+                                                const ZydisDecodedOperand& operand, u32 bits = 0,
+                                                s32 stack_adjust = 0) {
     ASSERT_MSG(operand.type == ZYDIS_OPERAND_TYPE_MEMORY, "Expected memory operand, got type: {}",
                static_cast<u32>(operand.type));
 
+    const Xbyak::AddressFrame frame(bits);
     if (operand.mem.base == ZYDIS_REGISTER_RIP || operand.mem.base == ZYDIS_REGISTER_EIP) {
         ZyanU64 target{};
         ASSERT(ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&instruction, &operand,
                                                      reinterpret_cast<ZyanU64>(address), &target)));
-        return ptr[rip + reinterpret_cast<const void*>(target)];
+        return frame[rip + reinterpret_cast<const void*>(target)];
     }
 
     Xbyak::RegExp expression{};
@@ -90,11 +98,15 @@ static Xbyak::Address ZydisToXbyakMemoryOperand(void* address,
             expression = expression + ZydisToXbyakRegister(operand.mem.index);
         }
     }
-    if (operand.mem.disp.size != 0 && operand.mem.disp.value != 0) {
-        expression = expression + operand.mem.disp.value;
+    ZyanI64 displacement = operand.mem.disp.size != 0 ? operand.mem.disp.value : 0;
+    if (operand.mem.base == ZYDIS_REGISTER_RSP) {
+        displacement += stack_adjust;
+    }
+    if (displacement != 0) {
+        expression = expression + displacement;
     }
 
-    return ptr[expression];
+    return frame[expression];
 }
 
 static bool FilterTcbAccess(const ZydisDecodedOperand* operands) {
@@ -523,6 +535,266 @@ static void ReplaceMOVNTSD(void* address, const ZydisDecodedInstruction&,
     ReplaceMOVNT(address, 0xF2);
 }
 
+static bool LegacyCpuPatchesForced() {
+    static const bool forced = EmulatorSettings.IsLegacyCpuPatchesEnabled();
+    return forced;
+}
+
+static bool FilterNoBMI1(const ZydisDecodedOperand*) {
+    static const bool missing = !Cpu().has(Cpu::tBMI1);
+    return missing || LegacyCpuPatchesForced();
+}
+
+static bool FilterNoLZCNT(const ZydisDecodedOperand*) {
+    static const bool missing = !Cpu().has(Cpu::tLZCNT);
+    return missing || LegacyCpuPatchesForced();
+}
+
+static bool FilterNoMOVBE(const ZydisDecodedOperand*) {
+    static const bool missing = !Cpu().has(Cpu::tMOVBE);
+    return missing || LegacyCpuPatchesForced();
+}
+
+// Picks two general registers that no operand uses. RCX is left out for shift counts.
+static std::array<Xbyak::Reg64, 2> PickFreeRegisters(const ZydisDecodedInstruction& instruction,
+                                                     const ZydisDecodedOperand* operands) {
+    std::bitset<16> used;
+    used.set(rsp.getIdx());
+    used.set(rcx.getIdx());
+    const auto mark = [&used](ZydisRegister reg) {
+        const auto enclosing = ZydisRegisterGetLargestEnclosing(ZYDIS_MACHINE_MODE_LONG_64, reg);
+        if (enclosing >= ZYDIS_REGISTER_RAX && enclosing <= ZYDIS_REGISTER_R15) {
+            used.set(enclosing - ZYDIS_REGISTER_RAX);
+        }
+    };
+    for (u8 i = 0; i < instruction.operand_count_visible; ++i) {
+        if (operands[i].type == ZYDIS_OPERAND_TYPE_REGISTER) {
+            mark(operands[i].reg.value);
+        } else if (operands[i].type == ZYDIS_OPERAND_TYPE_MEMORY) {
+            mark(operands[i].mem.base);
+            mark(operands[i].mem.index);
+        }
+    }
+    std::array<Xbyak::Reg64, 2> picked;
+    for (size_t index = 0, count = 0; count < picked.size(); ++index) {
+        if (!used[index]) {
+            picked[count++] = Xbyak::Reg64(static_cast<int>(index));
+        }
+    }
+    return picked;
+}
+
+template <typename Emit>
+static void EmitWithOperand(void* address, const ZydisDecodedInstruction& instruction,
+                            const ZydisDecodedOperand& operand, s32 stack_adjust, Emit&& emit) {
+    if (operand.type == ZYDIS_OPERAND_TYPE_REGISTER) {
+        emit(ZydisToXbyakRegisterOperand(operand));
+    } else {
+        emit(ZydisToXbyakMemoryOperand(address, instruction, operand, operand.size, stack_adjust));
+    }
+}
+
+static void GenerateANDN(void* address, const ZydisDecodedInstruction& instruction,
+                         const ZydisDecodedOperand* operands, Xbyak::CodeGenerator& c) {
+    const auto dst = ZydisToXbyakRegisterOperand(operands[0]);
+    const auto scratch = PickFreeRegisters(instruction, operands)[0];
+    const auto value = scratch.changeBit(dst.getBit());
+
+    c.lea(rsp, ptr[rsp - 128]);
+    c.push(scratch);
+    c.mov(value, ZydisToXbyakRegisterOperand(operands[1]));
+    c.not_(value);
+    // AND sets SF and ZF from the result and clears CF and OF, as ANDN does.
+    EmitWithOperand(address, instruction, operands[2], 128 + 8,
+                    [&](const auto& src) { c.and_(value, src); });
+    c.mov(dst, value);
+    c.pop(scratch);
+    c.lea(rsp, ptr[rsp + 128]);
+}
+
+static void GenerateBEXTR(void* address, const ZydisDecodedInstruction& instruction,
+                          const ZydisDecodedOperand* operands, Xbyak::CodeGenerator& c) {
+    const auto dst = ZydisToXbyakRegisterOperand(operands[0]);
+    const u32 bits = dst.getBit();
+    const auto [value, length] = PickFreeRegisters(instruction, operands);
+    const auto sized_value = value.changeBit(bits);
+
+    c.lea(rsp, ptr[rsp - 128]);
+    c.push(rcx);
+    c.push(value);
+    c.push(length);
+    // Both sources are read before RCX, which either may use, holds the shift count.
+    EmitWithOperand(address, instruction, operands[1], 128 + 24,
+                    [&](const auto& src) { c.mov(sized_value, src); });
+    c.mov(length.cvt32(), ZydisToXbyakRegisterOperand(operands[2]).cvt32());
+    c.movzx(ecx, length.cvt8());
+    c.shr(length.cvt32(), 8);
+    c.movzx(length.cvt32(), length.cvt8());
+
+    Xbyak::Label zero, unmasked;
+    c.cmp(ecx, bits);
+    c.jae(zero);
+    c.shr(sized_value, cl);
+    c.cmp(length.cvt32(), bits);
+    c.jae(unmasked);
+    c.mov(ecx, length.cvt32());
+    c.mov(length.cvt32(), 1);
+    c.shl(length, cl);
+    c.dec(length);
+    c.and_(value, length);
+    c.jmp(unmasked);
+    c.L(zero);
+    c.xor_(value.cvt32(), value.cvt32());
+    c.L(unmasked);
+    // BEXTR sets ZF from the result and clears CF and OF.
+    c.test(sized_value, sized_value);
+    if (dst.getIdx() == rcx.getIdx()) {
+        // The saved RCX is the destination, so the pop below delivers the result.
+        c.mov(qword[rsp + 16], value);
+    } else {
+        c.mov(dst, sized_value);
+    }
+    c.pop(length);
+    c.pop(value);
+    c.pop(rcx);
+    c.lea(rsp, ptr[rsp + 128]);
+}
+
+static void GenerateBLSI(void* address, const ZydisDecodedInstruction& instruction,
+                         const ZydisDecodedOperand* operands, Xbyak::CodeGenerator& c) {
+    const auto dst = ZydisToXbyakRegisterOperand(operands[0]);
+    const auto [value, negated] = PickFreeRegisters(instruction, operands);
+    const auto sized_value = value.changeBit(dst.getBit());
+    const auto sized_negated = negated.changeBit(dst.getBit());
+
+    c.lea(rsp, ptr[rsp - 128]);
+    c.push(value);
+    c.push(negated);
+    EmitWithOperand(address, instruction, operands[1], 128 + 16,
+                    [&](const auto& src) { c.mov(sized_value, src); });
+    c.mov(sized_negated, sized_value);
+    c.neg(sized_negated);
+    // AND sets SF and ZF from the result and clears CF and OF. BLSI sets CF for a nonzero source,
+    // which is when the result is nonzero.
+    c.and_(sized_value, sized_negated);
+    Xbyak::Label done;
+    c.jz(done);
+    c.stc();
+    c.L(done);
+    c.mov(dst, sized_value);
+    c.pop(negated);
+    c.pop(value);
+    c.lea(rsp, ptr[rsp + 128]);
+}
+
+static void GenerateBLSR(void* address, const ZydisDecodedInstruction& instruction,
+                         const ZydisDecodedOperand* operands, Xbyak::CodeGenerator& c) {
+    const auto dst = ZydisToXbyakRegisterOperand(operands[0]);
+    const auto [value, lowered] = PickFreeRegisters(instruction, operands);
+    const auto sized_value = value.changeBit(dst.getBit());
+    const auto sized_lowered = lowered.changeBit(dst.getBit());
+
+    c.lea(rsp, ptr[rsp - 128]);
+    c.push(value);
+    c.push(lowered);
+    EmitWithOperand(address, instruction, operands[1], 128 + 16,
+                    [&](const auto& src) { c.mov(sized_value, src); });
+    Xbyak::Label nonzero, done;
+    c.test(sized_value, sized_value);
+    c.jnz(nonzero);
+    // A zero source gives a zero result with CF set.
+    c.stc();
+    c.jmp(done);
+    c.L(nonzero);
+    c.lea(sized_lowered, ptr[value - 1]);
+    // AND sets SF and ZF from the result and clears CF and OF.
+    c.and_(sized_value, sized_lowered);
+    c.L(done);
+    c.mov(dst, sized_value);
+    c.pop(lowered);
+    c.pop(value);
+    c.lea(rsp, ptr[rsp + 128]);
+}
+
+// TZCNT and LZCNT run as BSF and BSR on CPUs without them instead of faulting.
+static void GenerateZeroCount(void* address, const ZydisDecodedInstruction& instruction,
+                              const ZydisDecodedOperand* operands, Xbyak::CodeGenerator& c) {
+    const bool leading = instruction.mnemonic == ZYDIS_MNEMONIC_LZCNT;
+    const auto dst = ZydisToXbyakRegisterOperand(operands[0]);
+    const u32 bits = dst.getBit();
+
+    Xbyak::Label nonzero, done;
+    EmitWithOperand(address, instruction, operands[1], 0, [&](const auto& src) {
+        if (leading) {
+            c.bsr(dst, src);
+        } else {
+            c.bsf(dst, src);
+        }
+    });
+    c.jnz(nonzero);
+    // A zero source counts the operand size, with CF set and ZF clear.
+    c.mov(dst, bits);
+    c.test(dst, dst);
+    c.stc();
+    c.jmp(done);
+    c.L(nonzero);
+    // Both clear CF for a nonzero source and set ZF for a zero count. XOR turns the index of the
+    // highest set bit into the number of zeros above it.
+    if (leading) {
+        c.xor_(dst, bits - 1);
+    } else {
+        c.test(dst, dst);
+    }
+    c.L(done);
+}
+
+// MOVBE leaves the flags unchanged, so this uses only MOV, MOVZX, BSWAP and LEA. A 16-bit value
+// is swapped in the upper half of a 32-bit register and brought down through a stack slot.
+static void GenerateMOVBE(void* address, const ZydisDecodedInstruction& instruction,
+                          const ZydisDecodedOperand* operands, Xbyak::CodeGenerator& c) {
+    const bool load = operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER;
+    const auto& memory_operand = operands[load ? 1 : 0];
+    const auto reg = ZydisToXbyakRegisterOperand(operands[load ? 0 : 1]);
+    const auto scratch = PickFreeRegisters(instruction, operands)[0];
+    const auto value = scratch.changeBit(reg.getBit());
+    const auto swap = [&c](const Xbyak::Reg& target) {
+        if (target.getBit() == 64) {
+            c.bswap(target.cvt64());
+        } else {
+            c.bswap(target.cvt32());
+        }
+    };
+
+    c.lea(rsp, ptr[rsp - 136]);
+    c.push(scratch);
+    const auto memory = ZydisToXbyakMemoryOperand(address, instruction, memory_operand,
+                                                  memory_operand.size, 136 + 8);
+    if (reg.getBit() == 16) {
+        if (load) {
+            c.movzx(scratch.cvt32(), memory);
+        } else {
+            c.movzx(scratch.cvt32(), reg);
+        }
+        c.bswap(scratch.cvt32());
+        c.mov(dword[rsp + 8], scratch.cvt32());
+        if (load) {
+            c.mov(reg, word[rsp + 10]);
+        } else {
+            c.mov(value, word[rsp + 10]);
+            c.mov(memory, value);
+        }
+    } else if (load) {
+        c.mov(reg, memory);
+        swap(reg);
+    } else {
+        c.mov(value, reg);
+        swap(value);
+        c.mov(memory, value);
+    }
+    c.pop(scratch);
+    c.lea(rsp, ptr[rsp + 136]);
+}
+
 #if defined(__APPLE__)
 // Rosetta 2 mistranslates VCMPSS with NEQ, NLT or NLE: if the destination is then reloaded by a
 // full width VEX load, later scalar reads of it still return the compare mask.
@@ -750,6 +1022,15 @@ static const std::unordered_map<ZydisMnemonic, std::vector<PatchInfo>> Patches =
     {ZYDIS_MNEMONIC_INSERTQ, {{FilterNoSSE4a, GenerateINSERTQ, true}}},
     {ZYDIS_MNEMONIC_MOVNTSS, {{FilterNoSSE4a, ReplaceMOVNTSS, false}}},
     {ZYDIS_MNEMONIC_MOVNTSD, {{FilterNoSSE4a, ReplaceMOVNTSD, false}}},
+
+    // BMI1, LZCNT and MOVBE, which Intel CPUs before Haswell lack
+    {ZYDIS_MNEMONIC_ANDN, {{FilterNoBMI1, GenerateANDN, true}}},
+    {ZYDIS_MNEMONIC_BEXTR, {{FilterNoBMI1, GenerateBEXTR, true}}},
+    {ZYDIS_MNEMONIC_BLSI, {{FilterNoBMI1, GenerateBLSI, true}}},
+    {ZYDIS_MNEMONIC_BLSR, {{FilterNoBMI1, GenerateBLSR, true}}},
+    {ZYDIS_MNEMONIC_TZCNT, {{FilterNoBMI1, GenerateZeroCount, true}}},
+    {ZYDIS_MNEMONIC_LZCNT, {{FilterNoLZCNT, GenerateZeroCount, true}}},
+    {ZYDIS_MNEMONIC_MOVBE, {{FilterNoMOVBE, GenerateMOVBE, true}}},
 
 #if defined(__APPLE__)
     // Rosetta 2
@@ -2106,6 +2387,15 @@ static RedZonePatchResult PatchSegmentStatically(u64 segment_addr, u64 segment_s
             const auto& rewrite = rewrite_sites.at(site);
             if (rewrite.cpu_patch != nullptr) {
                 ++result.unsupported_cpu_patch_instruction_count;
+                // An unpatched LZCNT or TZCNT runs as BSR or BSF, and the other legacy CPU
+                // instructions fault, so each one is reported.
+                const auto filter = rewrite.cpu_patch->filter;
+                if (filter == FilterNoBMI1 || filter == FilterNoLZCNT || filter == FilterNoMOVBE) {
+                    LOG_WARNING(
+                        Core, "Could not patch {} at {:#x} for this CPU",
+                        ZydisMnemonicGetString(function.instructions.at(site).instruction.mnemonic),
+                        site);
+                }
             }
             if (rewrite.protect_red_zone) {
                 ++result.unrelocatable_memory_instruction_count;
