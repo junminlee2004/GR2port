@@ -12,6 +12,12 @@ namespace Gr2Port::Capture {
 /// ring.
 void OnFrame(VAddr frame_graph, VAddr view);
 
+/// At the entry of the particle manager's first step of a frame.
+void OnParticleSetup(VAddr fx);
+
+/// After the particle manager's last step of a frame: completes and publishes the frame's scene.
+void OnParticleList(VAddr fx);
+
 /// The frames the game has started.
 u64 Frames();
 

@@ -6,6 +6,7 @@
 #include "common/logging/log.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
+#include "video_core/gr2port/particles.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/shaders/shadow_alpha_frag.h"
 #include "video_core/gr2port/shaders/shadow_alpha_vert.h"
@@ -211,8 +212,8 @@ bool Start(const Device& device, Memory& memory) {
     return true;
 }
 
-void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
-            u64 offset, vk::QueryPool timestamps, u32 first_query) {
+void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet, u64 address,
+            vk::Buffer buffer, u64 offset, vk::QueryPool timestamps, u32 first_query) {
     const auto& dl = g_device->dispatch;
     Transition(cmd, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
                vk::PipelineStageFlagBits2::eFragmentShader |
@@ -271,6 +272,9 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
                 count, sizeof(Scene::Command), dl);
         }
         Vegetation::RecordShadows(cmd, header, address, buffer, offset, c);
+        if ((header.cascades >> c & 1) != 0) {
+            Particles::RecordShadows(cmd, header, packet, address, buffer, offset, c);
+        }
         cmd.endRendering(dl);
         if (timestamps) {
             cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,

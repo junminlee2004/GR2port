@@ -15,9 +15,11 @@
 
 #include "common/logging/log.h"
 #include "video_core/gr2port/capture.h"
+#include "video_core/gr2port/capture_math.h"
 #include "video_core/gr2port/deformers.h"
 #include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/meshes.h"
+#include "video_core/gr2port/particle_capture.h"
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/scene_ring.h"
 #include "video_core/gr2port/textures.h"
@@ -374,6 +376,7 @@ struct Category {
     bool interior = false;
     bool layers = false;
     bool glass = false;
+    bool self_translucent = false;
 };
 constexpr Category MainCategory{15, 0x60, 0x38, 0x68, 0x00, 0x20, None, true}; // G2_BG_Main
 // The world's other opaque categories, drawn into the surfaces after G2_BG_Main.
@@ -398,6 +401,11 @@ constexpr u64 InteriorPixelBytes = 0xb0;
 // G2_BG_Glass: normal map, and the pixel constants whole.
 constexpr Category GlassCategory{18,   0x38,  0x48,  0x40,  None,  None,
                                  None, false, false, false, false, true};
+// SelfTranslucent: its vertex constants are WorldViewProj and the distance to move the skin along
+// its normal; its pixel constants are one colour; the item holds its stencil value.
+constexpr Category SelfTranslucentCategory{10,    0x38,  None,  0x40,  0x00,  None, None,
+                                           false, false, false, false, false, true};
+constexpr u64 SelfTranslucentStencil = 0x30;
 constexpr u32 ContourCategory = 11;
 constexpr u64 ContourVertexConstants = 0x30;
 constexpr u64 ContourGeometryConstants = 0x38;
@@ -547,63 +555,6 @@ struct GridConstants {
     u32 spheres;
     std::array<float, 2> fade;
 };
-
-template <typename T>
-T Load(VAddr address) {
-    T value;
-    std::memcpy(&value, reinterpret_cast<const void*>(address), sizeof(T));
-    return value;
-}
-
-using Matrix = std::array<float, 16>;
-
-// a * b for the game's row-major matrices.
-Matrix Multiply(const Matrix& a, const Matrix& b) {
-    Matrix result{};
-    for (u32 row = 0; row < 4; row++) {
-        for (u32 column = 0; column < 4; column++) {
-            for (u32 i = 0; i < 4; i++) {
-                result[row * 4 + column] += a[row * 4 + i] * b[i * 4 + column];
-            }
-        }
-    }
-    return result;
-}
-
-// A's inverse.
-Matrix Invert(const Matrix& a) {
-    const float s0 = a[0] * a[5] - a[4] * a[1];
-    const float s1 = a[0] * a[6] - a[4] * a[2];
-    const float s2 = a[0] * a[7] - a[4] * a[3];
-    const float s3 = a[1] * a[6] - a[5] * a[2];
-    const float s4 = a[1] * a[7] - a[5] * a[3];
-    const float s5 = a[2] * a[7] - a[6] * a[3];
-    const float c5 = a[10] * a[15] - a[14] * a[11];
-    const float c4 = a[9] * a[15] - a[13] * a[11];
-    const float c3 = a[9] * a[14] - a[13] * a[10];
-    const float c2 = a[8] * a[15] - a[12] * a[11];
-    const float c1 = a[8] * a[14] - a[12] * a[10];
-    const float c0 = a[8] * a[13] - a[12] * a[9];
-    const float scale = 1.0f / (s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0);
-    return {
-        (a[5] * c5 - a[6] * c4 + a[7] * c3) * scale,
-        (-a[1] * c5 + a[2] * c4 - a[3] * c3) * scale,
-        (a[13] * s5 - a[14] * s4 + a[15] * s3) * scale,
-        (-a[9] * s5 + a[10] * s4 - a[11] * s3) * scale,
-        (-a[4] * c5 + a[6] * c2 - a[7] * c1) * scale,
-        (a[0] * c5 - a[2] * c2 + a[3] * c1) * scale,
-        (-a[12] * s5 + a[14] * s2 - a[15] * s1) * scale,
-        (a[8] * s5 - a[10] * s2 + a[11] * s1) * scale,
-        (a[4] * c4 - a[5] * c2 + a[7] * c0) * scale,
-        (-a[0] * c4 + a[1] * c2 - a[3] * c0) * scale,
-        (a[12] * s4 - a[13] * s2 + a[15] * s0) * scale,
-        (-a[8] * s4 + a[9] * s2 - a[11] * s0) * scale,
-        (-a[4] * c3 + a[5] * c1 - a[6] * c0) * scale,
-        (a[0] * c3 - a[1] * c1 + a[2] * c0) * scale,
-        (-a[12] * s3 + a[13] * s1 - a[14] * s0) * scale,
-        (a[8] * s3 - a[9] * s1 + a[10] * s0) * scale,
-    };
-}
 
 // What the game's Decal pass multiplies a decal's box by.
 struct DecalView {
@@ -827,8 +778,19 @@ public:
                         reinterpret_cast<const void*>(material), sizeof(Scene::GlassMaterial));
             material_index = ++header.glass_materials;
         }
+        u32 stencil = 0;
+        if (category.self_translucent) {
+            stencil = Load<u8>(item + SelfTranslucentStencil);
+            if (material == 0 || stencil == 0 || stencil > Scene::SelfTranslucentLists) {
+                header.dropped++;
+                return;
+            }
+        }
         const Scene::DrawList list =
-            category.glass       ? Scene::DrawList::Glass
+            category.self_translucent
+                ? static_cast<Scene::DrawList>(static_cast<u32>(Scene::DrawList::SelfTranslucent1) +
+                                               stencil - 1)
+            : category.glass     ? Scene::DrawList::Glass
             : category.interior  ? Scene::DrawList::Interior
             : category.character ? Scene::DrawList::Character
             : alpha_tested       ? (culled ? Scene::DrawList::AlphaCulled : Scene::DrawList::Alpha)
@@ -2170,6 +2132,23 @@ GridConstants ReadGridConstants(VAddr view) {
 
 } // namespace
 
+// A written scene that waits for the particle manager's steps, later in the frame graph.
+struct PendingPacket {
+    VAddr view = 0;
+    u8* packet = nullptr;
+    u64 frame = 0;
+    Scene::Header header{};
+};
+PendingPacket g_pending;
+
+void PublishPending() {
+    if (g_pending.packet != nullptr) {
+        std::memcpy(g_pending.packet, &g_pending.header, sizeof(g_pending.header));
+        SceneRing::Publish(g_pending.frame);
+        g_pending.packet = nullptr;
+    }
+}
+
 void LogFrameRate(std::chrono::steady_clock::time_point now, bool capturing) {
     if (g_rate_frames == 0) {
         g_rate_start = now;
@@ -2201,6 +2180,7 @@ void LogFrameRate(std::chrono::steady_clock::time_point now, bool capturing) {
 }
 
 void OnFrame(VAddr frame_graph, VAddr view) {
+    PublishPending();
     const auto start = std::chrono::steady_clock::now();
     const u64 frame = g_frames.load(std::memory_order_relaxed) + 1;
     g_frames.store(frame, std::memory_order_relaxed);
@@ -2329,6 +2309,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     }
     writer.EndPart(Scene::CapturePart::World);
     add_category(CharacterCategory);
+    add_category(SelfTranslucentCategory);
     add_category(InteriorCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + ContourCategory * 4), ContourVertexConstants,
                 None, keyed(ContourCategory), [&](VAddr item) { writer.AddContour(item); });
@@ -2355,8 +2336,26 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     header.capture_ns = static_cast<u32>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                              std::chrono::steady_clock::now() - start)
                                              .count());
-    std::memcpy(packet, &header, sizeof(header));
-    SceneRing::Publish(frame);
+    g_pending.packet = packet;
+    g_pending.view = view;
+    g_pending.frame = frame;
+    g_pending.header = header;
+}
+
+void OnParticleSetup(VAddr fx) {
+    ParticleCapture::OnSetup(fx);
+}
+
+void OnParticleList(VAddr fx) {
+    if (g_pending.packet != nullptr) {
+        const auto start = std::chrono::steady_clock::now();
+        ParticleCapture::Write(fx, g_pending.view, g_pending.packet, g_pending.header);
+        g_pending.header.particles.capture_ns =
+            static_cast<u32>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                 std::chrono::steady_clock::now() - start)
+                                 .count());
+        PublishPending();
+    }
 }
 
 u64 Frames() {

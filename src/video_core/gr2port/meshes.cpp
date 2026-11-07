@@ -256,6 +256,7 @@ struct Source {
     u32 stride;
     u32 position;
     u32 texcoord;
+    u32 texcoord1;
     u32 normal;
     u32 tangent;
     u32 vertex_color;
@@ -364,21 +365,27 @@ u32 ReadElement(VAddr vb, u32 semantic, Accepted accepted) {
 }
 
 // The texture coordinates: the two-component element of the lowest semantic after the position.
-// Semantics follow each shader's inputs, so texture coordinates have no fixed one.
-u32 ReadTexcoord(VAddr vb) {
+// Semantics follow each shader's inputs, so texture coordinates have no fixed one. skip passes
+// over that many such elements.
+u32 ReadTexcoord(VAddr vb, u32 skip = 0) {
     const u32 elements = std::min<u32>(Load<u16>(vb + VertexElements), 16);
     u32 texcoord = 0;
-    u32 semantic = 16;
-    for (u32 i = 0; i < elements; i++) {
-        const VAddr info = vb + VertexElementInfo + 4 * i;
-        const u32 format = Load<u8>(info);
-        const u32 offset = Load<u8>(info + 2);
-        const u32 element_semantic = Load<u8>(info + 3);
-        if (element_semantic != SemanticPosition && element_semantic < semantic &&
-            TexcoordFormat(format) && offset % 4 == 0) {
-            texcoord = offset | format << 8;
-            semantic = element_semantic;
+    u32 above = SemanticPosition;
+    for (u32 pass = 0; pass <= skip; pass++) {
+        texcoord = 0;
+        u32 semantic = 16;
+        for (u32 i = 0; i < elements; i++) {
+            const VAddr info = vb + VertexElementInfo + 4 * i;
+            const u32 format = Load<u8>(info);
+            const u32 offset = Load<u8>(info + 2);
+            const u32 element_semantic = Load<u8>(info + 3);
+            if (element_semantic > above && element_semantic < semantic && TexcoordFormat(format) &&
+                offset % 4 == 0) {
+                texcoord = offset | format << 8;
+                semantic = element_semantic;
+            }
         }
+        above = semantic;
     }
     return texcoord;
 }
@@ -408,6 +415,7 @@ bool ReadShape(VAddr shape, Source& source) {
         .stride = Load<u16>(vb + VertexStride),
         .position = offset | format << 8,
         .texcoord = ReadTexcoord(vb),
+        .texcoord1 = ReadTexcoord(vb, 1),
         .normal = ReadElement(vb, SemanticNormal, NormalFormat),
         .tangent = ReadElement(vb, SemanticTangent, TangentFormat),
         .vertex_color = ReadElement(vb, SemanticVertexColor, VertexColorFormat),
@@ -641,6 +649,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             mesh.vertex_bytes = source.vertex_bytes;
             mesh.position = source.position;
             mesh.texcoord = source.texcoord;
+            mesh.texcoord1 = source.texcoord1;
             mesh.normal = source.normal;
             mesh.tangent = source.tangent;
             mesh.vertex_color = source.vertex_color;

@@ -11,7 +11,7 @@
 namespace Gr2Port::SceneRing {
 
 inline constexpr u32 Slots = 4;
-inline constexpr u64 SlotBytes = 16_MB;
+inline constexpr u64 SlotBytes = 24_MB;
 
 /// Hands the ring's memory to the draw thread: base holds Slots slots of SlotBytes, mapped at
 /// cpu and at address on the GPU.

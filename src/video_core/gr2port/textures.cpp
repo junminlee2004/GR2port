@@ -571,8 +571,9 @@ bool CreateSet(const Device& d) {
     sampler_info.addressModeV = vk::SamplerAddressMode::eClampToEdge;
     sampler_info.addressModeW = vk::SamplerAddressMode::eClampToEdge;
     g_clamp_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;
-    constexpr vk::ShaderStageFlags Stages =
-        vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
+    constexpr vk::ShaderStageFlags Stages = vk::ShaderStageFlagBits::eVertex |
+                                            vk::ShaderStageFlagBits::eFragment |
+                                            vk::ShaderStageFlagBits::eCompute;
     const std::array<vk::DescriptorSetLayoutBinding, 3> bindings{{
         {0, vk::DescriptorType::eSampledImage, Capacity, Stages},
         {1, vk::DescriptorType::eSampler, 1, Stages, &g_sampler},
@@ -638,7 +639,8 @@ void ClearWhite(vk::CommandBuffer cmd) {
         vk::ClearColorValue{.float32 = std::array<float, 4>{1.0f, 1.0f, 1.0f, 1.0f}}, range, dl);
     barrier.srcStageMask = vk::PipelineStageFlagBits2::eClear;
     barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-    barrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+    barrier.dstStageMask =
+        vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader;
     barrier.dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
     barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
     barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
@@ -867,7 +869,8 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
     for (vk::ImageMemoryBarrier2& barrier : barriers) {
         barrier.srcStageMask = vk::PipelineStageFlagBits2::eCopy;
         barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-        barrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+        barrier.dstStageMask =
+            vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader;
         barrier.dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
         barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
         barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;

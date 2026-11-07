@@ -12,6 +12,8 @@ layout(set = 0, binding = 1) uniform sampler texture_sampler;
 layout(set = 0, binding = 2) uniform sampler clamp_sampler;
 layout(set = 1, binding = 0) uniform sampler2DArrayShadow shadow_map;
 layout(set = 1, binding = 2) uniform sampler2DShadow last_shadow_map;
+layout(set = 2, binding = 0) uniform texture2D self_translucent_color;
+layout(set = 2, binding = 1) uniform texture2D self_translucent_depth;
 
 layout(push_constant) uniform Constants {
     Draws scene_draws;
@@ -275,6 +277,30 @@ void main() {
         } else {
             mask *= glow;
         }
+    }
+
+    // What SelfTranslucent drew shows through the skin, by how much skin lies over it.
+    const float translucency = table.characters[index].self_translucency;
+    if (translucency > 0.0) {
+        const ivec2 pixel = ivec2(gl_FragCoord.xy);
+        const vec3 inside =
+            table.characters[index].self_translucency_scale *
+            texelFetch(sampler2D(self_translucent_color, clamp_sampler), pixel, 0).rgb;
+        // Its reverse depth as the game's depth, then as a distance.
+        const float game_depth =
+            1.0 - texelFetch(sampler2D(self_translucent_depth, clamp_sampler), pixel, 0).r;
+        const vec2 inverse_z = table.characters[index].inverse_z;
+        const float inside_distance = 1.0 / (inverse_z.y + inverse_z.x * (2.0 * game_depth - 1.0));
+        const float start = smoothstep(
+            0.0, 1.0, inside_distance / table.characters[index].self_translucency_start);
+        const float skin = smoothstep(0.0, 1.0,
+                                      (inside_distance + view_position.z) / start /
+                                          table.characters[index].self_translucency_depth);
+        const float share =
+            translucency * pow(max(n.z, 0.0), table.characters[index].self_translucency_power) *
+            clamp(1.0 + table.characters[index].self_translucency_offset - skin, 0.0, 1.0);
+        result = table.characters[index].self_translucency_mode != 0u ? result + share * inside
+                                                                      : mix(result, inside, share);
     }
     color = vec4(result, mask);
 }

@@ -33,6 +33,12 @@ struct GraphicsPipelineInfo {
     vk::CompareOp depth_compare = vk::CompareOp::eGreater;
     /// The depth bias is enabled and set as dynamic state.
     bool depth_bias = false;
+    /// depth also holds stencil, whose reference is dynamic state: fragments that pass the depth
+    /// test write the reference, or only fragments where the stencil equals it pass.
+    bool stencil_replace = false;
+    bool stencil_equal = false;
+    /// depth also holds stencil, which the pipeline leaves alone.
+    bool stencil_attachment = false;
     /// Colour blends over the target by the fragment's alpha.
     bool alpha_blend = false;
     /// With alpha_blend, the target keeps its alpha.
@@ -40,6 +46,8 @@ struct GraphicsPipelineInfo {
     /// Colour adds to the target scaled by one minus the fragment's alpha; the target keeps its
     /// alpha.
     bool premultiplied_blend = false;
+    /// The cull mode and the depth test and write are dynamic state.
+    bool dynamic_depth_and_cull = false;
     u32 push_constant_bytes = 0;
     /// The pipeline's descriptor sets, in set order.
     std::span<const vk::DescriptorSetLayout> set_layouts;

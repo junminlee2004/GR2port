@@ -22,6 +22,9 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format);
 /// With the GPU idle: points the apply pass at the scene's depth.
 void Resize(vk::ImageView depth);
 
+/// The fog's scattered light for shaders to sample in the general layout, null when it is off.
+vk::ImageView ScatteredView();
+
 /// Outside rendering, after Shadows::Record: copies the game's noise once it exists, makes the
 /// cloud maps again when their inputs changed, then fills the fog's cells for the packet at
 /// address. Leaves the fog for fragment shaders to sample.

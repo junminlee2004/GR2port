@@ -32,10 +32,12 @@
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/overlays.h"
+#include "video_core/gr2port/particles.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/renderer.h"
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/scene_ring.h"
+#include "video_core/gr2port/self_translucent.h"
 #include "video_core/gr2port/shaders/character_depth_frag.h"
 #include "video_core/gr2port/shaders/character_frag.h"
 #include "video_core/gr2port/shaders/character_vert.h"
@@ -164,6 +166,13 @@ struct Stats {
     u64 dropped_world_decals = 0;
     u64 glass_materials = 0;
     u64 dropped_glass = 0;
+    u64 particle_draws = 0;
+    u64 particle_runs = 0;
+    u64 particle_unported = 0;
+    u64 particle_dropped = 0;
+    u64 particle_refused = 0;
+    u64 particle_live_effects = 0;
+    u64 particle_capture_ns = 0;
     u64 palette_rows = 0;
     std::array<u64, Scene::ItemCategories> category_items{};
     u64 casters = 0;
@@ -282,7 +291,8 @@ bool Thread::Init() {
     }
     scene_ring = memory->CreateBuffer(SceneRing::Slots * SceneRing::SlotBytes,
                                       vk::BufferUsageFlagBits::eStorageBuffer |
-                                          vk::BufferUsageFlagBits::eIndirectBuffer,
+                                          vk::BufferUsageFlagBits::eIndirectBuffer |
+                                          vk::BufferUsageFlagBits::eTransferSrc,
                                       Placement::Upload);
     if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
         !Textures::Start(d, *memory) || !Shadows::Start(d, *memory) ||
@@ -291,10 +301,13 @@ bool Thread::Init() {
         !Contours::Start(d, Look::SceneFormat, DepthFormat) ||
         !Fog::Start(d, *memory, Look::SceneFormat) ||
         !Glass::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
+        !SelfTranslucent::Start(d, *memory) ||
+        !Particles::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !Vegetation::Start(d, *memory, World::SurfaceFormats, DepthFormat, Shadows::DepthFormat)) {
         return false;
     }
-    const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout()};
+    const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout(),
+                                 SelfTranslucent::SetLayout()};
     character_pipeline = CreateGraphicsPipeline(d, {
                                                        .vertex = CHARACTER_VERT,
                                                        .fragment = CHARACTER_FRAG,
@@ -361,15 +374,18 @@ bool Thread::Recreate() {
         memory->Destroy(*image);
         *image = memory->CreateImage(DepthFormat, swapchain->Extent(),
                                      vk::ImageUsageFlagBits::eDepthStencilAttachment |
-                                         vk::ImageUsageFlagBits::eSampled,
+                                         vk::ImageUsageFlagBits::eSampled |
+                                         vk::ImageUsageFlagBits::eTransferSrc,
                                      vk::ImageAspectFlagBits::eDepth);
     }
     needs_swapchain = !depth.image || !character_depth.image ||
                       !Look::Resize(swapchain->Extent(), swapchain->Format(), depth.view) ||
                       !World::Resize(swapchain->Extent(), depth.view, character_depth.view) ||
-                      !Glass::Resize(swapchain->Extent());
+                      !Glass::Resize(swapchain->Extent()) ||
+                      !SelfTranslucent::Resize(swapchain->Extent());
     if (!needs_swapchain) {
         Fog::Resize(depth.view);
+        needs_swapchain = !Particles::Resize(depth.view, swapchain->Extent());
     }
     return !needs_swapchain;
 }
@@ -639,14 +655,18 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     if (drawn) {
         Deformers::Record(cmd, header, packet.address);
         Vegetation::RecordKernels(cmd, header, packet.address);
+        Particles::RecordSimulation(cmd, header, packet.data, packet.address, scene_ring.buffer,
+                                    offset);
+        SelfTranslucent::Record(cmd, header, packet.data, packet.address, scene_ring.buffer,
+                                offset);
     }
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + 2, dl);
     }
     if (drawn) {
-        Shadows::Record(cmd, header, packet.address, scene_ring.buffer, offset, timestamps,
-                        Timestamps * slot_index + 3);
+        Shadows::Record(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
+                        timestamps, Timestamps * slot_index + 3);
     } else if (timestamps) {
         for (u32 c = 0; c < Scene::Cascades; c++) {
             cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
@@ -684,7 +704,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     depth_barrier(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
                   depth_tests | vk::PipelineStageFlagBits2::eFragmentShader,
                   vk::AccessFlagBits2::eNone, depth_tests, depth_writes);
-    World::RecordSurfaces(cmd, header, drawn, packet.address, scene_ring.buffer, offset, depth);
+    World::RecordSurfaces(cmd, header, packet.data, drawn, packet.address, scene_ring.buffer,
+                          offset, depth);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + SurfacesTimestamp, dl);
@@ -801,7 +822,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     };
     cmd.beginRendering(rendering, dl);
     if (drawn) {
-        const std::array sets{Textures::Set(), Shadows::Set()};
+        const std::array sets{Textures::Set(), Shadows::Set(), SelfTranslucent::Set()};
         DrawCharacters(cmd, Scene::DrawList::Character, character_pipeline, sets, header, packet,
                        offset);
         DrawCharacters(cmd, Scene::DrawList::Interior, interior_pipeline, sets, header, packet,
@@ -849,6 +870,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                            dl);
         Fog::RecordApply(cmd, packet.address, extent);
         cmd.endRendering(dl);
+        // The game's particle passes, after its fog.
+        Particles::RecordDraws(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
+                               Look::SceneView(), depth, extent);
     }
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
@@ -918,6 +942,13 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.dropped_world_decals += header.dropped_world_decals;
     stats.glass_materials += header.glass_materials;
     stats.dropped_glass += header.dropped_glass;
+    stats.particle_draws += header.particles.draws;
+    stats.particle_runs += header.particles.runs;
+    stats.particle_unported += header.particles.unported;
+    stats.particle_dropped += header.particles.dropped;
+    stats.particle_refused += header.particles.refused;
+    stats.particle_live_effects += header.particles.live_effects;
+    stats.particle_capture_ns += header.particles.capture_ns;
     stats.dropped += header.dropped;
     stats.capture_ns += header.capture_ns;
     for (u32 part = 0; part < stats.capture_parts_ns.size(); part++) {
@@ -1169,6 +1200,16 @@ void Thread::Report() {
     LOG_INFO(Render_Vulkan, "GR2port glass: per frame {:.1f} drawn, {:.1f} not drawn",
              static_cast<double>(stats.glass_materials) / frames,
              static_cast<double>(stats.dropped_glass) / frames);
+    LOG_INFO(Render_Vulkan,
+             "GR2port particles: per frame {:.1f} live effects, {:.1f} draws in {:.1f} runs, "
+             "{:.1f} items not ported, {:.1f} dropped, {:.3f} ms capture, {} frames refused",
+             static_cast<double>(stats.particle_live_effects) / frames,
+             static_cast<double>(stats.particle_draws) / frames,
+             static_cast<double>(stats.particle_runs) / frames,
+             static_cast<double>(stats.particle_unported) / frames,
+             static_cast<double>(stats.particle_dropped) / frames,
+             static_cast<double>(stats.particle_capture_ns) * 1e-6 / frames,
+             stats.particle_refused);
     std::string categories;
     for (u32 c = 0; c < Scene::ItemCategories; c++) {
         if (stats.category_items[c] != 0) {
@@ -1216,7 +1257,8 @@ void Thread::Report() {
     };
     log_gaps("game frames", stats.game_gaps);
     log_gaps("presents", stats.present_gaps);
-    const double capture_ms = static_cast<double>(stats.capture_ns) * 1e-6 / frames;
+    const double capture_ms =
+        static_cast<double>(stats.capture_ns + stats.particle_capture_ns) * 1e-6 / frames;
     Window::SetTitle(fmt::format("GR2port | game {:.0f} fps | capture {:.2f} ms | render thread "
                                  "{:.2f} ms | GPU {:.2f} ms{}",
                                  game_fps, capture_ms, stats.work_ms / frames, gpu_ms,

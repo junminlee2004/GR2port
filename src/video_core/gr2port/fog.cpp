@@ -416,6 +416,10 @@ void Bake(vk::CommandBuffer cmd, const Scene::Header& header, u64 fog) {
 
 } // namespace
 
+vk::ImageView ScatteredView() {
+    return g_scattered.view;
+}
+
 bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     g_device = &device;
     g_memory = &memory;

@@ -7,6 +7,7 @@
 #include "common/logging/log.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
+#include "video_core/gr2port/particles.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/shaders/deferred_frag.h"
 #include "video_core/gr2port/shaders/fullscreen_vert.h"
@@ -441,8 +442,8 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_de
     return true;
 }
 
-void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, bool drawn, u64 address,
-                    vk::Buffer buffer, u64 offset, const Image& depth) {
+void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet,
+                    bool drawn, u64 address, vk::Buffer buffer, u64 offset, const Image& depth) {
     const auto& dl = g_device->dispatch;
     std::array<vk::ImageMemoryBarrier2, SurfaceFormats.size()> barriers;
     std::array<vk::RenderingAttachmentInfo, SurfaceFormats.size()> colors;
@@ -533,6 +534,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, bool dra
     }
     if (drawn) {
         Vegetation::RecordSurfaces(cmd, header, address, buffer, offset);
+        Particles::RecordSurfaces(cmd, header, packet, address, buffer, offset);
     }
     cmd.endRendering(dl);
     for (vk::ImageMemoryBarrier2& barrier : barriers) {

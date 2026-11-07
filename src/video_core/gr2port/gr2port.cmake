@@ -4,6 +4,7 @@
 target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/capture.cpp
     ${CMAKE_CURRENT_LIST_DIR}/capture.h
+    ${CMAKE_CURRENT_LIST_DIR}/capture_math.h
     ${CMAKE_CURRENT_LIST_DIR}/contours.cpp
     ${CMAKE_CURRENT_LIST_DIR}/contours.h
     ${CMAKE_CURRENT_LIST_DIR}/deformers.cpp
@@ -30,6 +31,10 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/meshes.h
     ${CMAKE_CURRENT_LIST_DIR}/overlays.cpp
     ${CMAKE_CURRENT_LIST_DIR}/overlays.h
+    ${CMAKE_CURRENT_LIST_DIR}/particle_capture.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/particle_capture.h
+    ${CMAKE_CURRENT_LIST_DIR}/particles.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/particles.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.cpp
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.h
     ${CMAKE_CURRENT_LIST_DIR}/renderer.cpp
@@ -37,6 +42,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/scene.h
     ${CMAKE_CURRENT_LIST_DIR}/scene_ring.cpp
     ${CMAKE_CURRENT_LIST_DIR}/scene_ring.h
+    ${CMAKE_CURRENT_LIST_DIR}/self_translucent.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/self_translucent.h
     ${CMAKE_CURRENT_LIST_DIR}/shadows.cpp
     ${CMAKE_CURRENT_LIST_DIR}/shadows.h
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.cpp
@@ -81,6 +88,8 @@ function(gr2port_add_shader FILENAME SHADER_NAME)
         VERBATIM)
     set(GR2PORT_SHADER_HEADERS ${GR2PORT_SHADER_HEADERS} ${HEADER_FILE} PARENT_SCOPE)
 endfunction()
+gr2port_add_shader(self_translucent.vert self_translucent_vert)
+gr2port_add_shader(self_translucent.frag self_translucent_frag)
 gr2port_add_shader(character.vert character_vert)
 gr2port_add_shader(character.frag character_frag)
 gr2port_add_shader(character_depth.frag character_depth_frag)
@@ -128,6 +137,51 @@ gr2port_add_shader(grass.frag grass_frag)
 gr2port_add_shader(branch.comp branch_comp)
 gr2port_add_shader(branch.vert branch_vert)
 gr2port_add_shader(branch.frag branch_frag)
+gr2port_add_shader(pfx/gpu_emitter_spawn.comp gpu_emitter_spawn_comp)
+gr2port_add_shader(pfx/gpu_object_update.comp gpu_object_update_comp)
+gr2port_add_shader(pfx/gpu_particle_clear.comp gpu_particle_clear_comp)
+gr2port_add_shader(pfx/gpu_particle_move.comp gpu_particle_move_comp)
+gr2port_add_shader(pfx/gpu_sample_mesh.comp gpu_sample_mesh_comp)
+gr2port_add_shader(pfx/gpu_sample_skinned_mesh.comp gpu_sample_skinned_mesh_comp)
+gr2port_add_shader(pfx/model.vert model_vert)
+gr2port_add_shader(pfx/model_blur.frag model_blur_frag)
+gr2port_add_shader(pfx/model_blur_soft.frag model_blur_soft_frag)
+gr2port_add_shader(pfx/model_distortion.frag model_distortion_frag)
+gr2port_add_shader(pfx/model_distortion_soft.frag model_distortion_soft_frag)
+gr2port_add_shader(pfx/model_fog.frag model_fog_frag)
+gr2port_add_shader(pfx/model_fog_lit.frag model_fog_lit_frag)
+gr2port_add_shader(pfx/model_fog_lit_soft.frag model_fog_lit_soft_frag)
+gr2port_add_shader(pfx/model_fog_soft.frag model_fog_soft_frag)
+gr2port_add_shader(pfx/model_lit.frag model_lit_frag)
+gr2port_add_shader(pfx/model_lit_soft.frag model_lit_soft_frag)
+gr2port_add_shader(pfx/model_plain.frag model_plain_frag)
+gr2port_add_shader(pfx/model_plain_soft.frag model_plain_soft_frag)
+gr2port_add_shader(pfx/model_shadow.vert model_shadow_vert)
+gr2port_add_shader(pfx/particle_surface.frag particle_surface_frag)
+gr2port_add_shader(pfx/particle_surface.vert particle_surface_vert)
+gr2port_add_shader(pfx/particle_surface_color.frag particle_surface_color_frag)
+gr2port_add_shader(pfx/particle_surface_color.vert particle_surface_color_vert)
+gr2port_add_shader(pfx/particle_surface_tangent.frag particle_surface_tangent_frag)
+gr2port_add_shader(pfx/particle_surface_tangent.vert particle_surface_tangent_vert)
+gr2port_add_shader(pfx/particle_surface_tangent_color.frag particle_surface_tangent_color_frag)
+gr2port_add_shader(pfx/particle_surface_tangent_color.vert particle_surface_tangent_color_vert)
+gr2port_add_shader(pfx/sprite.vert sprite_vert)
+gr2port_add_shader(pfx/sprite_blur.frag sprite_blur_frag)
+gr2port_add_shader(pfx/sprite_blur_soft.frag sprite_blur_soft_frag)
+gr2port_add_shader(pfx/sprite_distortion.frag sprite_distortion_frag)
+gr2port_add_shader(pfx/sprite_distortion_soft.frag sprite_distortion_soft_frag)
+gr2port_add_shader(pfx/sprite_ribbon.vert sprite_ribbon_vert)
+gr2port_add_shader(pfx/sprite_shadow.frag sprite_shadow_frag)
+gr2port_add_shader(pfx/sprite_shadow.vert sprite_shadow_vert)
+gr2port_add_shader(pfx/sprite_shadow_soft.frag sprite_shadow_soft_frag)
+gr2port_add_shader(pfx/sprite_fog.frag sprite_fog_frag)
+gr2port_add_shader(pfx/sprite_fog_lit.frag sprite_fog_lit_frag)
+gr2port_add_shader(pfx/sprite_fog_lit_soft.frag sprite_fog_lit_soft_frag)
+gr2port_add_shader(pfx/sprite_fog_soft.frag sprite_fog_soft_frag)
+gr2port_add_shader(pfx/sprite_lit.frag sprite_lit_frag)
+gr2port_add_shader(pfx/sprite_lit_soft.frag sprite_lit_soft_frag)
+gr2port_add_shader(pfx/sprite_plain.frag sprite_plain_frag)
+gr2port_add_shader(pfx/sprite_plain_soft.frag sprite_plain_soft_frag)
 gr2port_add_shader(skin.comp skin_comp)
 gr2port_add_shader(effector.comp effector_comp)
 gr2port_add_shader(soft_body.comp soft_body_comp)

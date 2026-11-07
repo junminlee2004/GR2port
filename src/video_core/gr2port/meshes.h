@@ -38,6 +38,8 @@ struct Mesh {
     u32 position = 0;
     /// The texture coordinate element, encoded as position; format 0 when the shape has none.
     u32 texcoord = 0;
+    /// The two-component element of the next semantic, encoded as position; format 0 for none.
+    u32 texcoord1 = 0;
     /// The elements of the packed normal, the RGBA16 FLOAT tangent and the vertex colour, encoded
     /// as position; format 0 when the shape has none.
     u32 normal = 0;

@@ -46,6 +46,26 @@ inline constexpr u32 MaxBlades = 131072;
 inline constexpr u32 BladeBytes = 32;
 /// Decals of the world per packet, the game's limit.
 inline constexpr u32 MaxWorldDecals = 1024;
+/// SelfTranslucent's stencil values, one draw list and one particle pass each.
+inline constexpr u32 SelfTranslucentLists = 3;
+/// Particle draws per packet, and what the game's simulation takes.
+inline constexpr u32 MaxParticleDraws = 1024;
+/// Meshes that place particles on themselves per packet, and the bytes of their bone palettes.
+inline constexpr u32 MaxParticleSamples = 64;
+inline constexpr u64 MaxParticleSamplePaletteBytes = 256 * 1024;
+inline constexpr u64 ParticleEffectBytes = 0xc0;
+inline constexpr u64 ParticleObjectBytes = 0x80;
+inline constexpr u64 ParticleBytes = 0x40;
+inline constexpr u64 MaxParticleEffectBytes = 0x600 * ParticleEffectBytes;
+inline constexpr u32 MaxParticleOwners = 0x18000;
+/// Descriptions the game rewrites each frame, at most, and the bytes of one.
+inline constexpr u32 MaxParticleLiveDescriptions = 0x40;
+inline constexpr u64 ParticleDescriptionBytes = 0x100;
+/// The words of the move program's constants, and which one holds the pool's size.
+inline constexpr u32 ParticleSceneWords = 72;
+inline constexpr u32 ParticlePoolWord = 46;
+/// A draw's first_instance holds its index above this bit, and the game's instance below it.
+inline constexpr u32 ParticleDrawShift = 20;
 /// Materials of G2_BG_Glass draws per packet.
 inline constexpr u32 MaxGlassMaterials = 256;
 /// Branch instances the kernel sways per packet, and branch ribbon draws.
@@ -87,6 +107,12 @@ enum class DrawList : u32 {
     Interior,
     /// G2_BG_Glass draws. material names a GlassMaterial, texture is the normal map.
     Glass,
+    /// SelfTranslucent draws of the characters with stencil value 1, 2 and 3. world_view holds
+    /// the game's WorldViewProj and color_scale its colour; the first word of
+    /// world_view_projection is the distance to move the skin along its normal.
+    SelfTranslucent1,
+    SelfTranslucent2,
+    SelfTranslucent3,
     Count,
 };
 
@@ -101,6 +127,83 @@ enum class CapturePart : u32 {
     /// The characters' draws and outlines, and copying the commands to the packet.
     Characters,
     Count,
+};
+
+/// The particle system's vertex programs that are ported, by what they draw.
+enum class ParticleShape : u32 {
+    Sprite,
+    Ribbon,
+    Model,
+    Count,
+};
+
+/// The programs of particles in a cascade's map.
+enum class ParticleShadowProgram : u32 {
+    Sprite,
+    SpriteSoft,
+    Model,
+    Count,
+};
+
+/// A run's mode when it draws into the world's surfaces, and when it draws into a cascade's map:
+/// the second plus the cascade.
+inline constexpr u32 ParticleSurfaceMode = 6;
+inline constexpr u32 ParticleShadowMode = 32;
+/// The vertex and pixel programs of mesh particles in the world's surfaces, by what the mesh has.
+inline constexpr u32 ParticleSurfaceVariants = 4;
+
+/// The pixel programs of the particle system that are ported. Sprites and ribbons share a set, and
+/// models have their own, in this order.
+enum class ParticleProgram : u32 {
+    Plain,
+    PlainSoft,
+    Lit,
+    LitSoft,
+    Fog,
+    FogSoft,
+    FogLit,
+    FogLitSoft,
+    Distortion,
+    DistortionSoft,
+    Blur,
+    BlurSoft,
+    Count,
+};
+
+/// The numbers of a packet's particle blocks.
+struct ParticleHeader {
+    /// Guest memory of the effect library, which changes when generation does, and of the noise.
+    u64 description_source;
+    u64 material_source;
+    u64 curve_source;
+    u64 noise_source;
+    /// The game's sizes of a particle and an object buffer.
+    u64 particle_bytes;
+    u64 object_bytes;
+    u32 generation;
+    u32 objects;
+    u32 particles;
+    u32 draws;
+    u32 runs;
+    /// Draws past MaxParticleDraws, and items of classes or modes not ported.
+    u32 dropped;
+    u32 unported;
+    /// The simulation's input did not fit the packet.
+    u32 refused;
+    /// Effects the game has running, and the time this block took to capture.
+    u32 live_effects;
+    u32 capture_ns;
+    /// Descriptions of the library this packet holds fresh copies of.
+    u32 live_descriptions;
+    /// The commands of the draws without indices and of the draws with them.
+    u32 vertex_commands;
+    u32 indexed_commands;
+    /// The runs that draw into the cascades' maps, and into the world's surfaces.
+    u32 shadow_runs;
+    u32 surface_runs;
+    /// The meshes that place particles on themselves, and those without room or data.
+    u32 samples;
+    u32 dropped_samples;
 };
 
 /// The start of each packet.
@@ -206,10 +309,11 @@ struct Header {
     /// GlassMaterial records written, and glass items not drawn.
     u32 glass_materials;
     u32 dropped_glass;
+    ParticleHeader particles;
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
-static_assert(sizeof(Header) <= 512);
+static_assert(sizeof(Header) <= 1024);
 inline constexpr u32 BloomOn = 1;
 inline constexpr u32 BloomFeedback = 2;
 inline constexpr u32 FogShadow = 1;
@@ -512,6 +616,67 @@ struct GlassMaterial {
     float constants[48];
 };
 static_assert(sizeof(GlassMaterial) == 192);
+
+/// What the game's effect, water and model particle programs fetch and sample: a mesh, encoded as
+/// Draw's, and the handles of its displacement map, its other maps and its reflection cube.
+struct EffectMesh {
+    u64 vertices;
+    u64 skin;
+    u64 palette;
+    u32 stride;
+    u32 position;
+    u32 texcoord;
+    u32 texcoord1;
+    u32 normal;
+    u32 tangent;
+    u32 vertex_color;
+    u32 displacement;
+    u32 textures[5];
+    u32 reflection;
+};
+static_assert(sizeof(EffectMesh) == 80);
+
+/// A mesh that places particles on itself: the game's PfxBufferSampleMesh, its vertices and, when
+/// skinned, its skin stream and where in the packet its palette lies.
+struct ParticleSample {
+    u32 constants[28];
+    u64 vertices;
+    u64 weights;
+    u64 palette_offset;
+};
+static_assert(sizeof(ParticleSample) == 136);
+
+/// A particle draw: the game's PfxBufferCommon, then the handles of its four textures. A model's
+/// draw adds how many meshes its set has and which this is, and the mesh. A mesh particle in the
+/// world's surfaces adds the constants of the game's programs, and the handles of its colour map,
+/// normal map, mask, layered colour map and layered normal map.
+struct ParticleDraw {
+    float constants[88];
+    u32 textures[4];
+    float model_count[2];
+    u32 padding[2];
+    EffectMesh mesh;
+    float vertex_constants[56];
+    float pixel_constants[40];
+    u32 maps[5];
+    u32 padding2;
+};
+static_assert(sizeof(ParticleDraw) == 872);
+
+/// Consecutive particle commands of one pipeline and state. The pipeline is the vertex program's
+/// shape times the programs per shape, plus the pixel program.
+struct ParticleRun {
+    u32 pipeline;
+    u32 mode;
+    u32 first;
+    u32 count;
+    /// Whether the draws test and write depth, and the game's cull mode: 0 none, 1 front, 2 back.
+    u32 tested;
+    u32 write;
+    u32 cull;
+    /// The commands are Command, with indices, or VertexCommand.
+    u32 indexed;
+};
 
 /// A Branch instance the renderer's kernel sways as the game's does, in its copy of the vertices,
 /// from its shape's. The kernel writes the state, a timer and a phase per segment. Matrices are as
@@ -820,8 +985,8 @@ inline u32 FirstCommand(const Header& header, DrawList list) {
     return first;
 }
 
-inline constexpr u64 ShadowsOffset = 512;
-inline constexpr u64 DrawsOffset = 1280;
+inline constexpr u64 ShadowsOffset = 1024;
+inline constexpr u64 DrawsOffset = 2048;
 inline constexpr u64 CommandsOffset = DrawsOffset + MaxDraws * sizeof(Draw);
 inline constexpr u64 CastersOffset = CommandsOffset + MaxDraws * sizeof(Command);
 /// MaxCasters commands per cascade and list, at (cascade * CasterLists + list) * MaxCasters.
@@ -856,7 +1021,31 @@ inline constexpr u64 BranchesOffset = BranchJobsOffset + MaxBranchJobs * sizeof(
 inline constexpr u64 BranchCommandsOffset = BranchesOffset + MaxBranches * sizeof(Branch);
 inline constexpr u64 WorldDecalsOffset = BranchCommandsOffset + MaxBranches * sizeof(VertexCommand);
 inline constexpr u64 GlassMaterialsOffset = WorldDecalsOffset + MaxWorldDecals * sizeof(WorldDecal);
-inline constexpr u64 PacketBytes = GlassMaterialsOffset + MaxGlassMaterials * sizeof(GlassMaterial);
+inline constexpr u64 ParticleSceneOffset =
+    GlassMaterialsOffset + MaxGlassMaterials * sizeof(GlassMaterial);
+/// The light's constants; the zeros after them stand for an empty list of point lights.
+inline constexpr u64 ParticleLightOffset = ParticleSceneOffset + ParticleSceneWords * 4 + 16 * 8;
+/// The fog's constants, for the fog programs.
+inline constexpr u64 ParticleFogOffset = ParticleLightOffset + 256;
+inline constexpr u32 ParticleFogWords = 36;
+inline constexpr u64 ParticleDrawsOffset = ParticleLightOffset + 1024;
+inline constexpr u64 ParticleCommandsOffset =
+    ParticleDrawsOffset + MaxParticleDraws * sizeof(ParticleDraw);
+inline constexpr u64 ParticleIndexedCommandsOffset =
+    ParticleCommandsOffset + MaxParticleDraws * sizeof(VertexCommand);
+inline constexpr u64 ParticleRunsOffset =
+    ParticleIndexedCommandsOffset + MaxParticleDraws * sizeof(Command);
+inline constexpr u64 ParticleLiveIndicesOffset =
+    ParticleRunsOffset + MaxParticleDraws * sizeof(ParticleRun);
+inline constexpr u64 ParticleLiveOffset =
+    ParticleLiveIndicesOffset + MaxParticleLiveDescriptions * sizeof(u32);
+inline constexpr u64 ParticleOwnersOffset =
+    ParticleLiveOffset + MaxParticleLiveDescriptions * ParticleDescriptionBytes;
+inline constexpr u64 ParticleEffectsOffset = ParticleOwnersOffset + MaxParticleOwners * sizeof(u64);
+inline constexpr u64 ParticleSamplesOffset = ParticleEffectsOffset + MaxParticleEffectBytes;
+inline constexpr u64 ParticleSamplePalettesOffset =
+    ParticleSamplesOffset + MaxParticleSamples * sizeof(ParticleSample);
+inline constexpr u64 PacketBytes = ParticleSamplePalettesOffset + MaxParticleSamplePaletteBytes;
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -867,6 +1056,8 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               LayerMaterialsOffset % 16 == 0 && GrassOffset % 16 == 0 &&
               GrassCommandOffset % 16 == 0 && BranchJobsOffset % 16 == 0 &&
               BranchesOffset % 16 == 0 && BranchCommandsOffset % 16 == 0 &&
-              WorldDecalsOffset % 16 == 0 && GlassMaterialsOffset % 16 == 0);
+              WorldDecalsOffset % 16 == 0 && GlassMaterialsOffset % 16 == 0 &&
+              ParticleSceneOffset % 16 == 0 && ParticleDrawsOffset % 16 == 0 &&
+              ParticleEffectsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

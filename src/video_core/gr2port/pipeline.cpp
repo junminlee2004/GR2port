@@ -94,10 +94,22 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
     const vk::PipelineMultisampleStateCreateInfo multisample{
         .rasterizationSamples = vk::SampleCountFlagBits::e1,
     };
+    const bool stencil = info.stencil_replace || info.stencil_equal;
+    const vk::StencilOpState stencil_state{
+        .failOp = vk::StencilOp::eKeep,
+        .passOp = info.stencil_replace ? vk::StencilOp::eReplace : vk::StencilOp::eKeep,
+        .depthFailOp = vk::StencilOp::eKeep,
+        .compareOp = info.stencil_replace ? vk::CompareOp::eAlways : vk::CompareOp::eEqual,
+        .compareMask = 0xff,
+        .writeMask = info.stencil_replace ? 0xffu : 0u,
+    };
     const vk::PipelineDepthStencilStateCreateInfo depth_stencil{
         .depthTestEnable = info.depth_test,
         .depthWriteEnable = info.depth_test && info.depth_write,
         .depthCompareOp = info.depth_compare,
+        .stencilTestEnable = stencil,
+        .front = stencil_state,
+        .back = stencil_state,
     };
     const bool premultiplied = info.premultiplied_blend;
     const bool keep_alpha = premultiplied || info.keep_target_alpha;
@@ -123,16 +135,29 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
         .attachmentCount = color_count,
         .pAttachments = blend_attachments.data(),
     };
-    const std::array dynamic_states{vk::DynamicState::eViewport, vk::DynamicState::eScissor,
-                                    vk::DynamicState::eDepthBias};
+    std::vector<vk::DynamicState> dynamic_states{vk::DynamicState::eViewport,
+                                                 vk::DynamicState::eScissor};
+    if (info.depth_bias) {
+        dynamic_states.push_back(vk::DynamicState::eDepthBias);
+    }
+    if (stencil) {
+        dynamic_states.push_back(vk::DynamicState::eStencilReference);
+    }
+    if (info.dynamic_depth_and_cull) {
+        dynamic_states.push_back(vk::DynamicState::eCullMode);
+        dynamic_states.push_back(vk::DynamicState::eDepthTestEnable);
+        dynamic_states.push_back(vk::DynamicState::eDepthWriteEnable);
+    }
     const vk::PipelineDynamicStateCreateInfo dynamic{
-        .dynamicStateCount = static_cast<u32>(dynamic_states.size()) - (info.depth_bias ? 0 : 1),
+        .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
         .pDynamicStates = dynamic_states.data(),
     };
     const vk::PipelineRenderingCreateInfo rendering{
         .colorAttachmentCount = color_count,
         .pColorAttachmentFormats = colors.data(),
         .depthAttachmentFormat = info.depth,
+        .stencilAttachmentFormat =
+            stencil || info.stencil_attachment ? info.depth : vk::Format::eUndefined,
     };
     const vk::GraphicsPipelineCreateInfo pipeline_info{
         .pNext = &rendering,

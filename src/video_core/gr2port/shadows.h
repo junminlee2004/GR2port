@@ -24,8 +24,8 @@ bool Start(const Device& device, Memory& memory);
 /// cascades and leaves them for fragment and compute shaders to sample. The packet is at offset in
 /// buffer.
 /// With a query pool, writes a timestamp after each cascade from first_query on.
-void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
-            u64 offset, vk::QueryPool timestamps, u32 first_query);
+void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet, u64 address,
+            vk::Buffer buffer, u64 offset, vk::QueryPool timestamps, u32 first_query);
 
 /// The set with the cascades for fragment shaders: the first two cascades at binding 0 as a
 /// sampler2DArrayShadow and at 1 as a sampler2DArray of their depth; the last cascade at binding 2

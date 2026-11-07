@@ -29,6 +29,18 @@ constexpr u64 StubAreaOffset = 32_MB;
 // The frame graph FUN_0142ec00: the game's draw thread calls it once per frame.
 constexpr Hooks::Entry FrameGraph{0x142ec00, 6, Hooks::FramePrologue};
 
+// The particle manager's first and last steps of a frame, inside the frame graph.
+constexpr Hooks::Entry ParticleSetup{0x14a31c0, 6, Hooks::FramePrologue};
+constexpr Hooks::Entry ParticleList{0x14a3ba0, 6, Hooks::FramePrologue};
+
+void PS4_SYSV_ABI OnParticleSetup(u32, const Hooks::Registers* registers, u64) {
+    Capture::OnParticleSetup(registers->rdi);
+}
+
+void PS4_SYSV_ABI OnParticleList(u32, const Hooks::Arguments* arguments, u64) {
+    Capture::OnParticleList(arguments->rdi);
+}
+
 // FUN_0142ec00(T + 0xa0, view, ...): rdi is the frame graph, rsi the view the frame draws.
 void PS4_SYSV_ABI OnFrameGraph(u32, const Hooks::Registers* registers, u64) {
     Capture::OnFrame(registers->rdi, registers->rsi);
@@ -57,6 +69,12 @@ void Install(VAddr module_base) {
     if (frame != Hooks::Result::Hooked && frame != Hooks::Result::Chained) {
         LOG_ERROR(Render_Vulkan, "GR2port: the frame graph's entry is not the expected code");
         return;
+    }
+    if (Hooks::ObserveEntry(module_base, ParticleSetup, c, StubAreaSize, &OnParticleSetup, 0) ==
+            Hooks::Result::Mismatch ||
+        Hooks::ObserveReturn(module_base, ParticleList, c, StubAreaSize, &OnParticleList, 0) ==
+            Hooks::Result::Mismatch) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the particle manager is not the expected code");
     }
     if (!Meshes::Install(module_base, c, StubAreaSize) ||
         !Textures::Install(module_base, c, StubAreaSize)) {
