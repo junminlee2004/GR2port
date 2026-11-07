@@ -1571,9 +1571,7 @@ cmrc_add_resource_library(embedded-resources
         src/resources/platinum.png
         src/resources/shadps4.png
         src/resources/silver.png
-        src/resources/trophy.wav
-        src/resources/amd_rcp_index_table.bin.zstd
-        src/resources/amd_rsqrt_index_table.bin.zstd)
+        src/resources/trophy.wav)
 target_link_libraries(shadps4 PRIVATE res::embedded)
 
 # ImGui resources
