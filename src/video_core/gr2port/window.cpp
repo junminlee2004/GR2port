@@ -9,6 +9,7 @@
 #include <SDL3/SDL_video.h>
 
 #include "common/logging/log.h"
+#include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/window.h"
 
 namespace Gr2Port::Window {
@@ -32,6 +33,9 @@ bool SDLCALL WatchEvents(void*, SDL_Event* event) {
     if (event->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED &&
         event->window.windowID == g_window_id.load(std::memory_order_relaxed)) {
         StoreSize(event->window.data1, event->window.data2);
+    }
+    if (event->type == SDL_EVENT_KEY_DOWN && event->key.key == SDLK_F3 && !event->key.repeat) {
+        EmulatedGpu::Toggle();
     }
     return true;
 }

@@ -21,6 +21,7 @@
 #include "video_core/buffer_cache/region_manager.h"
 #include "video_core/buffer_cache/stream_copy_lane.h"
 #include "video_core/gr2_fsr3/gr2_fsr3.h"
+#include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
@@ -99,6 +100,7 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
     if (!EmulatorSettings.IsNullGPU()) {
         liverpool->BindRasterizer(this);
     }
+    Gr2Port::EmulatedGpu::Start(liverpool, this);
     memory->SetRasterizer(this);
     auto& skipcache = Skipcache::Framework::Instance();
     const u32 sc_mode = EmulatorSettings.GetAdaptiveSkipCachesMode();
