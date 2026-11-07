@@ -47,6 +47,7 @@
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
 #include "video_core/gr2port/vegetation.h"
+#include "video_core/gr2port/water.h"
 #include "video_core/gr2port/window.h"
 #include "video_core/gr2port/world.h"
 
@@ -305,6 +306,7 @@ bool Thread::Init() {
         !SelfTranslucent::Start(d, *memory) ||
         !Particles::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !Effects::Start(d, Look::SceneFormat, DepthFormat) ||
+        !Water::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !Vegetation::Start(d, *memory, World::SurfaceFormats, DepthFormat, Shadows::DepthFormat)) {
         return false;
     }
@@ -384,6 +386,7 @@ bool Thread::Recreate() {
                       !Look::Resize(swapchain->Extent(), swapchain->Format(), depth.view) ||
                       !World::Resize(swapchain->Extent(), depth.view, character_depth.view) ||
                       !Glass::Resize(swapchain->Extent()) ||
+                      !Water::Resize(swapchain->Extent(), Glass::BehindView()) ||
                       !SelfTranslucent::Resize(swapchain->Extent());
     if (!needs_swapchain) {
         Fog::Resize(depth.view);
@@ -843,6 +846,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         Effects::RecordTransparentBg(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                      offset, Look::SceneView(), depth, extent);
         Glass::Record(cmd, header, packet.address, scene_ring.buffer, offset, depth, extent);
+        Water::Record(cmd, header, packet.address, scene_ring.buffer, offset, Look::SceneView(),
+                      depth, extent);
     }
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,

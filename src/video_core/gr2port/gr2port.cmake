@@ -56,6 +56,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/vegetation.h
     ${CMAKE_CURRENT_LIST_DIR}/window.cpp
     ${CMAKE_CURRENT_LIST_DIR}/window.h
+    ${CMAKE_CURRENT_LIST_DIR}/water.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/water.h
     ${CMAKE_CURRENT_LIST_DIR}/world.cpp
     ${CMAKE_CURRENT_LIST_DIR}/world.h)
 
@@ -142,6 +144,8 @@ gr2port_add_shader(branch.frag branch_frag)
 gr2port_add_shader(pfx/effect.frag effect_frag)
 gr2port_add_shader(pfx/effect_skinned.vert effect_skinned_vert)
 gr2port_add_shader(pfx/effect_unskinned.vert effect_unskinned_vert)
+gr2port_add_shader(pfx/water.frag water_frag)
+gr2port_add_shader(pfx/water.vert water_vert)
 gr2port_add_shader(pfx/gpu_emitter_spawn.comp gpu_emitter_spawn_comp)
 gr2port_add_shader(pfx/gpu_object_update.comp gpu_object_update_comp)
 gr2port_add_shader(pfx/gpu_particle_clear.comp gpu_particle_clear_comp)

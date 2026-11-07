@@ -439,6 +439,27 @@ constexpr u32 EffectPointLightsWord = 0x110 / 4;
 constexpr u32 EffectBlendMethodWord = 4;
 constexpr u32 EffectLayers = 4;
 constexpr u32 EffectBackgroundMethod = 16;
+// G2_BG_Water: an item holds the texture objects of its displacement map and its other maps, in
+// the order of the program's slots, and the constants of its programs. Its draw callback writes the
+// count of point lights and the view's water barriers into the pixel constants.
+constexpr u32 WaterCategory = 32;
+constexpr u64 WaterDisplacement = 0x30;
+constexpr std::array<u64, 5> WaterMaps{0x48, 0x50, 0x58, 0x38, 0x40};
+constexpr u64 WaterVertexConstants = 0x60;
+constexpr u64 WaterPixelConstants = 0x68;
+constexpr u32 WaterPointLightsWord = 0xfc / 4;
+constexpr u32 WaterBarrierCountWord = 0x1cc / 4;
+constexpr u32 WaterBarrierWord = 0x1d0 / 4;
+constexpr u64 WaterBarrierBytes = 0x20;
+constexpr u32 WaterMaxBarriers = 2;
+constexpr u64 ViewWaterBarrierCount = 0x1088;
+constexpr u64 ViewWaterBarriers = 0x1090;
+// The view's reflection probes: the program takes the cube of the heaviest.
+constexpr u64 ViewReflections = 0xc80;
+constexpr u64 ViewReflectionCount = 0xc88;
+constexpr u64 ReflectionBytes = 0x70;
+constexpr u64 ReflectionCube = 0x40;
+constexpr u64 ReflectionWeight = 0x58;
 constexpr u32 ContourCategory = 11;
 constexpr u64 ContourVertexConstants = 0x30;
 constexpr u64 ContourGeometryConstants = 0x38;
@@ -578,6 +599,7 @@ alignas(
 alignas(64) std::array<Scene::VertexCommand, Scene::MaxBranches> g_branch_commands;
 alignas(64) std::array<Scene::Command, Scene::MaxEffectDraws> g_effect_commands;
 alignas(64) std::array<Scene::EffectRun, Scene::MaxEffectDraws> g_effect_runs;
+alignas(64) std::array<Scene::Command, Scene::MaxWaterDraws> g_water_commands;
 // The wind's place in its cycle. The game keeps one per instance; only its rate shows, and only on
 // instances that move fast.
 float g_grass_phase = 0.0f;
@@ -649,6 +671,8 @@ public:
     // Writes the frame's commands to the packet.
     void CopyCommands() {
         constexpr u64 Bytes = sizeof(Scene::Command);
+        std::memcpy(packet + Scene::WaterCommandsOffset, g_water_commands.data(),
+                    header.effects.water_draws * Bytes);
         u8* out = packet + Scene::CommandsOffset;
         for (u32 list = 0; list < g_commands.size(); list++) {
             const u64 bytes = header.draw_commands[list] * Bytes;
@@ -990,6 +1014,92 @@ public:
                     header.effects.draws * sizeof(Scene::Command));
         std::memcpy(packet + Scene::EffectRunsOffset, g_effect_runs.data(),
                     header.effects.runs * sizeof(Scene::EffectRun));
+    }
+
+    // The cube of the view's heaviest reflection probe, or 0.
+    static u32 ReflectionCubeOf(VAddr view) {
+        const VAddr probes = Load<VAddr>(view + ViewReflections);
+        const s32 count = Load<s32>(view + ViewReflectionCount);
+        VAddr heaviest = 0;
+        for (s32 i = 0; i < count; i++) {
+            const VAddr probe = probes + i * ReflectionBytes;
+            if (Load<VAddr>(probe + ReflectionCube) != 0 &&
+                (heaviest == 0 || Load<float>(probe + ReflectionWeight) >
+                                      Load<float>(heaviest + ReflectionWeight))) {
+                heaviest = probe;
+            }
+        }
+        return heaviest != 0 ? Textures::GetCube(Load<VAddr>(heaviest + ReflectionCube)) : 0;
+    }
+
+    // A G2_BG_Water item.
+    void AddWater(VAddr item, VAddr view) {
+        Scene::EffectHeader& effects = header.effects;
+        const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
+        const VAddr index_buffer = Load<VAddr>(item + ItemIndexBuffer);
+        const VAddr vertex_constants = Load<VAddr>(item + WaterVertexConstants);
+        const VAddr pixel_constants = Load<VAddr>(item + WaterPixelConstants);
+        const VAddr shape = index_buffer - ShapeIndexBuffer;
+        if (submesh == 0 || index_buffer == 0 || vertex_constants == 0 || pixel_constants == 0 ||
+            Load<u16>(submesh + SubmeshRanges) == 0 ||
+            effects.water_draws == Scene::MaxWaterDraws) {
+            effects.dropped_water++;
+            return;
+        }
+        const Meshes::Mesh* mesh = Meshes::Get(shape);
+        if (mesh == nullptr) {
+            effects.dropped_water++;
+            return;
+        }
+        const u32 first =
+            Load<u32>(submesh + SubmeshFirstIndex) + Load<u32>(submesh + SubmeshRange);
+        const u32 count = Load<u32>(submesh + SubmeshRange + 4);
+        u64 vertices = mesh->vertices;
+        const VAddr vertex_buffer = Load<VAddr>(item + ItemVertexBuffer);
+        if (vertex_buffer != shape + ShapeVertexBuffer) {
+            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame).vertices;
+        }
+        if (u64{first} + count > mesh->indices || vertices == 0) {
+            effects.dropped_water++;
+            return;
+        }
+        const auto handle = [](VAddr object) { return object != 0 ? Textures::Get(object) : 0; };
+        const u32 i = effects.water_draws++;
+        // The fields are written in order: the packet is write-combined.
+        Scene::WaterDraw& out =
+            reinterpret_cast<Scene::WaterDraw*>(packet + Scene::WaterDrawsOffset)[i];
+        std::memcpy(out.vertex_constants, reinterpret_cast<const void*>(vertex_constants),
+                    sizeof(out.vertex_constants));
+        std::memcpy(out.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
+                    sizeof(out.pixel_constants));
+        // Point lights are not ported: the programs see none.
+        out.pixel_constants[WaterPointLightsWord] = 0;
+        out.pixel_constants[WaterBarrierCountWord] =
+            std::min(Load<u32>(view + ViewWaterBarrierCount), WaterMaxBarriers);
+        std::memcpy(out.pixel_constants + WaterBarrierWord,
+                    reinterpret_cast<const void*>(view + ViewWaterBarriers), WaterBarrierBytes);
+        out.mesh.vertices = vertices;
+        out.mesh.skin = 0;
+        out.mesh.palette = 0;
+        out.mesh.stride = mesh->stride;
+        out.mesh.position = mesh->position;
+        out.mesh.texcoord = mesh->texcoord;
+        out.mesh.texcoord1 = mesh->texcoord1;
+        out.mesh.normal = mesh->normal;
+        out.mesh.tangent = mesh->tangent;
+        out.mesh.vertex_color = mesh->vertex_color;
+        out.mesh.displacement = handle(Load<VAddr>(item + WaterDisplacement));
+        for (u32 t = 0; t < WaterMaps.size(); t++) {
+            out.mesh.textures[t] = handle(Load<VAddr>(item + WaterMaps[t]));
+        }
+        out.mesh.reflection = ReflectionCubeOf(view);
+        g_water_commands[i] = {
+            .index_count = count,
+            .instance_count = 1,
+            .first_index = mesh->first_index + first,
+            .vertex_offset = 0,
+            .first_instance = i,
+        };
     }
 
     // A G2_EF_Main item of one of the game's lists.
@@ -2541,6 +2651,10 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     ForEachItem(Load<s32>(view + ViewCategoryCount + ContourCategory * 4), ContourVertexConstants,
                 None, keyed(ContourCategory), [&](VAddr item) { writer.AddContour(item); });
     writer.AddEffects(view);
+    ForEachItem(std::min(Load<s32>(view + ViewCategoryCount + WaterCategory * 4),
+                         static_cast<s32>(Scene::MaxWaterDraws)),
+                WaterVertexConstants, WaterPixelConstants, keyed(WaterCategory),
+                [&](VAddr item) { writer.AddWater(item, view); });
     writer.CopyCommands();
     writer.EndPart(Scene::CapturePart::Characters);
     Scene::Header header = writer.Header();

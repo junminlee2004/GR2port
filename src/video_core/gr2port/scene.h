@@ -69,6 +69,8 @@ inline constexpr u32 ParticleDrawShift = 20;
 /// G2_EF_Main draws per packet, and the game's sorted lists they come from.
 inline constexpr u32 MaxEffectDraws = 256;
 inline constexpr u32 EffectLists = 7;
+/// G2_BG_Water draws per packet.
+inline constexpr u32 MaxWaterDraws = 32;
 /// Materials of G2_BG_Glass draws per packet.
 inline constexpr u32 MaxGlassMaterials = 256;
 /// Branch instances the kernel sways per packet, and branch ribbon draws.
@@ -218,6 +220,9 @@ struct EffectHeader {
     /// A bit per list that holds draws, and one per list with a draw that reads the scene's copy.
     u32 lists;
     u32 background;
+    /// G2_BG_Water draws in the packet, and items without room or a mesh.
+    u32 water_draws;
+    u32 dropped_water;
 };
 
 /// The start of each packet.
@@ -704,6 +709,14 @@ struct EffectDraw {
 };
 static_assert(sizeof(EffectDraw) == 784);
 
+/// A G2_BG_Water draw: the constants of the game's programs, then its mesh.
+struct WaterDraw {
+    u32 vertex_constants[152];
+    u32 pixel_constants[128];
+    EffectMesh mesh;
+};
+static_assert(sizeof(WaterDraw) == 1200);
+
 /// Consecutive effect draws of one list and one state.
 struct EffectRun {
     u32 list;
@@ -1085,7 +1098,9 @@ inline constexpr u64 EffectDrawsOffset =
     ParticleSamplePalettesOffset + MaxParticleSamplePaletteBytes;
 inline constexpr u64 EffectCommandsOffset = EffectDrawsOffset + MaxEffectDraws * sizeof(EffectDraw);
 inline constexpr u64 EffectRunsOffset = EffectCommandsOffset + MaxEffectDraws * sizeof(Command);
-inline constexpr u64 PacketBytes = EffectRunsOffset + MaxEffectDraws * sizeof(EffectRun);
+inline constexpr u64 WaterDrawsOffset = EffectRunsOffset + MaxEffectDraws * sizeof(EffectRun);
+inline constexpr u64 WaterCommandsOffset = WaterDrawsOffset + MaxWaterDraws * sizeof(WaterDraw);
+inline constexpr u64 PacketBytes = WaterCommandsOffset + MaxWaterDraws * sizeof(Command);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -1098,6 +1113,7 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               BranchesOffset % 16 == 0 && BranchCommandsOffset % 16 == 0 &&
               WorldDecalsOffset % 16 == 0 && GlassMaterialsOffset % 16 == 0 &&
               ParticleSceneOffset % 16 == 0 && ParticleDrawsOffset % 16 == 0 &&
-              ParticleEffectsOffset % 16 == 0 && EffectDrawsOffset % 16 == 0);
+              ParticleEffectsOffset % 16 == 0 && EffectDrawsOffset % 16 == 0 &&
+              WaterDrawsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

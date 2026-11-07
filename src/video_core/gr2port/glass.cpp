@@ -154,7 +154,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
             u64 offset, const Image& depth, vk::Extent2D extent) {
     constexpr Scene::DrawList List = Scene::DrawList::Glass;
     const u32 count = header.draw_commands[static_cast<u32>(List)];
-    if (count == 0 && header.effects.background == 0) {
+    if (count == 0 && header.effects.background == 0 && header.effects.water_draws == 0) {
         return;
     }
     const auto& dl = g_device->dispatch;
