@@ -25,6 +25,7 @@
 #include "video_core/gr2port/contours.h"
 #include "video_core/gr2port/deformers.h"
 #include "video_core/gr2port/device.h"
+#include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/fog.h"
 #include "video_core/gr2port/glass.h"
 #include "video_core/gr2port/look.h"
@@ -131,6 +132,10 @@ struct Stats {
     std::array<u64, static_cast<u32>(Scene::CapturePart::Count)> capture_parts_ns{};
     // Each frame's capture, for their median: work on other threads makes some much longer.
     std::array<u32, ReportFrames> captures{};
+    // Each drawn frame's gap to the game's frame before it and to the last present, in
+    // microseconds: how evenly frames arrive and leave.
+    std::array<u32, ReportFrames> game_gaps{};
+    std::array<u32, ReportFrames> present_gaps{};
     u64 untextured = 0;
     u64 skinned = 0;
     u64 deformed = 0;
@@ -919,6 +924,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         stats.capture_parts_ns[part] += header.capture_parts_ns[part];
     }
     stats.captures[stats.frames] = header.capture_ns;
+    stats.game_gaps[stats.frames] = header.frame_gap_ns / 1000;
     stats.untextured += header.untextured;
     stats.skinned += header.skinned;
     stats.deformed += header.deformed;
@@ -1028,6 +1034,11 @@ void Thread::Frame(const SceneRing::Packet& packet) {
         Ms(wait_end - wait_start).count() + Ms(acquire_end - acquire_start).count();
     stats.wait_ms += waited;
     stats.work_ms += Ms(std::chrono::steady_clock::now() - start).count() - waited;
+    static auto last_present = std::chrono::steady_clock::now();
+    const auto presenting = std::chrono::steady_clock::now();
+    stats.present_gaps[stats.frames] = static_cast<u32>(
+        std::chrono::duration_cast<std::chrono::microseconds>(presenting - last_present).count());
+    last_present = presenting;
     stats.frames++;
     if (!swapchain->Present(index)) {
         needs_swapchain = true;
@@ -1190,9 +1201,26 @@ void Thread::Report() {
              "GR2port memory: device-local {} MB of a {} MB budget used by the process, {} MB by "
              "the renderer",
              budget.usage >> 20, budget.budget >> 20, budget.own >> 20);
-    Window::SetTitle(fmt::format("GR2port | game {:.0f} fps | render thread {:.2f} ms | GPU "
-                                 "{:.2f} ms",
-                                 game_fps, stats.work_ms / frames, gpu_ms));
+    const auto log_gaps = [&](const char* what, std::array<u32, ReportFrames>& gaps) {
+        const std::span sorted = std::span{gaps}.first(stats.frames);
+        std::ranges::sort(sorted);
+        const auto over = [&](u32 ms) {
+            return sorted.end() - std::ranges::upper_bound(sorted, ms * 1000);
+        };
+        LOG_INFO(Render_Vulkan,
+                 "GR2port pacing: {} median {:.2f} ms, 99% {:.2f}, longest {:.2f}; {} over 20 ms, "
+                 "{} over 33 ms, {} over 50 ms, {} over 90 ms",
+                 what, sorted[sorted.size() / 2] / 1000.0,
+                 sorted[sorted.size() * 99 / 100] / 1000.0, sorted.back() / 1000.0, over(20),
+                 over(33), over(50), over(90));
+    };
+    log_gaps("game frames", stats.game_gaps);
+    log_gaps("presents", stats.present_gaps);
+    const double capture_ms = static_cast<double>(stats.capture_ns) * 1e-6 / frames;
+    Window::SetTitle(fmt::format("GR2port | game {:.0f} fps | capture {:.2f} ms | render thread "
+                                 "{:.2f} ms | GPU {:.2f} ms{}",
+                                 game_fps, capture_ms, stats.work_ms / frames, gpu_ms,
+                                 EmulatedGpu::On() ? "" : " | GR2fork off"));
     stats = {.game_frames = game_frames, .skipped = skipped, .start = now};
     snapshot_wanted = true;
 }

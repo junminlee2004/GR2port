@@ -7,15 +7,21 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <span>
 #include <utility>
 
+#include <fmt/format.h>
+
+#include "common/logging/log.h"
 #include "video_core/gr2port/capture.h"
 #include "video_core/gr2port/deformers.h"
+#include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/scene_ring.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/window.h"
 
 namespace Gr2Port::Capture {
 
@@ -506,6 +512,17 @@ constexpr u64 MatrixBytes = 64;
 std::atomic<u64> g_frames{0};
 // Whether frames are captured.
 std::atomic<bool> g_capturing{true};
+// The game's frame rate since the last report, in whichever state the switches are: the frames, the
+// time the count began, the last frame's time, the longest gap and the gaps over 50 ms.
+constexpr auto FrameRatePeriod = std::chrono::seconds{2};
+constexpr auto LongGap = std::chrono::milliseconds{50};
+u32 g_rate_frames = 0;
+u32 g_rate_long_gaps = 0;
+std::chrono::steady_clock::time_point g_rate_start;
+std::chrono::steady_clock::time_point g_rate_last;
+std::chrono::steady_clock::duration g_rate_longest{};
+// When the last frame's capture began.
+std::chrono::steady_clock::time_point g_last_frame_start;
 
 // The frame's commands, which reach the packet in one go. Written item by item, they would leave
 // half-full write-combined lines in several places for the reads between items to evict.
@@ -2153,11 +2170,42 @@ GridConstants ReadGridConstants(VAddr view) {
 
 } // namespace
 
+void LogFrameRate(std::chrono::steady_clock::time_point now, bool capturing) {
+    if (g_rate_frames == 0) {
+        g_rate_start = now;
+    } else {
+        const auto gap = now - g_rate_last;
+        g_rate_longest = std::max(g_rate_longest, gap);
+        g_rate_long_gaps += gap > LongGap ? 1 : 0;
+    }
+    g_rate_last = now;
+    g_rate_frames++;
+    if (now - g_rate_start < FrameRatePeriod) {
+        return;
+    }
+    const double seconds = std::chrono::duration<double>(now - g_rate_start).count();
+    const double rate = (g_rate_frames - 1) / seconds;
+    const char* const renderer = capturing ? "on" : "off";
+    const char* const fork = EmulatedGpu::On() ? "on" : "off";
+    LOG_INFO(Render_Vulkan,
+             "GR2port frame rate: {:.1f} game frames/s, longest gap {:.1f} ms, {} gaps over 50 ms; "
+             "GR2port {}, GR2fork {}",
+             rate, std::chrono::duration<double, std::milli>(g_rate_longest).count(),
+             g_rate_long_gaps, renderer, fork);
+    if (!capturing) {
+        Window::SetTitle(fmt::format("GR2port off | game {:.0f} fps | GR2fork {}", rate, fork));
+    }
+    g_rate_frames = 0;
+    g_rate_long_gaps = 0;
+    g_rate_longest = {};
+}
+
 void OnFrame(VAddr frame_graph, VAddr view) {
     const auto start = std::chrono::steady_clock::now();
     const u64 frame = g_frames.load(std::memory_order_relaxed) + 1;
     g_frames.store(frame, std::memory_order_relaxed);
     const bool capturing = g_capturing.load(std::memory_order_relaxed);
+    LogFrameRate(start, capturing);
     if (!capturing) {
         return;
     }
@@ -2288,6 +2336,10 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     writer.EndPart(Scene::CapturePart::Characters);
     Scene::Header header = writer.Header();
     header.frame = frame;
+    header.frame_gap_ns = static_cast<u32>(std::min<s64>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(start - g_last_frame_start).count(),
+        std::numeric_limits<u32>::max()));
+    g_last_frame_start = start;
     header.fog = fog.flags;
     for (u32 i = 0; i < 2; i++) {
         header.fog_maps[i] = fog.maps[i];

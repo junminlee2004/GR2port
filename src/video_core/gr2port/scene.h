@@ -114,6 +114,8 @@ struct Header {
     u32 dropped;
     /// The capture's time on the game's draw thread, and its parts.
     u32 capture_ns;
+    /// The time since the last frame's capture began.
+    u32 frame_gap_ns;
     u32 capture_parts_ns[static_cast<u32>(CapturePart::Count)];
     /// Draws whose colour texture is not converted.
     u32 untextured;
