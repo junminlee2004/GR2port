@@ -9,24 +9,26 @@ namespace Libraries::Kernel {
 
 TimedMutex::TimedMutex() {
 #ifdef _WIN64
-    mtx = CreateMutex(nullptr, false, nullptr);
-    ASSERT(mtx);
+    unlocked = CreateEvent(nullptr, false, false, nullptr);
+    ASSERT(unlocked);
 #endif
 }
 
 TimedMutex::~TimedMutex() {
 #ifdef _WIN64
-    CloseHandle(mtx);
+    CloseHandle(unlocked);
 #endif
 }
 
 void TimedMutex::lock() {
 #ifdef _WIN64
-    for (;;) {
-        u64 res = WaitForSingleObjectEx(mtx, INFINITE, true);
-        if (res == WAIT_OBJECT_0) {
-            return;
-        }
+    u32 expected = Free;
+    if (state.compare_exchange_strong(expected, Held, std::memory_order_acquire,
+                                      std::memory_order_relaxed)) {
+        return;
+    }
+    while (state.exchange(Waited, std::memory_order_acquire) != Free) {
+        WaitForSingleObjectEx(unlocked, INFINITE, true);
     }
 #else
     mtx.lock();
@@ -35,7 +37,10 @@ void TimedMutex::lock() {
 
 bool TimedMutex::try_lock() {
 #ifdef _WIN64
-    return WaitForSingleObjectEx(mtx, 0, true) == WAIT_OBJECT_0;
+    u32 expected = Free;
+    return state.load(std::memory_order_relaxed) == Free &&
+           state.compare_exchange_strong(expected, Held, std::memory_order_acquire,
+                                         std::memory_order_relaxed);
 #else
     return mtx.try_lock();
 #endif
@@ -43,7 +48,9 @@ bool TimedMutex::try_lock() {
 
 void TimedMutex::unlock() {
 #ifdef _WIN64
-    ReleaseMutex(mtx);
+    if (state.exchange(Free, std::memory_order_release) == Waited) {
+        SetEvent(unlocked);
+    }
 #else
     mtx.unlock();
 #endif

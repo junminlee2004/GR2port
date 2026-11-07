@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <chrono>
 
 #include "common/types.h"
@@ -56,13 +57,11 @@ public:
                 return try_lock();
             }
 
-            const auto rel_ms = std::chrono::ceil<std::chrono::milliseconds>(abs_time - now);
-            u64 res = WaitForSingleObjectEx(mtx, static_cast<u64>(rel_ms.count()), true);
-            if (res == WAIT_OBJECT_0) {
+            if (state.exchange(Waited, std::memory_order_acquire) == Free) {
                 return true;
-            } else if (res == WAIT_TIMEOUT) {
-                return false;
             }
+            const auto rel_ms = std::chrono::ceil<std::chrono::milliseconds>(abs_time - now);
+            WaitForSingleObjectEx(unlocked, static_cast<u64>(rel_ms.count()), true);
         }
 #else
         return mtx.try_lock_until(abs_time);
@@ -71,7 +70,11 @@ public:
 
 private:
 #ifdef _WIN64
-    HANDLE mtx;
+    enum : u32 { Free, Held, Waited };
+
+    // The lock lives in state, so only a thread that has to block enters the kernel.
+    std::atomic<u32> state{Free};
+    HANDLE unlocked;
 #else
     std::timed_mutex mtx;
 #endif
