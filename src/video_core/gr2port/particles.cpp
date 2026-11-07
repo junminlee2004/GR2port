@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "common/logging/log.h"
+#include "video_core/gr2port/device_lost.h"
 #include "video_core/gr2port/fog.h"
 #include "video_core/gr2port/look.h"
 #include "video_core/gr2port/memory.h"
@@ -1089,6 +1090,7 @@ void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const 
                       dl);
     cmd.dispatch(object_groups, 1, 1, dl);
     FullBarrier(cmd);
+    DeviceLost::Mark(*g_device, cmd, DeviceLost::Pass::MeshSampling);
     RecordSamples(cmd, frame, packet, address, next);
     g_next = next;
     CheckAlive(cmd, frame, g_particles[next]);

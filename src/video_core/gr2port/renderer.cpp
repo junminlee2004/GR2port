@@ -25,6 +25,7 @@
 #include "video_core/gr2port/contours.h"
 #include "video_core/gr2port/deformers.h"
 #include "video_core/gr2port/device.h"
+#include "video_core/gr2port/device_lost.h"
 #include "video_core/gr2port/effects.h"
 #include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/fog.h"
@@ -641,6 +642,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     const auto& dl = d.dispatch;
     const u32 slot_index = static_cast<u32>(&slot - slots.data());
     (void)cmd.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit}, dl);
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::FrameStart);
     if (timestamps) {
         cmd.resetQueryPool(timestamps, Timestamps * slot_index, Timestamps, dl);
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, timestamps,
@@ -662,11 +664,15 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                             Timestamps * slot_index + 1, dl);
     }
     if (drawn) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Deformers);
         Deformers::Record(cmd, header, packet.address);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Kernels);
         Vegetation::RecordKernels(cmd, header, packet.address);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Simulation);
         Particles::RecordSimulation(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                     offset);
         Glass::Prepare(cmd);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::SelfTranslucent);
         SelfTranslucent::Record(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                 offset);
     }
@@ -675,6 +681,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                             Timestamps * slot_index + 2, dl);
     }
     if (drawn) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Shadows);
         Shadows::Record(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
                         timestamps, Timestamps * slot_index + 3);
     } else if (timestamps) {
@@ -684,6 +691,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         }
     }
     if (drawn) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::FogVolumes);
         Fog::RecordVolumes(cmd, header, packet.address);
     }
     if (timestamps) {
@@ -714,6 +722,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     depth_barrier(vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal,
                   depth_tests | vk::PipelineStageFlagBits2::eFragmentShader,
                   vk::AccessFlagBits2::eNone, depth_tests, depth_writes);
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Surfaces);
     World::RecordSurfaces(cmd, header, packet.data, drawn, packet.address, scene_ring.buffer,
                           offset, depth);
     if (timestamps) {
@@ -727,6 +736,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                       vk::PipelineStageFlagBits2::eComputeShader,
                   vk::AccessFlagBits2::eShaderSampledRead);
     if (drawn) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Lines);
         World::RecordLines(cmd, packet.address);
     }
     if (timestamps) {
@@ -734,6 +744,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                             Timestamps * slot_index + LinesTimestamp, dl);
     }
     if (drawn) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::CharacterDepth);
         // The last frame's occlusion sampled the characters' depth.
         Barrier(d, cmd, character_depth.image, vk::ImageLayout::eUndefined,
                 vk::ImageLayout::eDepthStencilAttachmentOptimal,
@@ -760,8 +771,10 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                 vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
                 vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderSampledRead,
                 vk::ImageAspectFlagBits::eDepth);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Occlusion);
         World::RecordOcclusion(cmd, packet.address);
     }
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Velocity);
     Velocity::Record(cmd, drawn, packet.address);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
@@ -792,6 +805,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                         .pColorAttachments = &lit},
                        dl);
     if (drawn) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Light);
         World::RecordLight(cmd, packet.address);
     }
     cmd.endRendering(dl);
@@ -833,6 +847,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     };
     cmd.beginRendering(rendering, dl);
     if (drawn) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Characters);
         const std::array sets{Textures::Set(), Shadows::Set(), SelfTranslucent::Set()};
         DrawCharacters(cmd, Scene::DrawList::Character, character_pipeline, sets, header, packet,
                        offset);
@@ -840,16 +855,21 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                        offset);
     }
     if (header.sky != 0) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Sky);
         Look::RecordSky(cmd, packet.address);
     }
     if (drawn) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Contours);
         Contours::Record(cmd, header, packet.address, scene_ring.buffer, offset, extent);
     }
     cmd.endRendering(dl);
     if (drawn) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::EffectsBehind);
         Effects::RecordTransparentBg(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                      offset, Look::SceneView(), depth, extent);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Glass);
         Glass::Record(cmd, header, packet.address, scene_ring.buffer, offset, depth, extent);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Water);
         Water::Record(cmd, header, packet.address, scene_ring.buffer, offset, Look::SceneView(),
                       depth, extent);
     }
@@ -863,8 +883,10 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                   vk::PipelineStageFlagBits2::eFragmentShader,
                   vk::AccessFlagBits2::eShaderSampledRead);
     if (drawn) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::EffectsInFront);
         Effects::RecordTransparentFg(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                      offset, Look::SceneView(), depth.view, extent);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::FogApply);
         // The fog blends over the forward draws' colour.
         const vk::MemoryBarrier2 forward_barrier{
             .srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
@@ -888,8 +910,10 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         Fog::RecordApply(cmd, packet.address, extent);
         cmd.endRendering(dl);
         // The game's particle passes, after its fog.
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Particles);
         Particles::RecordDraws(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
                                Look::SceneView(), depth, extent);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::EffectsTopMost);
         Effects::RecordTopMost(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
                                Look::SceneView(), depth.view, extent);
     }
@@ -904,17 +928,20 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         vk::AccessFlagBits2::eColorAttachmentWrite,
         vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eFragmentShader,
         vk::AccessFlagBits2::eShaderSampledRead);
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Meter);
     Look::RecordMeter(cmd, packet.address);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + MeterTimestamp, dl);
     }
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Bloom);
     Look::RecordBloom(cmd, header.bloom, packet.address);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + BloomTimestamp, dl);
     }
 
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Antialias);
     Look::RecordAntialias(cmd, packet.address);
 
     const vk::Image image = swapchain->Image(index);
@@ -933,6 +960,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                         .colorAttachmentCount = 1,
                         .pColorAttachments = &picture},
                        dl);
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Composite);
     Look::RecordComposite(cmd, packet.address);
     cmd.endRendering(dl);
     if (snapshot_wanted) {
@@ -1030,7 +1058,7 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     const u32 slot_index = next;
     Slot& slot = slots[slot_index];
     const auto wait_start = std::chrono::steady_clock::now();
-    (void)d.device.waitForFences(slot.done, true, UINT64_MAX, dl);
+    DeviceLost::Check(d, d.device.waitForFences(slot.done, true, UINT64_MAX, dl));
     const auto wait_end = std::chrono::steady_clock::now();
     ReadTimes(slot_index);
     if (slot.snapshot) {
@@ -1073,7 +1101,9 @@ void Thread::Frame(const SceneRing::Packet& packet) {
         .signalSemaphoreInfoCount = 1,
         .pSignalSemaphoreInfos = &signal,
     };
-    if (d.queue.submit2(submit, slot.done, dl) != vk::Result::eSuccess) {
+    const vk::Result submitted = d.queue.submit2(submit, slot.done, dl);
+    DeviceLost::Check(d, submitted);
+    if (submitted != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "GR2port: the frame submit failed");
         SceneRing::Release(slot.scene);
         slot.scene = SceneRing::Slots;

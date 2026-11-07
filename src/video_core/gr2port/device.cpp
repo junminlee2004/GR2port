@@ -178,12 +178,28 @@ bool CreateDevice(SDL_Window* window, Device& d) {
                                         VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME};
     const auto [extensions_result, available] =
         d.gpu.enumerateDeviceExtensionProperties(nullptr, d.dispatch);
+    vk::PhysicalDeviceFaultFeaturesEXT fault_features;
     for (const vk::ExtensionProperties& extension : available) {
-        if (std::string_view{extension.extensionName.data()} ==
-            VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) {
+        const std::string_view name{extension.extensionName.data()};
+        if (name == VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) {
             d.memory_budget = true;
             extensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+        } else if (name == VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME) {
+            d.checkpoints = true;
+            extensions.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
+        } else if (name == VK_EXT_DEVICE_FAULT_EXTENSION_NAME) {
+            vk::PhysicalDeviceFeatures2 query{.pNext = &fault_features};
+            d.gpu.getFeatures2(&query, d.dispatch);
+            d.device_fault = fault_features.deviceFault != VK_FALSE;
+            if (d.device_fault) {
+                extensions.push_back(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
+            }
         }
+    }
+    if (d.device_fault) {
+        fault_features.deviceFaultVendorBinary = false;
+        fault_features.pNext = features.pNext;
+        features.pNext = &fault_features;
     }
     const vk::DeviceCreateInfo info{
         .pNext = &features,
@@ -206,8 +222,9 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     if (families[d.queue_family].timestampValidBits != 0) {
         d.timestamp_period = properties.limits.timestampPeriod;
     }
-    LOG_INFO(Render_Vulkan, "GR2port: renderer device {} (queue family {})",
-             properties.deviceName.data(), d.queue_family);
+    LOG_INFO(Render_Vulkan,
+             "GR2port: renderer device {} (queue family {}), checkpoints {}, fault information {}",
+             properties.deviceName.data(), d.queue_family, d.checkpoints, d.device_fault);
     return true;
 }
 

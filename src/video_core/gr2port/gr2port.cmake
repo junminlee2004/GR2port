@@ -10,6 +10,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/deformers.cpp
     ${CMAKE_CURRENT_LIST_DIR}/deformers.h
     ${CMAKE_CURRENT_LIST_DIR}/device.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/device_lost.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/device_lost.h
     ${CMAKE_CURRENT_LIST_DIR}/device.h
     ${CMAKE_CURRENT_LIST_DIR}/emulated_gpu.cpp
     ${CMAKE_CURRENT_LIST_DIR}/emulated_gpu.h

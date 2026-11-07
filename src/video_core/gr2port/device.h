@@ -28,6 +28,10 @@ struct Device {
     bool tessellation_shaders = false;
     /// Storage images may have formats such as R8 (shaderStorageImageExtendedFormats).
     bool storage_extended_formats = false;
+    /// A lost device reports the last checkpoints (VK_NV_device_diagnostic_checkpoints).
+    bool checkpoints = false;
+    /// A lost device reports the fault (VK_EXT_device_fault).
+    bool device_fault = false;
 };
 
 /// Creates the instance, a surface for window, and a device on the first discrete GPU (else the
