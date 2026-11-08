@@ -6,6 +6,7 @@
 #extension GL_GOOGLE_include_directive : require
 
 #include "scene.glsl"
+#include "point_lights.glsl"
 
 layout(set = 0, binding = 0) uniform textureCube cubes[];
 layout(set = 0, binding = 2) uniform sampler clamp_sampler;
@@ -22,6 +23,8 @@ layout(set = 2, binding = 5) uniform sampler2D occlusion;
 
 layout(push_constant) uniform Constants {
     Light light;
+    PointLights lights;
+    LightGrid grid;
 };
 
 layout(location = 0) out vec4 color;
@@ -137,8 +140,7 @@ vec3 Tone(vec3 c) {
     return mix(t, t - f + f2 * f2, step(vec3(1.0), t)) / light.toning;
 }
 
-// The game's LightPass (key light only), IBL and Resolve programs in one pass, without
-// screen-space shadows.
+// The game's LightPass, IBL and Resolve programs in one pass, without screen-space shadows.
 void main() {
     const ivec2 pixel = ivec2(gl_FragCoord.xy);
     const float depth = texelFetch(scene_depth, pixel, 0).r;
@@ -210,6 +212,45 @@ void main() {
                         (1.0 - translucency);
         lit += light.light_color.rgb * diffuse * translucency * Transmittance(s) *
                max(0.3 + light_on_normal, 0.0);
+    }
+
+    // Point lights from the pixel's cell of the grid: the key light's terms toward each light,
+    // faded over the end of its range, less where the key light is shadowed or faces away, and
+    // through thin surfaces toward the eye.
+    if (light.point_lights > 0u) {
+        const uint first =
+            GridCellFirst(uv, distance_to_eye,
+                          1.0 / (light.inverse_projection.w - light.inverse_projection.z));
+        const float key_reach = 1.0 + light.shadow_influence * (n_dot_l * visible - 1.0);
+        const float view_term = n_dot_v + sqrt(a2 + (1.0 - a2) * n_dot_v * n_dot_v);
+        for (uint i = 0u; i < light.point_lights; i++) {
+            const uint index = grid.light_indices[first + i];
+            if (index == ~0u) {
+                break;
+            }
+            const PointLight point = lights.point_lights[index];
+            const vec3 offset = point.position - position;
+            const float reach = length(offset);
+            if (reach > point.range) {
+                continue;
+            }
+            const vec3 toward = offset / reach;
+            const vec3 middle = normalize(toward - to_point);
+            const float n_dot_toward = clamp(dot(normal, toward), 0.0, 1.0);
+            const float n_dot_middle = clamp(dot(normal, middle), 0.0, 1.0);
+            const float edge = pow(clamp(1.0 + dot(to_point, middle), 0.0, 1.0), 5.0);
+            const float spread = n_dot_middle * n_dot_middle * (a2 - 1.0) + 1.0;
+            const float point_ggx = a2 / (Pi * spread * spread);
+            const float point_visibility =
+                1.0 / (view_term *
+                       (n_dot_toward + sqrt(a2 + (1.0 - a2) * n_dot_toward * n_dot_toward)));
+            const vec3 point_highlight = key_open * (reflectance + (1.0 - reflectance) * edge) *
+                                         point_ggx * point_visibility;
+            const float behind = max(dot(toward, to_point), 0.0);
+            lit += point.color * (key_reach * PointFade(point, reach)) *
+                   (key_open * n_dot_toward * (point_highlight + diffuse / Pi) +
+                    translucency * behind * behind * diffuse);
+        }
     }
     lit = max(lit, vec3(0.0)) + 6.0 * surface.a * albedo;
 

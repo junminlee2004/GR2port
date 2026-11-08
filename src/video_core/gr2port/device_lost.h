@@ -14,6 +14,7 @@ enum class Pass : u32 {
     Deformers,
     Kernels,
     Simulation,
+    PointLights,
     MeshSampling,
     SelfTranslucent,
     Shadows,

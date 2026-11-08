@@ -12,16 +12,16 @@ namespace Gr2Port::DeviceLost {
 namespace {
 
 constexpr std::array<const char*, static_cast<u32>(Pass::Count)> PassNames{
-    "frame start", "deformers",       "kernels",
-    "simulation",  "mesh sampling",   "self translucent",
-    "shadows",     "fog volumes",     "surfaces",
-    "lines",       "character depth", "occlusion",
-    "velocity",    "light",           "characters",
-    "sky",         "contours",        "effects behind",
-    "glass",       "water",           "effects in front",
-    "fog apply",   "particles",       "effects top-most",
-    "meter",       "bloom",           "antialias",
-    "composite",
+    "frame start",      "deformers",    "kernels",
+    "simulation",       "point lights", "mesh sampling",
+    "self translucent", "shadows",      "fog volumes",
+    "surfaces",         "lines",        "character depth",
+    "occlusion",        "velocity",     "light",
+    "characters",       "sky",          "contours",
+    "effects behind",   "glass",        "water",
+    "effects in front", "fog apply",    "particles",
+    "effects top-most", "meter",        "bloom",
+    "antialias",        "composite",
 };
 
 // A marker holds the frame above the pass.

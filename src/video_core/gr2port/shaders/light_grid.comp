@@ -1,0 +1,68 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+#include "scene.glsl"
+
+// The game's LightCompute (0x1c2fea4): a workgroup per cell of the grid lists the point lights
+// whose spheres reach into the cell's part of the view.
+layout(local_size_x = 64) in;
+
+layout(push_constant) uniform Constants {
+    Light light;
+    PointLights lights;
+    LightGrid grid;
+};
+
+// The far end of the last slice.
+const float GridEnd = 10000.0;
+
+shared uint hits;
+shared uint hit_lights[LightsPerCell - 1u];
+
+void main() {
+    const uvec3 cell = gl_WorkGroupID;
+    const uint thread = gl_LocalInvocationIndex;
+    if (thread == 0u) {
+        hits = 0u;
+    }
+    barrier();
+
+    // The slices double in depth from where they start; the last reaches GridEnd.
+    const float front = light.grid_start + exp2(float(cell.z));
+    const float back = cell.z == LightGridSlices - 1u
+                           ? GridEnd
+                           : light.grid_start + exp2(float(cell.z + 1u));
+    // Planes through the eye at the cell's edges, facing into it: the column's right and left
+    // edges in x and z, the row's lower and upper edges in y and z.
+    const vec2 half_grid = 0.5 * vec2(LightGridColumns, LightGridRows);
+    const vec2 cell_xy = vec2(cell.xy);
+    const vec2 right =
+        normalize(vec2(-half_grid.x * light.grid_scale.x, half_grid.x - 1.0 - cell_xy.x));
+    const vec2 left = normalize(vec2(half_grid.x * light.grid_scale.x, cell_xy.x - half_grid.x));
+    const vec2 lower =
+        normalize(vec2(half_grid.y * light.grid_scale.y, half_grid.y - 1.0 - cell_xy.y));
+    const vec2 upper = normalize(vec2(-half_grid.y * light.grid_scale.y, cell_xy.y - half_grid.y));
+    for (uint i = thread; i < light.point_lights; i += gl_WorkGroupSize.x) {
+        const vec3 p = lights.point_lights[i].position;
+        const float across = min(dot(right, p.xz), dot(left, p.xz));
+        const float up = min(dot(lower, p.yz), dot(upper, p.yz));
+        const float inside = min(min(across, up), min(back + p.z, -front - p.z));
+        if (inside >= -lights.point_lights[i].range) {
+            const uint slot = atomicAdd(hits, 1u);
+            if (slot < LightsPerCell - 1u) {
+                hit_lights[slot] = i;
+            }
+        }
+    }
+    barrier();
+
+    const uint count = min(hits, LightsPerCell - 1u);
+    const uint base =
+        ((cell.z * LightGridRows + cell.y) * LightGridColumns + cell.x) * LightsPerCell;
+    for (uint s = thread; s <= count; s += gl_WorkGroupSize.x) {
+        grid.light_indices[base + s] = s < count ? hit_lights[s] : ~0u;
+    }
+}

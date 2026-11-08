@@ -36,6 +36,7 @@
 #include "video_core/gr2port/overlays.h"
 #include "video_core/gr2port/particles.h"
 #include "video_core/gr2port/pipeline.h"
+#include "video_core/gr2port/point_lights.h"
 #include "video_core/gr2port/renderer.h"
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/scene_ring.h"
@@ -102,6 +103,8 @@ struct CharacterPush {
     u64 decals;
     u64 light;
     std::array<float, 2> target_inverse;
+    u64 point_lights;
+    u64 light_grid;
 };
 
 struct Slot {
@@ -174,6 +177,7 @@ struct Stats {
     u64 dropped_glass = 0;
     u64 metaballs = 0;
     u64 dropped_metaballs = 0;
+    u64 point_lights = 0;
     u64 particle_draws = 0;
     u64 particle_runs = 0;
     u64 particle_unported = 0;
@@ -312,7 +316,7 @@ bool Thread::Init() {
         !Glass::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !SelfTranslucent::Start(d, *memory) ||
         !Particles::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
-        !Effects::Start(d, Look::SceneFormat, DepthFormat) ||
+        !PointLights::Start(d, *memory) || !Effects::Start(d, Look::SceneFormat, DepthFormat) ||
         !Water::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !Vegetation::Start(d, *memory, World::SurfaceFormats, DepthFormat, Shadows::DepthFormat)) {
         return false;
@@ -432,6 +436,8 @@ void Thread::DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const P
         .light = packet.address + Scene::LightOffset,
         .target_inverse = {1.0f / static_cast<float>(extent.width),
                            -1.0f / static_cast<float>(extent.height)},
+        .point_lights = packet.address + Scene::PointLightsOffset,
+        .light_grid = PointLights::GridAddress(),
     };
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, sets, {}, dl);
@@ -675,6 +681,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Simulation);
         Particles::RecordSimulation(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                     offset);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::PointLights);
+        PointLights::Record(cmd, header, packet.address);
         Glass::Prepare(cmd);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::SelfTranslucent);
         SelfTranslucent::Record(cmd, header, packet.data, packet.address, scene_ring.buffer,
@@ -996,6 +1004,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.dropped_glass += header.dropped_glass;
     stats.metaballs += header.metaballs;
     stats.dropped_metaballs += header.dropped_metaballs;
+    stats.point_lights += header.point_lights;
     stats.particle_draws += header.particles.draws;
     stats.particle_runs += header.particles.runs;
     stats.particle_unported += header.particles.unported;
@@ -1259,6 +1268,8 @@ void Thread::Report() {
     LOG_INFO(Render_Vulkan, "GR2port metaballs: per frame {:.1f} drawn, {:.1f} not drawn",
              static_cast<double>(stats.metaballs) / frames,
              static_cast<double>(stats.dropped_metaballs) / frames);
+    LOG_INFO(Render_Vulkan, "GR2port point lights: per frame {:.1f}",
+             static_cast<double>(stats.point_lights) / frames);
     LOG_INFO(Render_Vulkan,
              "GR2port particles: per frame {:.1f} live effects, {:.1f} draws in {:.1f} runs, "
              "{:.1f} items not ported, {:.1f} dropped, {:.3f} ms capture, {} frames refused",

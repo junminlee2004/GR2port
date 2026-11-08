@@ -59,6 +59,8 @@ layout(push_constant) uniform Constants {
     uint64_t light_address;
     uint64_t fog_address;
     uint64_t instance_address;
+    uint64_t point_lights_address;
+    uint64_t light_grid_address;
 };
 layout(location = 15) flat in uint draw_index;
 layout(location = 0) in vec4 attr0;

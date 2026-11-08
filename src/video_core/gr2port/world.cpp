@@ -10,6 +10,7 @@
 #include "video_core/gr2port/metaballs.h"
 #include "video_core/gr2port/particles.h"
 #include "video_core/gr2port/pipeline.h"
+#include "video_core/gr2port/point_lights.h"
 #include "video_core/gr2port/shaders/deferred_frag.h"
 #include "video_core/gr2port/shaders/fullscreen_vert.h"
 #include "video_core/gr2port/shaders/occlusion_comp.h"
@@ -38,6 +39,13 @@ struct SurfacePush {
 struct DecalPush {
     u64 decals;
     u64 light;
+};
+
+// The light block, the point lights and their grid.
+struct LightPush {
+    u64 light;
+    u64 point_lights;
+    u64 grid;
 };
 
 // The light block, and the frame's place in the game's cycle of 26 frames.
@@ -302,7 +310,7 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
                                                  .vertex = FULLSCREEN_VERT,
                                                  .fragment = DEFERRED_FRAG,
                                                  .color = scene_format,
-                                                 .push_constant_bytes = sizeof(u64),
+                                                 .push_constant_bytes = sizeof(LightPush),
                                                  .set_layouts = light_sets,
                                              });
     const std::array line_sets{g_lines_layout};
@@ -682,13 +690,17 @@ void RecordLight(vk::CommandBuffer cmd, u64 address) {
         .maxDepth = 1.0f,
     };
     const std::array sets{Textures::Set(), Shadows::Set(), g_sets[g_lines_image]};
-    const u64 light = address + Scene::LightOffset;
+    const LightPush push{
+        .light = address + Scene::LightOffset,
+        .point_lights = address + Scene::PointLightsOffset,
+        .grid = PointLights::GridAddress(),
+    };
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_light.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_light.layout, 0, sets, {}, dl);
     cmd.setViewport(0, viewport, dl);
     cmd.setScissor(0, vk::Rect2D{{0, 0}, g_extent}, dl);
-    cmd.pushConstants(g_light.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(light),
-                      &light, dl);
+    cmd.pushConstants(g_light.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push), &push,
+                      dl);
     cmd.draw(3, 1, 0, 0, dl);
 }
 

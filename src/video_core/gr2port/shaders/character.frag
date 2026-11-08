@@ -6,6 +6,7 @@
 #extension GL_GOOGLE_include_directive : require
 
 #include "scene.glsl"
+#include "point_lights.glsl"
 
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform sampler texture_sampler;
@@ -21,6 +22,8 @@ layout(push_constant) uniform Constants {
     Decals scene_decals;
     Light light;
     vec2 target_inverse;
+    PointLights lights;
+    LightGrid grid;
 };
 
 layout(location = 0) in vec3 view_position;
@@ -92,9 +95,8 @@ vec3 AmbientOn(vec3 n) {
            light.sh[6].rgb * (n.x * n.x - n.y * n.y);
 }
 
-// The game's G2_CH_Main pixel programs without their point lights and self-translucency, in the
-// order they run: bands of the toon light, ambient light, camera light, reflection, detail,
-// highlight, rim.
+// The game's G2_CH_Main pixel programs, in the order they run: bands of the toon light, ambient
+// light, point lights, camera light, reflection, detail, highlight, rim, self-translucency.
 void main() {
     Characters table = scene_characters;
     const uint index = scene_draws.draws[draw_index].material - 1u;
@@ -197,6 +199,31 @@ void main() {
     vec3 result = light_scale * mix(in_shadow, albedo * toon, lit_share);
     result += table.characters[index].ibl_blend * albedo *
               AmbientOn(normalize(mat3(table.characters[index].view_inverse) * n));
+
+    // Point lights from the pixel's cell of the grid: each wraps round the surface as the camera's
+    // light does and fades over the end of its range, less where the key light is shadowed or
+    // faces away.
+    if (light.point_lights > 0u) {
+        const uint first =
+            GridCellFirst(gl_FragCoord.xy * abs(target_inverse), -view_position.z,
+                          1.0 / (light.inverse_projection.w - light.inverse_projection.z));
+        const float key_lit = max(-dot(travel, n), 0.0) * shadow;
+        const float key_reach = 1.0 + table.characters[index].shadow_influence * (key_lit - 1.0);
+        const float scale = table.characters[index].light_intensity_scale * key_reach;
+        for (uint i = 0u; i < light.point_lights; i++) {
+            const uint light_index = grid.light_indices[first + i];
+            if (light_index == ~0u) {
+                break;
+            }
+            const PointLight point = lights.point_lights[light_index];
+            const vec3 offset = point.position - view_position;
+            const float reach = length(offset);
+            const float wrap =
+                clamp(3.3333333 * (dot(offset, n) / reach + 1.0) - 2.3333333, 0.0, 1.0);
+            result += scale * wrap * wrap * (3.0 - 2.0 * wrap) * PointFade(point, reach) *
+                      point.color * albedo;
+        }
+    }
 
     // The camera's light.
     const float distance_to_eye = length(view_position);

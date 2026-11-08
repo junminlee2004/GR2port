@@ -462,6 +462,10 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Ca
 const uint Cascades = 3u;
 const uint CasterTables = 3u;
 const uint MaxOccluders = 64u;
+const uint LightGridColumns = 60u;
+const uint LightGridRows = 36u;
+const uint LightGridSlices = 8u;
+const uint LightsPerCell = 48u;
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Shadows {
     mat4 inverse_view;
@@ -591,6 +595,30 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Li
     float depth_range;
     float occlusion_intensity;
     float occlusion_select;
+    vec2 grid_scale;
+    float grid_start;
+    uint point_lights;
+    float shadow_influence;
+    uint light_padding[3];
     vec4 occluder_spheres[MaxOccluders];
     vec4 sh[7];
+};
+
+struct PointLight {
+    vec3 position;
+    float range;
+    vec3 color;
+    float falloff_start;
+    float falloff_power;
+    float shadow;
+    uint padding[2];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer PointLights {
+    PointLight point_lights[];
+};
+
+// LightCompute's grid: LightsPerCell light indices to a cell, the last after its lights ~0.
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer LightGrid {
+    uint light_indices[];
 };

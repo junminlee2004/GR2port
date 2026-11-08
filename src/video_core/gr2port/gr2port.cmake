@@ -43,6 +43,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/particles.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.cpp
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.h
+    ${CMAKE_CURRENT_LIST_DIR}/point_lights.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/point_lights.h
     ${CMAKE_CURRENT_LIST_DIR}/renderer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/renderer.h
     ${CMAKE_CURRENT_LIST_DIR}/scene.h
@@ -110,6 +112,7 @@ gr2port_add_shader(contour.frag contour_frag)
 gr2port_add_shader(fullscreen.vert fullscreen_vert)
 gr2port_add_shader(sky.frag sky_frag)
 gr2port_add_shader(luminance.comp luminance_comp)
+gr2port_add_shader(light_grid.comp light_grid_comp)
 gr2port_add_shader(pfx/collision_backup.comp collision_backup_comp)
 gr2port_add_shader(exposure.comp exposure_comp)
 gr2port_add_shader(composite.frag composite_frag)

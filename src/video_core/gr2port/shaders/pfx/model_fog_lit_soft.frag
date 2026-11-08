@@ -67,6 +67,8 @@ layout(push_constant) uniform Constants {
     uint64_t light_address;
     uint64_t fog_address;
     uint64_t instance_address;
+    uint64_t point_lights_address;
+    uint64_t light_grid_address;
 };
 layout(location = 15) flat in uint draw_index;
 layout(location = 0) in vec4 attr0;
@@ -91,8 +93,10 @@ void main() {
     uint vcc_lo = 0u, vcc_hi = 0u, exec_lo = 1u, scc = 0u, m0 = 0u;
     int pc = 0;
     Words material = Words(material_address);
-    Words light = Words(light_address);
+    Words point_lights = Words(point_lights_address);
     Words fog = Words(fog_address);
+    Words light = Words(light_address);
+    Words light_grid = Words(light_grid_address);
     Words draw_block = Words(draws_address + uint64_t(draw_index) * 872ul);
     uint texture0 = draw_block.w[88];
     uint texture1 = draw_block.w[89];
@@ -1401,7 +1405,7 @@ void main() {
                 v[2] = v[2] << (0x2u & 31u);
                 {
                     uint b_at = (v[2]) >> 2;
-                    v[9] = light.w[b_at + 0u];
+                    v[9] = light_grid.w[b_at + 0u];
                 }
             }
             {
@@ -1429,10 +1433,10 @@ void main() {
                 v[2] = abs_diff(0x1u, 0x0u) + v[2];
                 v[3] = 0xfu & v[3];
                 {
-                    uint b_at = (v[2] * 48u + v[3]) >> 2;
-                    v[6] = light.w[b_at + 0u];
-                    v[7] = light.w[b_at + 1u];
-                    v[8] = light.w[b_at + 2u];
+                    uint b_at = (v[2] * 16u + v[3]) >> 2;
+                    v[6] = point_lights.w[b_at + 0u];
+                    v[7] = point_lights.w[b_at + 1u];
+                    v[8] = point_lights.w[b_at + 2u];
                 }
             }
             {
@@ -1536,23 +1540,23 @@ void main() {
                 v[12] = abs_diff(0x1u, 0x0u) + v[2];
                 v[13] = v[3];
                 {
-                    uint b_at = (v[2] * 48u + v[3]) >> 2;
-                    v[9] = light.w[b_at + 0u];
-                    v[10] = light.w[b_at + 1u];
-                    v[11] = light.w[b_at + 2u];
+                    uint b_at = (v[2] * 16u + v[3]) >> 2;
+                    v[9] = point_lights.w[b_at + 0u];
+                    v[10] = point_lights.w[b_at + 1u];
+                    v[11] = point_lights.w[b_at + 2u];
                 }
                 {
-                    uint b_at = (v[12] * 48u + v[13] + 12u) >> 2;
-                    v[27] = light.w[b_at + 0u];
+                    uint b_at = (v[12] * 16u + v[13] + 12u) >> 2;
+                    v[27] = point_lights.w[b_at + 0u];
                 }
                 {
-                    uint b_at = (v[2] * 48u + v[3] + 12u) >> 2;
-                    v[26] = light.w[b_at + 0u];
+                    uint b_at = (v[2] * 16u + v[3] + 12u) >> 2;
+                    v[26] = point_lights.w[b_at + 0u];
                 }
                 v[12] = abs_diff(0x2u, 0x0u) + v[2];
                 {
-                    uint b_at = (v[12] * 48u + v[13]) >> 2;
-                    v[2] = light.w[b_at + 0u];
+                    uint b_at = (v[12] * 16u + v[13]) >> 2;
+                    v[2] = point_lights.w[b_at + 0u];
                 }
             }
             {

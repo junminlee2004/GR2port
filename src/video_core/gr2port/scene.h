@@ -73,6 +73,14 @@ inline constexpr u32 EffectLists = 7;
 inline constexpr u32 MaxWaterDraws = 32;
 /// G2_BG_Metaball draws per packet.
 inline constexpr u32 MaxMetaballs = 256;
+/// The game's limit on a view's point lights.
+inline constexpr u32 MaxPointLights = 1024;
+/// LightCompute's grid of the view: 60 columns, 36 rows and 8 depth slices, 48 light indices to a
+/// cell, the last after the cell's lights being ~0.
+inline constexpr u32 LightGridColumns = 60;
+inline constexpr u32 LightGridRows = 36;
+inline constexpr u32 LightGridSlices = 8;
+inline constexpr u32 LightsPerCell = 48;
 /// Materials of G2_BG_Glass draws per packet.
 inline constexpr u32 MaxGlassMaterials = 256;
 /// Branch instances the kernel sways per packet, and branch ribbon draws.
@@ -335,6 +343,8 @@ struct Header {
     u32 metaballs;
     u32 metaball_commands[2];
     u32 dropped_metaballs;
+    /// The view's point lights, as in Light.
+    u32 point_lights;
     ParticleHeader particles;
     EffectHeader effects;
     /// The items of each category in the frame, at most 65535.
@@ -962,6 +972,19 @@ struct Fog {
 };
 static_assert(sizeof(Fog) == 656);
 
+/// A point light as the view lists it: its position in view space and its range, its colour, the
+/// distance its falloff starts at, the falloff's power and the share the screen-space shadow takes.
+struct PointLight {
+    float position[3];
+    float range;
+    float color[3];
+    float falloff_start;
+    float falloff_power;
+    float shadow;
+    u32 padding[2];
+};
+static_assert(sizeof(PointLight) == 48);
+
 /// The key light, ambient light and comic shading of the world, as the game's LightPass, IBL and
 /// Resolve programs read them. Matrices are as in Draw.
 struct Light {
@@ -1016,6 +1039,14 @@ struct Light {
     /// samples skip pixels that are not the world's.
     float occlusion_intensity;
     float occlusion_select;
+    /// LightCompute's constants: the projection's x and y scales, the distance its depth slices
+    /// start from, and the view's point lights.
+    float grid_scale[2];
+    float grid_start;
+    u32 point_lights;
+    /// How much the point lights fade where the key light is shadowed or faces away.
+    float shadow_influence;
+    u32 padding[3];
     /// Occluders in view space: centre, radius.
     float occluder_spheres[MaxOccluders][4];
     /// The ambient light's spherical harmonics for characters: Ar, Ag, Ab, Br, Bg, Bb, Cc.
@@ -1122,7 +1153,10 @@ inline constexpr u64 MetaballDrawsOffset =
 /// MaxMetaballs commands of the unskinned draws, then of the skinned ones.
 inline constexpr u64 MetaballCommandsOffset =
     MetaballDrawsOffset + MaxMetaballs * sizeof(MetaballDraw);
-inline constexpr u64 PacketBytes = MetaballCommandsOffset + 2 * MaxMetaballs * sizeof(Command);
+/// The view's point lights, Light::point_lights of them.
+inline constexpr u64 PointLightsOffset =
+    (MetaballCommandsOffset + 2 * MaxMetaballs * sizeof(Command) + 15) & ~u64{15};
+inline constexpr u64 PacketBytes = PointLightsOffset + MaxPointLights * sizeof(PointLight);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -1136,6 +1170,7 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               WorldDecalsOffset % 16 == 0 && GlassMaterialsOffset % 16 == 0 &&
               ParticleSceneOffset % 16 == 0 && ParticleDrawsOffset % 16 == 0 &&
               ParticleEffectsOffset % 16 == 0 && EffectDrawsOffset % 16 == 0 &&
-              WaterDrawsOffset % 16 == 0 && MetaballDrawsOffset % 16 == 0);
+              WaterDrawsOffset % 16 == 0 && MetaballDrawsOffset % 16 == 0 &&
+              PointLightsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

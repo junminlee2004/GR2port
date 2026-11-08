@@ -186,6 +186,11 @@ constexpr u64 ContextClip = 0xd0;
 constexpr u64 ContextLight = 0x2c0;
 constexpr u64 ContextLightDirection = 0x2d0;
 constexpr u64 ContextLightLast = 0x2e0;
+// The view's point lights the context holds; the lit programs take at most MaxLitPointLights of a
+// cell's.
+constexpr u64 ContextPointLightCount = 0x388;
+constexpr u32 MaxLitPointLights = 10;
+constexpr u32 LightPointLightsWord = 12;
 constexpr u64 ContextScreen = 0x2f0;
 // The fog's values, as FUN_014c0960 reads them.
 constexpr u64 ContextFogMatrixRight = 0x300;
@@ -443,9 +448,10 @@ void WriteSurfaceMaterial(Scene::ParticleDraw& record, VAddr material, VAddr obj
     record.maps[4] = MapHandle(layered_normal);
 }
 
-// The light's constants, as FUN_014c0960 builds them for its lit programs, with no point lights:
-// its first values, its direction through the rotation at ContextProjection, its last values.
-void WriteLight(VAddr context, u8* packet) {
+// The light's constants, as FUN_014c0960 builds them for its lit programs: its first values, its
+// direction through the rotation at ContextProjection, its last values, and how many of a cell's
+// point lights to take, none when the packet holds no grid.
+void WriteLight(VAddr context, u8* packet, bool has_grid) {
     std::array<float, 16> light{};
     std::memcpy(&light[0], reinterpret_cast<const void*>(context + ContextLight),
                 4 * sizeof(float));
@@ -463,6 +469,9 @@ void WriteLight(VAddr context, u8* packet) {
     }
     std::memcpy(&light[8], reinterpret_cast<const void*>(context + ContextLightLast),
                 4 * sizeof(float));
+    const u32 point_lights =
+        has_grid ? std::min(Load<u32>(context + ContextPointLightCount), MaxLitPointLights) : 0;
+    std::memcpy(&light[LightPointLightsWord], &point_lights, sizeof(point_lights));
     std::memcpy(packet + Scene::ParticleLightOffset, light.data(), sizeof(light));
 }
 
@@ -1004,7 +1013,7 @@ void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
                  out.particles, out.live_effects, slot, ring_size, words);
     }
 
-    WriteLight(context, packet);
+    WriteLight(context, packet, header.point_lights != 0);
     WriteFog(context, packet);
     WriteLiveDescriptions(library, packet, out);
     WriteSamples(fx, view, packet, out);

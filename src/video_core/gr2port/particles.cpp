@@ -18,6 +18,7 @@
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/particles.h"
 #include "video_core/gr2port/pipeline.h"
+#include "video_core/gr2port/point_lights.h"
 #include "video_core/gr2port/self_translucent.h"
 #include "video_core/gr2port/shaders/collision_backup_comp.h"
 #include "video_core/gr2port/shaders/gpu_emitter_spawn_comp.h"
@@ -126,6 +127,8 @@ struct DrawPush {
     u64 light;
     u64 fog;
     u64 instance;
+    u64 point_lights;
+    u64 light_grid;
 };
 
 struct UpdatePush {
@@ -649,6 +652,8 @@ DrawPush MakePush(u64 address) {
         .light = address + Scene::ParticleLightOffset,
         .fog = address + Scene::ParticleFogOffset,
         .instance = g_instances.address,
+        .point_lights = address + Scene::PointLightsOffset,
+        .light_grid = PointLights::GridAddress(),
     };
 }
 

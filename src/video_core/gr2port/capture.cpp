@@ -108,6 +108,11 @@ constexpr u64 ViewSphereCount = 0xc38;
 constexpr u64 SphereBytes = 32;
 constexpr float GridFar = 40.0f;
 constexpr float GridFadeStart = 32.0f;
+// View: the point lights +0xc10, 48 bytes each, with their count +0xc18, and how much the point
+// lights fade where the key light is shadowed +0x890.
+constexpr u64 ViewPointLights = 0xc10;
+constexpr u64 ViewPointLightCount = 0xc18;
+constexpr u64 ViewShadowInfluence = 0x890;
 // View: V +0x20, inverse(V) +0x60, the cascade records from +0x400 every 0x110 ({valid, split,
 // depth bias constant, depth bias slope} and the cascade VP at +0x90), and the casters'
 // view-projection tables from +0x748 (a pointer per table and cascade).
@@ -2470,9 +2475,13 @@ FogHeader WriteFog(VAddr frame_graph, VAddr view, u8* packet) {
     return header;
 }
 
-// The values the game's LightPass, IBL and Resolve passes set up on the draw thread after the
-// capture, from the view. The cascades' projections take view space to their texture coordinates.
-void WriteLight(VAddr frame_graph, VAddr view, u8* packet) {
+// The first point light the capture copies is logged once, to check its fields.
+bool g_logged_point_light = false;
+
+// The values the game's LightCompute, LightPass, IBL and Resolve passes set up on the draw thread
+// after the capture, from the view, and its point lights. The cascades' projections take view
+// space to their texture coordinates. Returns the point lights copied.
+u32 WriteLight(VAddr frame_graph, VAddr view, u8* packet) {
     Scene::Light light{};
     const auto number = [view](u64 field) { return Load<float>(view + field); };
     const auto copy = [view](float* out, u64 field, size_t bytes) {
@@ -2552,7 +2561,31 @@ void WriteLight(VAddr frame_graph, VAddr view, u8* packet) {
     }
     std::memcpy(light.sh, reinterpret_cast<const void*>(frame_graph + FrameGraphSh),
                 sizeof(light.sh));
+    light.grid_scale[0] = number(ViewProjectionX);
+    light.grid_scale[1] = number(ViewProjectionY);
+    light.grid_start = number(ViewGridNear);
+    light.shadow_influence = number(ViewShadowInfluence);
+    const VAddr point_lights = Load<VAddr>(view + ViewPointLights);
+    if (point_lights != 0) {
+        light.point_lights = std::clamp<s32>(Load<s32>(view + ViewPointLightCount), 0,
+                                             static_cast<s32>(Scene::MaxPointLights));
+        std::memcpy(packet + Scene::PointLightsOffset, reinterpret_cast<const void*>(point_lights),
+                    light.point_lights * sizeof(Scene::PointLight));
+        if (light.point_lights != 0 && !g_logged_point_light) {
+            g_logged_point_light = true;
+            const auto first = Load<Scene::PointLight>(point_lights);
+            LOG_INFO(Render_Vulkan,
+                     "GR2port point lights: {} in the view, the first at ({:.2f} {:.2f} {:.2f}) "
+                     "with range {:.2f}, colour ({:.2f} {:.2f} {:.2f}), falloff from {:.2f} by "
+                     "power {:.2f}, shadow {:.2f}; shadow influence {:.2f}",
+                     light.point_lights, first.position[0], first.position[1], first.position[2],
+                     first.range, first.color[0], first.color[1], first.color[2],
+                     first.falloff_start, first.falloff_power, first.shadow,
+                     light.shadow_influence);
+        }
+    }
     std::memcpy(packet + Scene::LightOffset, &light, sizeof(light));
+    return light.point_lights;
 }
 
 // The effector constants and spheres as the game's effector program reads them.
@@ -2655,7 +2688,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     WriteShadows(view, packet, writer);
     WriteSky(frame_graph, view, packet, writer);
     WriteGrade(view, packet);
-    WriteLight(frame_graph, view, packet);
+    const u32 point_lights = WriteLight(frame_graph, view, packet);
     const FogHeader fog = WriteFog(frame_graph, view, packet);
     const VAddr hatching = Load<VAddr>(frame_graph + FrameGraphHatching);
     writer.SetHatching(hatching != 0 ? Textures::Get(hatching) : 0);
@@ -2798,6 +2831,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
         std::chrono::duration_cast<std::chrono::nanoseconds>(start - g_last_frame_start).count(),
         std::numeric_limits<u32>::max()));
     g_last_frame_start = start;
+    header.point_lights = point_lights;
     header.fog = fog.flags;
     for (u32 i = 0; i < 2; i++) {
         header.fog_maps[i] = fog.maps[i];
