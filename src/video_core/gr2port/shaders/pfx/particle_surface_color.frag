@@ -227,9 +227,9 @@ void main() {
         }
         if (exec_lo != 0u) {
             v5 = u(attr2.y);
-            v5 = (vcc_lo & 1u) != 0u ? v5 : v5;
+            v5 = (vcc_lo & 1u) != 0u ? (v5 ^ 0x80000000u) : v5;
             v13 = u(attr2.z);
-            v13 = (vcc_lo & 1u) != 0u ? v13 : v13;
+            v13 = (vcc_lo & 1u) != 0u ? (v13 ^ 0x80000000u) : v13;
         }
         s0 = pixel_constants.w[24];
         s1 = pixel_constants.w[25];
@@ -255,7 +255,7 @@ void main() {
             }
             v3 = u(f(s31) * f(v4) + f(v3));
             v4 = u(attr2.x);
-            v4 = (vcc_lo & 1u) != 0u ? v4 : v4;
+            v4 = (vcc_lo & 1u) != 0u ? (v4 ^ 0x80000000u) : v4;
             v15 = u(f(v4) * f(v4));
             v15 = u(f(v5) * f(v5) + f(v15));
             v15 = u(f(v13) * f(v13) + f(v15));

@@ -923,7 +923,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v30 = (vcc_lo & 1u) != 0u ? v32 : v32;
+                v30 = (vcc_lo & 1u) != 0u ? (v32 ^ 0x80000000u) : v32;
                 v30 = u(f(v152) * f(v30));
                 v32 = u(f(v30) * f(0x3ec01c14u) + f(v82));
                 v30 = u(f(v32) - f(v98));
@@ -1878,7 +1878,7 @@ void main() {
                     vcc_hi = 0u;
                 }
                 if (exec_lo != 0u) {
-                    v110 = (vcc_lo & 1u) != 0u ? v113 : v113;
+                    v110 = (vcc_lo & 1u) != 0u ? (v113 ^ 0x80000000u) : v113;
                     v113 = u(f(0x3b800000u) * f(v112));
                     v112 = u(f(0x3ac01c14u) * f(v112));
                     v114 = u(fract(abs(f(v112))));
@@ -1893,7 +1893,7 @@ void main() {
                     v112 = u(f(0x3b800000u) * f(v111));
                     v111 = u(f(0x3ac01c14u) * f(v111));
                     v111 = u(fract(abs(f(v111))));
-                    v113 = (vcc_lo & 1u) != 0u ? v113 : v113;
+                    v113 = (vcc_lo & 1u) != 0u ? (v113 ^ 0x80000000u) : v113;
                     v111 = u(f(0x402a91b9u) * f(v111));
                 }
                 {
@@ -1903,7 +1903,7 @@ void main() {
                 }
                 if (exec_lo != 0u) {
                     v112 = u(f(v96) * f(v113));
-                    v113 = (vcc_lo & 1u) != 0u ? v111 : v111;
+                    v113 = (vcc_lo & 1u) != 0u ? (v111 ^ 0x80000000u) : v111;
                     v112 = u(f(v112) * f(0x3ec01c14u) + f(v33));
                     v113 = u(f(v95) * f(v113));
                     v110 = u(f(v97) * f(v110));
@@ -1961,7 +1961,7 @@ void main() {
                     v116 = u(f(0x402a91b9u) * f(v109));
                     v108 = u(fract(abs(f(v108))));
                     v109 = u(f(0x402a91b9u) * f(v108));
-                    v108 = (vcc_lo & 1u) != 0u ? v116 : v116;
+                    v108 = (vcc_lo & 1u) != 0u ? (v116 ^ 0x80000000u) : v116;
                 }
                 {
                     uint c_out = exec_lo != 0u && (0.0 > f(v115)) ? 1u : 0u;
@@ -1973,7 +1973,7 @@ void main() {
                     v107 = u(f(0x3ac01c14u) * f(v107));
                     v107 = u(fract(abs(f(v107))));
                     v116 = u(f(0x402a91b9u) * f(v107));
-                    v107 = (vcc_lo & 1u) != 0u ? v109 : v109;
+                    v107 = (vcc_lo & 1u) != 0u ? (v109 ^ 0x80000000u) : v109;
                 }
                 {
                     uint c_out = exec_lo != 0u && (0.0 > f(v115)) ? 1u : 0u;
@@ -1981,7 +1981,7 @@ void main() {
                     vcc_hi = 0u;
                 }
                 if (exec_lo != 0u) {
-                    v109 = (vcc_lo & 1u) != 0u ? v116 : v116;
+                    v109 = (vcc_lo & 1u) != 0u ? (v116 ^ 0x80000000u) : v116;
                     v108 = u(f(v169) * f(v108));
                     v107 = u(f(v168) * f(v107));
                     v109 = u(f(v167) * f(v109));
@@ -2061,7 +2061,7 @@ void main() {
                     vcc_hi = 0u;
                 }
                 if (exec_lo != 0u) {
-                    v115 = (vcc_lo & 1u) != 0u ? v116 : v116;
+                    v115 = (vcc_lo & 1u) != 0u ? (v116 ^ 0x80000000u) : v116;
                     v115 = u(f(0x3ec01c14u) * f(v115));
                     v175 = u(f(v141) * f(v115) + f(v52));
                     v176 = u(f(v142) * f(v115) + f(v53));
@@ -2130,7 +2130,7 @@ void main() {
                     vcc_hi = 0u;
                 }
                 if (exec_lo != 0u) {
-                    v116 = (vcc_lo & 1u) != 0u ? v117 : v117;
+                    v116 = (vcc_lo & 1u) != 0u ? (v117 ^ 0x80000000u) : v117;
                     v116 = u(f(0x3ec01c14u) * f(v116));
                 }
             }
@@ -2637,7 +2637,7 @@ void main() {
                     vcc_hi = 0u;
                 }
                 if (exec_lo != 0u) {
-                    v115 = (vcc_lo & 1u) != 0u ? v116 : v116;
+                    v115 = (vcc_lo & 1u) != 0u ? (v116 ^ 0x80000000u) : v116;
                     v115 = u(f(0x3ec01c14u) * f(v115));
                 }
             }
@@ -3228,7 +3228,7 @@ void main() {
                     vcc_hi = 0u;
                 }
                 if (exec_lo != 0u) {
-                    v105 = (vcc_lo & 1u) != 0u ? v110 : v110;
+                    v105 = (vcc_lo & 1u) != 0u ? (v110 ^ 0x80000000u) : v110;
                 }
                 vcc_lo = 0x3f401c14u;
                 if (exec_lo != 0u) {
@@ -3254,7 +3254,7 @@ void main() {
                     vcc_hi = 0u;
                 }
                 if (exec_lo != 0u) {
-                    v105 = (vcc_lo & 1u) != 0u ? v110 : v110;
+                    v105 = (vcc_lo & 1u) != 0u ? (v110 ^ 0x80000000u) : v110;
                     v110 = 0x3f90150fu;
                     v105 = u(f(v110) * f(v105) + f(0xbfc00000u));
                     v110 = u(-f(v115) * f(v115) + 1.0);
@@ -3316,7 +3316,7 @@ void main() {
                     vcc_hi = 0u;
                 }
                 if (exec_lo != 0u) {
-                    v105 = (vcc_lo & 1u) != 0u ? v110 : v110;
+                    v105 = (vcc_lo & 1u) != 0u ? (v110 ^ 0x80000000u) : v110;
                     v110 = 0x40281892u;
                     v105 = u(f(v110) * f(v105) + f(0xc0600000u));
                     v118 = u(f(0xc0c90fdbu) + f(v105));
@@ -3379,7 +3379,7 @@ void main() {
                 }
                 if (exec_lo != 0u) {
                     v105 = u(f(0x402a91b9u) * f(v106));
-                    v106 = (vcc_lo & 1u) != 0u ? v105 : v105;
+                    v106 = (vcc_lo & 1u) != 0u ? (v105 ^ 0x80000000u) : v105;
                 }
                 {
                     uint c_out = exec_lo != 0u && (0x0u != v140) ? 1u : 0u;
@@ -3404,7 +3404,7 @@ void main() {
                     v105 = u(f(0x3ac01c14u) * f(v105));
                     v105 = u(fract(abs(f(v105))));
                     v105 = u(f(0x402a91b9u) * f(v105));
-                    v105 = (vcc_lo & 1u) != 0u ? v105 : v105;
+                    v105 = (vcc_lo & 1u) != 0u ? (v105 ^ 0x80000000u) : v105;
                 }
                 {
                     uint c_out = exec_lo != 0u && (v84 > 0xffffffffu - v14) ? 1u : 0u;
@@ -4222,7 +4222,7 @@ void main() {
                 v68 = u(f(0x402a91b9u) * f(v68));
                 v69 = u(f(0x402a91b9u) * f(v69));
                 v70 = u(f(0x402a91b9u) * f(v70));
-                v65 = (vcc_lo & 1u) != 0u ? v65 : v65;
+                v65 = (vcc_lo & 1u) != 0u ? (v65 ^ 0x80000000u) : v65;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v63)) ? 1u : 0u;
@@ -4230,7 +4230,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v63 = (vcc_lo & 1u) != 0u ? v66 : v66;
+                v63 = (vcc_lo & 1u) != 0u ? (v66 ^ 0x80000000u) : v66;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v62)) ? 1u : 0u;
@@ -4238,7 +4238,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v62 = (vcc_lo & 1u) != 0u ? v67 : v67;
+                v62 = (vcc_lo & 1u) != 0u ? (v67 ^ 0x80000000u) : v67;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v31)) ? 1u : 0u;
@@ -4246,7 +4246,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v31 = (vcc_lo & 1u) != 0u ? v68 : v68;
+                v31 = (vcc_lo & 1u) != 0u ? (v68 ^ 0x80000000u) : v68;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v61)) ? 1u : 0u;
@@ -4254,7 +4254,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v61 = (vcc_lo & 1u) != 0u ? v69 : v69;
+                v61 = (vcc_lo & 1u) != 0u ? (v69 ^ 0x80000000u) : v69;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v64)) ? 1u : 0u;
@@ -4262,7 +4262,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v64 = (vcc_lo & 1u) != 0u ? v70 : v70;
+                v64 = (vcc_lo & 1u) != 0u ? (v70 ^ 0x80000000u) : v70;
                 v65 = u(f(v100) * f(v65));
                 v63 = u(f(v99) * f(v63));
                 v62 = u(f(v98) * f(v62));
@@ -4316,7 +4316,7 @@ void main() {
             }
             if (exec_lo != 0u) {
                 v74 = uint(bitCount(v74)) + 0x0u;
-                v70 = (vcc_lo & 1u) != 0u ? v70 : v70;
+                v70 = (vcc_lo & 1u) != 0u ? (v70 ^ 0x80000000u) : v70;
             }
             {
                 uint c_out = exec_lo != 0u && (0x0u != v97) ? 1u : 0u;
@@ -4407,7 +4407,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v62 = (vcc_lo & 1u) != 0u ? v63 : v63;
+                v62 = (vcc_lo & 1u) != 0u ? (v63 ^ 0x80000000u) : v63;
                 v73 = u(f(0x3ec01c14u) * f(v62));
                 v62 = u(f(v34) * f(v73) + f(v52));
                 v63 = u(f(v101) * f(v73) + f(v53));
@@ -4474,7 +4474,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v73 = (vcc_lo & 1u) != 0u ? v74 : v74;
+                v73 = (vcc_lo & 1u) != 0u ? (v74 ^ 0x80000000u) : v74;
                 v73 = u(f(0x3ec01c14u) * f(v73));
             }
         }
@@ -4984,7 +4984,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v73 = (vcc_lo & 1u) != 0u ? v74 : v74;
+                v73 = (vcc_lo & 1u) != 0u ? (v74 ^ 0x80000000u) : v74;
                 v73 = u(f(0x3ec01c14u) * f(v73));
             }
         }
@@ -5568,7 +5568,7 @@ void main() {
                 v69 = u(f(0x402a91b9u) * f(v69));
                 v70 = u(f(0x402a91b9u) * f(v70));
                 v71 = u(f(0x402a91b9u) * f(v71));
-                v72 = (vcc_lo & 1u) != 0u ? v72 : v72;
+                v72 = (vcc_lo & 1u) != 0u ? (v72 ^ 0x80000000u) : v72;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v63)) ? 1u : 0u;
@@ -5577,7 +5577,7 @@ void main() {
             }
             if (exec_lo != 0u) {
                 v65 = 0x1u & v65;
-                v63 = (vcc_lo & 1u) != 0u ? v66 : v66;
+                v63 = (vcc_lo & 1u) != 0u ? (v66 ^ 0x80000000u) : v66;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v62)) ? 1u : 0u;
@@ -5585,7 +5585,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v62 = (vcc_lo & 1u) != 0u ? v67 : v67;
+                v62 = (vcc_lo & 1u) != 0u ? (v67 ^ 0x80000000u) : v67;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v61)) ? 1u : 0u;
@@ -5593,7 +5593,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v61 = (vcc_lo & 1u) != 0u ? v68 : v68;
+                v61 = (vcc_lo & 1u) != 0u ? (v68 ^ 0x80000000u) : v68;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v26)) ? 1u : 0u;
@@ -5601,7 +5601,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v26 = (vcc_lo & 1u) != 0u ? v69 : v69;
+                v26 = (vcc_lo & 1u) != 0u ? (v69 ^ 0x80000000u) : v69;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v27)) ? 1u : 0u;
@@ -5609,7 +5609,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v27 = (vcc_lo & 1u) != 0u ? v70 : v70;
+                v27 = (vcc_lo & 1u) != 0u ? (v70 ^ 0x80000000u) : v70;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v64)) ? 1u : 0u;
@@ -5617,7 +5617,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v64 = (vcc_lo & 1u) != 0u ? v71 : v71;
+                v64 = (vcc_lo & 1u) != 0u ? (v71 ^ 0x80000000u) : v71;
             }
             {
                 uint c_out = exec_lo != 0u && (0x3u == v129) ? 1u : 0u;
@@ -5678,7 +5678,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v26 = (vcc_lo & 1u) != 0u ? v27 : v27;
+                v26 = (vcc_lo & 1u) != 0u ? (v27 ^ 0x80000000u) : v27;
                 v26 = u(f(0x3ec01c14u) * f(v26));
                 v62 = u(f(v34) * f(v26) + f(v52));
                 v63 = u(f(v101) * f(v26) + f(v53));
@@ -5750,7 +5750,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v72 = (vcc_lo & 1u) != 0u ? v73 : v73;
+                v72 = (vcc_lo & 1u) != 0u ? (v73 ^ 0x80000000u) : v73;
                 v72 = u(f(0x3ec01c14u) * f(v72));
             }
         }
@@ -6230,7 +6230,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v60 = (vcc_lo & 1u) != 0u ? v72 : v72;
+                v60 = (vcc_lo & 1u) != 0u ? (v72 ^ 0x80000000u) : v72;
                 v60 = u(f(0x3ec01c14u) * f(v60));
             }
         }
@@ -6795,7 +6795,7 @@ void main() {
                 v26 = u(fract(abs(f(v26))));
                 v26 = u(f(0x402a91b9u) * f(v26));
                 v27 = 0x3f90150fu;
-                v26 = (vcc_lo & 1u) != 0u ? v26 : v26;
+                v26 = (vcc_lo & 1u) != 0u ? (v26 ^ 0x80000000u) : v26;
             }
             {
                 uint c_out = exec_lo != 0u && (0xfefu > 0xffffffffu - v61) ? 1u : 0u;
@@ -6817,7 +6817,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v31 = (vcc_lo & 1u) != 0u ? v60 : v60;
+                v31 = (vcc_lo & 1u) != 0u ? (v60 ^ 0x80000000u) : v60;
                 v27 = u(f(v27) * f(v31) + f(0xbfc00000u));
                 v74 = u(f(0xc0c90fdbu) + f(v27));
             }
@@ -6882,7 +6882,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v26 = (vcc_lo & 1u) != 0u ? v27 : v27;
+                v26 = (vcc_lo & 1u) != 0u ? (v27 ^ 0x80000000u) : v27;
                 v27 = 0x40281892u;
                 v26 = u(f(v27) * f(v26) + f(0xc0600000u));
                 v75 = u(f(0xc0c90fdbu) + f(v26));
@@ -6945,7 +6945,7 @@ void main() {
                 v26 = u(f(0x3ac01c14u) * f(v26));
                 v26 = u(fract(abs(f(v26))));
                 v26 = u(f(0x402a91b9u) * f(v26));
-                v26 = (vcc_lo & 1u) != 0u ? v26 : v26;
+                v26 = (vcc_lo & 1u) != 0u ? (v26 ^ 0x80000000u) : v26;
             }
             {
                 uint c_out = exec_lo != 0u && (v12 > 0xffffffffu - v90) ? 1u : 0u;

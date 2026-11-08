@@ -284,7 +284,7 @@ void main() {
             vcc_hi = 0u;
         }
         if (exec_lo != 0u) {
-            v3 = (vcc_lo & 1u) != 0u ? v11 : v11;
+            v3 = (vcc_lo & 1u) != 0u ? (v11 ^ 0x80000000u) : v11;
             v11 = u(-1.0 + f(s16));
             v3 = u(f(v3) * f(v11));
             v11 = 0x3ec01c14u;
@@ -379,7 +379,7 @@ void main() {
             vcc_hi = 0u;
         }
         if (exec_lo != 0u) {
-            v18 = (vcc_lo & 1u) != 0u ? v1 : v1;
+            v18 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
             {
                 uint b_at = (v11 * 128u + 32u) >> 2;
                 v43 = emitter.w[b_at + 0u];
@@ -443,7 +443,7 @@ void main() {
             vcc_hi = 0u;
         }
         if (exec_lo != 0u) {
-            v0 = (vcc_lo & 1u) != 0u ? v1 : v1;
+            v0 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
             v18 = u(f(0x3ec01c14u) * f(v0));
             {
                 uint b_at = (v11 * 128u + 36u) >> 2;
@@ -571,7 +571,7 @@ void main() {
             vcc_hi = 0u;
         }
         if (exec_lo != 0u) {
-            v0 = (vcc_lo & 1u) != 0u ? v1 : v1;
+            v0 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
             v3 = u(f(0x3ec01c14u) * f(v0));
             {
                 uint b_at = (v33 * 560u + 496u) >> 2;
@@ -721,7 +721,7 @@ void main() {
             vcc_hi = 0u;
         }
         if (exec_lo != 0u) {
-            v18 = (vcc_lo & 1u) != 0u ? v19 : v19;
+            v18 = (vcc_lo & 1u) != 0u ? (v19 ^ 0x80000000u) : v19;
             v37 = u(f(0x3ec01c14u) * f(v18));
             {
                 uint b_at = (v33 * 560u + 504u) >> 2;
@@ -811,7 +811,7 @@ void main() {
         if (exec_lo != 0u) {
             v19 = u(fract(abs(f(v19))));
             v19 = u(f(0x402a91b9u) * f(v19));
-            v38 = (vcc_lo & 1u) != 0u ? v19 : v19;
+            v38 = (vcc_lo & 1u) != 0u ? (v19 ^ 0x80000000u) : v19;
         }
         {
             uint c_out = exec_lo != 0u && (0x12ceu > 0xffffffffu - v7) ? 1u : 0u;
@@ -833,7 +833,7 @@ void main() {
             vcc_hi = 0u;
         }
         if (exec_lo != 0u) {
-            v39 = (vcc_lo & 1u) != 0u ? v19 : v19;
+            v39 = (vcc_lo & 1u) != 0u ? (v19 ^ 0x80000000u) : v19;
         }
         {
             uint c_out = exec_lo != 0u && (0xe9fu > 0xffffffffu - v7) ? 1u : 0u;
@@ -876,7 +876,7 @@ void main() {
             v40 = u(f(0x3ac01c14u) * f(v40));
             v40 = u(fract(abs(f(v40))));
             v40 = u(f(0x402a91b9u) * f(v40));
-            v40 = (vcc_lo & 1u) != 0u ? v40 : v40;
+            v40 = (vcc_lo & 1u) != 0u ? (v40 ^ 0x80000000u) : v40;
         }
         {
             uint c_out = exec_lo != 0u && (0x1a9eu > 0xffffffffu - v7) ? 1u : 0u;
@@ -898,7 +898,7 @@ void main() {
             v41 = u(f(0x3ac01c14u) * f(v41));
             v41 = u(fract(abs(f(v41))));
             v41 = u(f(0x402a91b9u) * f(v41));
-            v41 = (vcc_lo & 1u) != 0u ? v41 : v41;
+            v41 = (vcc_lo & 1u) != 0u ? (v41 ^ 0x80000000u) : v41;
         }
         {
             uint c_out = exec_lo != 0u && (0x166fu > 0xffffffffu - v7) ? 1u : 0u;
@@ -920,7 +920,7 @@ void main() {
             vcc_hi = 0u;
         }
         if (exec_lo != 0u) {
-            v44 = (vcc_lo & 1u) != 0u ? v44 : v44;
+            v44 = (vcc_lo & 1u) != 0u ? (v44 ^ 0x80000000u) : v44;
             v42 = u(f(0x3ec01c14u) * f(v38));
             v38 = u(f(0x3ec01c14u) * f(v39));
             v39 = u(f(0x3ec01c14u) * f(v40));
@@ -2140,7 +2140,7 @@ void main() {
             vcc_hi = 0u;
         }
         if (exec_lo != 0u) {
-            v0 = (vcc_lo & 1u) != 0u ? v1 : v1;
+            v0 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
             v10 = u(f(0x3ec01c14u) * f(v0));
             {
                 uint b_at = (v33 * 560u + 400u) >> 2;
@@ -2246,7 +2246,7 @@ void main() {
         }
         if (exec_lo != 0u) {
             v2 = v1 * v0;
-            v3 = (vcc_lo & 1u) != 0u ? v3 : v3;
+            v3 = (vcc_lo & 1u) != 0u ? (v3 ^ 0x80000000u) : v3;
             v2 = u(float(v2));
             v2 = u(f(v3) * f(v2));
             v2 = u(f(0x3ec01c14u) * f(v2));

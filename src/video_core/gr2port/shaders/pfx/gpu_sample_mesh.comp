@@ -427,7 +427,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v44 = (vcc_lo & 1u) != 0u ? v45 : v45;
+                v44 = (vcc_lo & 1u) != 0u ? (v45 ^ 0x80000000u) : v45;
                 v44 = u(f(0x3ec01c14u) * f(v44));
             }
         }

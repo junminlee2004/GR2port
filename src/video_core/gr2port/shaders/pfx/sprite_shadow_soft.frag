@@ -1321,7 +1321,7 @@ void main() {
         }
         if (exec_lo != 0u) {
             v[4] = u(f(0x3e800000u) * f(v[5]));
-            v[7] = (vcc_lo & 1u) != 0u ? v[7] : v[7];
+            v[7] = (vcc_lo & 1u) != 0u ? (v[7] ^ 0x80000000u) : v[7];
             v[4] = u((fract(abs(f(v[4])))) * 4.0);
         }
         {
@@ -1331,7 +1331,7 @@ void main() {
         }
         if (exec_lo != 0u) {
             v[5] = cvt_i32(f(v[7]));
-            v[4] = (vcc_lo & 1u) != 0u ? v[4] : v[4];
+            v[4] = (vcc_lo & 1u) != 0u ? (v[4] ^ 0x80000000u) : v[4];
             v[5] = v[5] << (0x2u & 31u);
             v[4] = cvt_i32(f(v[4]));
             v[4] = abs_diff(v[4], 0x0u) + v[5];

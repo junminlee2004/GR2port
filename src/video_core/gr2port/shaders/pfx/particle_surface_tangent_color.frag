@@ -151,11 +151,11 @@ void main() {
             vcc_hi = 0u;
         }
         if (exec_lo != 0u) {
-            v13 = (vcc_lo & 1u) != 0u ? v2 : v2;
+            v13 = (vcc_lo & 1u) != 0u ? (v2 ^ 0x80000000u) : v2;
             v2 = u(attr3.y);
-            v14 = (vcc_lo & 1u) != 0u ? v2 : v2;
+            v14 = (vcc_lo & 1u) != 0u ? (v2 ^ 0x80000000u) : v2;
             v2 = u(attr3.z);
-            v11 = (vcc_lo & 1u) != 0u ? v2 : v2;
+            v11 = (vcc_lo & 1u) != 0u ? (v2 ^ 0x80000000u) : v2;
         }
         s12 = pixel_constants.w[33];
         s13 = pixel_constants.w[38];

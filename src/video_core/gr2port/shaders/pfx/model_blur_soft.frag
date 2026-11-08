@@ -831,7 +831,7 @@ void main() {
         if (exec_lo != 0u) {
             v12 = u(f(0x3e800000u) * f(v12));
             v12 = u((fract(abs(f(v12)))) * 4.0);
-            v12 = (vcc_lo & 1u) != 0u ? v12 : v12;
+            v12 = (vcc_lo & 1u) != 0u ? (v12 ^ 0x80000000u) : v12;
         }
         {
             uint c_out = exec_lo != 0u && (0.0 > f(v11)) ? 1u : 0u;
@@ -842,7 +842,7 @@ void main() {
             v11 = u(f(0x3e800000u) * f(v11));
             v11 = u((fract(abs(f(v11)))) * 4.0);
             v12 = cvt_i32(f(v12));
-            v11 = (vcc_lo & 1u) != 0u ? v11 : v11;
+            v11 = (vcc_lo & 1u) != 0u ? (v11 ^ 0x80000000u) : v11;
             v12 = v12 << (0x2u & 31u);
             v11 = cvt_i32(f(v11));
             v11 = abs_diff(v11, 0x0u) + v12;

@@ -238,10 +238,10 @@ void main() {
         }
         if (exec_lo != 0u) {
             v3 = u(attr2.y);
-            v4 = (vcc_lo & 1u) != 0u ? v3 : v3;
-            v5 = (vcc_lo & 1u) != 0u ? v2 : v2;
+            v4 = (vcc_lo & 1u) != 0u ? (v3 ^ 0x80000000u) : v3;
+            v5 = (vcc_lo & 1u) != 0u ? (v2 ^ 0x80000000u) : v2;
             v2 = u(attr2.x);
-            v2 = (vcc_lo & 1u) != 0u ? v2 : v2;
+            v2 = (vcc_lo & 1u) != 0u ? (v2 ^ 0x80000000u) : v2;
             v3 = u(f(s32) * f(v10));
             v10 = u(f(v2) * f(v2));
             v10 = u(f(v4) * f(v4) + f(v10));

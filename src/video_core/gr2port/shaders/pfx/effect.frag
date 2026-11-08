@@ -168,7 +168,7 @@ void main() {
         v[6] = s33;
         v[5] = s32;
         v[6] = u(f(s35) * f(v[33]) + f(v[6]));
-        v[6] = v[6];
+        v[6] = (v[6] ^ 0x80000000u);
         v[5] = u(f(s34) * f(v[32]) + f(v[5]));
         {
             vec4 t_out = textureLod(sampler2D(textures[nonuniformEXT(color_map0)],
@@ -973,7 +973,7 @@ void main() {
             v[8] = s57;
             v[7] = s56;
             v[8] = u(f(s59) * f(v[6]) + f(v[8]));
-            v[6] = v[8];
+            v[6] = (v[8] ^ 0x80000000u);
             v[5] = u(f(s58) * f(v[5]) + f(v[7]));
             {
                 vec4 t_out = textureLod(sampler2D(textures[nonuniformEXT(color_map1)],
@@ -1682,7 +1682,7 @@ void main() {
             v[8] = s57;
             v[7] = s56;
             v[8] = u(f(s59) * f(v[6]) + f(v[8]));
-            v[6] = v[8];
+            v[6] = (v[8] ^ 0x80000000u);
             v[5] = u(f(s58) * f(v[5]) + f(v[7]));
             {
                 vec4 t_out = textureLod(sampler2D(textures[nonuniformEXT(color_map2)],
@@ -2391,7 +2391,7 @@ void main() {
             v[8] = s57;
             v[7] = s56;
             v[8] = u(f(s59) * f(v[6]) + f(v[8]));
-            v[6] = v[8];
+            v[6] = (v[8] ^ 0x80000000u);
             v[5] = u(f(s58) * f(v[5]) + f(v[7]));
             {
                 vec4 t_out = textureLod(sampler2D(textures[nonuniformEXT(color_map3)],

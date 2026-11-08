@@ -1700,7 +1700,7 @@ void main() {
                 v29 = u(f(v9) * f(v19) + f(v29));
                 v9 = u(f(v24) * f(v30));
                 v10 = u(f(v17) * -f(v22) + f(v10));
-                v17 = (vcc_lo & 1u) != 0u ? v28 : v28;
+                v17 = (vcc_lo & 1u) != 0u ? (v28 ^ 0x80000000u) : v28;
             }
             {
                 uint c_out = exec_lo != 0u && (0.0 > f(v18)) ? 1u : 0u;
@@ -1708,7 +1708,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v18 = (vcc_lo & 1u) != 0u ? v26 : v26;
+                v18 = (vcc_lo & 1u) != 0u ? (v26 ^ 0x80000000u) : v26;
                 v18 = u(f(v25) * f(v18) + f(0xc0490fdbu));
                 v25 = u(f(0x3e22f983u) * f(v18));
                 v24 = u(fract(abs(f(v25))));
@@ -1841,7 +1841,7 @@ void main() {
                 vcc_hi = 0u;
             }
             if (exec_lo != 0u) {
-                v12 = (vcc_lo & 1u) != 0u ? v13 : v13;
+                v12 = (vcc_lo & 1u) != 0u ? (v13 ^ 0x80000000u) : v13;
                 v12 = u(f(v12) * f(0x4016e1f2u) + f(v14));
                 v12 = u(f(0xc0490fdbu) + f(v12));
                 v19 = u(f(0xc0c90fdbu) + f(v12));
@@ -2023,7 +2023,7 @@ void main() {
                 exec_lo = c_out;
             }
             if (exec_lo != 0u) {
-                v17 = v17;
+                v17 = (v17 ^ 0x80000000u);
             }
             vcc_lo = 0x40c90fdbu;
             if (exec_lo != 0u) {
@@ -13223,7 +13223,7 @@ void main() {
             v30 = u(f(v9) * f(v18) + f(v30));
             v9 = u(f(v21) * f(v31));
             v10 = u(f(v16) * -f(v27) + f(v10));
-            v16 = (vcc_lo & 1u) != 0u ? v29 : v29;
+            v16 = (vcc_lo & 1u) != 0u ? (v29 ^ 0x80000000u) : v29;
         }
         {
             uint c_out = exec_lo != 0u && (0.0 > f(v17)) ? 1u : 0u;
@@ -13231,7 +13231,7 @@ void main() {
             vcc_hi = 0u;
         }
         if (exec_lo != 0u) {
-            v17 = (vcc_lo & 1u) != 0u ? v24 : v24;
+            v17 = (vcc_lo & 1u) != 0u ? (v24 ^ 0x80000000u) : v24;
             v17 = u(f(v22) * f(v17) + f(0xc0490fdbu));
             v22 = u(f(0x3e22f983u) * f(v17));
             v21 = u(fract(abs(f(v22))));
@@ -13364,7 +13364,7 @@ void main() {
             vcc_hi = 0u;
         }
         if (exec_lo != 0u) {
-            v12 = (vcc_lo & 1u) != 0u ? v13 : v13;
+            v12 = (vcc_lo & 1u) != 0u ? (v13 ^ 0x80000000u) : v13;
             v12 = u(f(v12) * f(0x4016e1f2u) + f(v14));
             v12 = u(f(0xc0490fdbu) + f(v12));
             v18 = u(f(0xc0c90fdbu) + f(v12));
@@ -13546,7 +13546,7 @@ void main() {
             exec_lo = c_out;
         }
         if (exec_lo != 0u) {
-            v16 = v16;
+            v16 = (v16 ^ 0x80000000u);
         }
         vcc_lo = 0x40c90fdbu;
         if (exec_lo != 0u) {
