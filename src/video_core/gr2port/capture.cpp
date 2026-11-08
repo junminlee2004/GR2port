@@ -460,6 +460,20 @@ constexpr u64 ViewReflectionCount = 0xc88;
 constexpr u64 ReflectionBytes = 0x70;
 constexpr u64 ReflectionCube = 0x40;
 constexpr u64 ReflectionWeight = 0x58;
+// G2_BG_Metaball: an item holds its sphere +0x40 (centre, radius), its vertex constants +0x50 and
+// pixel constants +0x58 and the texture object of its displacement map +0x60. Its draw writes into
+// the vertex constants up to six neighbours from +0x110, the spheres of the category's other items
+// closer than the two radii plus 4, each as its centre and 1 / (radius + 4), and their count at
+// +0x170.
+constexpr u32 MetaballCategory = 20;
+constexpr u64 MetaballSphere = 0x40;
+constexpr u64 MetaballVertexConstants = 0x50;
+constexpr u64 MetaballPixelConstants = 0x58;
+constexpr u64 MetaballDisplacement = 0x60;
+constexpr u32 MetaballNeighbourWord = 0x110 / 4;
+constexpr u32 MetaballNeighbourCountWord = 0x170 / 4;
+constexpr u32 MetaballNeighbours = 6;
+constexpr float MetaballReach = 4.0f;
 constexpr u32 ContourCategory = 11;
 constexpr u64 ContourVertexConstants = 0x30;
 constexpr u64 ContourGeometryConstants = 0x38;
@@ -600,6 +614,14 @@ alignas(64) std::array<Scene::VertexCommand, Scene::MaxBranches> g_branch_comman
 alignas(64) std::array<Scene::Command, Scene::MaxEffectDraws> g_effect_commands;
 alignas(64) std::array<Scene::EffectRun, Scene::MaxEffectDraws> g_effect_runs;
 alignas(64) std::array<Scene::Command, Scene::MaxWaterDraws> g_water_commands;
+// The unskinned metaball draws, then the skinned ones.
+alignas(64) std::array<std::array<Scene::Command, Scene::MaxMetaballs>, 2> g_metaball_commands;
+
+// A metaball item and its sphere, which its neighbours' draws read.
+struct MetaballSphereOf {
+    VAddr item;
+    std::array<float, 4> sphere;
+};
 // The wind's place in its cycle. The game keeps one per instance; only its rate shows, and only on
 // instances that move fast.
 float g_grass_phase = 0.0f;
@@ -704,6 +726,11 @@ public:
         }
         std::memcpy(packet + Scene::BranchCommandsOffset, g_branch_commands.data(),
                     header.branches * VertexBytes);
+        for (u32 list = 0; list < g_metaball_commands.size(); list++) {
+            std::memcpy(packet + Scene::MetaballCommandsOffset +
+                            u64{list} * Scene::MaxMetaballs * Bytes,
+                        g_metaball_commands[list].data(), header.metaball_commands[list] * Bytes);
+        }
     }
 
     void SetCascades(u32 mask) {
@@ -1094,6 +1121,100 @@ public:
         }
         out.mesh.reflection = ReflectionCubeOf(view);
         g_water_commands[i] = {
+            .index_count = count,
+            .instance_count = 1,
+            .first_index = mesh->first_index + first,
+            .vertex_offset = 0,
+            .first_instance = i,
+        };
+    }
+
+    // A G2_BG_Metaball item, given the spheres of all the frame's metaball items.
+    void AddMetaball(VAddr item, std::span<const MetaballSphereOf> spheres) {
+        const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
+        const VAddr index_buffer = Load<VAddr>(item + ItemIndexBuffer);
+        const VAddr vertex_constants = Load<VAddr>(item + MetaballVertexConstants);
+        const VAddr pixel_constants = Load<VAddr>(item + MetaballPixelConstants);
+        const VAddr shape = index_buffer - ShapeIndexBuffer;
+        if (submesh == 0 || index_buffer == 0 || vertex_constants == 0 || pixel_constants == 0 ||
+            Load<u16>(submesh + SubmeshRanges) == 0 || header.metaballs == Scene::MaxMetaballs) {
+            header.dropped_metaballs++;
+            return;
+        }
+        const Meshes::Mesh* mesh = Meshes::Get(shape);
+        if (mesh == nullptr) {
+            header.dropped_metaballs++;
+            return;
+        }
+        const u32 first =
+            Load<u32>(submesh + SubmeshFirstIndex) + Load<u32>(submesh + SubmeshRange);
+        const u32 count = Load<u32>(submesh + SubmeshRange + 4);
+        if (u64{first} + count > mesh->indices) {
+            header.dropped_metaballs++;
+            return;
+        }
+        Skin skin;
+        u64 vertices = mesh->vertices;
+        const VAddr vertex_buffer = Load<VAddr>(item + ItemVertexBuffer);
+        if (vertex_buffer != shape + ShapeVertexBuffer) {
+            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame).vertices;
+            if (vertices == 0) {
+                header.dropped_metaballs++;
+                return;
+            }
+        } else if (!ReadSkin(item, shape, *mesh, skin)) {
+            header.dropped_metaballs++;
+            return;
+        }
+        std::array<u32, sizeof(Scene::MetaballDraw::vertex_constants) / sizeof(u32)> constants;
+        std::memcpy(constants.data(), reinterpret_cast<const void*>(vertex_constants),
+                    sizeof(constants));
+        const auto sphere = Load<std::array<float, 4>>(item + MetaballSphere);
+        u32 neighbours = 0;
+        for (const MetaballSphereOf& other : spheres) {
+            if (neighbours == MetaballNeighbours) {
+                break;
+            }
+            if (other.item == item) {
+                continue;
+            }
+            const float dx = sphere[0] - other.sphere[0];
+            const float dy = sphere[1] - other.sphere[1];
+            const float dz = sphere[2] - other.sphere[2];
+            if (std::sqrt(dx * dx + dy * dy + dz * dz) <
+                sphere[3] + other.sphere[3] + MetaballReach) {
+                const std::array<float, 4> neighbour{other.sphere[0], other.sphere[1],
+                                                     other.sphere[2],
+                                                     1.0f / (other.sphere[3] + MetaballReach)};
+                std::memcpy(constants.data() + MetaballNeighbourWord + neighbours * 4,
+                            neighbour.data(), sizeof(neighbour));
+                neighbours++;
+            }
+        }
+        constants[MetaballNeighbourCountWord] = neighbours;
+        const u32 i = header.metaballs++;
+        // The fields are written in order: the packet is write-combined.
+        Scene::MetaballDraw& out =
+            reinterpret_cast<Scene::MetaballDraw*>(packet + Scene::MetaballDrawsOffset)[i];
+        std::memcpy(out.vertex_constants, constants.data(), sizeof(out.vertex_constants));
+        std::memcpy(out.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
+                    sizeof(out.pixel_constants));
+        const VAddr displacement = Load<VAddr>(item + MetaballDisplacement);
+        out.mesh = {
+            .vertices = vertices,
+            .skin = skin.stream,
+            .palette = skin.palette,
+            .stride = mesh->stride,
+            .position = mesh->position,
+            .texcoord = mesh->texcoord,
+            .texcoord1 = mesh->texcoord1,
+            .normal = mesh->normal,
+            .tangent = mesh->tangent,
+            .vertex_color = mesh->vertex_color,
+            .displacement = displacement != 0 ? Textures::Get(displacement) : 0,
+        };
+        const u32 list = skin.bones != 0 ? 1 : 0;
+        g_metaball_commands[list][header.metaball_commands[list]++] = {
             .index_count = count,
             .instance_count = 1,
             .first_index = mesh->first_index + first,
@@ -2613,6 +2734,20 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     }
     for (const Category& category : WorldCategories) {
         add_category(category);
+    }
+    const s32 metaball_items = std::min(Load<s32>(view + ViewCategoryCount + MetaballCategory * 4),
+                                        static_cast<s32>(Scene::MaxMetaballs));
+    if (metaball_items > 0) {
+        const auto metaball_at = keyed(MetaballCategory);
+        std::array<MetaballSphereOf, Scene::MaxMetaballs> spheres;
+        for (s32 i = 0; i < metaball_items; i++) {
+            const VAddr item = metaball_at(i);
+            spheres[i] = {item, Load<std::array<float, 4>>(item + MetaballSphere)};
+        }
+        const std::span<const MetaballSphereOf> all{spheres.data(),
+                                                    static_cast<size_t>(metaball_items)};
+        ForEachItem(metaball_items, MetaballVertexConstants, MetaballPixelConstants, metaball_at,
+                    [&](VAddr item) { writer.AddMetaball(item, all); });
     }
     add_category(GlassCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + BranchCategory * 4), LeafDomainConstants,

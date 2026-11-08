@@ -33,6 +33,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/memory.h
     ${CMAKE_CURRENT_LIST_DIR}/meshes.cpp
     ${CMAKE_CURRENT_LIST_DIR}/meshes.h
+    ${CMAKE_CURRENT_LIST_DIR}/metaballs.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/metaballs.h
     ${CMAKE_CURRENT_LIST_DIR}/overlays.cpp
     ${CMAKE_CURRENT_LIST_DIR}/overlays.h
     ${CMAKE_CURRENT_LIST_DIR}/particle_capture.cpp
@@ -199,6 +201,10 @@ gr2port_add_shader(pfx/sprite_lit.frag sprite_lit_frag)
 gr2port_add_shader(pfx/sprite_lit_soft.frag sprite_lit_soft_frag)
 gr2port_add_shader(pfx/sprite_plain.frag sprite_plain_frag)
 gr2port_add_shader(pfx/sprite_plain_soft.frag sprite_plain_soft_frag)
+gr2port_add_shader(pfx/metaball.frag metaball_frag)
+gr2port_add_shader(pfx/metaball.vert metaball_vert)
+gr2port_add_shader(pfx/metaball_skinned.vert metaball_skinned_vert)
+gr2port_add_shader(pfx/surface_blur.frag surface_blur_frag)
 gr2port_add_shader(skin.comp skin_comp)
 gr2port_add_shader(effector.comp effector_comp)
 gr2port_add_shader(soft_body.comp soft_body_comp)

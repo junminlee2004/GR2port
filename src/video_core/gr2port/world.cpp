@@ -7,6 +7,7 @@
 #include "common/logging/log.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
+#include "video_core/gr2port/metaballs.h"
 #include "video_core/gr2port/particles.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/shaders/deferred_frag.h"
@@ -316,7 +317,8 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
     return std::ranges::all_of(g_surface_pipelines,
                                [](const Pipeline& pipeline) { return !!pipeline.pipeline; }) &&
            g_decals.pipeline && g_light.pipeline && g_lines_pipeline.pipeline &&
-           g_occlusion_pipeline.pipeline && g_depth_level_pipeline.pipeline;
+           g_occlusion_pipeline.pipeline && g_depth_level_pipeline.pipeline &&
+           Metaballs::Start(device, memory, depth_format);
 }
 
 bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_depth) {
@@ -439,7 +441,7 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_de
         };
         g_device->device.updateDescriptorSets(writes, {}, dl);
     }
-    return true;
+    return Metaballs::Resize(extent, g_surfaces[1].view);
 }
 
 void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet,
@@ -532,6 +534,22 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
                             .pDepthAttachment = &depth_attachment},
                            dl);
     }
+    // The game draws metaballs after the other world categories and before vegetation; their
+    // rendering adds the mask that stands for their stencil.
+    if (drawn && header.metaballs != 0) {
+        cmd.endRendering(dl);
+        for (vk::RenderingAttachmentInfo& color : colors) {
+            color.loadOp = vk::AttachmentLoadOp::eLoad;
+        }
+        depth_attachment.loadOp = vk::AttachmentLoadOp::eLoad;
+        Metaballs::RecordSurfaces(cmd, header, address, buffer, offset, colors, depth_attachment);
+        cmd.beginRendering({.renderArea = {{0, 0}, g_extent},
+                            .layerCount = 1,
+                            .colorAttachmentCount = static_cast<u32>(colors.size()),
+                            .pColorAttachments = colors.data(),
+                            .pDepthAttachment = &depth_attachment},
+                           dl);
+    }
     if (drawn) {
         Vegetation::RecordSurfaces(cmd, header, address, buffer, offset);
         // The particles collide with the world without the mesh particles and characters.
@@ -562,6 +580,9 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
     cmd.pipelineBarrier2({.imageMemoryBarrierCount = static_cast<u32>(barriers.size()),
                           .pImageMemoryBarriers = barriers.data()},
                          dl);
+    if (drawn) {
+        Metaballs::RecordBlur(cmd, header, g_surfaces[1]);
+    }
 }
 
 void RecordLines(vk::CommandBuffer cmd, u64 address) {

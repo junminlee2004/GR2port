@@ -172,6 +172,8 @@ struct Stats {
     u64 dropped_world_decals = 0;
     u64 glass_materials = 0;
     u64 dropped_glass = 0;
+    u64 metaballs = 0;
+    u64 dropped_metaballs = 0;
     u64 particle_draws = 0;
     u64 particle_runs = 0;
     u64 particle_unported = 0;
@@ -992,6 +994,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.dropped_world_decals += header.dropped_world_decals;
     stats.glass_materials += header.glass_materials;
     stats.dropped_glass += header.dropped_glass;
+    stats.metaballs += header.metaballs;
+    stats.dropped_metaballs += header.dropped_metaballs;
     stats.particle_draws += header.particles.draws;
     stats.particle_runs += header.particles.runs;
     stats.particle_unported += header.particles.unported;
@@ -1252,6 +1256,9 @@ void Thread::Report() {
     LOG_INFO(Render_Vulkan, "GR2port glass: per frame {:.1f} drawn, {:.1f} not drawn",
              static_cast<double>(stats.glass_materials) / frames,
              static_cast<double>(stats.dropped_glass) / frames);
+    LOG_INFO(Render_Vulkan, "GR2port metaballs: per frame {:.1f} drawn, {:.1f} not drawn",
+             static_cast<double>(stats.metaballs) / frames,
+             static_cast<double>(stats.dropped_metaballs) / frames);
     LOG_INFO(Render_Vulkan,
              "GR2port particles: per frame {:.1f} live effects, {:.1f} draws in {:.1f} runs, "
              "{:.1f} items not ported, {:.1f} dropped, {:.3f} ms capture, {} frames refused",

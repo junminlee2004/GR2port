@@ -71,6 +71,8 @@ inline constexpr u32 MaxEffectDraws = 256;
 inline constexpr u32 EffectLists = 7;
 /// G2_BG_Water draws per packet.
 inline constexpr u32 MaxWaterDraws = 32;
+/// G2_BG_Metaball draws per packet.
+inline constexpr u32 MaxMetaballs = 256;
 /// Materials of G2_BG_Glass draws per packet.
 inline constexpr u32 MaxGlassMaterials = 256;
 /// Branch instances the kernel sways per packet, and branch ribbon draws.
@@ -328,6 +330,11 @@ struct Header {
     /// GlassMaterial records written, and glass items not drawn.
     u32 glass_materials;
     u32 dropped_glass;
+    /// MetaballDraw records written, the commands of the unskinned and of the skinned ones, and
+    /// metaball items not drawn.
+    u32 metaballs;
+    u32 metaball_commands[2];
+    u32 dropped_metaballs;
     ParticleHeader particles;
     EffectHeader effects;
     /// The items of each category in the frame, at most 65535.
@@ -717,6 +724,16 @@ struct WaterDraw {
 };
 static_assert(sizeof(WaterDraw) == 1200);
 
+/// A G2_BG_Metaball draw, as shaders/pfx/metaball.vert and metaball.frag read it: the game's
+/// vertex constants, with the neighbours its draw writes at +0x110 filled in, its pixel constants,
+/// then its mesh, whose displacement is the displacement map.
+struct MetaballDraw {
+    u32 vertex_constants[96];
+    u32 pixel_constants[12];
+    EffectMesh mesh;
+};
+static_assert(sizeof(MetaballDraw) == 512);
+
 /// Consecutive effect draws of one list and one state.
 struct EffectRun {
     u32 list;
@@ -1100,7 +1117,12 @@ inline constexpr u64 EffectCommandsOffset = EffectDrawsOffset + MaxEffectDraws *
 inline constexpr u64 EffectRunsOffset = EffectCommandsOffset + MaxEffectDraws * sizeof(Command);
 inline constexpr u64 WaterDrawsOffset = EffectRunsOffset + MaxEffectDraws * sizeof(EffectRun);
 inline constexpr u64 WaterCommandsOffset = WaterDrawsOffset + MaxWaterDraws * sizeof(WaterDraw);
-inline constexpr u64 PacketBytes = WaterCommandsOffset + MaxWaterDraws * sizeof(Command);
+inline constexpr u64 MetaballDrawsOffset =
+    (WaterCommandsOffset + MaxWaterDraws * sizeof(Command) + 15) & ~u64{15};
+/// MaxMetaballs commands of the unskinned draws, then of the skinned ones.
+inline constexpr u64 MetaballCommandsOffset =
+    MetaballDrawsOffset + MaxMetaballs * sizeof(MetaballDraw);
+inline constexpr u64 PacketBytes = MetaballCommandsOffset + 2 * MaxMetaballs * sizeof(Command);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -1114,6 +1136,6 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               WorldDecalsOffset % 16 == 0 && GlassMaterialsOffset % 16 == 0 &&
               ParticleSceneOffset % 16 == 0 && ParticleDrawsOffset % 16 == 0 &&
               ParticleEffectsOffset % 16 == 0 && EffectDrawsOffset % 16 == 0 &&
-              WaterDrawsOffset % 16 == 0);
+              WaterDrawsOffset % 16 == 0 && MetaballDrawsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene
