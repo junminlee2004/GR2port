@@ -457,8 +457,6 @@ s64 PS4_SYSV_ABI sceKernelWrite(s32 fd, const void* buf, u64 nbytes) {
     return result;
 }
 
-static thread_local std::vector<u8> file_buf{};
-
 s64 ReadFile(Core::FileSys::File* file, void* buf, u64 nbytes) {
     if (nbytes == 0) {
         return 0;
@@ -468,15 +466,7 @@ s64 ReadFile(Core::FileSys::File* file, void* buf, u64 nbytes) {
     // Invalidate up to the actual number of bytes that could be read.
     const auto remaining = file->GetSize() - file->Tell();
     memory->InvalidateMemory(reinterpret_cast<VAddr>(buf), std::min<u64>(nbytes, remaining));
-    if (file_buf.capacity() < nbytes) {
-        file_buf.reserve(nbytes);
-    }
-    s64 bytes = file->Read(file_buf.data(), nbytes);
-    if (bytes < 0) {
-        return bytes;
-    }
-    std::memcpy(buf, file_buf.data(), bytes);
-    return bytes;
+    return file->Read(buf, nbytes);
 }
 
 s64 PS4_SYSV_ABI readv(s32 fd, const OrbisKernelIovec* iov, s32 iovcnt) {
