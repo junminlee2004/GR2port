@@ -224,6 +224,14 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer In
     float size_squared[2];
 };
 
+// The start of an opaque/Lambert draw's Character: the game's pixel constants, the key light's
+// direction in the model's space and the colour scale, then the ShadowProj of its vertex constants.
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer LambertConstants {
+    vec4 light_direction;
+    vec4 color_scale;
+    mat4 shadow_projection[3];
+};
+
 // A character's outline: the game's G2_CH_Contour constants of each stage, then its mesh.
 struct Contour {
     mat4 world_view;

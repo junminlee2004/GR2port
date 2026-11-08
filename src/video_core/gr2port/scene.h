@@ -134,6 +134,10 @@ enum class DrawList : u32 {
     /// pixel_constants start with the game's 44 words, with their cube maps in normal_map and
     /// reflection and a bend_bias of 0.
     Interior,
+    /// opaque/Lambert draws. Both matrices hold the game's WorldViewProj. material names a
+    /// Character whose pixel_constants hold the game's 8 pixel constant words, then the three
+    /// ShadowProj of its vertex constants.
+    Lambert,
     /// G2_BG_Glass draws. material names a GlassMaterial, texture is the normal map.
     Glass,
     /// SelfTranslucent draws of the characters with stencil value 1, 2 and 3. world_view holds

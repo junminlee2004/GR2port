@@ -45,6 +45,8 @@
 #include "video_core/gr2port/shaders/character_frag.h"
 #include "video_core/gr2port/shaders/character_vert.h"
 #include "video_core/gr2port/shaders/interior_frag.h"
+#include "video_core/gr2port/shaders/lambert_frag.h"
+#include "video_core/gr2port/shaders/lambert_vert.h"
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
@@ -236,6 +238,8 @@ private:
     Pipeline character_depth_pipeline;
     Pipeline interior_pipeline;
     Pipeline interior_depth_pipeline;
+    Pipeline lambert_pipeline;
+    Pipeline lambert_depth_pipeline;
     u32 next = 0;
     // The number of the next frame to submit; frames up to frame - FramesInFlight are done once
     // the frame's slot is free.
@@ -369,8 +373,31 @@ bool Thread::Init() {
                                       .push_constant_bytes = sizeof(CharacterPush),
                                       .set_layouts = depth_set_layouts,
                                   });
+    lambert_pipeline =
+        CreateGraphicsPipeline(d, {
+                                      .vertex = LAMBERT_VERT,
+                                      .fragment = LAMBERT_FRAG,
+                                      .color = Look::SceneFormat,
+                                      .depth = DepthFormat,
+                                      .cull = vk::CullModeFlagBits::eBack,
+                                      .depth_test = true,
+                                      .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                      .push_constant_bytes = sizeof(CharacterPush),
+                                      .set_layouts = set_layouts,
+                                  });
+    lambert_depth_pipeline =
+        CreateGraphicsPipeline(d, {
+                                      .vertex = LAMBERT_VERT,
+                                      .depth = DepthFormat,
+                                      .cull = vk::CullModeFlagBits::eBack,
+                                      .depth_test = true,
+                                      .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                      .push_constant_bytes = sizeof(CharacterPush),
+                                      .set_layouts = depth_set_layouts,
+                                  });
     if (!character_pipeline.pipeline || !character_depth_pipeline.pipeline ||
-        !interior_pipeline.pipeline || !interior_depth_pipeline.pipeline) {
+        !interior_pipeline.pipeline || !interior_depth_pipeline.pipeline ||
+        !lambert_pipeline.pipeline || !lambert_depth_pipeline.pipeline) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -758,6 +785,8 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
             {.renderArea = {{0, 0}, SceneExtent}, .layerCount = 1, .pDepthAttachment = &characters},
             dl);
         const std::array depth_sets{Textures::Set()};
+        DrawCharacters(cmd, Scene::DrawList::Lambert, lambert_depth_pipeline, depth_sets, header,
+                       packet, offset);
         DrawCharacters(cmd, Scene::DrawList::Character, character_depth_pipeline, depth_sets,
                        header, packet, offset);
         DrawCharacters(cmd, Scene::DrawList::Interior, interior_depth_pipeline, depth_sets, header,
@@ -845,6 +874,8 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     if (drawn) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Characters);
         const std::array sets{Textures::Set(), Shadows::Set(), SelfTranslucent::Set()};
+        DrawCharacters(cmd, Scene::DrawList::Lambert, lambert_pipeline, sets, header, packet,
+                       offset);
         DrawCharacters(cmd, Scene::DrawList::Character, character_pipeline, sets, header, packet,
                        offset);
         DrawCharacters(cmd, Scene::DrawList::Interior, interior_pipeline, sets, header, packet,

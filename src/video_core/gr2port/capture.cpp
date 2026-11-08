@@ -384,6 +384,7 @@ struct Category {
     bool glass = false;
     bool self_translucent = false;
     bool gem = false;
+    bool lambert = false;
 };
 constexpr Category MainCategory{15, 0x60, 0x38, 0x68, 0x00, 0x20, None, true}; // G2_BG_Main
 // The world's other opaque categories, drawn into the surfaces after G2_BG_Main.
@@ -404,6 +405,24 @@ constexpr Category InteriorCategory{13, 0x40, None, 0x48, None, None, None, fals
 constexpr u64 InteriorCube0 = 0x30;
 constexpr u64 InteriorCube1 = 0x38;
 constexpr u64 InteriorPixelBytes = 0xb0;
+// opaque/Lambert, static and skinned: its vertex constants are WorldViewProj and the three
+// ShadowProj; its pixel constants are the key light's direction in the model's space and the
+// colour scale.
+constexpr Category LambertCategory{.index = 4,
+                                   .constants = 0x38,
+                                   .texture = 0x30,
+                                   .material = 0x40,
+                                   .color_scale = 0x10,
+                                   .texcoord_transform = None,
+                                   .lambert = true};
+constexpr Category LambertSkinnedCategory{.index = 5,
+                                          .constants = 0x38,
+                                          .texture = 0x30,
+                                          .material = 0x40,
+                                          .color_scale = 0x10,
+                                          .texcoord_transform = None,
+                                          .lambert = true};
+constexpr u64 LambertPixelBytes = 0x20;
 // G2_BG_Gem: the texture objects of its colour and normal maps, and its pixel constants, whose
 // last word is the screen door's threshold.
 constexpr u64 GemColorMap = 0x48;
@@ -863,6 +882,14 @@ public:
             }
             material_index = AddInterior(item, material);
         }
+        if (category.lambert) {
+            if (material == 0 || header.characters == Scene::MaxCharacters) {
+                header.dropped_characters += material != 0;
+                header.dropped++;
+                return;
+            }
+            material_index = AddLambert(constants, material);
+        }
         if (category.glass) {
             if (material == 0 || mesh->normal == 0 || mesh->tangent == 0 ||
                 header.glass_materials == Scene::MaxGlassMaterials) {
@@ -888,13 +915,21 @@ public:
                                                stencil - 1)
             : category.glass     ? Scene::DrawList::Glass
             : category.interior  ? Scene::DrawList::Interior
+            : category.lambert   ? Scene::DrawList::Lambert
             : category.character ? Scene::DrawList::Character
             : alpha_tested       ? (culled ? Scene::DrawList::AlphaCulled : Scene::DrawList::Alpha)
                            : (culled ? Scene::DrawList::OpaqueCulled : Scene::DrawList::Opaque);
         const u32 i = header.draws++;
         // The fields are written in order: the packet is write-combined.
         Scene::Draw& draw = draws[i];
-        std::memcpy(draw.world_view, reinterpret_cast<const void*>(constants), 2 * MatrixBytes);
+        if (category.lambert) {
+            // Lambert's vertex constants start with WorldViewProj, which fills both matrices.
+            std::memcpy(draw.world_view, reinterpret_cast<const void*>(constants), MatrixBytes);
+            std::memcpy(draw.world_view_projection, reinterpret_cast<const void*>(constants),
+                        MatrixBytes);
+        } else {
+            std::memcpy(draw.world_view, reinterpret_cast<const void*>(constants), 2 * MatrixBytes);
+        }
         std::memcpy(draw.color_scale, color_scale, sizeof(draw.color_scale));
         std::memcpy(draw.texcoord_transform, texcoord_transform, sizeof(draw.texcoord_transform));
         draw.vertices = vertices;
@@ -1966,6 +2001,19 @@ private:
         return ++header.characters;
     }
 
+    // A Lambert item's Character: its pixel constants, then the three ShadowProj that follow
+    // WorldViewProj in its vertex constants.
+    u32 AddLambert(VAddr vertex_constants, VAddr pixel_constants) {
+        // The fields are written in order: the packet is write-combined.
+        Scene::Character& out = characters[header.characters];
+        std::memcpy(out.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
+                    LambertPixelBytes);
+        std::memcpy(out.pixel_constants + LambertPixelBytes / sizeof(u32),
+                    reinterpret_cast<const void*>(vertex_constants + MatrixBytes),
+                    Scene::Cascades * MatrixBytes);
+        return ++header.characters;
+    }
+
     // Copies a palette into the packet once for each run of users that share it.
     bool CopyPalette(VAddr palette, u32 bones, u64& address) {
         if (palette != last_palette || bones != last_bones) {
@@ -2849,6 +2897,8 @@ void OnFrame(VAddr frame_graph, VAddr view) {
         }
     }
     writer.EndPart(Scene::CapturePart::World);
+    add_category(LambertCategory);
+    add_category(LambertSkinnedCategory);
     add_category(CharacterCategory);
     add_category(SelfTranslucentCategory);
     add_category(InteriorCategory);
