@@ -300,22 +300,22 @@ u32 MaterialTexture(VAddr material, u32 i) {
 }
 
 // The pixel program of an item, as FUN_014c0960 and FUN_014bc300 choose it; Count when it is not
-// ported.
+// ported. The fog's low path (passes 10 to 13) takes the programs of passes 0, 1, 16 and 17.
 Scene::ParticleProgram PixelProgram(u32 mode, VAddr material) {
     const u32 soft = Load<u8>(material + MaterialSoft) != 0 ? 1 : 0;
     const u32 variant = (Load<u8>(material + MaterialLit) != 0 ? 2 : 0) + soft;
-    if (mode == 0 || mode == 1 || (mode >= 18 && mode <= 20)) {
+    if (mode == 0 || mode == 1 || mode == 10 || mode == 11 || (mode >= 18 && mode <= 20)) {
         return static_cast<Scene::ParticleProgram>(variant);
     }
     if (mode == 14 || mode == 15) {
         return static_cast<Scene::ParticleProgram>(static_cast<u32>(Scene::ParticleProgram::Fog) +
                                                    variant);
     }
-    if (mode == 16) {
+    if (mode == 12 || mode == 16) {
         return static_cast<Scene::ParticleProgram>(
             static_cast<u32>(Scene::ParticleProgram::Distortion) + soft);
     }
-    if (mode == 17) {
+    if (mode == 13 || mode == 17) {
         return static_cast<Scene::ParticleProgram>(static_cast<u32>(Scene::ParticleProgram::Blur) +
                                                    soft);
     }

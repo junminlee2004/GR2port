@@ -60,10 +60,22 @@ void RecordCollision(vk::CommandBuffer cmd, const Image& depth);
 /// ExtractEmitterColor does, then copies this frame's albedo for the next, as BackupColorBuffer.
 void RecordEmitterColors(vk::CommandBuffer cmd, const Scene::Header& header, u64 address);
 
+/// The groups of passes the scene draws: the fog's low path draws its opaque pass with the opaque
+/// draws and its others after TransparentBg, before the fog; the high path draws after the fog.
+enum class Group {
+    LowOpaque,
+    LowTransparent,
+    AfterFog,
+};
+
+/// Whether the packet holds draws of group's passes.
+bool HasDraws(const Scene::Header& header, const u8* packet, Group group);
+
 /// Outside rendering, with the scene's colour an attachment and depth readable: draws the items
-/// of the packet at offset in buffer, pass by pass in the game's order, and leaves depth readable.
+/// of the packet at offset in buffer of group's passes, pass by pass in the game's order, and
+/// leaves depth readable.
 void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet, u64 address,
                  vk::Buffer buffer, u64 offset, vk::ImageView scene, const Image& depth,
-                 vk::Extent2D extent);
+                 vk::Extent2D extent, Group group);
 
 } // namespace Gr2Port::Particles

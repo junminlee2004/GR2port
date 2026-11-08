@@ -957,10 +957,32 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         Contours::Record(cmd, header, packet.address, scene_ring.buffer, offset, extent);
     }
     cmd.endRendering(dl);
+    // The fog's low path draws its particles before the fog: its opaque pass with the opaque
+    // draws, the others after TransparentBg. Depth is readable while they draw.
+    const auto low_particles = [&](Particles::Group group) {
+        if (!drawn || !Particles::HasDraws(header, packet.data, group)) {
+            return;
+        }
+        depth_barrier(vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                      vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
+                      depth_tests | vk::PipelineStageFlagBits2::eFragmentShader |
+                          vk::PipelineStageFlagBits2::eTransfer,
+                      vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                          vk::AccessFlagBits2::eShaderSampledRead |
+                          vk::AccessFlagBits2::eTransferRead);
+        Particles::RecordDraws(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
+                               Look::SceneView(), depth, extent, group);
+        depth_barrier(vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+                      vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                      depth_tests | vk::PipelineStageFlagBits2::eFragmentShader,
+                      vk::AccessFlagBits2::eNone, depth_tests, depth_writes);
+    };
+    low_particles(Particles::Group::LowOpaque);
     if (drawn) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::EffectsBehind);
         Effects::RecordTransparentBg(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                      offset, Look::SceneView(), depth, extent);
+        low_particles(Particles::Group::LowTransparent);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Glass);
         Glass::Record(cmd, header, packet.address, scene_ring.buffer, offset, depth, extent);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Water);
@@ -1006,7 +1028,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         // The game's particle passes, after its fog.
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Particles);
         Particles::RecordDraws(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
-                               Look::SceneView(), depth, extent);
+                               Look::SceneView(), depth, extent, Particles::Group::AfterFog);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::EffectsTopMost);
         Effects::RecordTopMost(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
                                Look::SceneView(), depth.view, extent);

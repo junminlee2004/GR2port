@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstring>
 #include <mutex>
+#include <span>
 #include <thread>
 #include <vector>
 
@@ -104,10 +105,38 @@ constexpr u32 ShapeCount = static_cast<u32>(Scene::ParticleShape::Count);
 constexpr u32 FogFirstProgram = static_cast<u32>(Scene::ParticleProgram::Fog);
 constexpr u32 FogEndProgram = static_cast<u32>(Scene::ParticleProgram::Distortion);
 // The passes with programs, in the game's order: before it copies the scene, those that read the
-// copy, and after them.
+// copy, and after them. The fog's low path (LW) draws its passes before the fog, the opaque one
+// with the opaque draws and the others after TransparentBg; the high path (HW) after the fog.
+struct Modes {
+    std::span<const u32> before_copy;
+    std::span<const u32> of_copy;
+    std::span<const u32> after_copy;
+};
+constexpr std::array<u32, 1> ModesLowOpaque{11};
+constexpr std::array<u32, 1> ModesLowBeforeCopy{10};
+constexpr std::array<u32, 2> ModesLowOfCopy{12, 13};
 constexpr std::array<u32, 2> ModesBeforeCopy{15, 14};
 constexpr std::array<u32, 2> ModesOfCopy{16, 17};
 constexpr std::array<u32, 2> ModesAfterCopy{1, 0};
+
+Modes ModesOf(Group group) {
+    switch (group) {
+    case Group::LowOpaque:
+        return {.before_copy = ModesLowOpaque};
+    case Group::LowTransparent:
+        return {.before_copy = ModesLowBeforeCopy, .of_copy = ModesLowOfCopy};
+    default:
+        return {
+            .before_copy = ModesBeforeCopy, .of_copy = ModesOfCopy, .after_copy = ModesAfterCopy};
+    }
+}
+
+bool Holds(const Modes& modes, u32 mode) {
+    const auto holds = [mode](std::span<const u32> list) {
+        return std::find(list.begin(), list.end(), mode) != list.end();
+    };
+    return holds(modes.before_copy) || holds(modes.of_copy) || holds(modes.after_copy);
+}
 // SelfTranslucent's passes draw sprites, with the programs before the fog's.
 constexpr u32 SelfTranslucentFirstMode = 18;
 constexpr u32 SelfTranslucentPrograms = FogFirstProgram;
@@ -1400,9 +1429,19 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
                 g_surface_pipelines);
 }
 
+bool HasDraws(const Scene::Header& header, const u8* packet, Group group) {
+    const Scene::ParticleHeader& frame = header.particles;
+    std::array<Scene::ParticleRun, Scene::MaxParticleDraws> runs;
+    std::memcpy(runs.data(), packet + Scene::ParticleRunsOffset,
+                frame.runs * sizeof(Scene::ParticleRun));
+    const Modes modes = ModesOf(group);
+    return std::any_of(runs.begin(), runs.begin() + frame.runs,
+                       [&](const Scene::ParticleRun& run) { return Holds(modes, run.mode); });
+}
+
 void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet, u64 address,
                  vk::Buffer buffer, u64 offset, vk::ImageView scene, const Image& depth,
-                 vk::Extent2D extent) {
+                 vk::Extent2D extent, Group group) {
     const Scene::ParticleHeader& frame = header.particles;
     if (!g_ready.load(std::memory_order_acquire) || !g_pool_ready || !g_depth_copy_ready ||
         frame.runs == frame.shadow_runs + frame.surface_runs) {
@@ -1414,12 +1453,8 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
     std::array<Scene::ParticleRun, Scene::MaxParticleDraws> runs;
     std::memcpy(runs.data(), packet + Scene::ParticleRunsOffset,
                 frame.runs * sizeof(Scene::ParticleRun));
-    const auto is_forward = [](u32 mode) {
-        const auto holds = [mode](const auto& modes) {
-            return std::find(modes.begin(), modes.end(), mode) != modes.end();
-        };
-        return holds(ModesBeforeCopy) || holds(ModesOfCopy) || holds(ModesAfterCopy);
-    };
+    const Modes modes = ModesOf(group);
+    const auto is_forward = [&modes](u32 mode) { return Holds(modes, mode); };
     // A draw that writes the depth needs the programs to read a copy of it.
     const bool writes_depth =
         std::any_of(runs.begin(), runs.begin() + frame.runs, [&](const Scene::ParticleRun& run) {
@@ -1500,10 +1535,11 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
             }
         }
     };
-    draw_modes(ModesBeforeCopy);
+    draw_modes(modes.before_copy);
     const bool reads_copy =
-        std::any_of(runs.begin(), runs.begin() + frame.runs, [](const auto& run) {
-            return run.mode == ModesOfCopy[0] || run.mode == ModesOfCopy[1];
+        std::any_of(runs.begin(), runs.begin() + frame.runs, [&modes](const auto& run) {
+            return std::find(modes.of_copy.begin(), modes.of_copy.end(), run.mode) !=
+                   modes.of_copy.end();
         });
     if (reads_copy) {
         if (begun) {
@@ -1512,8 +1548,8 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
         }
         CopyScene(cmd, extent);
     }
-    draw_modes(ModesOfCopy);
-    draw_modes(ModesAfterCopy);
+    draw_modes(modes.of_copy);
+    draw_modes(modes.after_copy);
     if (begun) {
         cmd.endRendering(dl);
     }
