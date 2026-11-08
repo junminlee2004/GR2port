@@ -22,6 +22,7 @@
 #include "common/stb.h"
 #include "common/thread.h"
 #include "video_core/gr2port/capture.h"
+#include "video_core/gr2port/character_glass.h"
 #include "video_core/gr2port/contours.h"
 #include "video_core/gr2port/deformers.h"
 #include "video_core/gr2port/device.h"
@@ -186,6 +187,8 @@ struct Stats {
     u64 dropped_metaballs = 0;
     u64 enemies = 0;
     u64 dropped_enemies = 0;
+    u64 character_glass = 0;
+    u64 dropped_character_glass = 0;
     u64 point_lights = 0;
     u64 particle_draws = 0;
     u64 particle_runs = 0;
@@ -334,6 +337,7 @@ bool Thread::Init() {
         !Particles::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !PointLights::Start(d, *memory) || !Effects::Start(d, Look::SceneFormat, DepthFormat) ||
         !Enemies::Start(d, Look::SceneFormat, DepthFormat) ||
+        !CharacterGlass::Start(d, Look::SceneFormat, DepthFormat) ||
         !Water::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !Vegetation::Start(d, *memory, World::SurfaceFormats, DepthFormat, Shadows::DepthFormat)) {
         return false;
@@ -935,6 +939,8 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         Look::RecordSky(cmd, packet.address);
     }
     if (drawn) {
+        CharacterGlass::Record(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
+                               extent);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Contours);
         Contours::Record(cmd, header, packet.address, scene_ring.buffer, offset, extent);
     }
@@ -1129,6 +1135,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.dropped_metaballs += header.dropped_metaballs;
     stats.enemies += header.enemies;
     stats.dropped_enemies += header.dropped_enemies;
+    stats.character_glass += header.character_glass;
+    stats.dropped_character_glass += header.dropped_character_glass;
     stats.point_lights += header.point_lights;
     stats.particle_draws += header.particles.draws;
     stats.particle_runs += header.particles.runs;
@@ -1396,6 +1404,9 @@ void Thread::Report() {
     LOG_INFO(Render_Vulkan, "GR2port enemies: per frame {:.1f} drawn, {:.1f} not drawn",
              static_cast<double>(stats.enemies) / frames,
              static_cast<double>(stats.dropped_enemies) / frames);
+    LOG_INFO(Render_Vulkan, "GR2port character glass: per frame {:.1f} drawn, {:.1f} not drawn",
+             static_cast<double>(stats.character_glass) / frames,
+             static_cast<double>(stats.dropped_character_glass) / frames);
     LOG_INFO(Render_Vulkan, "GR2port point lights: per frame {:.1f}",
              static_cast<double>(stats.point_lights) / frames);
     LOG_INFO(Render_Vulkan,

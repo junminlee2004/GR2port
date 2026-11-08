@@ -80,6 +80,10 @@ inline constexpr u32 MaxEnemyDraws = 128;
 inline constexpr u32 EnemyLists = 8;
 inline constexpr u32 EnemyCoreLists = 4;
 inline constexpr u32 EnemySelfTranslucentLists = 6;
+/// G_CH_Glass draws per packet, category 12, and the bit of a draw's state that marks a skinned
+/// one; the bits below hold its blend mode.
+inline constexpr u32 MaxCharacterGlassDraws = 32;
+inline constexpr u32 CharacterGlassSkinned = 8;
 /// Textures of the world's draws that change each frame, per packet.
 inline constexpr u32 MaxDynamicTextures = 16;
 /// The game's limit on a view's point lights.
@@ -433,6 +437,10 @@ struct Header {
     u32 enemies;
     u32 enemy_commands[EnemyLists];
     u32 dropped_enemies;
+    /// CharacterGlassDraw records written, each with its command and state, and G_CH_Glass items
+    /// not drawn.
+    u32 character_glass;
+    u32 dropped_character_glass;
     /// The view's point lights, as in Light.
     u32 point_lights;
     /// Textures of the world's draws that change each frame, which the renderer copies again
@@ -863,6 +871,14 @@ struct EnemyDraw {
     EnemyMesh mesh;
 };
 static_assert(sizeof(EnemyDraw) == 896);
+
+/// A G_CH_Glass draw: the constants of the game's programs, then its mesh.
+struct CharacterGlassDraw {
+    u32 vertex_constants[80];
+    u32 pixel_constants[28];
+    EnemyMesh mesh;
+};
+static_assert(sizeof(CharacterGlassDraw) == 560);
 
 /// Consecutive effect draws of one list and one state.
 struct EffectRun {
@@ -1338,8 +1354,15 @@ inline constexpr u64 UiDataOffset = UiDynamicOffset + MaxUiDynamicTextures * siz
 inline constexpr u64 EnemyDrawsOffset = (UiDataOffset + MaxUiDataBytes + 15) & ~u64{15};
 /// MaxEnemyDraws commands of each enemy pipeline.
 inline constexpr u64 EnemyCommandsOffset = EnemyDrawsOffset + MaxEnemyDraws * sizeof(EnemyDraw);
-inline constexpr u64 PacketBytes =
+inline constexpr u64 CharacterGlassDrawsOffset =
     EnemyCommandsOffset + EnemyLists * MaxEnemyDraws * sizeof(Command);
+inline constexpr u64 CharacterGlassCommandsOffset =
+    CharacterGlassDrawsOffset + MaxCharacterGlassDraws * sizeof(CharacterGlassDraw);
+/// Each G_CH_Glass draw's state: its blend mode, and CharacterGlassSkinned.
+inline constexpr u64 CharacterGlassStatesOffset =
+    CharacterGlassCommandsOffset + MaxCharacterGlassDraws * sizeof(Command);
+inline constexpr u64 PacketBytes =
+    CharacterGlassStatesOffset + MaxCharacterGlassDraws * sizeof(u32);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -1355,6 +1378,6 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               ParticleEffectsOffset % 16 == 0 && EffectDrawsOffset % 16 == 0 &&
               WaterDrawsOffset % 16 == 0 && MetaballDrawsOffset % 16 == 0 &&
               PointLightsOffset % 16 == 0 && UiDrawsOffset % 16 == 0 && UiDataOffset % 16 == 0 &&
-              EnemyDrawsOffset % 16 == 0);
+              EnemyDrawsOffset % 16 == 0 && CharacterGlassDrawsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

@@ -5,6 +5,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/capture.cpp
     ${CMAKE_CURRENT_LIST_DIR}/capture.h
     ${CMAKE_CURRENT_LIST_DIR}/capture_math.h
+    ${CMAKE_CURRENT_LIST_DIR}/character_glass.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/character_glass.h
     ${CMAKE_CURRENT_LIST_DIR}/contours.cpp
     ${CMAKE_CURRENT_LIST_DIR}/contours.h
     ${CMAKE_CURRENT_LIST_DIR}/deformers.cpp
@@ -168,6 +170,9 @@ gr2port_add_shader(grass.frag grass_frag)
 gr2port_add_shader(branch.comp branch_comp)
 gr2port_add_shader(branch.vert branch_vert)
 gr2port_add_shader(branch.frag branch_frag)
+gr2port_add_shader(pfx/character_glass.frag character_glass_frag)
+gr2port_add_shader(pfx/character_glass.vert character_glass_vert)
+gr2port_add_shader(pfx/character_glass_skinned.vert character_glass_skinned_vert)
 gr2port_add_shader(pfx/effect.frag effect_frag)
 gr2port_add_shader(pfx/effect_skinned.vert effect_skinned_vert)
 gr2port_add_shader(pfx/effect_unskinned.vert effect_unskinned_vert)

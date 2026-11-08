@@ -255,6 +255,10 @@ void RecordList(vk::CommandBuffer cmd, const Scene::Header& header, const u8* pa
 
 } // namespace
 
+vk::PipelineColorBlendAttachmentState BlendState(u32 mode) {
+    return BlendState(BlendModes[mode]);
+}
+
 bool Start(const Device& device, vk::Format scene_format, vk::Format depth_format) {
     g_device = &device;
     g_scene_format = scene_format;

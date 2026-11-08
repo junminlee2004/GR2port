@@ -17,6 +17,10 @@ namespace Gr2Port::Effects {
 /// since the programs are large. The draws stay off until they are ready.
 bool Start(const Device& device, vk::Format scene_format, vk::Format depth_format);
 
+/// The game's blend state for an item's blend mode, below 8, which G2_EF_Main and G_CH_Glass
+/// items share.
+vk::PipelineColorBlendAttachmentState BlendState(u32 mode);
+
 /// With the GPU idle: points the programs at the scene's depth and at the copy of its colour.
 void Resize(vk::ImageView depth, vk::ImageView background);
 

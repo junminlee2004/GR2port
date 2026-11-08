@@ -596,6 +596,16 @@ constexpr u64 VertexElementCount = 0x1c;
 constexpr u64 VertexSemanticElement = 0x24;
 constexpr u64 VertexElementInfo = 0x34;
 constexpr u32 LoggedEnemyItems = 2;
+// G_CH_Glass (category 12): the texture objects of its pixel program's t0, t1 and t2 +0x48, +0x50
+// and +0x58, its blend mode +0x34, vertex constants +0x38 and pixel constants +0x40.
+constexpr u32 CharacterGlassCategory = 12;
+constexpr std::array<u64, 3> CharacterGlassMaps{0x48, 0x50, 0x58};
+constexpr u64 CharacterGlassBlend = 0x34;
+constexpr u64 CharacterGlassVertexConstants = 0x38;
+constexpr u64 CharacterGlassPixelConstants = 0x40;
+constexpr u64 CharacterGlassVertexBytes = 0x140;
+constexpr u64 CharacterGlassPixelBytes = 0x70;
+constexpr u32 CharacterGlassBlendModes = 8;
 constexpr u32 ContourCategory = 11;
 constexpr u64 ContourVertexConstants = 0x30;
 constexpr u64 ContourGeometryConstants = 0x38;
@@ -741,6 +751,8 @@ alignas(64) std::array<std::array<Scene::Command, Scene::MaxMetaballs>, 2> g_met
 alignas(64) std::array<std::array<Scene::Command, Scene::MaxEnemyDraws>,
                        Scene::EnemyLists> g_enemy_commands;
 std::array<u32, Scene::EnemyLists> g_logged_enemy_items{};
+alignas(64) std::array<Scene::Command, Scene::MaxCharacterGlassDraws> g_character_glass_commands;
+std::array<u32, Scene::MaxCharacterGlassDraws> g_character_glass_states;
 
 // A metaball item and its sphere, which its neighbours' draws read.
 struct MetaballSphereOf {
@@ -779,6 +791,23 @@ struct GrassView {
     float cluster_scale;
     float time_step;
 };
+
+// The element of each of the engine's semantics in a vertex buffer object, for EnemyMesh: its
+// offset, with its format from bit 8; 0 for a semantic it lacks or an offset off a word.
+std::array<u32, 16> MeshElements(VAddr vertex_buffer) {
+    const u32 element_count = Load<u16>(vertex_buffer + VertexElementCount);
+    std::array<u32, 16> elements{};
+    for (u32 semantic = 0; semantic < elements.size(); semantic++) {
+        const u32 element = Load<u8>(vertex_buffer + VertexSemanticElement + semantic);
+        if (element >= element_count) {
+            continue;
+        }
+        const u32 format = Load<u8>(vertex_buffer + VertexElementInfo + 4 * element);
+        const u32 offset = Load<u8>(vertex_buffer + VertexElementInfo + 4 * element + 2);
+        elements[semantic] = offset % 4 == 0 ? offset | format << 8 : 0;
+    }
+    return elements;
+}
 
 // The view's point lights that the packet holds and the programs count.
 u32 PointLightCount(VAddr view) {
@@ -869,6 +898,10 @@ public:
                             u64{list} * Scene::MaxEnemyDraws * Bytes,
                         g_enemy_commands[list].data(), header.enemy_commands[list] * Bytes);
         }
+        std::memcpy(packet + Scene::CharacterGlassCommandsOffset, g_character_glass_commands.data(),
+                    header.character_glass * Bytes);
+        std::memcpy(packet + Scene::CharacterGlassStatesOffset, g_character_glass_states.data(),
+                    header.character_glass * sizeof(u32));
     }
 
     void SetCascades(u32 mask) {
@@ -1440,16 +1473,7 @@ public:
         }
         const VAddr vb = shape + ShapeVertexBuffer;
         const u32 element_count = Load<u16>(vb + VertexElementCount);
-        std::array<u32, 16> elements{};
-        for (u32 semantic = 0; semantic < elements.size(); semantic++) {
-            const u32 element = Load<u8>(vb + VertexSemanticElement + semantic);
-            if (element >= element_count) {
-                continue;
-            }
-            const u32 format = Load<u8>(vb + VertexElementInfo + 4 * element);
-            const u32 offset = Load<u8>(vb + VertexElementInfo + 4 * element + 2);
-            elements[semantic] = offset % 4 == 0 ? offset | format << 8 : 0;
-        }
+        const std::array<u32, 16> elements = MeshElements(vb);
         // A texture object's handle, by its T# when the texture hooks never saw the object.
         u32 by_sharp = 0;
         const auto handle = [this, &by_sharp](VAddr object) -> u32 {
@@ -1509,6 +1533,73 @@ public:
                      core ? Load<u8>(item + EnemyCoreSkinned) : 0, text, enemy_mesh.displacement,
                      fmt::join(enemy_mesh.maps, " "), by_sharp);
         }
+    }
+
+    // A G_CH_Glass item, drawn in the game's order with its blend mode.
+    void AddCharacterGlass(VAddr item) {
+        const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
+        const VAddr index_buffer = Load<VAddr>(item + ItemIndexBuffer);
+        const VAddr vertex_constants = Load<VAddr>(item + CharacterGlassVertexConstants);
+        const VAddr pixel_constants = Load<VAddr>(item + CharacterGlassPixelConstants);
+        const u32 blend = Load<u32>(item + CharacterGlassBlend);
+        const VAddr shape = index_buffer - ShapeIndexBuffer;
+        if (submesh == 0 || index_buffer == 0 || vertex_constants == 0 || pixel_constants == 0 ||
+            blend >= CharacterGlassBlendModes || Load<u16>(submesh + SubmeshRanges) == 0 ||
+            header.character_glass == Scene::MaxCharacterGlassDraws) {
+            header.dropped_character_glass++;
+            return;
+        }
+        const Meshes::Mesh* mesh = Meshes::Get(shape);
+        if (mesh == nullptr) {
+            header.dropped_character_glass++;
+            return;
+        }
+        Skin skin;
+        u64 vertices = mesh->vertices;
+        const VAddr vertex_buffer = Load<VAddr>(item + ItemVertexBuffer);
+        if (vertex_buffer != shape + ShapeVertexBuffer) {
+            // The game's compute has deformed the vertices; the renderer's copy holds its own.
+            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame).vertices;
+        } else if (!ReadSkin(item, shape, *mesh, skin)) {
+            header.dropped_character_glass++;
+            return;
+        }
+        const u32 first =
+            Load<u32>(submesh + SubmeshFirstIndex) + Load<u32>(submesh + SubmeshRange);
+        const u32 count = Load<u32>(submesh + SubmeshRange + 4);
+        if (u64{first} + count > mesh->indices || vertices == 0) {
+            header.dropped_character_glass++;
+            return;
+        }
+        const u32 i = header.character_glass++;
+        // The fields are written in order: the packet is write-combined.
+        Scene::CharacterGlassDraw& out = reinterpret_cast<Scene::CharacterGlassDraw*>(
+            packet + Scene::CharacterGlassDrawsOffset)[i];
+        std::memcpy(out.vertex_constants, reinterpret_cast<const void*>(vertex_constants),
+                    CharacterGlassVertexBytes);
+        std::memcpy(out.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
+                    CharacterGlassPixelBytes);
+        Scene::EnemyMesh glass_mesh{
+            .vertices = vertices,
+            .skin = skin.stream,
+            .palette = skin.palette,
+            .stride = mesh->stride,
+        };
+        const std::array<u32, 16> elements = MeshElements(shape + ShapeVertexBuffer);
+        std::memcpy(glass_mesh.elements, elements.data(), sizeof(glass_mesh.elements));
+        for (u32 t = 0; t < CharacterGlassMaps.size(); t++) {
+            const VAddr object = Load<VAddr>(item + CharacterGlassMaps[t]);
+            glass_mesh.maps[t] = object != 0 ? Textures::Get(object) : 0;
+        }
+        out.mesh = glass_mesh;
+        g_character_glass_commands[i] = {
+            .index_count = count,
+            .instance_count = 1,
+            .first_index = mesh->first_index + first,
+            .vertex_offset = 0,
+            .first_instance = i,
+        };
+        g_character_glass_states[i] = blend | (skin.stream != 0 ? Scene::CharacterGlassSkinned : 0);
     }
 
     // A G2_EF_Main item of one of the game's lists, lit by point_lights of the view's lights.
@@ -3236,6 +3327,9 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     add_category(CharacterGlowCategory);
     add_category(SelfTranslucentCategory);
     add_category(InteriorCategory);
+    ForEachItem(Load<s32>(view + ViewCategoryCount + CharacterGlassCategory * 4),
+                CharacterGlassVertexConstants, CharacterGlassPixelConstants,
+                keyed(CharacterGlassCategory), [&](VAddr item) { writer.AddCharacterGlass(item); });
     ForEachItem(Load<s32>(view + ViewCategoryCount + ContourCategory * 4), ContourVertexConstants,
                 None, keyed(ContourCategory), [&](VAddr item) { writer.AddContour(item); });
     writer.AddEffects(view);
