@@ -50,6 +50,9 @@ constexpr u64 BackBufferBytes = 0x118;
 constexpr u64 TargetWidth = 0x14;
 constexpr u64 TargetHeight = 0x16;
 constexpr u64 TargetSharp = 0x30;
+// The photo manager, whose target object at +0x580 FUN_011afe90 draws each shot into.
+constexpr VAddr PhotoManager = 0x1eed278;
+constexpr u64 PhotoObject = 0x580;
 
 // Command packets.
 constexpr u32 PacketType2 = 2;
@@ -112,6 +115,7 @@ constexpr std::array<VertexProgram, static_cast<u32>(Scene::UiVertexProgram::Cou
         {0x7ff3ec61, 3, true, false},
         {0x239eaa3a, 5, true, true},
         {0x13c2ea85, 6, true, true},
+        {0xc1dfc610, 4, true, false},
     }};
 
 struct PixelProgram {
@@ -132,6 +136,7 @@ constexpr std::array<PixelProgram, static_cast<u32>(Scene::UiPixelProgram::Count
     {0xb11cba5e, 1, true},
     {0xe2f10454, 2, true},
     {0x69770dd9, 1, true},
+    {0xf64d728c, 2, true},
 }};
 
 constexpr u32 ReportFrames = 600;
@@ -246,6 +251,23 @@ u32 ObjectTarget(VAddr object) {
     const auto sharp = Load<std::array<u32, 8>>(object + TargetSharp);
     return FindTarget(SharpAddress(sharp.data()), Load<u16>(object + TargetWidth),
                       Load<u16>(object + TargetHeight));
+}
+
+// The target of the photo the frame drew, plus one, or 0.
+u32 PhotoTarget(const Scene::UiHeader& ui) {
+    const VAddr manager = Load<VAddr>(g_base + PhotoManager - GoldHenBase);
+    if (manager == 0) {
+        return 0;
+    }
+    const auto sharp = Load<std::array<u32, 8>>(manager + PhotoObject + TargetSharp);
+    const u64 base = SharpAddress(sharp.data());
+    for (u32 i = 0; i < ui.runs; i++) {
+        const u32 target = g_runs[i].target;
+        if (target < g_target_count && g_targets[target].base == base) {
+            return target + 1;
+        }
+    }
+    return 0;
 }
 
 class Writer {
@@ -471,14 +493,26 @@ void Writer::Draw(u32 opcode, const u32* body) {
         draw.textures[0] = TextureHandle(ps_user);
         draw.samplers[0] = sampler_of(ps_user + PsUserSampler);
     }
+    std::array<u32, 16> table_words{};
     if (pixel_program->textures == 2) {
         const VAddr table = u64{ps_user[PsUserConstants]} | u64{ps_user[PsUserConstants + 1]} << 32;
-        const auto words = Load<std::array<u32, 16>>(table);
-        draw.textures[1] = TextureHandle(words.data());
-        draw.samplers[1] = sampler_of(words.data() + TableSampler);
-        draw.ps_constants = constants_of(words.data() + TableConstants);
+        table_words = Load<std::array<u32, 16>>(table);
+        draw.textures[1] = TextureHandle(table_words.data());
+        draw.samplers[1] = sampler_of(table_words.data() + TableSampler);
+        draw.ps_constants = constants_of(table_words.data() + TableConstants);
     } else if (pixel_program->constants) {
         draw.ps_constants = constants_of(ps_user + PsUserConstants);
+    }
+    if (static_cast<u32>(pixel_program - PixelPrograms.begin()) ==
+        static_cast<u32>(Scene::UiPixelProgram::Photo)) {
+        LOG_INFO(Render_Vulkan,
+                 "GR2port photo: drawn into target {}, the frame from {:#x} as {:#x}, the filter's "
+                 "frame from {:#x} as {:#x}, curves of {} bytes at {:#x}; world target {}",
+                 target, SharpAddress(ps_user), draw.textures[0], SharpAddress(table_words.data()),
+                 draw.textures[1],
+                 u64{ReadBuffer(table_words.data() + TableConstants).stride} *
+                     ReadBuffer(table_words.data() + TableConstants).elements,
+                 draw.ps_constants, ui.world);
     }
     // A texture the renderer does not have yet reads white, which a movie's colour conversion
     // turns pink, so the draw is left out until the renderer has it.
@@ -630,6 +664,7 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
         g_unread++;
     }
     writer.Finish();
+    ui.photo = PhotoTarget(ui);
 
     g_draws += ui.draws;
     g_runs_total += ui.runs;

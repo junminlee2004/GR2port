@@ -49,6 +49,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/particle_capture.h
     ${CMAKE_CURRENT_LIST_DIR}/motion_blur.cpp
     ${CMAKE_CURRENT_LIST_DIR}/motion_blur.h
+    ${CMAKE_CURRENT_LIST_DIR}/photo.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/photo.h
     ${CMAKE_CURRENT_LIST_DIR}/particles.cpp
     ${CMAKE_CURRENT_LIST_DIR}/particles.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.cpp
@@ -274,6 +276,8 @@ gr2port_add_shader(pfx/ui_blur.frag ui_blur_frag)
 gr2port_add_shader(pfx/ui_blur_history.frag ui_blur_history_frag)
 gr2port_add_shader(pfx/ui_color.frag ui_color_frag)
 gr2port_add_shader(pfx/ui_color_control.frag ui_color_control_frag)
+gr2port_add_shader(pfx/ui_photo.frag ui_photo_frag)
+gr2port_add_shader(pfx/ui_photo.vert ui_photo_vert)
 gr2port_add_shader(pfx/ui_copy.frag ui_copy_frag)
 gr2port_add_shader(pfx/ui_frame.frag ui_frame_frag)
 gr2port_add_shader(pfx/ui_gamma.frag ui_gamma_frag)

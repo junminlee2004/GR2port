@@ -39,6 +39,7 @@
 #include "video_core/gr2port/motion_blur.h"
 #include "video_core/gr2port/overlays.h"
 #include "video_core/gr2port/particles.h"
+#include "video_core/gr2port/photo.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/point_lights.h"
 #include "video_core/gr2port/renderer.h"
@@ -1116,6 +1117,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     }
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Ui);
     Ui::Record(cmd, header, packet.data, packet.address, scene_ring.buffer, offset);
+    Photo::Record(*memory, cmd, header, slot_index);
     ImGuiRelay::Update(cmd, frame, frame - FramesInFlight);
 
     const vk::Image image = swapchain->Image(index);
@@ -1247,6 +1249,7 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     DeviceLost::Check(d, d.device.waitForFences(slot.done, true, UINT64_MAX, dl));
     const auto wait_end = std::chrono::steady_clock::now();
     ReadTimes(slot_index);
+    Photo::Collect(slot_index);
     if (slot.snapshot) {
         slot.snapshot = false;
         SaveSnapshot();

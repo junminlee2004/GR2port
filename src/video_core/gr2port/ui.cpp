@@ -22,6 +22,8 @@
 #include "video_core/gr2port/shaders/ui_movie_frag.h"
 #include "video_core/gr2port/shaders/ui_pass_flat_vert.h"
 #include "video_core/gr2port/shaders/ui_pass_vert.h"
+#include "video_core/gr2port/shaders/ui_photo_frag.h"
+#include "video_core/gr2port/shaders/ui_photo_vert.h"
 #include "video_core/gr2port/shaders/ui_present_frag.h"
 #include "video_core/gr2port/shaders/ui_skinned_b_vert.h"
 #include "video_core/gr2port/shaders/ui_skinned_vert.h"
@@ -54,8 +56,8 @@ std::unordered_map<u64, Pipeline> g_pipelines;
 // the locations in its mask.
 constexpr u32 VertexPrograms = static_cast<u32>(Scene::UiVertexProgram::Count);
 constexpr u32 PixelPrograms = static_cast<u32>(Scene::UiPixelProgram::Count);
-constexpr std::array<u32, VertexPrograms> VertexOutputs{3, 1, 3, 3, 3, 3, 3};
-constexpr std::array<u32, PixelPrograms> PixelInputs{1, 2, 1, 2, 1, 3, 3, 3, 2, 2, 2};
+constexpr std::array<u32, VertexPrograms> VertexOutputs{3, 1, 3, 3, 3, 3, 3, 3};
+constexpr std::array<u32, PixelPrograms> PixelInputs{1, 2, 1, 2, 1, 3, 3, 3, 2, 2, 2, 2};
 std::array<Pipeline, VertexPrograms * PixelPrograms> g_pairs;
 Pipeline g_present;
 u32 g_open_target = Scene::MaxUiTargets;
@@ -194,6 +196,8 @@ std::span<const u32> VertexCode(u32 program) {
         return UI_TRANSFORM_VERT;
     case Scene::UiVertexProgram::Skinned:
         return UI_SKINNED_VERT;
+    case Scene::UiVertexProgram::Photo:
+        return UI_PHOTO_VERT;
     default:
         return UI_SKINNED_B_VERT;
     }
@@ -221,6 +225,8 @@ std::span<const u32> PixelCode(u32 program) {
         return UI_BLUR_FRAG;
     case Scene::UiPixelProgram::BlurHistory:
         return UI_BLUR_HISTORY_FRAG;
+    case Scene::UiPixelProgram::Photo:
+        return UI_PHOTO_FRAG;
     default:
         return UI_COLOR_CONTROL_FRAG;
     }
@@ -389,6 +395,30 @@ vk::Extent2D BeginWorld(vk::CommandBuffer cmd, const Scene::Header& header) {
 
 void EndWorld(vk::CommandBuffer cmd) {
     EndTarget(cmd);
+}
+
+vk::Extent2D TargetExtent(u32 target) {
+    return target < g_images.size() && g_images[target].image ? g_images[target].extent
+                                                              : vk::Extent2D{};
+}
+
+void CopyTarget(vk::CommandBuffer cmd, u32 target, vk::Buffer buffer) {
+    TargetBarrier(cmd, target, vk::ImageLayout::eShaderReadOnlyOptimal,
+                  vk::ImageLayout::eTransferSrcOptimal,
+                  vk::PipelineStageFlagBits2::eColorAttachmentOutput |
+                      vk::PipelineStageFlagBits2::eFragmentShader,
+                  vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eCopy,
+                  vk::AccessFlagBits2::eTransferRead);
+    const vk::BufferImageCopy region{
+        .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+        .imageExtent = {g_images[target].extent.width, g_images[target].extent.height, 1},
+    };
+    cmd.copyImageToBuffer(g_images[target].image, vk::ImageLayout::eTransferSrcOptimal, buffer,
+                          region, g_device->dispatch);
+    TargetBarrier(cmd, target, vk::ImageLayout::eTransferSrcOptimal,
+                  vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eCopy,
+                  vk::AccessFlagBits2::eTransferRead, vk::PipelineStageFlagBits2::eFragmentShader,
+                  vk::AccessFlagBits2::eShaderSampledRead);
 }
 
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet, u64 address,

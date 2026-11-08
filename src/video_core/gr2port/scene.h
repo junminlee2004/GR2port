@@ -288,6 +288,7 @@ enum class UiVertexProgram : u32 {
     Transform,
     Skinned,
     SkinnedB,
+    Photo,
     Count,
 };
 enum class UiPixelProgram : u32 {
@@ -302,6 +303,7 @@ enum class UiPixelProgram : u32 {
     Blur,
     BlurHistory,
     ColorControl,
+    Photo,
     Count,
 };
 
@@ -322,6 +324,8 @@ struct UiHeader {
     u32 dropped;
     u32 unported;
     u32 unknown_textures;
+    /// The target the game drew a photo into, plus one; 0 when the frame drew none.
+    u32 photo;
 };
 
 struct EffectHeader {

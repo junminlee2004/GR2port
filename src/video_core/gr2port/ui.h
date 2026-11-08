@@ -34,6 +34,12 @@ vk::Extent2D BeginWorld(vk::CommandBuffer cmd, const Scene::Header& header);
 /// Ends the rendering BeginWorld began and leaves the target for shaders to read.
 void EndWorld(vk::CommandBuffer cmd);
 
+/// A target's size, 0 by 0 when the renderer has no image for it.
+vk::Extent2D TargetExtent(u32 target);
+
+/// After Record: copies a target's pixels to buffer, rows of 4 bytes per pixel in RGBA order.
+void CopyTarget(vk::CommandBuffer cmd, u32 target, vk::Buffer buffer);
+
 /// Outside rendering: draws the screen drawing of the packet at offset in buffer, mapped at
 /// address.
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet, u64 address,

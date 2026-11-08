@@ -14,6 +14,7 @@
 #include "core/libraries/jpeg/jpeg_error.h"
 #include "core/libraries/jpeg/jpegenc.h"
 #include "core/libraries/libs.h"
+#include "video_core/gr2port/photo.h"
 #include "video_core/texture_cache/photo_readback.h"
 
 namespace Libraries::Gr2Photo::JpegEnc {
@@ -119,7 +120,8 @@ static s32 ValidateJpecEngHandle(OrbisJpegEncHandle handle) {
 // wrote back. The pixels of the target itself take its place.
 static void ReadPhotoTarget(const OrbisJpegEncEncodeParam* param) {
     VideoCore::PhotoReadback::Frame frame;
-    if (!VideoCore::PhotoReadback::Download(frame)) {
+    if (!Gr2Port::Photo::Read(frame.pixels, frame.width, frame.height, frame.pitch) &&
+        !VideoCore::PhotoReadback::Download(frame)) {
         LOG_WARNING(Lib_Jpeg, "No photo target to read, encoding the guest buffer as it is");
         return;
     }
