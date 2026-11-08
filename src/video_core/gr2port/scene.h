@@ -198,13 +198,16 @@ enum class ParticleShape : u32 {
     Count,
 };
 
-/// The programs of particles in a cascade's map.
+/// The programs of particles in a cascade's map. Kind 4's meshes have one per material class.
 enum class ParticleShadowProgram : u32 {
     Sprite,
     SpriteSoft,
     Model,
     Ribbon,
     RibbonSoft,
+    Surface,
+    Gem,
+    Effect,
     Count,
 };
 
@@ -213,9 +216,10 @@ enum class ParticleShadowProgram : u32 {
 inline constexpr u32 ParticleSurfaceMode = 6;
 inline constexpr u32 ParticleShadowMode = 32;
 /// The vertex and pixel programs of mesh particles in the world's surfaces, by what the mesh has,
-/// then those of sprites, ribbons and models there, each plain and soft.
+/// then those of sprites, ribbons and models there, each plain and soft, then gem meshes.
 inline constexpr u32 ParticleSurfaceVariants = 4;
-inline constexpr u32 ParticleSurfacePipelines = ParticleSurfaceVariants + 6;
+inline constexpr u32 ParticleSurfaceGem = ParticleSurfaceVariants + 6;
+inline constexpr u32 ParticleSurfacePipelines = ParticleSurfaceGem + 1;
 
 /// The pixel programs of the particle system that are ported. Sprites and ribbons share a set, and
 /// models have their own, in this order.
@@ -234,6 +238,10 @@ enum class ParticleProgram : u32 {
     BlurSoft,
     Count,
 };
+
+/// The pipeline of a run of kind 4's effect meshes, after the shapes' programs.
+inline constexpr u32 ParticleEffectPipeline =
+    static_cast<u32>(ParticleShape::Count) * static_cast<u32>(ParticleProgram::Count);
 
 /// The numbers of a packet's particle blocks.
 struct ParticleHeader {
@@ -797,24 +805,25 @@ struct ParticleSample {
 static_assert(sizeof(ParticleSample) == 136);
 
 /// A particle draw: the game's PfxBufferCommon, then the handles of its four textures. A model's
-/// draw adds how many meshes its set has and which this is, and the mesh. A mesh particle in the
-/// world's surfaces adds the constants of the game's programs, and the handles of its colour map,
-/// normal map, mask, layered colour map and layered normal map.
+/// draw adds how many meshes its set has and which this is, and the mesh. A kind 4 mesh adds the
+/// constants of its material's programs and the handles of its maps: a surface's colour map,
+/// normal map, mask, layered colour map and layered normal map, a gem's colour and normal maps, an
+/// effect's four colour maps, with its displacement map in the mesh.
 struct ParticleDraw {
     float constants[88];
     u32 textures[4];
     float model_count[2];
     u32 padding[2];
     EffectMesh mesh;
-    float vertex_constants[56];
-    float pixel_constants[40];
+    float vertex_constants[104];
+    float pixel_constants[72];
     u32 maps[5];
     u32 padding2;
 };
-static_assert(sizeof(ParticleDraw) == 872);
+static_assert(sizeof(ParticleDraw) == 1192);
 
 /// Consecutive particle commands of one pipeline and state. The pipeline is the vertex program's
-/// shape times the programs per shape, plus the pixel program.
+/// shape times the programs per shape, plus the pixel program, or ParticleEffectPipeline.
 struct ParticleRun {
     u32 pipeline;
     u32 mode;

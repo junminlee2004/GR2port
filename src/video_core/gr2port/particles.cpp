@@ -46,9 +46,18 @@
 #include "video_core/gr2port/shaders/model_plain_soft_frag.h"
 #include "video_core/gr2port/shaders/model_shadow_vert.h"
 #include "video_core/gr2port/shaders/model_vert.h"
+#include "video_core/gr2port/shaders/particle_effect_frag.h"
+#include "video_core/gr2port/shaders/particle_effect_shadow_frag.h"
+#include "video_core/gr2port/shaders/particle_effect_shadow_vert.h"
+#include "video_core/gr2port/shaders/particle_effect_vert.h"
+#include "video_core/gr2port/shaders/particle_gem_frag.h"
+#include "video_core/gr2port/shaders/particle_gem_shadow_vert.h"
+#include "video_core/gr2port/shaders/particle_gem_vert.h"
+#include "video_core/gr2port/shaders/particle_mesh_shadow_frag.h"
 #include "video_core/gr2port/shaders/particle_surface_color_frag.h"
 #include "video_core/gr2port/shaders/particle_surface_color_vert.h"
 #include "video_core/gr2port/shaders/particle_surface_frag.h"
+#include "video_core/gr2port/shaders/particle_surface_shadow_vert.h"
 #include "video_core/gr2port/shaders/particle_surface_tangent_color_frag.h"
 #include "video_core/gr2port/shaders/particle_surface_tangent_color_vert.h"
 #include "video_core/gr2port/shaders/particle_surface_tangent_frag.h"
@@ -223,6 +232,9 @@ std::array<Pipeline, ShapeCount * ProgramCount> g_draws;
 constexpr u32 OpaqueMode = 1;
 constexpr u32 OpaquePrograms = FogFirstProgram;
 std::array<Pipeline, ShapeCount * OpaquePrograms> g_opaque;
+// Kind 4's effect meshes, blended as the other particles, and replacing the colour in pass 1.
+Pipeline g_effect;
+Pipeline g_effect_opaque;
 std::array<Pipeline, SelfTranslucentPrograms * 2> g_self_translucent;
 std::array<Pipeline, ShadowPrograms> g_shadow_pipelines;
 std::array<Pipeline, Scene::ParticleSurfacePipelines> g_surface_pipelines;
@@ -408,6 +420,28 @@ void Build() {
             built = built && pipeline.pipeline;
         }
     }
+    const GraphicsPipelineInfo effect{
+        .vertex = PARTICLE_EFFECT_VERT,
+        .fragment = PARTICLE_EFFECT_FRAG,
+        .color = g_scene_format,
+        .depth = g_depth_format,
+        .topology = vk::PrimitiveTopology::eTriangleList,
+        .depth_test = true,
+        .depth_write = false,
+        .depth_compare = vk::CompareOp::eGreaterOrEqual,
+        .premultiplied_blend = true,
+        .clear_target_alpha = true,
+        .dynamic_depth_and_cull = true,
+        .push_constant_bytes = sizeof(DrawPush),
+        .set_layouts = draw_sets,
+    };
+    GraphicsPipelineInfo effect_opaque = effect;
+    effect_opaque.premultiplied_blend = false;
+    effect_opaque.clear_target_alpha = false;
+    effect_opaque.blend = &Replace;
+    g_effect = CreateGraphicsPipeline(d, effect);
+    g_effect_opaque = CreateGraphicsPipeline(d, effect_opaque);
+    built = built && g_effect.pipeline && g_effect_opaque.pipeline;
     for (u32 program = 0; program < SelfTranslucentPrograms; program++) {
         for (u32 tested = 0; tested < 2; tested++) {
             Pipeline& inside = g_self_translucent[program * 2 + tested];
@@ -440,6 +474,11 @@ void Build() {
         {MODEL_SHADOW_VERT, {}, vk::PrimitiveTopology::eTriangleList},
         {SPRITE_RIBBON_SHADOW_VERT, SPRITE_SHADOW_FRAG, vk::PrimitiveTopology::eTriangleStrip},
         {SPRITE_RIBBON_SHADOW_VERT, SPRITE_SHADOW_SOFT_FRAG, vk::PrimitiveTopology::eTriangleStrip},
+        {PARTICLE_SURFACE_SHADOW_VERT, PARTICLE_MESH_SHADOW_FRAG,
+         vk::PrimitiveTopology::eTriangleList},
+        {PARTICLE_GEM_SHADOW_VERT, PARTICLE_MESH_SHADOW_FRAG, vk::PrimitiveTopology::eTriangleList},
+        {PARTICLE_EFFECT_SHADOW_VERT, PARTICLE_EFFECT_SHADOW_FRAG,
+         vk::PrimitiveTopology::eTriangleList},
     }};
     for (u32 i = 0; i < ShadowPrograms; i++) {
         g_shadow_pipelines[i] =
@@ -507,6 +546,20 @@ void Build() {
             built = built && pipeline.pipeline;
         }
     }
+    Pipeline& gem = g_surface_pipelines[Scene::ParticleSurfaceGem];
+    gem = CreateGraphicsPipeline(d, {
+                                        .vertex = PARTICLE_GEM_VERT,
+                                        .fragment = PARTICLE_GEM_FRAG,
+                                        .colors = World::SurfaceFormats,
+                                        .depth = g_depth_format,
+                                        .topology = vk::PrimitiveTopology::eTriangleList,
+                                        .depth_test = true,
+                                        .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                        .dynamic_depth_and_cull = true,
+                                        .push_constant_bytes = sizeof(DrawPush),
+                                        .set_layouts = draw_sets,
+                                    });
+    built = built && gem.pipeline;
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - start)
                         .count();
@@ -1582,13 +1635,16 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
             cmd.setScissor(0, vk::Rect2D{{0, 0}, extent}, dl);
             cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
         }
-        const bool opaque = run.mode == OpaqueMode && program < OpaquePrograms;
-        const u32 key = run.pipeline + (opaque ? ShapeCount * ProgramCount : 0);
+        const bool effect = run.pipeline == Scene::ParticleEffectPipeline;
+        const bool opaque = run.mode == OpaqueMode && (effect || program < OpaquePrograms);
+        // Pass 1's pipelines take keys after all the others.
+        const u32 key = run.pipeline + (opaque ? Scene::ParticleEffectPipeline + 1 : 0);
         if (key != bound) {
             bound = key;
             const Pipeline& pipeline =
-                opaque ? g_opaque[run.pipeline / ProgramCount * OpaquePrograms + program]
-                       : g_draws[run.pipeline];
+                effect   ? (opaque ? g_effect_opaque : g_effect)
+                : opaque ? g_opaque[run.pipeline / ProgramCount * OpaquePrograms + program]
+                         : g_draws[run.pipeline];
             const std::array sets{Textures::Set(), set};
             cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, sets, {},

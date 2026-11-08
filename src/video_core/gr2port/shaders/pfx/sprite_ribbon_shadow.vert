@@ -106,7 +106,7 @@ void main() {
     Words description = Words(description_address);
     Words material = Words(material_address);
     draw_index = uint(gl_InstanceIndex) >> 20;
-    Words draw_block = Words(draws_address + uint64_t(draw_index) * 872ul);
+    Words draw_block = Words(draws_address + uint64_t(draw_index) * 1192ul);
     v0 = uint(gl_VertexIndex);
     v3 = uint(gl_InstanceIndex) & 0xfffffu;
     gl_Position = vec4(0.0);

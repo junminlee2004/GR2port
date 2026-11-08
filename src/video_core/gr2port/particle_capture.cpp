@@ -109,6 +109,8 @@ constexpr u32 KindRibbon = 2;
 constexpr u32 KindModel = 3;
 constexpr u32 KindMesh = 4;
 constexpr u32 ShadowPass = 3;
+// The first of SelfTranslucent's passes, which draw only sprites.
+constexpr u32 SelfTranslucentFirstMode = 18;
 constexpr u32 SpriteVertices = 4;
 constexpr u32 RibbonVertices = 10;
 constexpr u64 ResourceMaterial = 0x20;
@@ -169,11 +171,54 @@ constexpr float SurfacePunchThroughMost = 0.995f;
 constexpr float SurfaceEmissiveScale = 1.0f / 6.0f;
 constexpr float SurfaceLastConstant = 3.0f;
 // A map of such a material: its own texture or else a shared one, each with its object at +8, and
-// its transform.
+// its transform, and the kind of a texture's object.
 constexpr u64 MapOwnTexture = 0x20;
 constexpr u64 MapSharedTexture = 0x18;
 constexpr u64 MapOffset = 0x70;
 constexpr u64 MapRepeat = 0x68;
+constexpr u64 TextureKind = 0x64;
+// A G2_BG_Gem material, as FUN_013fc280 reads it for kind 4's gem meshes: the colour's scale and
+// colour, the normal scale, roughness, metallic and translucency, then the emissive, refraction
+// and radius.
+constexpr u64 GemColorMap = 0x20;
+constexpr u64 GemColorScale = 0x2c;
+constexpr u64 GemValues = 0x38;
+constexpr u64 GemEmissive = 0x48;
+constexpr u64 GemRefraction = 0x4c;
+constexpr u64 GemColor = 0x50;
+constexpr u64 GemRadius = 0x5c;
+constexpr u64 GemNormalMap = 0x60;
+constexpr float GemEmissiveScale = 1.0f / 6.0f;
+constexpr float GemRefractionScale = 1.000292f;
+constexpr float GemLeastRadius = 1e-6f;
+constexpr float GemAspect = 16.0f / 9.0f;
+// A G2_EF_Main material, as FUN_014147a0 reads it for kind 4's effect meshes. EffectVectors holds
+// the blend method, colour scale, alpha scale and contrast; EffectLineValues the z scale, the
+// lines' places and widths and the distortion's scale.
+constexpr u64 EffectAlphaRef = 0x14;
+constexpr std::array<u64, 4> EffectColorMaps{0x20, 0x30, 0x38, 0x40};
+constexpr u64 EffectDisplacementMap = 0x28;
+constexpr u64 EffectVectors = 0x48;
+constexpr u64 EffectLineColor0 = 0x88;
+constexpr u64 EffectSoftness = 0x94;
+constexpr u64 EffectLineColor1 = 0x98;
+constexpr u64 EffectLineValues = 0xa4;
+constexpr u64 EffectDisplacementIntensity = 0xbc;
+constexpr u64 EffectZOffset = 0xc0;
+constexpr u64 EffectToning = 0xc4;
+constexpr u64 EffectBaseColor = 0xcc;
+constexpr u64 EffectColorScale = 0xd8;
+constexpr u64 EffectAlphaScale = 0xdc;
+constexpr u64 EffectFresnelLow = 0xe0;
+constexpr u64 EffectFresnelHigh = 0xe4;
+constexpr u64 EffectDirectionalRange = 0xe8;
+constexpr u64 EffectFlags = 0xf4;
+// The flags gain a bit for each colour map whose texture's object has kind EffectMapKind.
+constexpr s32 EffectMapKind = 4;
+constexpr std::array<u32, 4> EffectMapKindFlags{0x10000000, 0x20000000, 0x40000000, 0x80000000};
+constexpr float EffectFresnelGap = 0.0001f;
+// The object's alpha, which scales the effect's.
+constexpr u64 ObjectAlpha = 0x234;
 // The block of camera values, as FUN_014b4100 reads it.
 constexpr u64 ContextView = 0x0;
 constexpr u64 ContextCamera = 0x40;
@@ -204,6 +249,8 @@ constexpr float FogScaleFactor = 0.1f;
 constexpr u64 MaterialTextures = 0x58;
 constexpr u64 MaterialMeshType = 0xa4;
 constexpr s32 MeshTypeSurface = 0x4e;
+constexpr s32 MeshTypeGem = 0x5b;
+constexpr s32 MeshTypeEffect = 0x4f;
 constexpr u64 MaterialSurfaceVariant = 0xa8;
 constexpr u64 MaterialDepthWrite = 0xb6;
 constexpr u64 MaterialFxUsed = 0x70;
@@ -354,15 +401,18 @@ VAddr ObjectShape(VAddr object) {
     return at != 0 ? Load<VAddr>(at) : 0;
 }
 
-// A map's handle; 0 for white or for a texture the renderer does not hold.
-u32 MapHandle(VAddr map) {
+// A map's texture, or 0.
+VAddr MapTexture(VAddr map) {
     if (map == 0) {
         return 0;
     }
-    VAddr texture = Load<VAddr>(map + MapOwnTexture);
-    if (texture == 0) {
-        texture = Load<VAddr>(map + MapSharedTexture);
-    }
+    const VAddr texture = Load<VAddr>(map + MapOwnTexture);
+    return texture != 0 ? texture : Load<VAddr>(map + MapSharedTexture);
+}
+
+// A map's handle; 0 for white or for a texture the renderer does not hold.
+u32 MapHandle(VAddr map) {
+    const VAddr texture = MapTexture(map);
     return texture != 0 ? Textures::Get(texture + ObjectOfReference) : 0;
 }
 
@@ -448,8 +498,97 @@ void WriteSurfaceMaterial(Scene::ParticleDraw& record, VAddr material, VAddr obj
     record.maps[4] = MapHandle(layered_normal);
 }
 
+// The game's conversion of a colour channel from sRGB to linear.
+float Linear(float value) {
+    return value <= 0.03928f ? value * 0.0773993805f
+                             : std::pow((value + 0.055f) * 0.94786733f, 2.4f);
+}
+
+// The constants of kind 4's gem meshes, as FUN_013fc280 builds them for FUN_014bdc00, which hands
+// it identity matrices: the refraction maps the view's directions by the material's radius.
+void WriteGemMaterial(Scene::ParticleDraw& record, VAddr material) {
+    std::array<float, 72> pixel{};
+    std::memcpy(&pixel[0], reinterpret_cast<const void*>(material + GemColorScale),
+                3 * sizeof(float));
+    pixel[3] = 1.0f;
+    std::memcpy(&pixel[4], reinterpret_cast<const void*>(material + GemColor), 3 * sizeof(float));
+    pixel[7] = 1.0f;
+    pixel[8] = 1.0f;
+    pixel[9] = 1.0f;
+    const float radius = std::abs(Load<float>(material + GemRadius));
+    pixel[12] = 1.0f / std::max(GemLeastRadius, radius);
+    pixel[13] = 1.0f / std::max(GemLeastRadius, radius * GemAspect);
+    std::memcpy(&pixel[14], reinterpret_cast<const void*>(material + GemValues), 4 * sizeof(float));
+    pixel[18] = Load<float>(material + GemEmissive) * GemEmissiveScale;
+    pixel[19] = GemRefractionScale / Load<float>(material + GemRefraction);
+    std::memcpy(record.pixel_constants, pixel.data(), sizeof(pixel));
+    record.maps[0] = MapHandle(Load<VAddr>(material + GemColorMap));
+    record.maps[1] = MapHandle(Load<VAddr>(material + GemNormalMap));
+}
+
+// The constants of kind 4's effect meshes, as FUN_014147a0 builds them for FUN_014bf7e0: the
+// displacement's transform and values, then the target, the material's colours, lines and
+// fresnel, the context's light and depth range, and the maps. The vertex program reads only the
+// displacement's words.
+void WriteEffectMaterial(Scene::ParticleDraw& record, VAddr material, VAddr object, VAddr context,
+                         u32 point_lights) {
+    std::array<float, 104> vertex{};
+    const VAddr displacement = Load<VAddr>(material + EffectDisplacementMap);
+    ReadMapTransform(displacement, &vertex[96]);
+    vertex[100] = Load<float>(material + EffectZOffset);
+    vertex[101] = Load<float>(material + EffectDisplacementIntensity);
+    u32 flags = Load<u32>(material + EffectFlags);
+    std::memcpy(&vertex[102], &flags, sizeof(flags));
+    std::memcpy(record.vertex_constants, vertex.data(), sizeof(vertex));
+
+    std::array<float, 72> pixel{};
+    std::memcpy(&pixel[0], reinterpret_cast<const void*>(context + ContextScreen),
+                4 * sizeof(float));
+    std::memcpy(&pixel[4], reinterpret_cast<const void*>(material + EffectVectors),
+                16 * sizeof(float));
+    for (u32 i = 0; i < EffectColorMaps.size(); i++) {
+        const VAddr map = Load<VAddr>(material + EffectColorMaps[i]);
+        ReadMapTransform(map, &pixel[20 + i * 4]);
+        const VAddr texture = MapTexture(map);
+        if (texture != 0 && Load<s32>(texture + ObjectOfReference + TextureKind) == EffectMapKind) {
+            flags |= EffectMapKindFlags[i];
+        }
+        record.maps[i] = MapHandle(map);
+    }
+    pixel[36] = Load<float>(material + EffectColorScale);
+    pixel[37] = Load<float>(material + EffectAlphaRef);
+    const float fresnel_low = Load<float>(material + EffectFresnelLow);
+    const float fresnel_high = Load<float>(material + EffectFresnelHigh);
+    pixel[38] = fresnel_low;
+    pixel[39] = fresnel_high == fresnel_low ? fresnel_high + EffectFresnelGap : fresnel_high;
+    for (u32 i = 0; i < 3; i++) {
+        pixel[40 + i] = Linear(Load<float>(material + EffectLineColor0 + i * 4));
+        pixel[44 + i] = Linear(Load<float>(material + EffectLineColor1 + i * 4));
+        pixel[64 + i] = Linear(Load<float>(material + EffectBaseColor + i * 4));
+    }
+    pixel[43] = Load<float>(material + EffectSoftness);
+    std::memcpy(&pixel[47], reinterpret_cast<const void*>(material + EffectLineValues),
+                6 * sizeof(float));
+    std::memcpy(&pixel[53], reinterpret_cast<const void*>(context + ContextLight),
+                3 * sizeof(float));
+    std::memcpy(&pixel[56], reinterpret_cast<const void*>(context + ContextLightDirection),
+                3 * sizeof(float));
+    pixel[59] = Load<float>(object + ObjectAlpha) * Load<float>(material + EffectAlphaScale);
+    const float clip_x = Load<float>(context + ContextClip);
+    const float clip_y = Load<float>(context + ContextClip + 4);
+    const float scale = 1.0f / (clip_x * (clip_y + clip_y));
+    pixel[60] = (clip_x - clip_y) * scale;
+    pixel[61] = (clip_y + clip_x) * scale;
+    pixel[62] = Load<float>(material + EffectToning);
+    std::memcpy(&pixel[67], &flags, sizeof(flags));
+    std::memcpy(&pixel[68], &point_lights, sizeof(point_lights));
+    pixel[69] = Load<float>(material + EffectDirectionalRange);
+    std::memcpy(record.pixel_constants, pixel.data(), sizeof(pixel));
+    record.mesh.displacement = MapHandle(displacement);
+}
+
 // An item's program in the shadow passes, or Count when the port has none.
-Scene::ParticleShadowProgram ShadowProgram(u32 kind, VAddr material) {
+Scene::ParticleShadowProgram ShadowProgram(u32 kind, s32 mesh_type, VAddr material) {
     using Program = Scene::ParticleShadowProgram;
     const bool soft = Load<u8>(material + MaterialSoft) != 0;
     switch (kind) {
@@ -459,6 +598,11 @@ Scene::ParticleShadowProgram ShadowProgram(u32 kind, VAddr material) {
         return soft ? Program::RibbonSoft : Program::Ribbon;
     case KindModel:
         return Program::Model;
+    case KindMesh:
+        return mesh_type == MeshTypeSurface  ? Program::Surface
+               : mesh_type == MeshTypeGem    ? Program::Gem
+               : mesh_type == MeshTypeEffect ? Program::Effect
+                                             : Program::Count;
     default:
         return Program::Count;
     }
@@ -783,20 +927,16 @@ public:
         }
     }
 
-    // A draw per submesh of each object whose shape fits the material's programs, since each
-    // submesh has a material of the game's world.
-    void AddSurfaces(const RunState& state, const Camera& camera, const ModelObjectList& objects,
-                     VAddr material, VAddr system, u32 first, u32 instances) {
+    // A draw per submesh of each object whose shape fits, since each submesh has a material of the
+    // game's world; fill writes a draw's constants from that material, the object and the shape.
+    template <typename Fits, typename Fill>
+    void AddSubmeshes(const RunState& state, const Camera& camera, const ModelObjectList& objects,
+                      VAddr material, VAddr system, u32 first, u32 instances, Fits fits,
+                      Fill fill) {
         for (u32 o = 0; o < objects.count; o++) {
             const VAddr object = Load<VAddr>(objects.first + u64{o} * sizeof(VAddr));
             const VAddr shape = object != 0 ? ObjectShape(object) : 0;
-            if (shape == 0) {
-                continue;
-            }
-            const u32 elements = Load<u16>(shape + ShapeElements);
-            const u32 variant =
-                ((elements >> ElementsColorBit) & 1) << 1 | ((elements >> ElementsTangentBit) & 1);
-            if (variant != state.pipeline) {
+            if (shape == 0 || !fits(shape)) {
                 continue;
             }
             const Meshes::Mesh* mesh = Meshes::Get(shape);
@@ -819,10 +959,26 @@ public:
                 Scene::ParticleDraw& record = draws[draw];
                 WriteDraw(record, camera, material, system, first, instances);
                 WriteMesh(record, *mesh, objects.count, o);
-                WriteSurfaceMaterial(record, surface, object, shape, system);
+                fill(record, surface, object, shape);
                 AddSubmesh(state, *mesh, submesh, draw, instances);
             }
         }
+    }
+
+    // The submeshes of each object whose shape fits the surface material's programs.
+    void AddSurfaces(const RunState& state, const Camera& camera, const ModelObjectList& objects,
+                     VAddr material, VAddr system, u32 first, u32 instances) {
+        const auto fits = [&state](VAddr shape) {
+            const u32 elements = Load<u16>(shape + ShapeElements);
+            const u32 variant =
+                ((elements >> ElementsColorBit) & 1) << 1 | ((elements >> ElementsTangentBit) & 1);
+            return variant == state.pipeline;
+        };
+        const auto fill = [system](Scene::ParticleDraw& record, VAddr surface, VAddr object,
+                                   VAddr shape) {
+            WriteSurfaceMaterial(record, surface, object, shape, system);
+        };
+        AddSubmeshes(state, camera, objects, material, system, first, instances, fits, fill);
     }
 
     void Finish() {
@@ -1056,6 +1212,14 @@ void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
             Load<Matrix>(context + ContextCascadeProjections + c * ContextCascadeStride));
     }
     DrawWriter writer{packet, out};
+    const auto any_shape = [](VAddr) { return true; };
+    const auto no_constants = [](Scene::ParticleDraw&, VAddr, VAddr, VAddr) {};
+    // Kind 4's effect meshes take their constants from each submesh's material and object.
+    const u32 point_lights = header.point_lights;
+    const auto fill_effect = [context, point_lights](Scene::ParticleDraw& record, VAddr surface,
+                                                     VAddr object, VAddr) {
+        WriteEffectMaterial(record, surface, object, context, point_lights);
+    };
     const VAddr items = Load<VAddr>(table + TableItems);
     const u32 count = Load<u32>(table + TableCount);
     for (u32 i = 0; i < count; i++) {
@@ -1086,8 +1250,9 @@ void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
             return FindModel(system, Load<u32>(item + ItemModelKey),
                              Load<u32>(resource + ResourceKey));
         };
+        const s32 mesh_type = kind == KindMesh ? Load<s32>(material + MaterialMeshType) : 0;
         if (mode == ShadowPass) {
-            const Scene::ParticleShadowProgram program = ShadowProgram(kind, material);
+            const Scene::ParticleShadowProgram program = ShadowProgram(kind, mesh_type, material);
             if (program == Scene::ParticleShadowProgram::Count) {
                 out.unported++;
                 continue;
@@ -1099,9 +1264,15 @@ void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
                 if (kind == KindSprite || kind == KindRibbon) {
                     writer.AddSprite(state, cascades[c], material, system, first, instances,
                                      kind == KindSprite ? SpriteVertices : RibbonVertices);
-                } else {
+                } else if (kind == KindModel) {
                     writer.AddModel(state, cascades[c], model_objects(), material, system, first,
                                     instances, false);
+                } else if (mesh_type == MeshTypeEffect) {
+                    writer.AddSubmeshes(state, cascades[c], model_objects(), material, system,
+                                        first, instances, any_shape, fill_effect);
+                } else {
+                    writer.AddSubmeshes(state, cascades[c], model_objects(), material, system,
+                                        first, instances, any_shape, no_constants);
                 }
             }
             continue;
@@ -1125,8 +1296,17 @@ void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
             }
             continue;
         }
+        if (mode == Scene::ParticleSurfaceMode && mesh_type == MeshTypeGem) {
+            const auto fill_gem = [](Scene::ParticleDraw& record, VAddr surface, VAddr, VAddr) {
+                WriteGemMaterial(record, surface);
+            };
+            const RunState state{Scene::ParticleSurfaceGem, mode, tested, write, cull};
+            writer.AddSubmeshes(state, camera, model_objects(), material, system, first, instances,
+                                any_shape, fill_gem);
+            continue;
+        }
         if (mode == Scene::ParticleSurfaceMode) {
-            if (Load<s32>(material + MaterialMeshType) != MeshTypeSurface) {
+            if (mesh_type != MeshTypeSurface) {
                 out.unported++;
                 continue;
             }
@@ -1137,6 +1317,17 @@ void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
             continue;
         }
         const Scene::ParticleProgram program = PixelProgram(mode, material);
+        if (kind == KindMesh) {
+            if (mesh_type != MeshTypeEffect || program == Scene::ParticleProgram::Count ||
+                mode >= SelfTranslucentFirstMode) {
+                out.unported++;
+                continue;
+            }
+            const RunState state{Scene::ParticleEffectPipeline, mode, tested, write, cull};
+            writer.AddSubmeshes(state, camera, model_objects(), material, system, first, instances,
+                                any_shape, fill_effect);
+            continue;
+        }
         if (program == Scene::ParticleProgram::Count ||
             (kind != KindSprite && kind != KindRibbon && kind != KindModel)) {
             out.unported++;

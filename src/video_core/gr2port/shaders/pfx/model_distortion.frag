@@ -80,7 +80,7 @@ void main() {
     uint s22 = 0u, s23 = 0u, s32 = 0u, s33 = 0u, s34 = 0u, s35 = 0u;
     uint vcc_lo = 0u, vcc_hi = 0u, exec_lo = 1u, scc = 0u, m0 = 0u;
     int pc = 0;
-    Words draw_block = Words(draws_address + uint64_t(draw_index) * 872ul);
+    Words draw_block = Words(draws_address + uint64_t(draw_index) * 1192ul);
     uint texture0 = draw_block.w[88];
     uint texture1 = draw_block.w[89];
     uint texture2 = draw_block.w[90];

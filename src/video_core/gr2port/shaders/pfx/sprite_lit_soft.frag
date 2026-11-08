@@ -95,7 +95,7 @@ void main() {
     Words point_lights = Words(point_lights_address);
     Words light_grid = Words(light_grid_address);
     Words material = Words(material_address);
-    Words draw_block = Words(draws_address + uint64_t(draw_index) * 872ul);
+    Words draw_block = Words(draws_address + uint64_t(draw_index) * 1192ul);
     uint texture0 = draw_block.w[88];
     uint texture1 = draw_block.w[89];
     uint texture2 = draw_block.w[90];
