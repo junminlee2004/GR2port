@@ -49,6 +49,14 @@ vk::DescriptorPool g_pool;
 vk::DescriptorSet g_sampler_set;
 std::array<Image, Scene::MaxUiTargets> g_images;
 std::unordered_map<u64, Pipeline> g_pipelines;
+// With dynamic blend, a pipeline for each pair of programs whose interfaces match, made at start:
+// the vertex programs write locations 0 and 1 but PassFlat only 0, and each pixel program reads
+// the locations in its mask.
+constexpr u32 VertexPrograms = static_cast<u32>(Scene::UiVertexProgram::Count);
+constexpr u32 PixelPrograms = static_cast<u32>(Scene::UiPixelProgram::Count);
+constexpr std::array<u32, VertexPrograms> VertexOutputs{3, 1, 3, 3, 3, 3, 3};
+constexpr std::array<u32, PixelPrograms> PixelInputs{1, 2, 1, 2, 1, 3, 3, 3, 2, 2, 2};
+std::array<Pipeline, VertexPrograms * PixelPrograms> g_pairs;
 Pipeline g_present;
 u32 g_open_target = Scene::MaxUiTargets;
 
@@ -288,6 +296,35 @@ bool Start(const Device& device, Memory& memory) {
         return false;
     }
     g_sampler_set = sets.front();
+    if (!device.dynamic_blend) {
+        LOG_WARNING(Render_Vulkan,
+                    "GR2port UI: the device has no dynamic blend; pipelines are made on first use");
+        return true;
+    }
+    const std::array pipeline_sets{Textures::SetLayout(), g_sampler_layout};
+    u32 made = 0;
+    for (u32 vertex = 0; vertex < VertexPrograms; vertex++) {
+        for (u32 pixel = 0; pixel < PixelPrograms; pixel++) {
+            if ((PixelInputs[pixel] & ~VertexOutputs[vertex]) != 0) {
+                continue;
+            }
+            Pipeline& pipeline = g_pairs[vertex * PixelPrograms + pixel];
+            pipeline = CreateGraphicsPipeline(device, {
+                                                          .vertex = VertexCode(vertex),
+                                                          .fragment = PixelCode(pixel),
+                                                          .color = TargetFormat,
+                                                          .dynamic_topology = true,
+                                                          .dynamic_blend = true,
+                                                          .push_constant_bytes = sizeof(u64),
+                                                          .set_layouts = pipeline_sets,
+                                                      });
+            if (!pipeline.pipeline) {
+                return false;
+            }
+            made++;
+        }
+    }
+    LOG_INFO(Render_Vulkan, "GR2port UI: {} pipelines made at start", made);
     return true;
 }
 
@@ -370,7 +407,12 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
         if (!HasImage(header, run.target)) {
             continue;
         }
-        const Pipeline& pipeline = PipelineFor(run);
+        if (run.vertex >= VertexPrograms || run.pixel >= PixelPrograms) {
+            continue;
+        }
+        const Pipeline& pipeline = g_device->dynamic_blend
+                                       ? g_pairs[run.vertex * PixelPrograms + run.pixel]
+                                       : PipelineFor(run);
         if (!pipeline.pipeline) {
             continue;
         }
@@ -381,6 +423,20 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
             BeginTarget(cmd, run.target);
         }
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
+        if (g_device->dynamic_blend) {
+            const vk::PipelineColorBlendAttachmentState blend = BlendState(run.blend);
+            cmd.setColorBlendEnableEXT(0, blend.blendEnable, dl);
+            cmd.setColorBlendEquationEXT(0,
+                                         vk::ColorBlendEquationEXT{
+                                             .srcColorBlendFactor = blend.srcColorBlendFactor,
+                                             .dstColorBlendFactor = blend.dstColorBlendFactor,
+                                             .colorBlendOp = blend.colorBlendOp,
+                                             .srcAlphaBlendFactor = blend.srcAlphaBlendFactor,
+                                             .dstAlphaBlendFactor = blend.dstAlphaBlendFactor,
+                                             .alphaBlendOp = blend.alphaBlendOp,
+                                         },
+                                         dl);
+        }
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, sets, {}, dl);
         cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(draws),
                           &draws, dl);

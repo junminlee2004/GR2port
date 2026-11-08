@@ -13,6 +13,7 @@
 
 #include "common/logging/log.h"
 #include "video_core/gr2port/device.h"
+#include "video_core/gr2port/pipeline.h"
 
 namespace Gr2Port {
 
@@ -179,6 +180,10 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     const auto [extensions_result, available] =
         d.gpu.enumerateDeviceExtensionProperties(nullptr, d.dispatch);
     vk::PhysicalDeviceFaultFeaturesEXT fault_features;
+    vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT blend_features{
+        .extendedDynamicState3ColorBlendEnable = true,
+        .extendedDynamicState3ColorBlendEquation = true,
+    };
     for (const vk::ExtensionProperties& extension : available) {
         const std::string_view name{extension.extensionName.data()};
         if (name == VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) {
@@ -194,7 +199,20 @@ bool CreateDevice(SDL_Window* window, Device& d) {
             if (d.device_fault) {
                 extensions.push_back(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
             }
+        } else if (name == VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME) {
+            vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT supported_blend;
+            vk::PhysicalDeviceFeatures2 query{.pNext = &supported_blend};
+            d.gpu.getFeatures2(&query, d.dispatch);
+            d.dynamic_blend = supported_blend.extendedDynamicState3ColorBlendEnable != VK_FALSE &&
+                              supported_blend.extendedDynamicState3ColorBlendEquation != VK_FALSE;
+            if (d.dynamic_blend) {
+                extensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+            }
         }
+    }
+    if (d.dynamic_blend) {
+        blend_features.pNext = features.pNext;
+        features.pNext = &blend_features;
     }
     if (d.device_fault) {
         fault_features.deviceFaultVendorBinary = false;
@@ -223,8 +241,11 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         d.timestamp_period = properties.limits.timestampPeriod;
     }
     LOG_INFO(Render_Vulkan,
-             "GR2port: renderer device {} (queue family {}), checkpoints {}, fault information {}",
-             properties.deviceName.data(), d.queue_family, d.checkpoints, d.device_fault);
+             "GR2port: renderer device {} (queue family {}), checkpoints {}, fault information {}, "
+             "dynamic blend {}",
+             properties.deviceName.data(), d.queue_family, d.checkpoints, d.device_fault,
+             d.dynamic_blend);
+    LoadPipelineCache(d);
     return true;
 }
 

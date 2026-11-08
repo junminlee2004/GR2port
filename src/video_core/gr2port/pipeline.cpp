@@ -2,14 +2,24 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
+#include <filesystem>
+#include <mutex>
 #include <vector>
 
+#include "common/io_file.h"
 #include "common/logging/log.h"
+#include "common/path_util.h"
 #include "video_core/gr2port/pipeline.h"
 
 namespace Gr2Port {
 
 namespace {
+
+// The pipeline cache's file, in the emulator's shader folder, and the lock of its writes.
+std::filesystem::path PipelineCachePath() {
+    return Common::FS::GetUserPath(Common::FS::PathType::ShaderDir) / "gr2port_pipelines.bin";
+}
+std::mutex g_cache_file;
 
 vk::ShaderModule CreateModule(const Device& d, std::span<const u32> code) {
     const vk::ShaderModuleCreateInfo info{
@@ -159,6 +169,10 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
     if (info.dynamic_topology) {
         dynamic_states.push_back(vk::DynamicState::ePrimitiveTopology);
     }
+    if (info.dynamic_blend) {
+        dynamic_states.push_back(vk::DynamicState::eColorBlendEnableEXT);
+        dynamic_states.push_back(vk::DynamicState::eColorBlendEquationEXT);
+    }
     const vk::PipelineDynamicStateCreateInfo dynamic{
         .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
         .pDynamicStates = dynamic_states.data(),
@@ -186,7 +200,7 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
         .layout = result.layout,
     };
     const auto [pipeline_result, pipeline] =
-        d.device.createGraphicsPipeline(nullptr, pipeline_info, nullptr, dl);
+        d.device.createGraphicsPipeline(d.pipeline_cache, pipeline_info, nullptr, dl);
     d.device.destroyShaderModule(vertex, nullptr, dl);
     if (fragment) {
         d.device.destroyShaderModule(fragment, nullptr, dl);
@@ -232,7 +246,7 @@ Pipeline CreateComputePipeline(const Device& d, std::span<const u32> code, u32 p
         .layout = result.layout,
     };
     const auto [pipeline_result, pipeline] =
-        d.device.createComputePipeline(nullptr, info, nullptr, dl);
+        d.device.createComputePipeline(d.pipeline_cache, info, nullptr, dl);
     d.device.destroyShaderModule(module, nullptr, dl);
     if (pipeline_result != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "GR2port: no compute pipeline: {}",
@@ -247,6 +261,53 @@ void DestroyPipeline(const Device& d, Pipeline& pipeline) {
     d.device.destroyPipeline(pipeline.pipeline, nullptr, d.dispatch);
     d.device.destroyPipelineLayout(pipeline.layout, nullptr, d.dispatch);
     pipeline = {};
+}
+
+void LoadPipelineCache(Device& d) {
+    const std::filesystem::path path = PipelineCachePath();
+    std::vector<u8> data;
+    const Common::FS::IOFile file{path, Common::FS::FileAccessMode::Read};
+    if (file.IsOpen()) {
+        data.resize(file.GetSize());
+        if (file.ReadRaw<u8>(data.data(), data.size()) != data.size()) {
+            data.clear();
+        }
+    }
+    // The driver ignores a cache that another driver or GPU wrote.
+    const auto [result, cache] = d.device.createPipelineCache(
+        {.initialDataSize = data.size(), .pInitialData = data.empty() ? nullptr : data.data()},
+        nullptr, d.dispatch);
+    if (result == vk::Result::eSuccess) {
+        d.pipeline_cache = cache;
+    }
+    LOG_INFO(Render_Vulkan, "GR2port: pipeline cache of {} bytes from {}", data.size(),
+             path.string());
+}
+
+void SavePipelineCache(const Device& d) {
+    if (!d.pipeline_cache) {
+        return;
+    }
+    std::scoped_lock lock{g_cache_file};
+    const auto [result, data] = d.device.getPipelineCacheData(d.pipeline_cache, d.dispatch);
+    if (result != vk::Result::eSuccess || data.empty()) {
+        return;
+    }
+    // Written beside the last file and renamed over it, so that a run ending mid-write keeps it.
+    const std::filesystem::path path = PipelineCachePath();
+    std::filesystem::path written = path;
+    written += ".new";
+    std::error_code error;
+    std::filesystem::create_directories(path.parent_path(), error);
+    {
+        const Common::FS::IOFile file{written, Common::FS::FileAccessMode::Create};
+        if (!file.IsOpen() || file.WriteRaw<u8>(data.data(), data.size()) != data.size()) {
+            return;
+        }
+    }
+    std::filesystem::rename(written, path, error);
+    LOG_INFO(Render_Vulkan, "GR2port: pipeline cache of {} bytes saved{}", data.size(),
+             error ? ": " + error.message() : "");
 }
 
 } // namespace Gr2Port

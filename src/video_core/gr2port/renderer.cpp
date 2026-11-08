@@ -417,6 +417,7 @@ bool Thread::Init() {
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
     swapchain = std::make_unique<Swapchain>(d);
     needs_swapchain = true;
+    SavePipelineCache(d);
     return true;
 }
 
@@ -449,6 +450,10 @@ bool Thread::Recreate() {
         Fog::Resize(depth.view);
         needs_swapchain = !Particles::Resize(depth.view, World::AlbedoView(), SceneExtent);
         Effects::Resize(depth.view, Glass::BehindView());
+    }
+    if (!needs_swapchain) {
+        // The picture's and the screen's pipelines take the window's format.
+        SavePipelineCache(d);
     }
     return !needs_swapchain;
 }

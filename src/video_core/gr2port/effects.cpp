@@ -157,6 +157,7 @@ void Build() {
         return;
     }
     LOG_INFO(Render_Vulkan, "GR2port effects: pipelines built in {} ms", ms);
+    SavePipelineCache(*g_device);
     g_ready.store(true, std::memory_order_release);
 }
 

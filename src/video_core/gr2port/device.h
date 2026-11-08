@@ -32,6 +32,11 @@ struct Device {
     bool checkpoints = false;
     /// A lost device reports the fault (VK_EXT_device_fault).
     bool device_fault = false;
+    /// A colour attachment's blend enable and equation can be dynamic state
+    /// (VK_EXT_extended_dynamic_state3).
+    bool dynamic_blend = false;
+    /// Every pipeline is made through this cache, which a file keeps between runs.
+    vk::PipelineCache pipeline_cache;
 };
 
 /// Creates the instance, a surface for window, and a device on the first discrete GPU (else the

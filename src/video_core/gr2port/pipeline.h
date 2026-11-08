@@ -56,6 +56,8 @@ struct GraphicsPipelineInfo {
     bool dynamic_blend_constants = false;
     /// The primitive topology is dynamic state, of topology's class.
     bool dynamic_topology = false;
+    /// The blend enable and equation are dynamic state; the device has dynamic_blend.
+    bool dynamic_blend = false;
     u32 push_constant_bytes = 0;
     /// The pipeline's descriptor sets, in set order.
     std::span<const vk::DescriptorSetLayout> set_layouts;
@@ -76,5 +78,11 @@ Pipeline CreateComputePipeline(const Device& device, std::span<const u32> code,
                                std::span<const vk::DescriptorSetLayout> set_layouts = {});
 
 void DestroyPipeline(const Device& device, Pipeline& pipeline);
+
+/// After the device is made: creates its pipeline cache from the file an earlier run saved.
+void LoadPipelineCache(Device& device);
+
+/// Any thread: writes the pipeline cache to its file, with every pipeline made so far.
+void SavePipelineCache(const Device& device);
 
 } // namespace Gr2Port
