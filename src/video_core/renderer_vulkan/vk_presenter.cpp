@@ -18,6 +18,7 @@
 #include "imgui/shadnet_notifications_layer.h"
 #include "sdl_window.h"
 #include "video_core/buffer_cache/buffer.h"
+#include "video_core/gr2port/overlays.h"
 #include "video_core/renderdoc.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
 #include "video_core/renderer_vulkan/vk_presenter.h"
@@ -851,6 +852,25 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
             free_cv.notify_one();
         }
     };
+
+    // GR2port: while an overlay hooks every device's present, only the renderer's window presents.
+    if (Gr2Port::OverlayHooksEveryDevice()) {
+        const auto reset = instance.GetDevice().resetFences(frame->present_done);
+        ASSERT_MSG(reset == vk::Result::eSuccess,
+                   "Unexpected error resetting present done fence: {}", vk::to_string(reset));
+        if (frame->ready_semaphore == draw_scheduler.GetWorkSemaphore()->Handle()) {
+            draw_scheduler.WaitSubmitted(frame->ready_tick);
+        }
+        SubmitInfo info{};
+        info.AddWait(frame->ready_semaphore, frame->ready_tick);
+        info.AddSignal(frame->present_done);
+        present_scheduler.Flush(info);
+        free_frame();
+        if (!is_reusing_frame && is_game_frame) {
+            DebugState.IncFlipFrameNum();
+        }
+        return;
+    }
 
     // Recreate the swapchain if the window was resized.
     if (window.GetWidth() != swapchain.GetWidth() || window.GetHeight() != swapchain.GetHeight()) {

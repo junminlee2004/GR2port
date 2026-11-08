@@ -25,7 +25,6 @@
 #include "core/user_settings.h"
 #include "emulator.h"
 #include "imgui/big_picture/big_picture.h"
-#include "video_core/gr2port/overlays.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -34,7 +33,6 @@
 #endif
 
 int main(int argc, char* argv[]) {
-    Gr2Port::KeepOverlaysOut();
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
 #endif

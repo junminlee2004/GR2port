@@ -22,6 +22,7 @@
 #include "core/emulator_settings.h"
 #include "sdl_window.h"
 #include "video_core/gr2_fsr3/dlss_streamline.h"
+#include "video_core/gr2port/overlays.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
 
 #ifdef __APPLE__
@@ -415,6 +416,7 @@ vk::UniqueInstance CreateInstance(Frontend::WindowSystemType window_type, bool e
         },
     };
 
+    const Gr2Port::OverlaysOutOfInstance overlays_out;
     auto [instance_result, instance] = vk::createInstanceUnique(instance_ci_chain.get());
     ASSERT_MSG(instance_result == vk::Result::eSuccess, "Failed to create instance: {}",
                vk::to_string(instance_result));
