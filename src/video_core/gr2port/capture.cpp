@@ -768,6 +768,14 @@ struct GrassView {
     float time_step;
 };
 
+// The view's point lights that the packet holds and the programs count.
+u32 PointLightCount(VAddr view) {
+    return Load<VAddr>(view + ViewPointLights) != 0
+               ? std::clamp<s32>(Load<s32>(view + ViewPointLightCount), 0,
+                                 static_cast<s32>(Scene::MaxPointLights))
+               : 0;
+}
+
 // Writes the draws of a packet. The packet's memory is write-combined, where reads are slow:
 // the writer only stores to it, and counts in its own members.
 class Writer {
@@ -1136,10 +1144,7 @@ public:
         };
         std::array<Entry, Scene::MaxEffectDraws> entries;
         const VAddr items = Load<VAddr>(view + ViewItems);
-        const u32 point_lights = Load<VAddr>(view + ViewPointLights) != 0
-                                     ? std::clamp<s32>(Load<s32>(view + ViewPointLightCount), 0,
-                                                       static_cast<s32>(Scene::MaxPointLights))
-                                     : 0;
+        const u32 point_lights = PointLightCount(view);
         for (u32 list = 0; list < Scene::EffectLists; list++) {
             const VAddr bounds = view + ViewEffectLists + list * ViewEffectListBytes;
             const VAddr begin = Load<VAddr>(bounds);
@@ -1250,8 +1255,7 @@ public:
                     sizeof(out.vertex_constants));
         std::memcpy(out.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
                     sizeof(out.pixel_constants));
-        // Point lights are not ported: the programs see none.
-        out.pixel_constants[WaterPointLightsWord] = 0;
+        out.pixel_constants[WaterPointLightsWord] = PointLightCount(view);
         out.pixel_constants[WaterBarrierCountWord] =
             std::min(Load<u32>(view + ViewWaterBarrierCount), WaterMaxBarriers);
         std::memcpy(out.pixel_constants + WaterBarrierWord,
@@ -1419,11 +1423,7 @@ public:
         if (!core) {
             std::memcpy(pixels.data() + EnemyShWord,
                         reinterpret_cast<const void*>(frame_graph + FrameGraphSh), EnemyShBytes);
-            pixels[EnemyPointLightsWord] =
-                Load<VAddr>(view + ViewPointLights) != 0
-                    ? std::clamp<s32>(Load<s32>(view + ViewPointLightCount), 0,
-                                      static_cast<s32>(Scene::MaxPointLights))
-                    : 0;
+            pixels[EnemyPointLightsWord] = PointLightCount(view);
         }
         const VAddr vb = shape + ShapeVertexBuffer;
         const u32 element_count = Load<u16>(vb + VertexElementCount);
@@ -2947,8 +2947,7 @@ u32 WriteLight(VAddr frame_graph, VAddr view, u8* packet) {
     light.shadow_influence = number(ViewShadowInfluence);
     const VAddr point_lights = Load<VAddr>(view + ViewPointLights);
     if (point_lights != 0) {
-        light.point_lights = std::clamp<s32>(Load<s32>(view + ViewPointLightCount), 0,
-                                             static_cast<s32>(Scene::MaxPointLights));
+        light.point_lights = PointLightCount(view);
         std::memcpy(packet + Scene::PointLightsOffset, reinterpret_cast<const void*>(point_lights),
                     light.point_lights * sizeof(Scene::PointLight));
         if (light.point_lights != 0 && !g_logged_point_light) {

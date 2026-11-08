@@ -10,6 +10,7 @@
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/pipeline.h"
+#include "video_core/gr2port/point_lights.h"
 #include "video_core/gr2port/shaders/water_frag.h"
 #include "video_core/gr2port/shaders/water_vert.h"
 #include "video_core/gr2port/shadows.h"
@@ -23,6 +24,8 @@ namespace {
 struct DrawPush {
     u64 draws;
     u64 lights;
+    u64 point_lights;
+    u64 light_grid;
 };
 
 const Device* g_device = nullptr;
@@ -269,10 +272,11 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
     cmd.setViewport(0, viewport, dl);
     cmd.setScissor(0, vk::Rect2D{{0, 0}, extent}, dl);
     const std::array sets{Textures::Set(), Shadows::Set(), g_set};
-    // The point lights are not ported: the programs count none and never read the address.
     const DrawPush push{
         .draws = address + Scene::WaterDrawsOffset,
         .lights = address + Scene::ParticleLightOffset,
+        .point_lights = address + Scene::PointLightsOffset,
+        .light_grid = PointLights::GridAddress(),
     };
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_pipeline.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_pipeline.layout, 0, sets, {}, dl);

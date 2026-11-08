@@ -112,6 +112,8 @@ layout(set = 2, binding = 3) uniform sampler background_sampler;
 layout(push_constant) uniform Constants {
     uint64_t draws_address;
     uint64_t lights_address;
+    uint64_t point_lights_address;
+    uint64_t light_grid_address;
 };
 layout(location = 15) flat in uint draw_index;
 layout(location = 0) in vec4 attr0;
@@ -143,6 +145,8 @@ void main() {
     EffectMesh mesh = EffectMesh(draw + 1120ul);
     Words lights = Words(lights_address);
     uint reflection = mesh.reflection;
+    Words point_lights = Words(point_lights_address);
+    Words light_grid = Words(light_grid_address);
     uint color_map0 = mesh.color_maps[0];
     uint color_map1 = mesh.color_maps[1];
     uint color_map2 = mesh.color_maps[2];
@@ -1397,7 +1401,7 @@ void main() {
                 v2 = v2 << (0x2u & 31u);
                 {
                     uint b_at = (v2) >> 2;
-                    v2 = lights.w[b_at + 0u];
+                    v2 = light_grid.w[b_at + 0u];
                 }
             }
             {
@@ -1429,27 +1433,27 @@ void main() {
                 v9 = v13;
                 {
                     uint b_at = (v12 * 16u + v13) >> 2;
-                    v5 = lights.w[b_at + 0u];
-                    v6 = lights.w[b_at + 1u];
-                    v7 = lights.w[b_at + 2u];
+                    v5 = point_lights.w[b_at + 0u];
+                    v6 = point_lights.w[b_at + 1u];
+                    v7 = point_lights.w[b_at + 2u];
                 }
                 {
                     uint b_at = (v12 * 16u + v13 + 12u) >> 2;
-                    v12 = lights.w[b_at + 0u];
+                    v12 = point_lights.w[b_at + 0u];
                 }
                 {
                     uint b_at = (v8 * 16u + v9) >> 2;
-                    v8 = lights.w[b_at + 0u];
+                    v8 = point_lights.w[b_at + 0u];
                 }
                 {
                     uint b_at = (v2 * 16u + v3 + 12u) >> 2;
-                    v13 = lights.w[b_at + 0u];
+                    v13 = point_lights.w[b_at + 0u];
                 }
                 {
                     uint b_at = (v2 * 16u + v3) >> 2;
-                    v2 = lights.w[b_at + 0u];
-                    v3 = lights.w[b_at + 1u];
-                    v4 = lights.w[b_at + 2u];
+                    v2 = point_lights.w[b_at + 0u];
+                    v3 = point_lights.w[b_at + 1u];
+                    v4 = point_lights.w[b_at + 2u];
                 }
             }
             {
