@@ -73,6 +73,8 @@ inline constexpr u32 EffectLists = 7;
 inline constexpr u32 MaxWaterDraws = 32;
 /// G2_BG_Metaball draws per packet.
 inline constexpr u32 MaxMetaballs = 256;
+/// Textures of the world's draws that change each frame, per packet.
+inline constexpr u32 MaxDynamicTextures = 16;
 /// The game's limit on a view's point lights.
 inline constexpr u32 MaxPointLights = 1024;
 /// LightCompute's grid of the view: 60 columns, 36 rows and 8 depth slices, 48 light indices to a
@@ -138,6 +140,14 @@ enum class DrawList : u32 {
     /// Character whose pixel_constants hold the game's 8 pixel constant words, then the three
     /// ShadowProj of its vertex constants.
     Lambert,
+    /// opaque/G2_BG_Vision draws, the screens of televisions. texture is the screen and
+    /// texcoord_transform flips v. material names a Character whose pixel_constants hold the
+    /// game's 12 pixel constant words, with the damage map in normal_map and the overlay in
+    /// reflection.
+    Vision,
+    /// The televisions' glow, category 25: Vision draws for the bloom's image, whose word 9 holds
+    /// the game's blend constant.
+    VisionGlow,
     /// G2_BG_Glass draws. material names a GlassMaterial, texture is the normal map.
     Glass,
     /// SelfTranslucent draws of the characters with stencil value 1, 2 and 3. world_view holds
@@ -408,6 +418,10 @@ struct Header {
     u32 dropped_metaballs;
     /// The view's point lights, as in Light.
     u32 point_lights;
+    /// Textures of the world's draws that change each frame, which the renderer copies again
+    /// before drawing.
+    u32 dynamic_textures;
+    u32 dynamic[MaxDynamicTextures];
     ParticleHeader particles;
     EffectHeader effects;
     UiHeader ui;

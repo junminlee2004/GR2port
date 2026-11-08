@@ -4,6 +4,7 @@
 #pragma once
 
 #include "video_core/gr2port/device.h"
+#include "video_core/gr2port/scene.h"
 
 namespace Gr2Port {
 class Memory;
@@ -37,8 +38,10 @@ void RecordSky(vk::CommandBuffer cmd, u64 packet_address);
 void RecordMeter(vk::CommandBuffer cmd, u64 packet_address);
 
 /// Outside rendering, with the scene's colour and depth readable: draws the game's bloom when the
-/// header's bloom flags say it runs.
-void RecordBloom(vk::CommandBuffer cmd, u32 bloom, u64 packet_address);
+/// header's bloom flags say it runs, with the glow draws of the packet at packet_address, which is
+/// at offset in buffer.
+void RecordBloom(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_address,
+                 vk::Buffer buffer, u64 offset);
 
 /// Outside rendering, with the scene's colour readable, after the bloom: tonemaps the scene and
 /// runs the game's antialias program on the result.

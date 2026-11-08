@@ -232,6 +232,17 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer La
     mat4 shadow_projection[3];
 };
 
+// The start of a G2_BG_Vision draw's Character: the game's pixel constants.
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer VisionConstants {
+    // The screen's texel width and width, the offset added to the picture, and a word unread.
+    vec4 movie_size;
+    // The overlay's coordinates: offset xy, then scale zw of the screen's.
+    vec4 post_texcoord;
+    float punch_through;
+    // The scale of the picture: 1 on the screen, the blend constant in the glow.
+    float glow;
+};
+
 // A character's outline: the game's G2_CH_Contour constants of each stage, then its mesh.
 struct Contour {
     mat4 world_view;

@@ -55,7 +55,9 @@ constexpr u32 SourceHeight = 4;
 constexpr u32 CropLeft = 5;
 constexpr u32 CropTop = 6;
 
-constexpr u32 Surfaces = 8;
+// Each player turns over three surfaces, and a scene plays several: the televisions and the
+// screen's movie.
+constexpr u32 Surfaces = 32;
 constexpr u32 LoggedJobs = 4;
 
 // One surface's last job, written by the game's thread and read by any: the sequence is odd while

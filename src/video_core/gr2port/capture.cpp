@@ -14,6 +14,7 @@
 #include <fmt/format.h>
 
 #include "common/logging/log.h"
+#include "common/memory_patcher.h"
 #include "video_core/gr2port/capture.h"
 #include "video_core/gr2port/capture_math.h"
 #include "video_core/gr2port/deformers.h"
@@ -385,6 +386,8 @@ struct Category {
     bool self_translucent = false;
     bool gem = false;
     bool lambert = false;
+    bool vision = false;
+    bool glow = false;
 };
 constexpr Category MainCategory{15, 0x60, 0x38, 0x68, 0x00, 0x20, None, true}; // G2_BG_Main
 // The world's other opaque categories, drawn into the surfaces after G2_BG_Main.
@@ -423,6 +426,54 @@ constexpr Category LambertSkinnedCategory{.index = 5,
                                           .texcoord_transform = None,
                                           .lambert = true};
 constexpr u64 LambertPixelBytes = 0x20;
+// opaque/G2_BG_Vision, a television's screen: its vertex constants are WorldView and
+// WorldViewProj; its pixel constants take 0x30 bytes. The item holds the texture object its movie
+// last gave the screen, and the damage map and overlay with the ones that replace them.
+constexpr Category VisionCategory{.index = 24,
+                                  .constants = 0x70,
+                                  .texture = None,
+                                  .material = 0x78,
+                                  .color_scale = None,
+                                  .texcoord_transform = None,
+                                  .vision = true};
+// The televisions' glow, which the bloom adds: a Vision item with the glow at +0x80, sRGB.
+constexpr Category VisionGlowCategory{.index = 25,
+                                      .constants = 0x70,
+                                      .texture = None,
+                                      .material = 0x78,
+                                      .color_scale = None,
+                                      .texcoord_transform = None,
+                                      .vision = true,
+                                      .glow = true};
+constexpr u64 VisionGlow = 0x80;
+constexpr u32 VisionGlowWord = 9;
+constexpr u64 VisionTime = 0x38;
+constexpr u64 VisionSource = 0x40;
+constexpr u64 VisionScreen = 0x48;
+constexpr u64 VisionDamage = 0x50;
+constexpr u64 VisionDamageNext = 0x58;
+constexpr u64 VisionOverlay = 0x60;
+constexpr u64 VisionOverlayNext = 0x68;
+constexpr u64 VisionPixelBytes = 0x30;
+// The source a screen's item points to holds the movie player: ready when its byte at +0x78 is
+// set, with the texture object of its last frame at +0x90.
+constexpr u64 PlayerReady = 0x78;
+constexpr u64 PlayerTexture = 0x90;
+// The overlay's scroll per unit of time, x then y, DAT_01f0c700.
+constexpr u64 VisionScroll = 0x1f0c700 - 0x400000;
+// The vertex program flips the texture's v.
+constexpr std::array<float, 4> VisionTexcoord{0.0f, 1.0f, 1.0f, -1.0f};
+// A texture object's memory, width and height, and T#; the word at +0x3c, the T#'s fourth, is
+// negative for an image.
+constexpr u64 TextureObjectMemory = 0x08;
+constexpr u64 TextureObjectWidth = 0x14;
+constexpr u64 TextureObjectHeight = 0x16;
+constexpr u64 TextureObjectSharp = 0x30;
+constexpr u64 TextureObjectSharpType = 0x3c;
+// The game's sRGB to linear conversion of a glow, as its callback takes the blend constant.
+float LinearGlow(float glow) {
+    return glow <= 0.03928f ? glow * 0.07739938f : std::pow((glow + 0.055f) * 0.94786733f, 2.4f);
+}
 // G2_BG_Gem: the texture objects of its colour and normal maps, and its pixel constants, whose
 // last word is the screen door's threshold.
 constexpr u64 GemColorMap = 0x48;
@@ -890,6 +941,17 @@ public:
             }
             material_index = AddLambert(constants, material);
         }
+        if (category.vision) {
+            if (material == 0 || header.characters == Scene::MaxCharacters) {
+                header.dropped_characters += material != 0;
+                header.dropped++;
+                return;
+            }
+            const VAddr screen = VisionScreenObject(item);
+            texture = ScreenTexture(screen, true);
+            texcoord_transform = VisionTexcoord.data();
+            material_index = AddVision(item, material, screen, category.glow);
+        }
         if (category.glass) {
             if (material == 0 || mesh->normal == 0 || mesh->tangent == 0 ||
                 header.glass_materials == Scene::MaxGlassMaterials) {
@@ -913,9 +975,11 @@ public:
             category.self_translucent
                 ? static_cast<Scene::DrawList>(static_cast<u32>(Scene::DrawList::SelfTranslucent1) +
                                                stencil - 1)
-            : category.glass     ? Scene::DrawList::Glass
-            : category.interior  ? Scene::DrawList::Interior
-            : category.lambert   ? Scene::DrawList::Lambert
+            : category.glass    ? Scene::DrawList::Glass
+            : category.interior ? Scene::DrawList::Interior
+            : category.lambert  ? Scene::DrawList::Lambert
+            : category.vision
+                ? (category.glow ? Scene::DrawList::VisionGlow : Scene::DrawList::Vision)
             : category.character ? Scene::DrawList::Character
             : alpha_tested       ? (culled ? Scene::DrawList::AlphaCulled : Scene::DrawList::Alpha)
                            : (culled ? Scene::DrawList::OpaqueCulled : Scene::DrawList::Opaque);
@@ -2014,6 +2078,78 @@ private:
         return ++header.characters;
     }
 
+    // The handle of a texture object's T#, when the game would bind it. With refresh, one the CPU
+    // writes each frame, as a movie's surface, joins the frame's dynamic textures.
+    u32 ScreenTexture(VAddr object, bool refresh) {
+        if (object == 0 || Load<VAddr>(object + TextureObjectMemory) == 0 ||
+            Load<s32>(object + TextureObjectSharpType) >= 0) {
+            return 0;
+        }
+        bool dynamic = false;
+        const u32 handle = Textures::GetBySharp(
+            reinterpret_cast<const u32*>(object + TextureObjectSharp), dynamic);
+        const auto listed = header.dynamic + header.dynamic_textures;
+        if (refresh && handle != 0 && dynamic &&
+            header.dynamic_textures < Scene::MaxDynamicTextures &&
+            std::find(header.dynamic, listed, handle) == listed) {
+            header.dynamic[header.dynamic_textures++] = handle;
+        }
+        return handle;
+    }
+
+    // The texture object a television's screen shows: the last frame of its movie when the movie
+    // is ready, which the game's callback asks for at the draw, else the item's own.
+    static VAddr VisionScreenObject(VAddr item) {
+        const VAddr source = Load<VAddr>(item + VisionSource);
+        const VAddr player = source != 0 ? Load<VAddr>(source) : 0;
+        if (player != 0 && Load<u8>(player + PlayerReady) != 0) {
+            const VAddr frame = Load<VAddr>(player + PlayerTexture);
+            if (frame != 0) {
+                return frame;
+            }
+        }
+        return Load<VAddr>(item + VisionScreen);
+    }
+
+    // A G2_BG_Vision item's Character: its pixel constants as the game's callback rewrites them
+    // for screen, then its damage map and overlay, each replaced by the next one when the item
+    // holds it.
+    u32 AddVision(VAddr item, VAddr pixel_constants, VAddr screen, bool glow) {
+        const auto pick = [item](u64 field, u64 next) {
+            const VAddr replacement = Load<VAddr>(item + next);
+            return replacement != 0 ? replacement : Load<VAddr>(item + field);
+        };
+        const VAddr damage = pick(VisionDamage, VisionDamageNext);
+        const VAddr overlay = pick(VisionOverlay, VisionOverlayNext);
+        auto words = Load<std::array<float, VisionPixelBytes / sizeof(float)>>(pixel_constants);
+        const float width = screen != 0 ? Load<u16>(screen + TextureObjectWidth) : 1.0f;
+        const float height = screen != 0 ? Load<u16>(screen + TextureObjectHeight) : 1.0f;
+        words[0] = static_cast<float>(1.0 / width);
+        words[1] = width;
+        std::fill(words.begin() + 4, words.begin() + 8, 0.0f);
+        if (overlay != 0) {
+            // The overlay scrolls with the item's time and spans the movie's luma rows.
+            const auto scroll =
+                Load<std::array<float, 2>>(MemoryPatcher::g_eboot_address + VisionScroll);
+            const double time = Load<double>(item + VisionTime);
+            const double x = static_cast<double>(scroll[0] * (1.0f / width)) * time;
+            const double y = static_cast<double>(scroll[1] * (1.0f / height)) * time;
+            words[4] = static_cast<float>(x - std::floor(x));
+            words[5] = static_cast<float>(y - std::floor(y));
+            words[6] = width / static_cast<float>(Load<u16>(overlay + TextureObjectWidth));
+            words[7] =
+                height * 0.6666667f / static_cast<float>(Load<u16>(overlay + TextureObjectHeight));
+        }
+        words[VisionGlowWord] = glow ? LinearGlow(Load<float>(item + VisionGlow)) : 1.0f;
+        // The fields are written in order: the packet is write-combined.
+        Scene::Character& out = characters[header.characters];
+        std::memcpy(out.pixel_constants, words.data(), VisionPixelBytes);
+        out.bend_bias = 0.0f;
+        out.normal_map = ScreenTexture(damage, false);
+        out.reflection = ScreenTexture(overlay, false);
+        return ++header.characters;
+    }
+
     // Copies a palette into the packet once for each run of users that share it.
     bool CopyPalette(VAddr palette, u32 bones, u64& address) {
         if (palette != last_palette || bones != last_bones) {
@@ -2899,6 +3035,8 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     writer.EndPart(Scene::CapturePart::World);
     add_category(LambertCategory);
     add_category(LambertSkinnedCategory);
+    add_category(VisionCategory);
+    add_category(VisionGlowCategory);
     add_category(CharacterCategory);
     add_category(SelfTranslucentCategory);
     add_category(InteriorCategory);

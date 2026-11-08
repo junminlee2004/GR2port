@@ -47,6 +47,7 @@
 #include "video_core/gr2port/shaders/interior_frag.h"
 #include "video_core/gr2port/shaders/lambert_frag.h"
 #include "video_core/gr2port/shaders/lambert_vert.h"
+#include "video_core/gr2port/shaders/vision_frag.h"
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
@@ -240,6 +241,7 @@ private:
     Pipeline interior_depth_pipeline;
     Pipeline lambert_pipeline;
     Pipeline lambert_depth_pipeline;
+    Pipeline vision_pipeline;
     u32 next = 0;
     // The number of the next frame to submit; frames up to frame - FramesInFlight are done once
     // the frame's slot is free.
@@ -395,9 +397,21 @@ bool Thread::Init() {
                                       .push_constant_bytes = sizeof(CharacterPush),
                                       .set_layouts = depth_set_layouts,
                                   });
+    vision_pipeline = CreateGraphicsPipeline(d, {
+                                                    .vertex = CHARACTER_VERT,
+                                                    .fragment = VISION_FRAG,
+                                                    .color = Look::SceneFormat,
+                                                    .depth = DepthFormat,
+                                                    .cull = vk::CullModeFlagBits::eBack,
+                                                    .depth_test = true,
+                                                    .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                                    .push_constant_bytes = sizeof(CharacterPush),
+                                                    .set_layouts = set_layouts,
+                                                });
     if (!character_pipeline.pipeline || !character_depth_pipeline.pipeline ||
         !interior_pipeline.pipeline || !interior_depth_pipeline.pipeline ||
-        !lambert_pipeline.pipeline || !lambert_depth_pipeline.pipeline) {
+        !lambert_pipeline.pipeline || !lambert_depth_pipeline.pipeline ||
+        !vision_pipeline.pipeline) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -787,6 +801,9 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         const std::array depth_sets{Textures::Set()};
         DrawCharacters(cmd, Scene::DrawList::Lambert, lambert_depth_pipeline, depth_sets, header,
                        packet, offset);
+        // The screens' depth takes the interiors' pipeline: the same vertex program and state.
+        DrawCharacters(cmd, Scene::DrawList::Vision, interior_depth_pipeline, depth_sets, header,
+                       packet, offset);
         DrawCharacters(cmd, Scene::DrawList::Character, character_depth_pipeline, depth_sets,
                        header, packet, offset);
         DrawCharacters(cmd, Scene::DrawList::Interior, interior_depth_pipeline, depth_sets, header,
@@ -876,6 +893,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         const std::array sets{Textures::Set(), Shadows::Set(), SelfTranslucent::Set()};
         DrawCharacters(cmd, Scene::DrawList::Lambert, lambert_pipeline, sets, header, packet,
                        offset);
+        DrawCharacters(cmd, Scene::DrawList::Vision, vision_pipeline, sets, header, packet, offset);
         DrawCharacters(cmd, Scene::DrawList::Character, character_pipeline, sets, header, packet,
                        offset);
         DrawCharacters(cmd, Scene::DrawList::Interior, interior_pipeline, sets, header, packet,
@@ -962,7 +980,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                             Timestamps * slot_index + MeterTimestamp, dl);
     }
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Bloom);
-    Look::RecordBloom(cmd, header.bloom, packet.address);
+    Look::RecordBloom(cmd, header, packet.address, scene_ring.buffer, offset);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + BloomTimestamp, dl);
@@ -993,6 +1011,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     LogScene(header, packet);
     const u64 offset = u64{packet.slot} * SceneRing::SlotBytes;
     Ui::Prepare(cmd, header, packet.data, frame);
+    Textures::Refresh(cmd, frame,
+                      std::span{header.dynamic}.first(
+                          std::min(header.dynamic_textures, Scene::MaxDynamicTextures)));
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + 1, dl);

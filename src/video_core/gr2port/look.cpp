@@ -8,17 +8,21 @@
 #include "common/logging/log.h"
 #include "video_core/gr2port/look.h"
 #include "video_core/gr2port/memory.h"
+#include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/shaders/antialias_comp.h"
 #include "video_core/gr2port/shaders/bloom_blur_frag.h"
+#include "video_core/gr2port/shaders/bloom_depth_frag.h"
 #include "video_core/gr2port/shaders/bloom_extract_frag.h"
+#include "video_core/gr2port/shaders/character_vert.h"
 #include "video_core/gr2port/shaders/composite_frag.h"
 #include "video_core/gr2port/shaders/exposure_comp.h"
 #include "video_core/gr2port/shaders/fullscreen_vert.h"
 #include "video_core/gr2port/shaders/luminance_comp.h"
 #include "video_core/gr2port/shaders/sky_frag.h"
 #include "video_core/gr2port/shaders/tonemap_frag.h"
+#include "video_core/gr2port/shaders/vision_frag.h"
 #include "video_core/gr2port/textures.h"
 #include "video_core/gr2port/velocity.h"
 
@@ -63,6 +67,32 @@ struct BlurPush {
     u32 feedback;
     u32 padding;
 };
+
+// character.vert's push constants, which vision.frag shares.
+struct GlowPush {
+    u64 draws;
+    u64 characters;
+    u64 decals;
+    u64 light;
+    std::array<float, 2> target_inverse;
+};
+
+// The game's glow blend, colour (constant, one) and alpha (one, zero): the draws add their colour,
+// the blend constant already in it, and write their alpha of 1, which the blur reads as its widest
+// kernel.
+constexpr vk::PipelineColorBlendAttachmentState GlowBlend{
+    .blendEnable = true,
+    .srcColorBlendFactor = vk::BlendFactor::eOne,
+    .dstColorBlendFactor = vk::BlendFactor::eOne,
+    .colorBlendOp = vk::BlendOp::eAdd,
+    .srcAlphaBlendFactor = vk::BlendFactor::eOne,
+    .dstAlphaBlendFactor = vk::BlendFactor::eZero,
+    .alphaBlendOp = vk::BlendOp::eAdd,
+    .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                      vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+};
+// The depth copy shares the glow's rendering and writes no colour.
+constexpr vk::PipelineColorBlendAttachmentState NoColor{};
 
 // The bloom's images, a quarter of the scene's size, in a ring: a frame's bright pass and second
 // blur write the current one, its first blur the next, and the last frame's result is the third.
@@ -130,6 +160,12 @@ bool g_bloom_cleared = false;
 // The image that holds the last bloom, and whether the last frame ran bloom.
 u32 g_bloom_image = 0;
 bool g_bloom_ran = false;
+// The game's glow draws into the bloom: the scene's depth at the bloom's size, which only they
+// test against, its copy, and the televisions' glow.
+vk::Format g_depth_format = vk::Format::eUndefined;
+Image g_glow_depth;
+Pipeline g_glow_depth_copy;
+Pipeline g_glow;
 Pipeline g_sky;
 Pipeline g_luminance;
 Pipeline g_exposure;
@@ -391,13 +427,37 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format) {
                                                    .push_constant_bytes = sizeof(CompositePush),
                                                    .set_layouts = pair_set,
                                                });
+    g_depth_format = depth_format;
+    g_glow_depth_copy = CreateGraphicsPipeline(device, {
+                                                           .vertex = FULLSCREEN_VERT,
+                                                           .fragment = BLOOM_DEPTH_FRAG,
+                                                           .color = SceneFormat,
+                                                           .depth = depth_format,
+                                                           .depth_test = true,
+                                                           .depth_compare = vk::CompareOp::eAlways,
+                                                           .blend = &NoColor,
+                                                           .set_layouts = pair_set,
+                                                       });
+    g_glow = CreateGraphicsPipeline(device, {
+                                                .vertex = CHARACTER_VERT,
+                                                .fragment = VISION_FRAG,
+                                                .color = SceneFormat,
+                                                .depth = depth_format,
+                                                .cull = vk::CullModeFlagBits::eBack,
+                                                .depth_test = true,
+                                                .depth_write = false,
+                                                .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                                .blend = &GlowBlend,
+                                                .push_constant_bytes = sizeof(GlowPush),
+                                                .set_layouts = texture_set,
+                                            });
     const std::array antialias_set{g_antialias_layout};
     g_antialias = CreateComputePipeline(device, ANTIALIAS_COMP, sizeof(u64), antialias_set);
     g_antialias_constants = memory.CreateBuffer(
         sizeof(AntialiasConstants), vk::BufferUsageFlagBits::eStorageBuffer, Placement::Upload);
     return g_sky.pipeline && g_luminance.pipeline && g_exposure.pipeline && g_extract.pipeline &&
            g_blur.pipeline && g_tonemap.pipeline && g_antialias.pipeline &&
-           g_antialias_constants.mapped != nullptr;
+           g_glow_depth_copy.pipeline && g_glow.pipeline && g_antialias_constants.mapped != nullptr;
 }
 
 bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth) {
@@ -436,6 +496,13 @@ bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth)
         if (!image.image) {
             return false;
         }
+    }
+    g_memory->Destroy(g_glow_depth);
+    g_glow_depth = g_memory->CreateImage(g_depth_format, bloom_extent,
+                                         vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                                         vk::ImageAspectFlagBits::eDepth);
+    if (!g_glow_depth.image) {
+        return false;
     }
     g_bloom_cleared = false;
     g_bloom_ran = false;
@@ -631,8 +698,98 @@ void RecordMeter(vk::CommandBuffer cmd, u64 packet_address) {
         vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite);
 }
 
-void RecordBloom(vk::CommandBuffer cmd, u32 bloom, u64 packet_address) {
+namespace {
+
+// The game's bloom passes 0 and 1b: the scene's depth at the bloom's size, then the televisions'
+// glow added into target where that depth shows them, which leaves target for the blur to read.
+void RecordGlow(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_address,
+                vk::Buffer buffer, u64 offset, const Image& target) {
+    const u32 count = header.draw_commands[static_cast<u32>(Scene::DrawList::VisionGlow)];
+    if (count == 0 || !g_glow_depth.image) {
+        return;
+    }
     const auto& dl = g_device->dispatch;
+    constexpr auto Tests = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                           vk::PipelineStageFlagBits2::eLateFragmentTests;
+    ImageBarrier(
+        cmd, target.image, vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::ImageLayout::eColorAttachmentOptimal, vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::AccessFlagBits2::eShaderSampledRead, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite);
+    // The last frame's glow tested against the depth.
+    const vk::ImageMemoryBarrier2 depth_barrier{
+        .srcStageMask = Tests,
+        .srcAccessMask = vk::AccessFlagBits2::eNone,
+        .dstStageMask = Tests,
+        .dstAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                         vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+        .oldLayout = vk::ImageLayout::eUndefined,
+        .newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
+        .image = g_glow_depth.image,
+        .subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1},
+    };
+    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &depth_barrier},
+                         dl);
+    const vk::RenderingAttachmentInfo color{
+        .imageView = target.view,
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eLoad,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+    };
+    const vk::RenderingAttachmentInfo depth{
+        .imageView = g_glow_depth.view,
+        .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eDontCare,
+        .storeOp = vk::AttachmentStoreOp::eDontCare,
+    };
+    cmd.beginRendering({.renderArea = {{0, 0}, target.extent},
+                        .layerCount = 1,
+                        .colorAttachmentCount = 1,
+                        .pColorAttachments = &color,
+                        .pDepthAttachment = &depth},
+                       dl);
+    const float width = static_cast<float>(target.extent.width);
+    const float height = static_cast<float>(target.extent.height);
+    cmd.setScissor(0, vk::Rect2D{{0, 0}, target.extent}, dl);
+    cmd.setViewport(0, vk::Viewport{.width = width, .height = height, .maxDepth = 1.0f}, dl);
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_glow_depth_copy.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_glow_depth_copy.layout, 0,
+                           g_extract_set, {}, dl);
+    cmd.draw(3, 1, 0, 0, dl);
+    // A negative height keeps the game's y-up clip space.
+    cmd.setViewport(
+        0, vk::Viewport{.y = height, .width = width, .height = -height, .maxDepth = 1.0f}, dl);
+    const GlowPush push{
+        .draws = packet_address + Scene::DrawsOffset,
+        .characters = packet_address + Scene::CharactersOffset,
+        .decals = packet_address + Scene::DecalsOffset,
+        .light = packet_address + Scene::LightOffset,
+        .target_inverse = {1.0f / width, -1.0f / height},
+    };
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_glow.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_glow.layout, 0, Textures::Set(), {},
+                           dl);
+    cmd.pushConstants(g_glow.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push), &push,
+                      dl);
+    cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
+    const u32 first = Scene::FirstCommand(header, Scene::DrawList::VisionGlow);
+    cmd.drawIndexedIndirect(buffer,
+                            offset + Scene::CommandsOffset + u64{first} * sizeof(Scene::Command),
+                            count, sizeof(Scene::Command), dl);
+    cmd.endRendering(dl);
+    ImageBarrier(
+        cmd, target.image, vk::ImageLayout::eColorAttachmentOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::AccessFlagBits2::eShaderSampledRead);
+}
+
+} // namespace
+
+void RecordBloom(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_address,
+                 vk::Buffer buffer, u64 offset) {
+    const auto& dl = g_device->dispatch;
+    const u32 bloom = header.bloom;
     if (!g_bloom_cleared) {
         g_bloom_cleared = true;
         const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
@@ -664,6 +821,7 @@ void RecordBloom(vk::CommandBuffer cmd, u32 bloom, u64 packet_address) {
                         1.0f / static_cast<float>(g_extent.height)},
     };
     BloomPass(cmd, g_bloom[current], g_extract, g_extract_set, &extract, sizeof(extract));
+    RecordGlow(cmd, header, packet_address, buffer, offset, g_bloom[current]);
     const vk::Extent2D size = g_bloom[current].extent;
     const BlurPush across{
         .grade = grade,
