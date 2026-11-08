@@ -73,6 +73,13 @@ inline constexpr u32 EffectLists = 7;
 inline constexpr u32 MaxWaterDraws = 32;
 /// G2_BG_Metaball draws per packet.
 inline constexpr u32 MaxMetaballs = 256;
+/// opaque/G2_EN draws per packet, and their pipelines: the body's, unskinned and skinned, the boss
+/// body's, the same, the core's, the same, then the core's in SelfTranslucent (category 35), the
+/// same.
+inline constexpr u32 MaxEnemyDraws = 128;
+inline constexpr u32 EnemyLists = 8;
+inline constexpr u32 EnemyCoreLists = 4;
+inline constexpr u32 EnemySelfTranslucentLists = 6;
 /// Textures of the world's draws that change each frame, per packet.
 inline constexpr u32 MaxDynamicTextures = 16;
 /// The game's limit on a view's point lights.
@@ -416,6 +423,10 @@ struct Header {
     u32 metaballs;
     u32 metaball_commands[2];
     u32 dropped_metaballs;
+    /// EnemyDraw records written, the commands of each enemy pipeline, and enemy items not drawn.
+    u32 enemies;
+    u32 enemy_commands[EnemyLists];
+    u32 dropped_enemies;
     /// The view's point lights, as in Light.
     u32 point_lights;
     /// Textures of the world's draws that change each frame, which the renderer copies again
@@ -821,6 +832,29 @@ struct MetaballDraw {
     EffectMesh mesh;
 };
 static_assert(sizeof(MetaballDraw) == 512);
+
+/// What the game's enemy programs fetch and sample: a mesh, the element of each of the engine's
+/// semantics (byte offset in the low 8 bits, the game's vertex format above, 0 for none), the
+/// handle of the displacement map, and the handles of the pixel program's textures: the body's
+/// t1, t2, t4, t5, t6, t8 and t9, the core's t1 and t2.
+struct EnemyMesh {
+    u64 vertices;
+    u64 skin;
+    u64 palette;
+    u32 stride;
+    u32 displacement;
+    u32 elements[16];
+    u32 maps[8];
+};
+static_assert(sizeof(EnemyMesh) == 128);
+
+/// An opaque/G2_EN draw: the constants of the game's programs, then its mesh.
+struct EnemyDraw {
+    u32 vertex_constants[68];
+    u32 pixel_constants[124];
+    EnemyMesh mesh;
+};
+static_assert(sizeof(EnemyDraw) == 896);
 
 /// Consecutive effect draws of one list and one state.
 struct EffectRun {
@@ -1293,7 +1327,11 @@ inline constexpr u64 UiCommandsOffset = UiDrawsOffset + MaxUiDraws * sizeof(UiDr
 inline constexpr u64 UiDynamicOffset = UiCommandsOffset + MaxUiDraws * sizeof(VertexCommand);
 /// Copies of the game's vertices, indices and constants.
 inline constexpr u64 UiDataOffset = UiDynamicOffset + MaxUiDynamicTextures * sizeof(u32);
-inline constexpr u64 PacketBytes = UiDataOffset + MaxUiDataBytes;
+inline constexpr u64 EnemyDrawsOffset = (UiDataOffset + MaxUiDataBytes + 15) & ~u64{15};
+/// MaxEnemyDraws commands of each enemy pipeline.
+inline constexpr u64 EnemyCommandsOffset = EnemyDrawsOffset + MaxEnemyDraws * sizeof(EnemyDraw);
+inline constexpr u64 PacketBytes =
+    EnemyCommandsOffset + EnemyLists * MaxEnemyDraws * sizeof(Command);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -1308,6 +1346,7 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               ParticleSceneOffset % 16 == 0 && ParticleDrawsOffset % 16 == 0 &&
               ParticleEffectsOffset % 16 == 0 && EffectDrawsOffset % 16 == 0 &&
               WaterDrawsOffset % 16 == 0 && MetaballDrawsOffset % 16 == 0 &&
-              PointLightsOffset % 16 == 0 && UiDrawsOffset % 16 == 0 && UiDataOffset % 16 == 0);
+              PointLightsOffset % 16 == 0 && UiDrawsOffset % 16 == 0 && UiDataOffset % 16 == 0 &&
+              EnemyDrawsOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

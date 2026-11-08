@@ -19,6 +19,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/fault_report.h
     ${CMAKE_CURRENT_LIST_DIR}/effects.cpp
     ${CMAKE_CURRENT_LIST_DIR}/effects.h
+    ${CMAKE_CURRENT_LIST_DIR}/enemies.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/enemies.h
     ${CMAKE_CURRENT_LIST_DIR}/fog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/fog.h
     ${CMAKE_CURRENT_LIST_DIR}/glass.cpp
@@ -167,6 +169,15 @@ gr2port_add_shader(branch.frag branch_frag)
 gr2port_add_shader(pfx/effect.frag effect_frag)
 gr2port_add_shader(pfx/effect_skinned.vert effect_skinned_vert)
 gr2port_add_shader(pfx/effect_unskinned.vert effect_unskinned_vert)
+gr2port_add_shader(pfx/enemy.frag enemy_frag)
+gr2port_add_shader(pfx/enemy.vert enemy_vert)
+gr2port_add_shader(pfx/enemy_boss.frag enemy_boss_frag)
+gr2port_add_shader(pfx/enemy_boss.vert enemy_boss_vert)
+gr2port_add_shader(pfx/enemy_boss_skinned.vert enemy_boss_skinned_vert)
+gr2port_add_shader(pfx/enemy_core.frag enemy_core_frag)
+gr2port_add_shader(pfx/enemy_core.vert enemy_core_vert)
+gr2port_add_shader(pfx/enemy_core_skinned.vert enemy_core_skinned_vert)
+gr2port_add_shader(pfx/enemy_skinned.vert enemy_skinned_vert)
 gr2port_add_shader(pfx/water.frag water_frag)
 gr2port_add_shader(pfx/water.vert water_vert)
 gr2port_add_shader(pfx/gpu_emitter_spawn.comp gpu_emitter_spawn_comp)

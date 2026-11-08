@@ -12,6 +12,7 @@
 #include <utility>
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include "common/logging/log.h"
 #include "common/memory_patcher.h"
@@ -550,6 +551,39 @@ constexpr u32 MetaballNeighbourWord = 0x110 / 4;
 constexpr u32 MetaballNeighbourCountWord = 0x170 / 4;
 constexpr u32 MetaballNeighbours = 6;
 constexpr float MetaballReach = 4.0f;
+// opaque/G2_EN, the enemies. A body (category 27) holds the texture objects of its pixel program's
+// t1, t2, t4, t5 and t6, its displacement map +0x50, vertex constants +0x70, pixel constants +0x78
+// and boss variant +0x80; only the boss variant holds t8 and t9, at +0x60 and +0x68. Its draw sets
+// the pixel constants' ambient light +0x30 from the frame graph and the count of point lights +0xac
+// from the view. A core (category 33) holds t1 and t2 +0x30 and +0x38, vertex constants +0x40,
+// pixel constants +0x48 and whether its programs are the skinned ones +0x50.
+constexpr u32 EnemyCategory = 27;
+constexpr std::array<u64, 7> EnemyMaps{0x30, 0x38, 0x40, 0x48, 0x58, 0x60, 0x68};
+constexpr size_t EnemyBodyMaps = 5;
+constexpr u64 EnemyDisplacement = 0x50;
+constexpr u64 EnemyVertexConstants = 0x70;
+constexpr u64 EnemyPixelConstants = 0x78;
+constexpr u64 EnemyVariant = 0x80;
+constexpr u64 EnemyVertexBytes = 0x110;
+constexpr u64 EnemyPixelBytes = 0x1f0;
+constexpr u32 EnemyShWord = 0x30 / 4;
+constexpr u64 EnemyShBytes = 0x70;
+constexpr u32 EnemyPointLightsWord = 0xac / 4;
+constexpr u32 EnemyCoreCategory = 33;
+constexpr std::array<u64, 2> EnemyCoreMaps{0x30, 0x38};
+constexpr u64 EnemyCoreVertexConstants = 0x40;
+constexpr u64 EnemyCorePixelConstants = 0x48;
+constexpr u64 EnemyCoreSkinned = 0x50;
+constexpr u64 EnemyCoreVertexBytes = 0x90;
+constexpr u64 EnemyCorePixelBytes = 0x70;
+// SelfTranslucent draws the cores again, with the core's callback.
+constexpr u32 EnemySelfTranslucentCoreCategory = 35;
+// Vertex buffer object: element count +0x1c, the element of each semantic +0x24, elements
+// {format, stride, offset, semantic} +0x34.
+constexpr u64 VertexElementCount = 0x1c;
+constexpr u64 VertexSemanticElement = 0x24;
+constexpr u64 VertexElementInfo = 0x34;
+constexpr u32 LoggedEnemyItems = 2;
 constexpr u32 ContourCategory = 11;
 constexpr u64 ContourVertexConstants = 0x30;
 constexpr u64 ContourGeometryConstants = 0x38;
@@ -692,6 +726,9 @@ alignas(64) std::array<Scene::EffectRun, Scene::MaxEffectDraws> g_effect_runs;
 alignas(64) std::array<Scene::Command, Scene::MaxWaterDraws> g_water_commands;
 // The unskinned metaball draws, then the skinned ones.
 alignas(64) std::array<std::array<Scene::Command, Scene::MaxMetaballs>, 2> g_metaball_commands;
+alignas(64) std::array<std::array<Scene::Command, Scene::MaxEnemyDraws>,
+                       Scene::EnemyLists> g_enemy_commands;
+std::array<u32, Scene::EnemyLists> g_logged_enemy_items{};
 
 // A metaball item and its sphere, which its neighbours' draws read.
 struct MetaballSphereOf {
@@ -806,6 +843,11 @@ public:
             std::memcpy(packet + Scene::MetaballCommandsOffset +
                             u64{list} * Scene::MaxMetaballs * Bytes,
                         g_metaball_commands[list].data(), header.metaball_commands[list] * Bytes);
+        }
+        for (u32 list = 0; list < Scene::EnemyLists; list++) {
+            std::memcpy(packet + Scene::EnemyCommandsOffset +
+                            u64{list} * Scene::MaxEnemyDraws * Bytes,
+                        g_enemy_commands[list].data(), header.enemy_commands[list] * Bytes);
         }
     }
 
@@ -1326,6 +1368,130 @@ public:
             .vertex_offset = 0,
             .first_instance = i,
         };
+    }
+
+    // An opaque/G2_EN item: a body, or with core set, a core in the lists from core_lists.
+    void AddEnemy(VAddr item, bool core, VAddr view, VAddr frame_graph,
+                  u32 core_lists = Scene::EnemyCoreLists) {
+        const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
+        const VAddr index_buffer = Load<VAddr>(item + ItemIndexBuffer);
+        const VAddr vertex_constants =
+            Load<VAddr>(item + (core ? EnemyCoreVertexConstants : EnemyVertexConstants));
+        const VAddr pixel_constants =
+            Load<VAddr>(item + (core ? EnemyCorePixelConstants : EnemyPixelConstants));
+        const VAddr shape = index_buffer - ShapeIndexBuffer;
+        if (submesh == 0 || index_buffer == 0 || vertex_constants == 0 || pixel_constants == 0 ||
+            Load<u16>(submesh + SubmeshRanges) == 0 || header.enemies == Scene::MaxEnemyDraws) {
+            header.dropped_enemies++;
+            return;
+        }
+        const Meshes::Mesh* mesh = Meshes::Get(shape);
+        if (mesh == nullptr) {
+            header.dropped_enemies++;
+            return;
+        }
+        Skin skin;
+        u64 vertices = mesh->vertices;
+        const VAddr vertex_buffer = Load<VAddr>(item + ItemVertexBuffer);
+        const bool deformed = vertex_buffer != shape + ShapeVertexBuffer;
+        if (deformed) {
+            // The game's compute has deformed the vertices; the renderer's copy holds its own.
+            vertices = Deformers::Get(vertex_buffer, shape, *mesh, frame).vertices;
+        } else if (!ReadSkin(item, shape, *mesh, skin)) {
+            header.dropped_enemies++;
+            return;
+        }
+        const bool skinned = skin.stream != 0;
+        const u32 first =
+            Load<u32>(submesh + SubmeshFirstIndex) + Load<u32>(submesh + SubmeshRange);
+        const u32 count = Load<u32>(submesh + SubmeshRange + 4);
+        if (u64{first} + count > mesh->indices || vertices == 0) {
+            header.dropped_enemies++;
+            return;
+        }
+        std::array<u32, sizeof(Scene::EnemyDraw::pixel_constants) / sizeof(u32)> pixels{};
+        std::memcpy(pixels.data(), reinterpret_cast<const void*>(pixel_constants),
+                    core ? EnemyCorePixelBytes : EnemyPixelBytes);
+        if (!core) {
+            std::memcpy(pixels.data() + EnemyShWord,
+                        reinterpret_cast<const void*>(frame_graph + FrameGraphSh), EnemyShBytes);
+            pixels[EnemyPointLightsWord] =
+                Load<VAddr>(view + ViewPointLights) != 0
+                    ? std::clamp<s32>(Load<s32>(view + ViewPointLightCount), 0,
+                                      static_cast<s32>(Scene::MaxPointLights))
+                    : 0;
+        }
+        const VAddr vb = shape + ShapeVertexBuffer;
+        const u32 element_count = Load<u16>(vb + VertexElementCount);
+        std::array<u32, 16> elements{};
+        for (u32 semantic = 0; semantic < elements.size(); semantic++) {
+            const u32 element = Load<u8>(vb + VertexSemanticElement + semantic);
+            if (element >= element_count) {
+                continue;
+            }
+            const u32 format = Load<u8>(vb + VertexElementInfo + 4 * element);
+            const u32 offset = Load<u8>(vb + VertexElementInfo + 4 * element + 2);
+            elements[semantic] = offset % 4 == 0 ? offset | format << 8 : 0;
+        }
+        // A texture object's handle, by its T# when the texture hooks never saw the object.
+        u32 by_sharp = 0;
+        const auto handle = [this, &by_sharp](VAddr object) -> u32 {
+            const u32 known = object != 0 ? Textures::Get(object) : 0;
+            if (known != 0 || object == 0) {
+                return known;
+            }
+            const u32 found = ScreenTexture(object, true);
+            by_sharp += found != 0 ? 1 : 0;
+            return found;
+        };
+        const u32 i = header.enemies++;
+        // The fields are written in order: the packet is write-combined.
+        Scene::EnemyDraw& out =
+            reinterpret_cast<Scene::EnemyDraw*>(packet + Scene::EnemyDrawsOffset)[i];
+        std::memcpy(out.vertex_constants, reinterpret_cast<const void*>(vertex_constants),
+                    core ? EnemyCoreVertexBytes : EnemyVertexBytes);
+        std::memcpy(out.pixel_constants, pixels.data(), sizeof(out.pixel_constants));
+        Scene::EnemyMesh enemy_mesh{
+            .vertices = vertices,
+            .skin = skin.stream,
+            .palette = skin.palette,
+            .stride = mesh->stride,
+            .displacement = core ? 0 : handle(Load<VAddr>(item + EnemyDisplacement)),
+        };
+        std::memcpy(enemy_mesh.elements, elements.data(), sizeof(enemy_mesh.elements));
+        const bool boss = !core && Load<u8>(item + EnemyVariant) != 0;
+        const std::span<const u64> maps =
+            core ? std::span<const u64>{EnemyCoreMaps}
+                 : std::span<const u64>{EnemyMaps}.first(boss ? EnemyMaps.size() : EnemyBodyMaps);
+        for (u32 t = 0; t < maps.size(); t++) {
+            enemy_mesh.maps[t] = handle(Load<VAddr>(item + maps[t]));
+        }
+        out.mesh = enemy_mesh;
+        const u32 list = (core ? core_lists : (boss ? 2 : 0)) + (skinned ? 1 : 0);
+        g_enemy_commands[list][header.enemy_commands[list]++] = {
+            .index_count = count,
+            .instance_count = 1,
+            .first_index = mesh->first_index + first,
+            .vertex_offset = 0,
+            .first_instance = i,
+        };
+        if (g_logged_enemy_items[list] < LoggedEnemyItems) {
+            g_logged_enemy_items[list]++;
+            std::string text;
+            for (u32 semantic = 0; semantic < elements.size(); semantic++) {
+                if (elements[semantic] != 0 || (semantic == 0 && element_count != 0)) {
+                    text += fmt::format(" {}:{}@{}", semantic, elements[semantic] >> 8,
+                                        elements[semantic] & 0xff);
+                }
+            }
+            LOG_INFO(Render_Vulkan,
+                     "GR2port enemies: mesh {:#x} in list {}, stride {}, deformed {}, {} bones, "
+                     "skin stream {:#x}, core program {}, semantic:format@offset{}; displacement "
+                     "{}, maps {}, {} by T#",
+                     shape, list, mesh->stride, deformed, skin.bones, Load<VAddr>(item + ItemSkin),
+                     core ? Load<u8>(item + EnemyCoreSkinned) : 0, text, enemy_mesh.displacement,
+                     fmt::join(enemy_mesh.maps, " "), by_sharp);
+        }
     }
 
     // A G2_EF_Main item of one of the game's lists.
@@ -3002,6 +3168,18 @@ void OnFrame(VAddr frame_graph, VAddr view) {
         ForEachItem(metaball_items, MetaballVertexConstants, MetaballPixelConstants, metaball_at,
                     [&](VAddr item) { writer.AddMetaball(item, all); });
     }
+    ForEachItem(Load<s32>(view + ViewCategoryCount + EnemyCategory * 4), EnemyVertexConstants,
+                EnemyPixelConstants, keyed(EnemyCategory),
+                [&](VAddr item) { writer.AddEnemy(item, false, view, frame_graph); });
+    ForEachItem(Load<s32>(view + ViewCategoryCount + EnemyCoreCategory * 4),
+                EnemyCoreVertexConstants, EnemyCorePixelConstants, keyed(EnemyCoreCategory),
+                [&](VAddr item) { writer.AddEnemy(item, true, view, frame_graph); });
+    ForEachItem(Load<s32>(view + ViewCategoryCount + EnemySelfTranslucentCoreCategory * 4),
+                EnemyCoreVertexConstants, EnemyCorePixelConstants,
+                keyed(EnemySelfTranslucentCoreCategory), [&](VAddr item) {
+                    writer.AddEnemy(item, true, view, frame_graph,
+                                    Scene::EnemySelfTranslucentLists);
+                });
     add_category(GlassCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + BranchCategory * 4), LeafDomainConstants,
                 BranchPixelConstants, keyed(BranchCategory),

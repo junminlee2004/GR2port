@@ -4,6 +4,7 @@
 #include <array>
 
 #include "video_core/gr2port/effects.h"
+#include "video_core/gr2port/enemies.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/particles.h"
@@ -158,6 +159,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
     for (u32 i = 0; i < Scene::SelfTranslucentLists; i++) {
         bodies += header.draw_commands[first_list + i];
     }
+    bodies += Enemies::HasSelfTranslucent(header) ? 1 : 0;
     if (bodies == 0 && g_clear) {
         return;
     }
@@ -231,6 +233,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
                                     count, sizeof(Scene::Command), dl);
         }
         Effects::RecordHidden(cmd, header, packet, address, buffer, offset);
+        Enemies::RecordSelfTranslucent(cmd, header, address, buffer, offset, g_extent);
         Particles::RecordSelfTranslucent(cmd, header, packet, address, buffer, offset);
     }
     cmd.endRendering(dl);

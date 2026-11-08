@@ -28,6 +28,7 @@
 #include "video_core/gr2port/device_lost.h"
 #include "video_core/gr2port/effects.h"
 #include "video_core/gr2port/emulated_gpu.h"
+#include "video_core/gr2port/enemies.h"
 #include "video_core/gr2port/fog.h"
 #include "video_core/gr2port/glass.h"
 #include "video_core/gr2port/look.h"
@@ -181,6 +182,8 @@ struct Stats {
     u64 dropped_glass = 0;
     u64 metaballs = 0;
     u64 dropped_metaballs = 0;
+    u64 enemies = 0;
+    u64 dropped_enemies = 0;
     u64 point_lights = 0;
     u64 particle_draws = 0;
     u64 particle_runs = 0;
@@ -326,6 +329,7 @@ bool Thread::Init() {
         !SelfTranslucent::Start(d, *memory) ||
         !Particles::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !PointLights::Start(d, *memory) || !Effects::Start(d, Look::SceneFormat, DepthFormat) ||
+        !Enemies::Start(d, Look::SceneFormat, DepthFormat) ||
         !Water::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !Vegetation::Start(d, *memory, World::SurfaceFormats, DepthFormat, Shadows::DepthFormat)) {
         return false;
@@ -806,6 +810,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         const std::array depth_sets{Textures::Set()};
         DrawCharacters(cmd, Scene::DrawList::Lambert, lambert_depth_pipeline, depth_sets, header,
                        packet, offset);
+        Enemies::RecordDepth(cmd, header, packet.address, scene_ring.buffer, offset, SceneExtent);
         // The screens' depth takes the interiors' pipeline: the same vertex program and state.
         DrawCharacters(cmd, Scene::DrawList::Vision, interior_depth_pipeline, depth_sets, header,
                        packet, offset);
@@ -898,6 +903,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         const std::array sets{Textures::Set(), Shadows::Set(), SelfTranslucent::Set()};
         DrawCharacters(cmd, Scene::DrawList::Lambert, lambert_pipeline, sets, header, packet,
                        offset);
+        Enemies::RecordForward(cmd, header, packet.address, scene_ring.buffer, offset, extent);
         DrawCharacters(cmd, Scene::DrawList::Vision, vision_pipeline, sets, header, packet, offset);
         DrawCharacters(cmd, Scene::DrawList::Character, character_pipeline, sets, header, packet,
                        offset);
@@ -1093,6 +1099,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.dropped_glass += header.dropped_glass;
     stats.metaballs += header.metaballs;
     stats.dropped_metaballs += header.dropped_metaballs;
+    stats.enemies += header.enemies;
+    stats.dropped_enemies += header.dropped_enemies;
     stats.point_lights += header.point_lights;
     stats.particle_draws += header.particles.draws;
     stats.particle_runs += header.particles.runs;
@@ -1357,6 +1365,9 @@ void Thread::Report() {
     LOG_INFO(Render_Vulkan, "GR2port metaballs: per frame {:.1f} drawn, {:.1f} not drawn",
              static_cast<double>(stats.metaballs) / frames,
              static_cast<double>(stats.dropped_metaballs) / frames);
+    LOG_INFO(Render_Vulkan, "GR2port enemies: per frame {:.1f} drawn, {:.1f} not drawn",
+             static_cast<double>(stats.enemies) / frames,
+             static_cast<double>(stats.dropped_enemies) / frames);
     LOG_INFO(Render_Vulkan, "GR2port point lights: per frame {:.1f}",
              static_cast<double>(stats.point_lights) / frames);
     LOG_INFO(Render_Vulkan,
