@@ -68,6 +68,7 @@
 #include "video_core/gr2port/shaders/sprite_lit_soft_frag.h"
 #include "video_core/gr2port/shaders/sprite_plain_frag.h"
 #include "video_core/gr2port/shaders/sprite_plain_soft_frag.h"
+#include "video_core/gr2port/shaders/sprite_ribbon_shadow_vert.h"
 #include "video_core/gr2port/shaders/sprite_ribbon_vert.h"
 #include "video_core/gr2port/shaders/sprite_shadow_frag.h"
 #include "video_core/gr2port/shaders/sprite_shadow_soft_frag.h"
@@ -437,6 +438,8 @@ void Build() {
         {SPRITE_SHADOW_VERT, SPRITE_SHADOW_FRAG, vk::PrimitiveTopology::eTriangleStrip},
         {SPRITE_SHADOW_VERT, SPRITE_SHADOW_SOFT_FRAG, vk::PrimitiveTopology::eTriangleStrip},
         {MODEL_SHADOW_VERT, {}, vk::PrimitiveTopology::eTriangleList},
+        {SPRITE_RIBBON_SHADOW_VERT, SPRITE_SHADOW_FRAG, vk::PrimitiveTopology::eTriangleStrip},
+        {SPRITE_RIBBON_SHADOW_VERT, SPRITE_SHADOW_SOFT_FRAG, vk::PrimitiveTopology::eTriangleStrip},
     }};
     for (u32 i = 0; i < ShadowPrograms; i++) {
         g_shadow_pipelines[i] =

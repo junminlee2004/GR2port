@@ -448,6 +448,22 @@ void WriteSurfaceMaterial(Scene::ParticleDraw& record, VAddr material, VAddr obj
     record.maps[4] = MapHandle(layered_normal);
 }
 
+// An item's program in the shadow passes, or Count when the port has none.
+Scene::ParticleShadowProgram ShadowProgram(u32 kind, VAddr material) {
+    using Program = Scene::ParticleShadowProgram;
+    const bool soft = Load<u8>(material + MaterialSoft) != 0;
+    switch (kind) {
+    case KindSprite:
+        return soft ? Program::SpriteSoft : Program::Sprite;
+    case KindRibbon:
+        return soft ? Program::RibbonSoft : Program::Ribbon;
+    case KindModel:
+        return Program::Model;
+    default:
+        return Program::Count;
+    }
+}
+
 // The light's constants, as FUN_014c0960 builds them for its lit programs: its first values, its
 // direction through the rotation at ContextProjection, its last values, and how many of a cell's
 // point lights to take, none when the packet holds no grid.
@@ -1071,21 +1087,18 @@ void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
                              Load<u32>(resource + ResourceKey));
         };
         if (mode == ShadowPass) {
-            if (kind != KindSprite && kind != KindModel) {
+            const Scene::ParticleShadowProgram program = ShadowProgram(kind, material);
+            if (program == Scene::ParticleShadowProgram::Count) {
                 out.unported++;
                 continue;
             }
             // The game's shadow passes keep their own depth state.
-            const Scene::ParticleShadowProgram program =
-                kind == KindModel                        ? Scene::ParticleShadowProgram::Model
-                : Load<u8>(material + MaterialSoft) != 0 ? Scene::ParticleShadowProgram::SpriteSoft
-                                                         : Scene::ParticleShadowProgram::Sprite;
             for (u32 c = 0; c < Scene::Cascades; c++) {
                 const RunState state{static_cast<u32>(program), Scene::ParticleShadowMode + c, 1, 1,
                                      cull};
-                if (kind == KindSprite) {
+                if (kind == KindSprite || kind == KindRibbon) {
                     writer.AddSprite(state, cascades[c], material, system, first, instances,
-                                     SpriteVertices);
+                                     kind == KindSprite ? SpriteVertices : RibbonVertices);
                 } else {
                     writer.AddModel(state, cascades[c], model_objects(), material, system, first,
                                     instances, false);

@@ -203,6 +203,8 @@ enum class ParticleShadowProgram : u32 {
     Sprite,
     SpriteSoft,
     Model,
+    Ribbon,
+    RibbonSoft,
     Count,
 };
 
