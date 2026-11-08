@@ -115,6 +115,15 @@ constexpr float GridFadeStart = 32.0f;
 // lights fade where the key light is shadowed +0x890.
 constexpr u64 ViewPointLights = 0xc10;
 constexpr u64 ViewPointLightCount = 0xc18;
+// ShadowTrace runs when this count is above 0, with the projection +0xa0 and the inverse view
+// constants +0x820; the frame graph's targets +0x1f98 hold the game's target size +0x92d0.
+constexpr u64 ViewShadowTrace = 0xc1c;
+constexpr u64 ViewInverseConstants = 0x820;
+constexpr u64 FrameGraphTargets = 0x1f98;
+constexpr u64 TargetsSize = 0x92d0;
+constexpr float ShadowTraceRadius = 0.4f;
+constexpr float ShadowTraceDensity = 1.6f;
+constexpr float ShadowTraceJitter = 0.9f;
 constexpr u64 ViewShadowInfluence = 0x890;
 // View: V +0x20, inverse(V) +0x60, the cascade records from +0x400 every 0x110 ({valid, split,
 // depth bias constant, depth bias slope} and the cascade VP at +0x90), and the casters'
@@ -3080,6 +3089,21 @@ u32 WriteLight(VAddr frame_graph, VAddr view, u8* packet) {
                      first.falloff_start, first.falloff_power, first.shadow,
                      light.shadow_influence);
         }
+    }
+    const VAddr targets = Load<VAddr>(frame_graph + FrameGraphTargets);
+    light.shadow_trace = Load<s32>(view + ViewShadowTrace) > 0 && targets != 0 ? 1 : 0;
+    if (light.shadow_trace != 0) {
+        Scene::ShadowTrace trace{
+            .lights = light.point_lights,
+            .radius = ShadowTraceRadius,
+            .density = ShadowTraceDensity,
+            .jitter = ShadowTraceJitter,
+        };
+        copy(trace.projection, ViewProjection, sizeof(trace.projection));
+        copy(trace.inverse_view, ViewInverseConstants, sizeof(trace.inverse_view));
+        std::memcpy(trace.target_size, reinterpret_cast<const void*>(targets + TargetsSize),
+                    sizeof(trace.target_size));
+        std::memcpy(packet + Scene::ShadowTraceOffset, &trace, sizeof(trace));
     }
     std::memcpy(packet + Scene::LightOffset, &light, sizeof(light));
     return light.point_lights;

@@ -1111,6 +1111,20 @@ static_assert(sizeof(Fog) == 656);
 
 /// A point light as the view lists it: its position in view space and its range, its colour, the
 /// distance its falloff starts at, the falloff's power and the share the screen-space shadow takes.
+/// ShadowTrace's constants, as its program reads them: the view's projection and inverse view
+/// constants, the game's target size, the view's point lights, and the trace's radius, density
+/// and jitter.
+struct ShadowTrace {
+    float projection[16];
+    float inverse_view[4];
+    float target_size[4];
+    u32 lights;
+    float radius;
+    float density;
+    float jitter;
+};
+static_assert(sizeof(ShadowTrace) == 112);
+
 struct PointLight {
     float position[3];
     float range;
@@ -1183,7 +1197,9 @@ struct Light {
     u32 point_lights;
     /// How much the point lights fade where the key light is shadowed or faces away.
     float shadow_influence;
-    u32 padding[3];
+    /// Whether the game traced the point lights' screen-space shadows (view+0xc1c).
+    u32 shadow_trace;
+    u32 padding[2];
     /// Occluders in view space: centre, radius.
     float occluder_spheres[MaxOccluders][4];
     /// The ambient light's spherical harmonics for characters: Ar, Ag, Ab, Br, Bg, Bb, Cc.
@@ -1362,8 +1378,9 @@ inline constexpr u64 CharacterGlassCommandsOffset =
 /// Each G_CH_Glass draw's state: its blend mode, and CharacterGlassSkinned.
 inline constexpr u64 CharacterGlassStatesOffset =
     CharacterGlassCommandsOffset + MaxCharacterGlassDraws * sizeof(Command);
-inline constexpr u64 PacketBytes =
-    CharacterGlassStatesOffset + MaxCharacterGlassDraws * sizeof(u32);
+inline constexpr u64 ShadowTraceOffset =
+    (CharacterGlassStatesOffset + MaxCharacterGlassDraws * sizeof(u32) + 15) & ~u64{15};
+inline constexpr u64 PacketBytes = ShadowTraceOffset + sizeof(ShadowTrace);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&

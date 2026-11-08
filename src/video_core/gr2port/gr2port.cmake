@@ -60,6 +60,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/scene_ring.h
     ${CMAKE_CURRENT_LIST_DIR}/self_translucent.cpp
     ${CMAKE_CURRENT_LIST_DIR}/self_translucent.h
+    ${CMAKE_CURRENT_LIST_DIR}/shadow_trace.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/shadow_trace.h
     ${CMAKE_CURRENT_LIST_DIR}/shadows.cpp
     ${CMAKE_CURRENT_LIST_DIR}/shadows.h
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.cpp
@@ -186,6 +188,7 @@ gr2port_add_shader(pfx/enemy_core_alpha.frag enemy_core_alpha_frag)
 gr2port_add_shader(pfx/enemy_core.vert enemy_core_vert)
 gr2port_add_shader(pfx/enemy_core_skinned.vert enemy_core_skinned_vert)
 gr2port_add_shader(pfx/enemy_skinned.vert enemy_skinned_vert)
+gr2port_add_shader(pfx/shadow_trace.frag shadow_trace_frag)
 gr2port_add_shader(pfx/water.frag water_frag)
 gr2port_add_shader(pfx/water.vert water_vert)
 gr2port_add_shader(pfx/gpu_emitter_spawn.comp gpu_emitter_spawn_comp)

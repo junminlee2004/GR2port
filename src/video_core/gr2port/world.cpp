@@ -21,6 +21,7 @@
 #include "video_core/gr2port/shaders/world_frag.h"
 #include "video_core/gr2port/shaders/world_lines_comp.h"
 #include "video_core/gr2port/shaders/world_vert.h"
+#include "video_core/gr2port/shadow_trace.h"
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/textures.h"
 #include "video_core/gr2port/vegetation.h"
@@ -141,8 +142,8 @@ bool CreateSet(const Device& d) {
     constexpr auto Combined = vk::DescriptorType::eCombinedImageSampler;
     constexpr auto Storage = vk::DescriptorType::eStorageImage;
     constexpr auto Compute = vk::ShaderStageFlagBits::eCompute;
-    // Depth, the surfaces, the lines and the occlusion.
-    std::array<vk::DescriptorSetLayoutBinding, 3 + SurfaceFormats.size()> bindings;
+    // Depth, the surfaces, the lines, the occlusion and ShadowTrace's shadows.
+    std::array<vk::DescriptorSetLayoutBinding, 4 + SurfaceFormats.size()> bindings;
     for (u32 i = 0; i < bindings.size(); i++) {
         bindings[i] = {i, Combined, 1, vk::ShaderStageFlagBits::eFragment, &g_sampler};
     }
@@ -411,6 +412,10 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_de
     const std::array surface_infos{surface_info(0), surface_info(1), surface_info(2)};
     const vk::DescriptorImageInfo levels_info =
         read_info(g_depth_levels, vk::ImageLayout::eGeneral);
+    const vk::DescriptorImageInfo traced_info{
+        .imageView = ShadowTrace::View(),
+        .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+    };
     for (u32 i = 0; i < LineImages; i++) {
         const u32 last = (i + 1) % LineImages;
         const vk::DescriptorImageInfo output = read_info(g_lines[i], vk::ImageLayout::eGeneral);
@@ -419,13 +424,14 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_de
             read_info(g_occlusion[i], vk::ImageLayout::eGeneral);
         const vk::DescriptorImageInfo occlusion_history =
             read_info(g_occlusion[last], vk::ImageLayout::eGeneral);
-        const std::array<vk::WriteDescriptorSet, 16> writes{
+        const std::array<vk::WriteDescriptorSet, 17> writes{
             write(g_sets[i], 0, Combined, &depth_info),
             write(g_sets[i], 1, Combined, &surface_infos[0]),
             write(g_sets[i], 2, Combined, &surface_infos[1]),
             write(g_sets[i], 3, Combined, &surface_infos[2]),
             write(g_sets[i], 4, Combined, &output),
             write(g_sets[i], 5, Combined, &occlusion),
+            write(g_sets[i], 6, Combined, &traced_info),
             write(g_lines_sets[i], 0, Combined, &depth_info),
             write(g_lines_sets[i], 1, Combined, &surface_infos[1]),
             write(g_lines_sets[i], 2, Combined, &history),

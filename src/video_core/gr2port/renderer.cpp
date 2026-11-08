@@ -51,6 +51,7 @@
 #include "video_core/gr2port/shaders/lambert_frag.h"
 #include "video_core/gr2port/shaders/lambert_vert.h"
 #include "video_core/gr2port/shaders/vision_frag.h"
+#include "video_core/gr2port/shadow_trace.h"
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
@@ -190,6 +191,8 @@ struct Stats {
     u64 character_glass = 0;
     u64 dropped_character_glass = 0;
     u64 point_lights = 0;
+    // Frames whose point lights ShadowTrace shadowed.
+    u64 traced = 0;
     u64 particle_draws = 0;
     u64 particle_runs = 0;
     u64 particle_unported = 0;
@@ -335,7 +338,8 @@ bool Thread::Init() {
         !Glass::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !SelfTranslucent::Start(d, *memory) ||
         !Particles::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
-        !PointLights::Start(d, *memory) || !Effects::Start(d, Look::SceneFormat, DepthFormat) ||
+        !PointLights::Start(d, *memory) || !ShadowTrace::Start(d, *memory) ||
+        !Effects::Start(d, Look::SceneFormat, DepthFormat) ||
         !Enemies::Start(d, Look::SceneFormat, DepthFormat) ||
         !CharacterGlass::Start(d, Look::SceneFormat, DepthFormat) ||
         !Water::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
@@ -469,7 +473,8 @@ bool Thread::Recreate() {
         !depth.image || !character_depth.image ||
         !Velocity::Resize(SceneExtent, depth.view, character_depth.view) ||
         !Look::Resize(SceneExtent, Ui::TargetFormat, depth.view) ||
-        !Ui::Resize(swapchain->Format()) || !ImGuiRelay::Resize(swapchain->Format()) ||
+        !ShadowTrace::Resize(SceneExtent, depth.view) || !Ui::Resize(swapchain->Format()) ||
+        !ImGuiRelay::Resize(swapchain->Format()) ||
         !World::Resize(SceneExtent, depth.view, character_depth.view) ||
         !Glass::Resize(SceneExtent) || !Water::Resize(SceneExtent, Glass::BehindView()) ||
         !SelfTranslucent::Resize(SceneExtent);
@@ -852,6 +857,8 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     }
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Velocity);
     Velocity::Record(cmd, drawn, packet.address);
+    const auto* light = reinterpret_cast<const Scene::Light*>(packet.data + Scene::LightOffset);
+    ShadowTrace::Record(cmd, packet.address, drawn && light->shadow_trace != 0);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + OcclusionTimestamp, dl);
@@ -1139,6 +1146,8 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     stats.character_glass += header.character_glass;
     stats.dropped_character_glass += header.dropped_character_glass;
     stats.point_lights += header.point_lights;
+    stats.traced +=
+        reinterpret_cast<const Scene::Light*>(packet.data + Scene::LightOffset)->shadow_trace != 0;
     stats.particle_draws += header.particles.draws;
     stats.particle_runs += header.particles.runs;
     stats.particle_unported += header.particles.unported;
@@ -1408,8 +1417,8 @@ void Thread::Report() {
     LOG_INFO(Render_Vulkan, "GR2port character glass: per frame {:.1f} drawn, {:.1f} not drawn",
              static_cast<double>(stats.character_glass) / frames,
              static_cast<double>(stats.dropped_character_glass) / frames);
-    LOG_INFO(Render_Vulkan, "GR2port point lights: per frame {:.1f}",
-             static_cast<double>(stats.point_lights) / frames);
+    LOG_INFO(Render_Vulkan, "GR2port point lights: per frame {:.1f}, traced in {} of {} frames",
+             static_cast<double>(stats.point_lights) / frames, stats.traced, stats.frames);
     LOG_INFO(Render_Vulkan,
              "GR2port particles: per frame {:.1f} live effects, {:.1f} draws in {:.1f} runs, "
              "{:.1f} items not ported, {:.1f} dropped, {:.3f} ms capture, {} frames refused",

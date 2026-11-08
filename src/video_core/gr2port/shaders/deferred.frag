@@ -20,6 +20,7 @@ layout(set = 2, binding = 2) uniform sampler2D surface_normal;
 layout(set = 2, binding = 3) uniform sampler2D surface_material;
 layout(set = 2, binding = 4) uniform sampler2D world_lines;
 layout(set = 2, binding = 5) uniform sampler2D occlusion;
+layout(set = 2, binding = 6) uniform sampler2D traced_shadow;
 
 layout(push_constant) uniform Constants {
     Light light;
@@ -140,7 +141,7 @@ vec3 Tone(vec3 c) {
     return mix(t, t - f + f2 * f2, step(vec3(1.0), t)) / light.toning;
 }
 
-// The game's LightPass, IBL and Resolve programs in one pass, without screen-space shadows.
+// The game's LightPass, IBL and Resolve programs in one pass.
 void main() {
     const ivec2 pixel = ivec2(gl_FragCoord.xy);
     const float depth = texelFetch(scene_depth, pixel, 0).r;
@@ -215,14 +216,18 @@ void main() {
     }
 
     // Point lights from the pixel's cell of the grid: the key light's terms toward each light,
-    // faded over the end of its range, less where the key light is shadowed or faces away, and
-    // through thin surfaces toward the eye.
+    // faded over the end of its range, less where the key light is shadowed or faces away or
+    // ShadowTrace shadows the pixel, and through thin surfaces toward the eye.
     if (light.point_lights > 0u) {
         const uint first =
             GridCellFirst(uv, distance_to_eye,
                           1.0 / (light.inverse_projection.w - light.inverse_projection.z));
         const float key_reach = 1.0 + light.shadow_influence * (n_dot_l * visible - 1.0);
         const float view_term = n_dot_v + sqrt(a2 + (1.0 - a2) * n_dot_v * n_dot_v);
+        // ShadowTrace's screen-space shadow, which each light takes by its share.
+        const float traced =
+            light.shadow_trace != 0u ? texelFetch(traced_shadow, ivec2(gl_FragCoord.xy), 0).x
+                                     : 0.0;
         for (uint i = 0u; i < light.point_lights; i++) {
             const uint index = grid.light_indices[first + i];
             if (index == ~0u) {
@@ -247,7 +252,8 @@ void main() {
             const vec3 point_highlight = key_open * (reflectance + (1.0 - reflectance) * edge) *
                                          point_ggx * point_visibility;
             const float behind = max(dot(toward, to_point), 0.0);
-            lit += point.color * (key_reach * PointFade(point, reach)) *
+            const float fade = key_reach * PointFade(point, reach) * (1.0 - point.shadow * traced);
+            lit += point.color * fade *
                    (key_open * n_dot_toward * (point_highlight + diffuse / Pi) +
                     translucency * behind * behind * diffuse);
         }

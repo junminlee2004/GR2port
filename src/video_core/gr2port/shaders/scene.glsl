@@ -619,7 +619,8 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Li
     float grid_start;
     uint point_lights;
     float shadow_influence;
-    uint light_padding[3];
+    uint shadow_trace;
+    uint light_padding[2];
     vec4 occluder_spheres[MaxOccluders];
     vec4 sh[7];
 };
