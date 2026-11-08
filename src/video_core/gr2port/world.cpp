@@ -534,6 +534,19 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
     }
     if (drawn) {
         Vegetation::RecordSurfaces(cmd, header, address, buffer, offset);
+        // The particles collide with the world without the mesh particles and characters.
+        cmd.endRendering(dl);
+        Particles::RecordCollision(cmd, depth);
+        for (vk::RenderingAttachmentInfo& color : colors) {
+            color.loadOp = vk::AttachmentLoadOp::eLoad;
+        }
+        depth_attachment.loadOp = vk::AttachmentLoadOp::eLoad;
+        cmd.beginRendering({.renderArea = {{0, 0}, g_extent},
+                            .layerCount = 1,
+                            .colorAttachmentCount = static_cast<u32>(colors.size()),
+                            .pColorAttachments = colors.data(),
+                            .pDepthAttachment = &depth_attachment},
+                           dl);
         Particles::RecordSurfaces(cmd, header, packet, address, buffer, offset);
     }
     cmd.endRendering(dl);

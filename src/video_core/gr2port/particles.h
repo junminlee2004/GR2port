@@ -49,6 +49,11 @@ void RecordShadows(vk::CommandBuffer cmd, const Scene::Header& header, const u8*
 void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet,
                     u64 address, vk::Buffer buffer, u64 offset);
 
+/// Outside rendering, between the world's surfaces and the mesh particles, with depth, the image of
+/// the view Resize was given, an attachment: copies it as the game's BackupCollisionBuffer does for
+/// the next frame's collisions, and leaves it an attachment.
+void RecordCollision(vk::CommandBuffer cmd, const Image& depth);
+
 /// Outside rendering, with the scene's colour an attachment and depth readable: draws the items
 /// of the packet at offset in buffer, pass by pass in the game's order, and leaves depth readable.
 void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet, u64 address,

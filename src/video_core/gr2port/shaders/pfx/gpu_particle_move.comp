@@ -550,8 +550,8 @@ void main() {
             v11 = u(0.5 * f(v57) + 0.5);
             v12 = u(-0.5 * f(v58) + 0.5);
             {
-                vec4 t_out = textureLod(sampler2D(depth_texture, curve_sampler), vec2(f(v11),
-                    f(v12)), 0.0);
+                vec4 t_out = vec4(1.0) - textureLod(sampler2D(depth_texture, curve_sampler),
+                    vec2(f(v11), f(v12)), 0.0);
                 v11 = u(t_out.x);
             }
             v12 = u(f(s18) * f(v4));
@@ -1359,8 +1359,8 @@ void main() {
                 v11 = u(0.5 * f(v12) + 0.5);
                 v12 = u(-0.5 * f(v24) + 0.5);
                 {
-                    vec4 t_out = textureLod(sampler2D(depth_texture, curve_sampler),
-                        vec2(f(v11), f(v12)), 0.0);
+                    vec4 t_out = vec4(1.0) - textureLod(sampler2D(depth_texture,
+                        curve_sampler), vec2(f(v11), f(v12)), 0.0);
                     v24 = u(t_out.x);
                 }
                 v25 = u(f(v25) - f(s64));
@@ -1447,8 +1447,8 @@ void main() {
                 v20 = u(f(v68) + f(v11));
                 v21 = v12;
                 {
-                    vec4 t_out = textureLod(sampler2D(depth_texture, curve_sampler),
-                        vec2(f(v20), f(v21)), 0.0);
+                    vec4 t_out = vec4(1.0) - textureLod(sampler2D(depth_texture,
+                        curve_sampler), vec2(f(v20), f(v21)), 0.0);
                     v21 = u(t_out.x);
                 }
                 v25 = u(2.0 * f(v20) + -1.0);
@@ -1457,8 +1457,8 @@ void main() {
                 v22 = u(-2.0 * f(v12) + 1.0);
                 v12 = u(f(v12) + f(v69));
                 {
-                    vec4 t_out = textureLod(sampler2D(depth_texture, curve_sampler),
-                        vec2(f(v11), f(v12)), 0.0);
+                    vec4 t_out = vec4(1.0) - textureLod(sampler2D(depth_texture,
+                        curve_sampler), vec2(f(v11), f(v12)), 0.0);
                     v11 = u(t_out.x);
                 }
                 v26 = u(f(s34) * f(v20) + f(v64));
@@ -12829,15 +12829,15 @@ void main() {
             v23 = u(0.5 * f(v32) + 0.5);
             v24 = u(-0.5 * f(v34) + 0.5);
             {
-                vec4 t_out = textureLod(sampler2D(depth_texture, curve_sampler), vec2(f(v23),
-                    f(v24)), 0.0);
+                vec4 t_out = vec4(1.0) - textureLod(sampler2D(depth_texture, curve_sampler),
+                    vec2(f(v23), f(v24)), 0.0);
                 v38 = u(t_out.x);
             }
             v23 = u(0.5 * f(v29) + 0.5);
             v24 = u(-0.5 * f(v33) + 0.5);
             {
-                vec4 t_out = textureLod(sampler2D(depth_texture, curve_sampler), vec2(f(v23),
-                    f(v24)), 0.0);
+                vec4 t_out = vec4(1.0) - textureLod(sampler2D(depth_texture, curve_sampler),
+                    vec2(f(v23), f(v24)), 0.0);
                 v29 = u(t_out.x);
             }
             {
@@ -12949,13 +12949,13 @@ void main() {
             v32 = u(-2.0 * f(v24) + 1.0);
             v24 = u(f(v24) + f(v28));
             {
-                vec4 t_out = textureLod(sampler2D(depth_texture, curve_sampler), vec2(f(v25),
-                    f(v26)), 0.0);
+                vec4 t_out = vec4(1.0) - textureLod(sampler2D(depth_texture, curve_sampler),
+                    vec2(f(v25), f(v26)), 0.0);
                 v26 = u(t_out.x);
             }
             {
-                vec4 t_out = textureLod(sampler2D(depth_texture, curve_sampler), vec2(f(v23),
-                    f(v24)), 0.0);
+                vec4 t_out = vec4(1.0) - textureLod(sampler2D(depth_texture, curve_sampler),
+                    vec2(f(v23), f(v24)), 0.0);
                 v23 = u(t_out.x);
             }
             v25 = u(-2.0 * f(v24) + 1.0);

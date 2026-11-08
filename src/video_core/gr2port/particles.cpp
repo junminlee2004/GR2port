@@ -19,6 +19,7 @@
 #include "video_core/gr2port/particles.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/self_translucent.h"
+#include "video_core/gr2port/shaders/collision_backup_comp.h"
 #include "video_core/gr2port/shaders/gpu_emitter_spawn_comp.h"
 #include "video_core/gr2port/shaders/gpu_object_update_comp.h"
 #include "video_core/gr2port/shaders/gpu_particle_clear_comp.h"
@@ -187,6 +188,17 @@ vk::DescriptorSetLayout g_draw_layout;
 vk::DescriptorPool g_pool;
 vk::DescriptorSet g_compute_curve_set;
 vk::DescriptorSet g_compute_depth_set;
+// BackupCollisionBuffer's copy of the world's depth, at the game's half of its 1920x1080 target,
+// which the move program's constants name; and the program that makes it.
+constexpr vk::Extent2D CollisionExtent{960, 540};
+Pipeline g_collision_backup;
+// The scene's depth and the copy, written when they are made. Pushed instead, the depth reads as
+// the characters' depth image on an RTX 2080 Ti, with validation clean.
+vk::DescriptorSetLayout g_collision_layout;
+vk::DescriptorSet g_collision_set;
+Image g_collision;
+Buffer g_collision_size;
+bool g_collision_cleared = false;
 vk::DescriptorSet g_draw_set;
 // As g_draw_set, with the copy of the depth, for draws while the scene's depth is written.
 vk::DescriptorSet g_copy_set;
@@ -249,6 +261,9 @@ void Build() {
     g_spawn = CreateComputePipeline(d, GPU_EMITTER_SPAWN_COMP, sizeof(SpawnPush), compute_sets);
     g_sample = CreateComputePipeline(d, GPU_SAMPLE_MESH_COMP, sizeof(SamplePush));
     g_sample_skinned = CreateComputePipeline(d, GPU_SAMPLE_SKINNED_MESH_COMP, sizeof(SamplePush));
+    const std::array collision_sets{g_collision_layout};
+    g_collision_backup =
+        CreateComputePipeline(d, COLLISION_BACKUP_COMP, sizeof(u64), collision_sets);
     using Programs = std::array<std::span<const u32>, ProgramCount>;
     const Programs sprite_pixels{
         SPRITE_PLAIN_FRAG,           SPRITE_PLAIN_SOFT_FRAG,   SPRITE_LIT_FRAG,
@@ -273,7 +288,7 @@ void Build() {
         {MODEL_VERT, vk::PrimitiveTopology::eTriangleList, model_pixels},
     }};
     bool built = g_update.pipeline && g_clear.pipeline && g_move.pipeline && g_spawn.pipeline &&
-                 g_sample.pipeline && g_sample_skinned.pipeline;
+                 g_sample.pipeline && g_sample_skinned.pipeline && g_collision_backup.pipeline;
     for (u32 shape = 0; shape < ShapeCount; shape++) {
         for (u32 program = 0; program < ProgramCount; program++) {
             Pipeline& pipeline = g_draws[shape * ProgramCount + program];
@@ -721,6 +736,26 @@ void PrepareDepthCopy(vk::CommandBuffer cmd) {
     cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &to_read}, dl);
 }
 
+// Clears the collision copy to the far depth and leaves it in its only layout.
+void ClearCollision(vk::CommandBuffer cmd) {
+    const auto& dl = g_device->dispatch;
+    g_collision_cleared = true;
+    constexpr vk::ImageSubresourceRange Range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+    const vk::ImageMemoryBarrier2 layout{
+        .dstStageMask = vk::PipelineStageFlagBits2::eClear,
+        .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+        .oldLayout = vk::ImageLayout::eUndefined,
+        .newLayout = vk::ImageLayout::eGeneral,
+        .image = g_collision.image,
+        .subresourceRange = Range,
+    };
+    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &layout}, dl);
+    cmd.clearColorImage(g_collision.image, vk::ImageLayout::eGeneral,
+                        vk::ClearColorValue{.float32 = std::array<float, 4>{0, 0, 0, 0}}, Range,
+                        dl);
+    FullBarrier(cmd);
+}
+
 // Copies the scene's depth for the programs to read while draws write it, as the game's copy of
 // its depth lets them, and leaves the depth an attachment.
 void CopyDepth(vk::CommandBuffer cmd, const Image& depth, vk::Extent2D extent) {
@@ -892,20 +927,29 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
     }};
     g_compute_layout = CreateLayout(device, compute_bindings);
     g_draw_layout = CreateLayout(device, draw_bindings);
-    const std::array<vk::DescriptorPoolSize, 2> sizes{{
-        {Sampled, 10},
-        {Sampler, 6},
+    const std::array<vk::DescriptorSetLayoutBinding, 3> backup_bindings{{
+        {0, Sampled, 1, Compute},
+        {1, Sampler, 1, Compute, &g_depth_sampler},
+        {2, vk::DescriptorType::eStorageImage, 1, Compute},
+    }};
+    g_collision_layout = CreateLayout(device, backup_bindings);
+    const std::array<vk::DescriptorPoolSize, 3> sizes{{
+        {Sampled, 11},
+        {Sampler, 7},
+        {vk::DescriptorType::eStorageImage, 1},
     }};
     g_pool = device.device
-                 .createDescriptorPool({.maxSets = 4,
+                 .createDescriptorPool({.maxSets = 5,
                                         .poolSizeCount = static_cast<u32>(sizes.size()),
                                         .pPoolSizes = sizes.data()},
                                        nullptr, dl)
                  .value;
-    if (!g_curve_sampler || !g_depth_sampler || !g_compute_layout || !g_draw_layout || !g_pool) {
+    if (!g_curve_sampler || !g_depth_sampler || !g_compute_layout || !g_draw_layout ||
+        !g_collision_layout || !g_pool) {
         return false;
     }
-    const std::array layouts{g_compute_layout, g_compute_layout, g_draw_layout, g_draw_layout};
+    const std::array layouts{g_compute_layout, g_compute_layout, g_draw_layout, g_draw_layout,
+                             g_collision_layout};
     const auto [result, sets] = device.device.allocateDescriptorSets(
         {.descriptorPool = g_pool,
          .descriptorSetCount = static_cast<u32>(layouts.size()),
@@ -918,6 +962,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
     g_compute_depth_set = sets[1];
     g_draw_set = sets[2];
     g_copy_set = sets[3];
+    g_collision_set = sets[4];
 
     g_curves =
         memory.CreateImage(CurveFormat, CurveExtent,
@@ -962,7 +1007,6 @@ bool Resize(vk::ImageView depth, vk::Extent2D extent) {
     WriteSampledImage(g_copy_set, 5, g_background.view, vk::ImageLayout::eShaderReadOnlyOptimal);
     WriteSampledImage(g_copy_set, 2, g_depth_copy.view,
                       vk::ImageLayout::eDepthStencilReadOnlyOptimal);
-    WriteSampledImage(g_compute_depth_set, 0, depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal);
     WriteSampledImage(g_draw_set, 2, depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal);
     const vk::ImageView fog = Fog::ScatteredView();
     if (fog) {
@@ -971,6 +1015,41 @@ bool Resize(vk::ImageView depth, vk::Extent2D extent) {
         g_fog_ready = true;
     }
     g_depth_ready_frame = g_frames + FramesInFlight;
+
+    g_memory->Destroy(g_collision);
+    g_collision =
+        g_memory->CreateImage(vk::Format::eR32Sfloat, CollisionExtent,
+                              vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage |
+                                  vk::ImageUsageFlagBits::eTransferDst,
+                              vk::ImageAspectFlagBits::eColor);
+    if (!g_collision_size.buffer) {
+        g_collision_size = g_memory->CreateBuffer(
+            4 * sizeof(float), vk::BufferUsageFlagBits::eStorageBuffer, Placement::Upload);
+    }
+    if (!g_collision.image || g_collision_size.mapped == nullptr) {
+        return false;
+    }
+    // u_f4Size: the copy's size, then the depth's pixels to each of the copy's.
+    const std::array<float, 4> collision_size{
+        static_cast<float>(CollisionExtent.width), static_cast<float>(CollisionExtent.height),
+        static_cast<float>(extent.width) / CollisionExtent.width,
+        static_cast<float>(extent.height) / CollisionExtent.height};
+    std::memcpy(g_collision_size.mapped, collision_size.data(), sizeof(collision_size));
+    g_collision_cleared = false;
+    WriteSampledImage(g_compute_depth_set, 0, g_collision.view, vk::ImageLayout::eGeneral);
+    WriteSampledImage(g_collision_set, 0, depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+    const vk::DescriptorImageInfo copy{
+        .imageView = g_collision.view,
+        .imageLayout = vk::ImageLayout::eGeneral,
+    };
+    const vk::WriteDescriptorSet write{
+        .dstSet = g_collision_set,
+        .dstBinding = 2,
+        .descriptorCount = 1,
+        .descriptorType = vk::DescriptorType::eStorageImage,
+        .pImageInfo = &copy,
+    };
+    g_device->device.updateDescriptorSets(write, {}, g_device->dispatch);
     return true;
 }
 
@@ -990,6 +1069,10 @@ void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const 
     if (!g_depth_copy_ready) {
         g_depth_copy_ready = true;
         PrepareDepthCopy(cmd);
+    }
+    if (!g_collision_cleared && g_collision.image) {
+        // Until the first copy, nothing is there to collide with.
+        ClearCollision(cmd);
     }
     if (!g_curves_ready) {
         // The first frame leaves the curve atlas in its only layout.
@@ -1094,6 +1177,56 @@ void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const 
     RecordSamples(cmd, frame, packet, address, next);
     g_next = next;
     CheckAlive(cmd, frame, g_particles[next]);
+}
+
+void RecordCollision(vk::CommandBuffer cmd, const Image& depth) {
+    if (!g_ready.load(std::memory_order_acquire) || !g_collision.image) {
+        return;
+    }
+    const auto& dl = g_device->dispatch;
+    if (!g_collision_cleared) {
+        ClearCollision(cmd);
+    }
+    constexpr auto Tests = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                           vk::PipelineStageFlagBits2::eLateFragmentTests;
+    const auto depth_barrier = [&](vk::ImageLayout from, vk::ImageLayout to,
+                                   vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
+                                   vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) {
+        const vk::ImageMemoryBarrier2 barrier{
+            .srcStageMask = src_stage,
+            .srcAccessMask = src_access,
+            .dstStageMask = dst_stage,
+            .dstAccessMask = dst_access,
+            .oldLayout = from,
+            .newLayout = to,
+            .image = depth.image,
+            .subresourceRange = DepthRange,
+        };
+        cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier}, dl);
+    };
+    depth_barrier(vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                  vk::ImageLayout::eDepthStencilReadOnlyOptimal, Tests,
+                  vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+                  vk::PipelineStageFlagBits2::eComputeShader,
+                  vk::AccessFlagBits2::eShaderSampledRead);
+    // The last frame's move program read the copy.
+    FullBarrier(cmd);
+    // The game's program runs groups of 10 by 10 pixels.
+    constexpr u32 GroupPixels = 10;
+    const u64 size = g_collision_size.address;
+    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_collision_backup.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_collision_backup.layout, 0,
+                           g_collision_set, {}, dl);
+    cmd.pushConstants(g_collision_backup.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(size),
+                      &size, dl);
+    cmd.dispatch((CollisionExtent.width + GroupPixels - 1) / GroupPixels,
+                 (CollisionExtent.height + GroupPixels - 1) / GroupPixels, 1, dl);
+    depth_barrier(vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+                  vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                  vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eNone, Tests,
+                  vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                      vk::AccessFlagBits2::eDepthStencilAttachmentWrite);
+    FullBarrier(cmd);
 }
 
 void RecordSelfTranslucent(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet,
