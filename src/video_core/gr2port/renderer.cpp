@@ -939,6 +939,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         Look::RecordSky(cmd, packet.address);
     }
     if (drawn) {
+        Enemies::RecordAlpha(cmd, header, packet.address, scene_ring.buffer, offset, extent);
         CharacterGlass::Record(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
                                extent);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Contours);

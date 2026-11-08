@@ -31,4 +31,8 @@ void RecordSelfTranslucent(vk::CommandBuffer cmd, const Scene::Header& header, u
 void RecordForward(vk::CommandBuffer cmd, const Scene::Header& header, u64 address,
                    vk::Buffer buffer, u64 offset, vk::Extent2D extent);
 
+/// Inside the forward rendering, after the sky: draws the cores' alpha pass, G_BG_ENCore.
+void RecordAlpha(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
+                 u64 offset, vk::Extent2D extent);
+
 } // namespace Gr2Port::Enemies

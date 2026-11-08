@@ -16,6 +16,7 @@
 #include "video_core/gr2port/shaders/enemy_boss_frag.h"
 #include "video_core/gr2port/shaders/enemy_boss_skinned_vert.h"
 #include "video_core/gr2port/shaders/enemy_boss_vert.h"
+#include "video_core/gr2port/shaders/enemy_core_alpha_frag.h"
 #include "video_core/gr2port/shaders/enemy_core_frag.h"
 #include "video_core/gr2port/shaders/enemy_core_skinned_vert.h"
 #include "video_core/gr2port/shaders/enemy_core_vert.h"
@@ -40,7 +41,7 @@ vk::Format g_depth_format;
 std::atomic<bool> g_ready{false};
 std::thread g_builder;
 // By list, with the game's programs, and for the lists the scene draws, with the vertex program
-// alone. The last lists draw into SelfTranslucent's targets.
+// alone. Lists 6 and 7 draw into SelfTranslucent's targets, 8 and 9 after the sky.
 std::array<Pipeline, Scene::EnemyLists> g_forward;
 std::array<Pipeline, Scene::EnemySelfTranslucentLists> g_depth;
 
@@ -50,10 +51,19 @@ void Build() {
     const std::array<std::span<const u32>, Scene::EnemyLists> vertex{
         ENEMY_VERT,      ENEMY_SKINNED_VERT,      ENEMY_BOSS_VERT, ENEMY_BOSS_SKINNED_VERT,
         ENEMY_CORE_VERT, ENEMY_CORE_SKINNED_VERT, ENEMY_CORE_VERT, ENEMY_CORE_SKINNED_VERT,
+        ENEMY_CORE_VERT, ENEMY_CORE_SKINNED_VERT,
     };
     const std::array<std::span<const u32>, Scene::EnemyLists> fragment{
-        ENEMY_FRAG,      ENEMY_FRAG,      ENEMY_BOSS_FRAG, ENEMY_BOSS_FRAG,
-        ENEMY_CORE_FRAG, ENEMY_CORE_FRAG, ENEMY_CORE_FRAG, ENEMY_CORE_FRAG,
+        ENEMY_FRAG,
+        ENEMY_FRAG,
+        ENEMY_BOSS_FRAG,
+        ENEMY_BOSS_FRAG,
+        ENEMY_CORE_FRAG,
+        ENEMY_CORE_FRAG,
+        ENEMY_CORE_FRAG,
+        ENEMY_CORE_FRAG,
+        ENEMY_CORE_ALPHA_FRAG,
+        ENEMY_CORE_ALPHA_FRAG,
     };
     const std::array forward_sets{Textures::SetLayout(), SelfTranslucent::SetLayout()};
     const std::array depth_sets{Textures::SetLayout()};
@@ -86,7 +96,7 @@ void Build() {
     // In SelfTranslucent's targets the game draws the cores with its state for the effects inside
     // the skin: no culling, and the stencil set to its reference.
     const std::array self_translucent_sets{Textures::SetLayout()};
-    for (u32 list = Scene::EnemySelfTranslucentLists; list < Scene::EnemyLists; list++) {
+    for (u32 list = Scene::EnemySelfTranslucentLists; list < Scene::EnemyAlphaLists; list++) {
         g_forward[list] =
             CreateGraphicsPipeline(*g_device, {
                                                   .vertex = vertex[list],
@@ -98,6 +108,37 @@ void Build() {
                                                   .stencil_replace = true,
                                                   .push_constant_bytes = sizeof(DrawPush),
                                                   .set_layouts = self_translucent_sets,
+                                              });
+        built = built && g_forward[list].pipeline;
+    }
+    // After the sky the game blends the cores again by their alpha, without depth writes, and
+    // keeps the target's alpha.
+    constexpr vk::PipelineColorBlendAttachmentState AlphaBlend{
+        .blendEnable = true,
+        .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
+        .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+        .colorBlendOp = vk::BlendOp::eAdd,
+        .srcAlphaBlendFactor = vk::BlendFactor::eZero,
+        .dstAlphaBlendFactor = vk::BlendFactor::eOne,
+        .alphaBlendOp = vk::BlendOp::eAdd,
+        .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+    };
+    const std::array alpha_sets{Textures::SetLayout()};
+    for (u32 list = Scene::EnemyAlphaLists; list < Scene::EnemyLists; list++) {
+        g_forward[list] =
+            CreateGraphicsPipeline(*g_device, {
+                                                  .vertex = vertex[list],
+                                                  .fragment = fragment[list],
+                                                  .color = g_scene_format,
+                                                  .depth = g_depth_format,
+                                                  .cull = vk::CullModeFlagBits::eBack,
+                                                  .depth_test = true,
+                                                  .depth_write = false,
+                                                  .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                                  .blend = &AlphaBlend,
+                                                  .push_constant_bytes = sizeof(DrawPush),
+                                                  .set_layouts = alpha_sets,
                                               });
         built = built && g_forward[list].pipeline;
     }
@@ -199,6 +240,13 @@ void RecordSelfTranslucent(vk::CommandBuffer cmd, const Scene::Header& header, u
                             g_device->dispatch);
     const std::array sets{Textures::Set()};
     Draw(cmd, header, address, buffer, offset, extent, g_forward, Scene::EnemySelfTranslucentLists,
+         Scene::EnemyAlphaLists, sets);
+}
+
+void RecordAlpha(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
+                 u64 offset, vk::Extent2D extent) {
+    const std::array sets{Textures::Set()};
+    Draw(cmd, header, address, buffer, offset, extent, g_forward, Scene::EnemyAlphaLists,
          Scene::EnemyLists, sets);
 }
 

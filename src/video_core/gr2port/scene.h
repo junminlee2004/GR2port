@@ -75,11 +75,12 @@ inline constexpr u32 MaxWaterDraws = 32;
 inline constexpr u32 MaxMetaballs = 256;
 /// opaque/G2_EN draws per packet, and their pipelines: the body's, unskinned and skinned, the boss
 /// body's, the same, the core's, the same, then the core's in SelfTranslucent (category 35), the
-/// same.
+/// same, then the core's alpha pass after the sky (G_BG_ENCore, category 34), the same.
 inline constexpr u32 MaxEnemyDraws = 128;
-inline constexpr u32 EnemyLists = 8;
+inline constexpr u32 EnemyLists = 10;
 inline constexpr u32 EnemyCoreLists = 4;
 inline constexpr u32 EnemySelfTranslucentLists = 6;
+inline constexpr u32 EnemyAlphaLists = 8;
 /// G_CH_Glass draws per packet, category 12, and the bit of a draw's state that marks a skinned
 /// one; the bits below hold its blend mode.
 inline constexpr u32 MaxCharacterGlassDraws = 32;

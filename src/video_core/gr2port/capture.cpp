@@ -590,6 +590,11 @@ constexpr u64 EnemyCoreVertexBytes = 0x90;
 constexpr u64 EnemyCorePixelBytes = 0x70;
 // SelfTranslucent draws the cores again, with the core's callback.
 constexpr u32 EnemySelfTranslucentCoreCategory = 35;
+// G_BG_ENCore (category 34) draws the cores again after the sky, with their fields and the
+// constants of u_f4Alpha +0x58, which follow the core's pixel constants in the draw.
+constexpr u32 EnemyCoreAlphaCategory = 34;
+constexpr u64 EnemyCoreAlpha = 0x58;
+constexpr u64 EnemyCoreAlphaBytes = 0x10;
 // Vertex buffer object: element count +0x1c, the element of each semantic +0x24, elements
 // {format, stride, offset, semantic} +0x34.
 constexpr u64 VertexElementCount = 0x1c;
@@ -1470,6 +1475,13 @@ public:
             std::memcpy(pixels.data() + EnemyShWord,
                         reinterpret_cast<const void*>(frame_graph + FrameGraphSh), EnemyShBytes);
             pixels[EnemyPointLightsWord] = PointLightCount(view);
+        }
+        if (core && core_lists == Scene::EnemyAlphaLists) {
+            const VAddr alpha = Load<VAddr>(item + EnemyCoreAlpha);
+            if (alpha != 0) {
+                std::memcpy(pixels.data() + EnemyCorePixelBytes / sizeof(u32),
+                            reinterpret_cast<const void*>(alpha), EnemyCoreAlphaBytes);
+            }
         }
         const VAddr vb = shape + ShapeVertexBuffer;
         const u32 element_count = Load<u16>(vb + VertexElementCount);
@@ -3287,6 +3299,11 @@ void OnFrame(VAddr frame_graph, VAddr view) {
                 keyed(EnemySelfTranslucentCoreCategory), [&](VAddr item) {
                     writer.AddEnemy(item, true, view, frame_graph,
                                     Scene::EnemySelfTranslucentLists);
+                });
+    ForEachItem(Load<s32>(view + ViewCategoryCount + EnemyCoreAlphaCategory * 4),
+                EnemyCoreVertexConstants, EnemyCorePixelConstants, keyed(EnemyCoreAlphaCategory),
+                [&](VAddr item) {
+                    writer.AddEnemy(item, true, view, frame_graph, Scene::EnemyAlphaLists);
                 });
     add_category(GlassCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + BranchCategory * 4), LeafDomainConstants,
