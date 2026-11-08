@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstddef>
+#include <span>
 
 #include "video_core/gr2port/device.h"
 
@@ -33,6 +34,19 @@ u32 Get(VAddr texture);
 
 /// As Get, for a cube map.
 u32 GetCube(VAddr texture);
+
+/// Draw thread: the handle of the 2D texture a T# of 8 words describes, when it is ready, else 0.
+/// A T# of no texture object the hooks saw gets a texture of its own, converted like the others;
+/// dynamic says whether it is linear, as the textures the CPU writes each frame are, and needs
+/// Refresh. Never waits.
+u32 GetBySharp(const u32* sharp, bool& dynamic);
+
+/// Render thread, after Update: copies the guest memory of these textures into their images again.
+void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> handles);
+
+/// Render thread: handle, one of the handles Start keeps out of use, samples view from now on.
+/// view is in ShaderReadOnlyOptimal layout whenever a shader samples it.
+void SetExternal(u32 handle, vk::ImageView view);
 
 /// Render thread: creates the texture array, its sampler and the detile pipelines.
 bool Start(const Device& device, Memory& memory);

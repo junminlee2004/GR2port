@@ -156,6 +156,9 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
     if (info.dynamic_blend_constants) {
         dynamic_states.push_back(vk::DynamicState::eBlendConstants);
     }
+    if (info.dynamic_topology) {
+        dynamic_states.push_back(vk::DynamicState::ePrimitiveTopology);
+    }
     const vk::PipelineDynamicStateCreateInfo dynamic{
         .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
         .pDynamicStates = dynamic_states.data(),

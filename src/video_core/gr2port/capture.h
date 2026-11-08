@@ -15,8 +15,12 @@ void OnFrame(VAddr frame_graph, VAddr view);
 /// At the entry of the particle manager's first step of a frame.
 void OnParticleSetup(VAddr fx);
 
-/// After the particle manager's last step of a frame: completes and publishes the frame's scene.
+/// After the particle manager's last step of a frame: completes the frame's scene.
 void OnParticleList(VAddr fx);
+
+/// At the end of each frame of the game's draw thread, after its screen drawing: adds that to the
+/// frame's scene, or to a packet of its own when the frame graph did not run, and publishes it.
+void OnFrameEnd();
 
 /// The frames the game has started.
 u64 Frames();

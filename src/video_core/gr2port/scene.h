@@ -90,6 +90,20 @@ inline constexpr u32 MaxBranches = 512;
 /// marker.
 inline constexpr u32 GridCells = 360;
 inline constexpr u32 GridEntries = 128;
+/// The screen drawing per packet: draws, runs, the game's targets, the textures it reads that
+/// change each frame, and the bytes of the game's buffers it copies.
+inline constexpr u32 MaxUiDraws = 2048;
+inline constexpr u32 MaxUiRuns = 1024;
+inline constexpr u32 MaxUiTargets = 32;
+inline constexpr u32 MaxUiDynamicTextures = 64;
+inline constexpr u64 MaxUiDataBytes = 4_MB;
+/// The inputs of the screen drawing's vertex programs, at most.
+inline constexpr u32 UiAttributes = 6;
+/// The texture handles of the targets: the last MaxUiTargets of the texture array.
+inline constexpr u32 UiTargetHandles = (1u << 15) - MaxUiTargets;
+/// The game's primitive types of the screen drawing: triangle lists and strips.
+inline constexpr u32 UiPrimitiveList = 4;
+inline constexpr u32 UiPrimitiveStrip = 6;
 
 /// Why the capture does not run a SoftBody record.
 enum class SoftBodyDrop : u32 {
@@ -221,6 +235,51 @@ struct ParticleHeader {
     u32 dropped_samples;
 };
 
+/// The game's programs of the screen drawing that are ported.
+enum class UiVertexProgram : u32 {
+    Pass,
+    PassFlat,
+    Master,
+    TransformB,
+    Transform,
+    Skinned,
+    SkinnedB,
+    Count,
+};
+enum class UiPixelProgram : u32 {
+    Color,
+    Copy,
+    Gamma,
+    Threshold,
+    Movie,
+    Sprite,
+    Frame,
+    Masked,
+    Blur,
+    BlurHistory,
+    ColorControl,
+    Count,
+};
+
+/// The numbers of a packet's screen drawing.
+struct UiHeader {
+    /// 1 when the frame graph did not run: the packet holds the screen drawing alone.
+    u32 only;
+    u32 draws;
+    u32 runs;
+    u32 targets;
+    /// Textures read that change each frame.
+    u32 dynamic;
+    /// The target of the frame's back buffer, and the target the world's picture goes to.
+    u32 picture;
+    u32 world;
+    /// Draws without room, state or data, draws of programs not ported, and reads of textures
+    /// the renderer does not have.
+    u32 dropped;
+    u32 unported;
+    u32 unknown_textures;
+};
+
 struct EffectHeader {
     u32 draws;
     u32 runs;
@@ -347,6 +406,7 @@ struct Header {
     u32 point_lights;
     ParticleHeader particles;
     EffectHeader effects;
+    UiHeader ui;
     /// The items of each category in the frame, at most 65535.
     u16 category_items[ItemCategories];
 };
@@ -1054,6 +1114,53 @@ struct Light {
 };
 static_assert(sizeof(Light) % 16 == 0);
 
+/// An input of a screen draw: its vertices' device address, stride and the V#'s last word, which
+/// holds the format and the components' order.
+struct UiAttribute {
+    u64 address;
+    u32 stride;
+    u32 format;
+};
+
+/// A screen draw, as the generated programs in shaders/pfx/ui_*.vert and ui_*.frag read it: the
+/// device addresses of its indices (0 for none) and constants, the handles of its textures, its
+/// samplers (bit 0 clamps, bit 1 picks point filtering), its inputs, and the size and first of
+/// its indices.
+struct UiDraw {
+    u64 indices;
+    u64 vs_constants;
+    u64 vs_palette;
+    u64 ps_constants;
+    u32 textures[2];
+    u32 samplers[2];
+    UiAttribute attributes[UiAttributes];
+    u32 index_bits;
+    u32 first_index;
+    u32 padding[2];
+};
+static_assert(sizeof(UiDraw) == 160);
+
+/// Consecutive screen draws of one target, pair of programs, blend, primitive type and viewport:
+/// x, y, width and height, with a negative height where the game's y scale is.
+struct UiRun {
+    u32 target;
+    u32 vertex;
+    u32 pixel;
+    /// CB_BLEND0_CONTROL.
+    u32 blend;
+    u32 topology;
+    float viewport[4];
+    u32 first;
+    u32 count;
+};
+
+/// A target of the game's: its address, which names it, and its size.
+struct UiTarget {
+    u64 base;
+    u32 width;
+    u32 height;
+};
+
 /// The indirect command of a draw or a caster, which gives its index as the first instance.
 struct Command {
     u32 index_count;
@@ -1156,7 +1263,15 @@ inline constexpr u64 MetaballCommandsOffset =
 /// The view's point lights, Light::point_lights of them.
 inline constexpr u64 PointLightsOffset =
     (MetaballCommandsOffset + 2 * MaxMetaballs * sizeof(Command) + 15) & ~u64{15};
-inline constexpr u64 PacketBytes = PointLightsOffset + MaxPointLights * sizeof(PointLight);
+inline constexpr u64 UiTargetsOffset = PointLightsOffset + MaxPointLights * sizeof(PointLight);
+inline constexpr u64 UiRunsOffset = UiTargetsOffset + MaxUiTargets * sizeof(UiTarget);
+inline constexpr u64 UiDrawsOffset = UiRunsOffset + MaxUiRuns * sizeof(UiRun);
+inline constexpr u64 UiCommandsOffset = UiDrawsOffset + MaxUiDraws * sizeof(UiDraw);
+/// The handles of the textures that change each frame.
+inline constexpr u64 UiDynamicOffset = UiCommandsOffset + MaxUiDraws * sizeof(VertexCommand);
+/// Copies of the game's vertices, indices and constants.
+inline constexpr u64 UiDataOffset = UiDynamicOffset + MaxUiDynamicTextures * sizeof(u32);
+inline constexpr u64 PacketBytes = UiDataOffset + MaxUiDataBytes;
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
@@ -1171,6 +1286,6 @@ static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows)
               ParticleSceneOffset % 16 == 0 && ParticleDrawsOffset % 16 == 0 &&
               ParticleEffectsOffset % 16 == 0 && EffectDrawsOffset % 16 == 0 &&
               WaterDrawsOffset % 16 == 0 && MetaballDrawsOffset % 16 == 0 &&
-              PointLightsOffset % 16 == 0);
+              PointLightsOffset % 16 == 0 && UiDrawsOffset % 16 == 0 && UiDataOffset % 16 == 0);
 
 } // namespace Gr2Port::Scene

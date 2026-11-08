@@ -23,6 +23,7 @@
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/scene_ring.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/ui_capture.h"
 #include "video_core/gr2port/window.h"
 
 namespace Gr2Port::Capture {
@@ -2623,14 +2624,21 @@ GridConstants ReadGridConstants(VAddr view) {
 
 } // namespace
 
-// A written scene that waits for the particle manager's steps, later in the frame graph.
+// The view's target for the world's picture; the back buffer when 0.
+constexpr u64 ViewWorldTarget = 0xfe0;
+
+// A written scene that waits for the particle manager's steps, later in the frame graph, and for
+// the screen drawing after it.
 struct PendingPacket {
     VAddr view = 0;
+    VAddr world_target = 0;
     u8* packet = nullptr;
     u64 frame = 0;
     Scene::Header header{};
 };
 PendingPacket g_pending;
+// The frame graph ran without a packet: the frame's screen drawing has none either.
+bool g_skipped_frame = false;
 
 void PublishPending() {
     if (g_pending.packet != nullptr) {
@@ -2682,6 +2690,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     }
     u8* const packet = SceneRing::Begin();
     if (packet == nullptr) {
+        g_skipped_frame = true;
         return;
     }
     Writer writer{packet, SceneRing::Address(packet), frame, start};
@@ -2849,6 +2858,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
                                              .count());
     g_pending.packet = packet;
     g_pending.view = view;
+    g_pending.world_target = Load<VAddr>(view + ViewWorldTarget);
     g_pending.frame = frame;
     g_pending.header = header;
 }
@@ -2865,8 +2875,41 @@ void OnParticleList(VAddr fx) {
             static_cast<u32>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                  std::chrono::steady_clock::now() - start)
                                  .count());
-        PublishPending();
     }
+}
+
+void OnFrameEnd() {
+    const bool skipped = g_skipped_frame;
+    g_skipped_frame = false;
+    if (skipped || (g_pending.packet == nullptr && !g_capturing.load(std::memory_order_relaxed))) {
+        UiCapture::Skip();
+        return;
+    }
+    const auto start = std::chrono::steady_clock::now();
+    if (g_pending.packet == nullptr) {
+        u8* const packet = SceneRing::Begin();
+        if (packet == nullptr) {
+            UiCapture::Skip();
+            return;
+        }
+        const u64 frame = g_frames.load(std::memory_order_relaxed) + 1;
+        g_frames.store(frame, std::memory_order_relaxed);
+        g_pending = {.packet = packet, .frame = frame};
+        g_pending.header.frame = frame;
+        g_pending.header.ui.only = 1;
+        g_pending.header.frame_gap_ns = static_cast<u32>(std::min<s64>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(start - g_last_frame_start)
+                .count(),
+            std::numeric_limits<u32>::max()));
+        g_last_frame_start = start;
+    }
+    UiCapture::Write(g_pending.packet, SceneRing::Address(g_pending.packet), g_pending.header,
+                     g_pending.world_target);
+    g_pending.header.capture_ns +=
+        static_cast<u32>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                             std::chrono::steady_clock::now() - start)
+                             .count());
+    PublishPending();
 }
 
 u64 Frames() {

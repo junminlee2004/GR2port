@@ -54,6 +54,8 @@ struct GraphicsPipelineInfo {
     bool dynamic_depth_and_cull = false;
     /// The blend constants are dynamic state.
     bool dynamic_blend_constants = false;
+    /// The primitive topology is dynamic state, of topology's class.
+    bool dynamic_topology = false;
     u32 push_constant_bytes = 0;
     /// The pipeline's descriptor sets, in set order.
     std::span<const vk::DescriptorSetLayout> set_layouts;

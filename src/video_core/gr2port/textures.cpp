@@ -18,6 +18,8 @@
 #include "video_core/amdgpu/tiling.h"
 #include "video_core/gr2port/hooks.h"
 #include "video_core/gr2port/memory.h"
+#include "video_core/gr2port/movies.h"
+#include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/textures.h"
 #include "video_core/host_shaders/tiling_macro_128_comp.h"
 #include "video_core/host_shaders/tiling_macro_16_comp.h"
@@ -92,7 +94,21 @@ struct Texture {
     std::atomic<VAddr> object{0};
     std::atomic<bool> ready{false};
     std::atomic<bool> cube{false};
+    /// The address of its data, and for a texture of a T# alone, that T#'s key and whether it is
+    /// linear.
+    std::atomic<VAddr> address{0};
+    std::atomic<u64> key{0};
+    std::atomic<bool> sharp_only{false};
+    std::atomic<bool> linear{false};
 };
+
+// The handles by the address of their data: open addressing over AddressProbes slots from a home
+// slot, written under g_mutex and read without it.
+constexpr u32 AddressSlots = Capacity * 2;
+constexpr u32 AddressProbes = 16;
+// Textures of a T# alone take handles below the targets', which Start keeps out of use.
+constexpr u32 FirstReserved = Scene::UiTargetHandles;
+static_assert(Scene::UiTargetHandles + Scene::MaxUiTargets == Capacity);
 
 // What a texture object holds when it is built: its T# and the end of its GNF data.
 struct Source {
@@ -102,6 +118,7 @@ struct Source {
 
 std::array<Texture, Capacity> g_textures;
 std::array<Source, Capacity> g_sources;
+std::array<std::atomic<u32>, AddressSlots + AddressProbes> g_by_address{};
 
 // Guards the handle lists, the sources and the reads of texture data that destroys free.
 std::mutex g_mutex;
@@ -167,6 +184,9 @@ vk::PipelineLayout g_detile_layout;
 // Indexed by the position in TileModes and in BlockBits.
 std::array<std::array<vk::Pipeline, BlockBits.size()>, TileModes.size()> g_detile{};
 std::array<Image, Capacity> g_resident;
+// The movie frame each image holds, 0 for none.
+std::array<u32, Capacity> g_refreshed{};
+constexpr u64 MaxMovieFrameAge = 120;
 std::vector<Retiring> g_retiring;
 std::vector<Staging> g_staging;
 std::unordered_map<VkFormat, bool> g_format_support;
@@ -251,6 +271,64 @@ Layout ReadLayout(const AmdGpu::Image& sharp, u32 max_extent) {
     return layout;
 }
 
+u32 AddressHome(VAddr address) {
+    return static_cast<u32>(address >> 8) * 0x9e3779b1u >> (32 - std::countr_zero(AddressSlots));
+}
+
+// Under g_mutex.
+void AddAddress(u32 handle, VAddr address) {
+    g_textures[handle].address.store(address, std::memory_order_release);
+    const u32 home = AddressHome(address);
+    for (u32 i = 0; i < AddressProbes; i++) {
+        if (g_by_address[home + i].load(std::memory_order_relaxed) == 0) {
+            g_by_address[home + i].store(handle, std::memory_order_release);
+            return;
+        }
+    }
+    g_by_address[home].store(handle, std::memory_order_release);
+}
+
+// Under g_mutex.
+void RemoveAddress(u32 handle) {
+    const VAddr address = g_textures[handle].address.exchange(0, std::memory_order_relaxed);
+    if (address == 0) {
+        return;
+    }
+    const u32 home = AddressHome(address);
+    for (u32 i = 0; i < AddressProbes; i++) {
+        if (g_by_address[home + i].load(std::memory_order_relaxed) == handle) {
+            g_by_address[home + i].store(0, std::memory_order_relaxed);
+            return;
+        }
+    }
+}
+
+u32 FindAddress(VAddr address) {
+    const u32 home = AddressHome(address);
+    for (u32 i = 0; i < AddressProbes; i++) {
+        const u32 handle = g_by_address[home + i].load(std::memory_order_acquire);
+        if (handle != 0 && g_textures[handle].address.load(std::memory_order_relaxed) == address) {
+            return handle;
+        }
+    }
+    return 0;
+}
+
+// Under g_mutex: the texture is no longer the game's, and its handle is freed once no frame can
+// sample it.
+void Drop(u32 handle) {
+    g_textures[handle].ready.store(false, std::memory_order_relaxed);
+    g_textures[handle].object.store(0, std::memory_order_release);
+    RemoveAddress(handle);
+    g_destroyed.push_back(handle);
+}
+
+// What tells two T#s of one address apart: the format, size, levels, tiling and pitch, not the
+// order of the components.
+u64 SharpKey(const u32* sharp) {
+    return (u64{sharp[2]} << 32 | sharp[1]) ^ (u64{sharp[4]} << 20) ^ (sharp[3] >> 12);
+}
+
 void LogSkip(VAddr texture, const AmdGpu::Image& sharp, const char* reason) {
     if (g_logged_skips >= LoggedTextures) {
         return;
@@ -278,10 +356,13 @@ void PS4_SYSV_ABI OnInit(u32, const Hooks::Arguments* arguments, u64) {
     const u32 earlier = Load<u32>(texture + TextureHandle);
     if (earlier != 0 && earlier < Capacity &&
         g_textures[earlier].object.load(std::memory_order_relaxed) == texture) {
-        g_textures[earlier].ready.store(false, std::memory_order_relaxed);
-        g_textures[earlier].object.store(0, std::memory_order_release);
-        g_destroyed.push_back(earlier);
+        Drop(earlier);
         g_missed_destroys++;
+    }
+    // A texture of the T# alone at this address is this one's data from now on.
+    const u32 sharp_only = FindAddress(sharp.Address());
+    if (sharp_only != 0 && g_textures[sharp_only].sharp_only.load(std::memory_order_relaxed)) {
+        Drop(sharp_only);
     }
     u32 handle = 0;
     if (!SingleImage(sharp)) {
@@ -293,7 +374,7 @@ void PS4_SYSV_ABI OnInit(u32, const Hooks::Arguments* arguments, u64) {
     } else if (!g_free.empty()) {
         handle = g_free.back();
         g_free.pop_back();
-    } else if (g_unused < Capacity) {
+    } else if (g_unused < FirstReserved) {
         handle = g_unused++;
     }
     std::memcpy(reinterpret_cast<void*>(texture + TextureHandle), &handle, sizeof(handle));
@@ -304,7 +385,9 @@ void PS4_SYSV_ABI OnInit(u32, const Hooks::Arguments* arguments, u64) {
     g_sources[handle] = {.sharp = sharp, .end = stream + Load<u32>(blob + BlobStreamSize)};
     g_textures[handle].ready.store(false, std::memory_order_relaxed);
     g_textures[handle].cube.store(IsCube(sharp), std::memory_order_relaxed);
+    g_textures[handle].sharp_only.store(false, std::memory_order_relaxed);
     g_textures[handle].object.store(texture, std::memory_order_release);
+    AddAddress(handle, sharp.Address());
     g_pending.push_back(handle);
 }
 
@@ -322,9 +405,7 @@ void PS4_SYSV_ABI OnDestroy(u32, const Hooks::Registers* registers, u64) {
     if (g_textures[handle].object.load(std::memory_order_relaxed) != texture) {
         return;
     }
-    g_textures[handle].ready.store(false, std::memory_order_relaxed);
-    g_textures[handle].object.store(0, std::memory_order_release);
-    g_destroyed.push_back(handle);
+    Drop(handle);
 }
 
 void WriteDescriptor(u32 handle, vk::ImageView view) {
@@ -689,6 +770,135 @@ u32 GetCube(VAddr texture) {
     return GetOfKind(texture, true);
 }
 
+u32 GetBySharp(const u32* words, bool& dynamic) {
+    AmdGpu::Image sharp;
+    std::memcpy(&sharp, words, sizeof(sharp));
+    const VAddr address = sharp.Address();
+    const u64 key = SharpKey(words);
+    const u32 found = FindAddress(address);
+    if (found != 0) {
+        const Texture& t = g_textures[found];
+        const bool sharp_only = t.sharp_only.load(std::memory_order_relaxed);
+        if (!sharp_only || t.key.load(std::memory_order_relaxed) == key) {
+            dynamic = sharp_only && t.linear.load(std::memory_order_relaxed);
+            return t.ready.load(std::memory_order_acquire) &&
+                           !t.cube.load(std::memory_order_relaxed)
+                       ? found
+                       : 0;
+        }
+    }
+    // The first draw that reads it, or a T# of another texture at its address.
+    std::unique_lock lock{g_mutex, std::try_to_lock};
+    if (!lock.owns_lock() || sharp.GetType() != AmdGpu::ImageType::Color2D || !SingleImage(sharp) ||
+        !Convertible(sharp)) {
+        return 0;
+    }
+    if (found != 0 && g_textures[found].sharp_only.load(std::memory_order_relaxed)) {
+        Drop(found);
+    }
+    u32 handle = 0;
+    if (!g_free.empty()) {
+        handle = g_free.back();
+        g_free.pop_back();
+    } else if (g_unused < FirstReserved) {
+        handle = g_unused++;
+    } else {
+        return 0;
+    }
+    g_sources[handle] = {.sharp = sharp, .end = ~VAddr{0}};
+    Texture& t = g_textures[handle];
+    t.ready.store(false, std::memory_order_relaxed);
+    t.cube.store(false, std::memory_order_relaxed);
+    t.sharp_only.store(true, std::memory_order_relaxed);
+    t.linear.store(!Tiled(sharp.GetTileMode()), std::memory_order_relaxed);
+    t.key.store(key, std::memory_order_relaxed);
+    t.object.store(address, std::memory_order_release);
+    AddAddress(handle, address);
+    g_pending.push_back(handle);
+    return 0;
+}
+
+void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> handles) {
+    const auto& dl = g_device->dispatch;
+    for (const u32 handle : handles) {
+        const Image& image = g_resident[handle];
+        if (handle == 0 || handle >= FirstReserved || !image.image ||
+            !g_textures[handle].ready.load(std::memory_order_acquire)) {
+            continue;
+        }
+        AmdGpu::Image sharp;
+        {
+            std::scoped_lock lock{g_mutex};
+            sharp = g_sources[handle].sharp;
+        }
+        const Layout layout = ReadLayout(sharp, LargeDeviceExtent);
+        const VideoCore::MipInfo& info = layout.mips[0];
+        if (Tiled(layout.tile_mode) || layout.levels != 1 || layout.layers != 1 ||
+            layout.image_extent != image.extent ||
+            u64{info.pitch} * image.extent.height > layout.bytes) {
+            continue;
+        }
+        // A movie surface takes the frame the game's job copied into it, once per frame; a job
+        // long past may name memory AvPlayer has freed.
+        const Movies::Frame movie = Movies::Find(sharp.Address());
+        if (movie.found &&
+            (movie.generation == g_refreshed[handle] || movie.age > MaxMovieFrameAge)) {
+            continue;
+        }
+        Staging staging{
+            .buffer = g_memory->CreateBuffer(layout.bytes, vk::BufferUsageFlagBits::eTransferSrc,
+                                             Placement::Staging),
+            .frame = frame,
+        };
+        if (staging.buffer.mapped == nullptr) {
+            g_memory->Destroy(staging.buffer);
+            continue;
+        }
+        if (movie.found) {
+            Movies::Write(movie, staging.buffer.mapped, info.pitch, image.extent.height);
+            g_refreshed[handle] = movie.generation;
+        } else {
+            std::memcpy(staging.buffer.mapped,
+                        reinterpret_cast<const void*>(sharp.Address() + layout.base), layout.bytes);
+        }
+        const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        const auto samplers =
+            vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader;
+        vk::ImageMemoryBarrier2 barrier{
+            .srcStageMask = samplers,
+            .srcAccessMask = vk::AccessFlagBits2::eNone,
+            .dstStageMask = vk::PipelineStageFlagBits2::eCopy,
+            .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            .oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+            .newLayout = vk::ImageLayout::eTransferDstOptimal,
+            .image = image.image,
+            .subresourceRange = range,
+        };
+        cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier}, dl);
+        const vk::BufferImageCopy copy{
+            .bufferOffset = info.offset - layout.base,
+            .bufferRowLength = info.pitch,
+            .bufferImageHeight = info.height,
+            .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+            .imageExtent = {image.extent.width, image.extent.height, 1},
+        };
+        cmd.copyBufferToImage(staging.buffer.buffer, image.image,
+                              vk::ImageLayout::eTransferDstOptimal, copy, dl);
+        barrier.srcStageMask = vk::PipelineStageFlagBits2::eCopy;
+        barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        barrier.dstStageMask = samplers;
+        barrier.dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
+        barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier}, dl);
+        g_staging.push_back(staging);
+    }
+}
+
+void SetExternal(u32 handle, vk::ImageView view) {
+    WriteDescriptor(handle, view);
+}
+
 bool Start(const Device& device, Memory& memory) {
     g_device = &device;
     g_memory = &memory;
@@ -804,6 +1014,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                 g_staging.push_back(scratch);
             }
             g_resident[handle] = image;
+            g_refreshed[handle] = 0;
             g_stats.textures++;
             g_stats.uploaded_bytes += layout.bytes;
             g_stats.uploaded_data_bytes += layout.size;

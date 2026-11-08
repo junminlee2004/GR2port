@@ -48,6 +48,7 @@
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/ui.h"
 #include "video_core/gr2port/vegetation.h"
 #include "video_core/gr2port/velocity.h"
 #include "video_core/gr2port/water.h"
@@ -206,6 +207,8 @@ public:
 private:
     bool Init();
     void Frame(const SceneRing::Packet& packet);
+    void RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Header& header,
+                     const SceneRing::Packet& packet, u64 offset);
     void Record(Slot& slot, u32 index, const SceneRing::Packet& packet);
     void ReadTimes(u32 slot_index);
     void LogScene(const Scene::Header& header, const SceneRing::Packet& packet);
@@ -307,7 +310,7 @@ bool Thread::Init() {
                                           vk::BufferUsageFlagBits::eTransferSrc,
                                       Placement::Upload);
     if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
-        !Textures::Start(d, *memory) || !Shadows::Start(d, *memory) ||
+        !Textures::Start(d, *memory) || !Ui::Start(d, *memory) || !Shadows::Start(d, *memory) ||
         !Deformers::Start(d, *memory) || !Velocity::Start(d, *memory) ||
         !Look::Start(d, *memory, DepthFormat) ||
         !World::Start(d, *memory, DepthFormat, Look::SceneFormat) ||
@@ -395,7 +398,8 @@ bool Thread::Recreate() {
     }
     needs_swapchain = !depth.image || !character_depth.image ||
                       !Velocity::Resize(SceneExtent, depth.view, character_depth.view) ||
-                      !Look::Resize(SceneExtent, swapchain->Format(), depth.view) ||
+                      !Look::Resize(SceneExtent, Ui::TargetFormat, depth.view) ||
+                      !Ui::Resize(swapchain->Format()) ||
                       !World::Resize(SceneExtent, depth.view, character_depth.view) ||
                       !Glass::Resize(SceneExtent) ||
                       !Water::Resize(SceneExtent, Glass::BehindView()) ||
@@ -647,32 +651,13 @@ void Thread::LogShadows(const Scene::Header& header, const SceneRing::Packet& pa
     }
 }
 
-void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
-    const vk::CommandBuffer cmd = slot.commands;
+// The world's passes, from the deformers to the antialias, which leave the picture the composite
+// reads.
+void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Header& header,
+                         const SceneRing::Packet& packet, u64 offset) {
     const auto& dl = d.dispatch;
-    const u32 slot_index = static_cast<u32>(&slot - slots.data());
-    (void)cmd.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit}, dl);
-    DeviceLost::Mark(d, cmd, DeviceLost::Pass::FrameStart);
-    if (timestamps) {
-        cmd.resetQueryPool(timestamps, Timestamps * slot_index, Timestamps, dl);
-        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, timestamps,
-                            Timestamps * slot_index, dl);
-    }
-    // One read of the header: the packet is write-combined.
-    Scene::Header header;
-    std::memcpy(&header, packet.data, sizeof(header));
-    memory->Refresh(frame);
-    Meshes::Update(cmd, frame, frame - FramesInFlight);
-    Textures::Update(cmd, frame, frame - FramesInFlight);
-    Deformers::Update(cmd, frame, frame - FramesInFlight, header.frame);
-    LogScene(header, packet);
     const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices;
     stats.refused += header.indices > MaxFrameIndices;
-    const u64 offset = u64{packet.slot} * SceneRing::SlotBytes;
-    if (timestamps) {
-        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
-                            Timestamps * slot_index + 1, dl);
-    }
     if (drawn) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Deformers);
         Deformers::Record(cmd, header, packet.address);
@@ -954,6 +939,51 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
 
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Antialias);
     Look::RecordAntialias(cmd, packet.address);
+}
+
+void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
+    const vk::CommandBuffer cmd = slot.commands;
+    const auto& dl = d.dispatch;
+    const u32 slot_index = static_cast<u32>(&slot - slots.data());
+    (void)cmd.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit}, dl);
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::FrameStart);
+    if (timestamps) {
+        cmd.resetQueryPool(timestamps, Timestamps * slot_index, Timestamps, dl);
+        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, timestamps,
+                            Timestamps * slot_index, dl);
+    }
+    // One read of the header: the packet is write-combined.
+    Scene::Header header;
+    std::memcpy(&header, packet.data, sizeof(header));
+    memory->Refresh(frame);
+    Meshes::Update(cmd, frame, frame - FramesInFlight);
+    Textures::Update(cmd, frame, frame - FramesInFlight);
+    Deformers::Update(cmd, frame, frame - FramesInFlight, header.frame);
+    LogScene(header, packet);
+    const u64 offset = u64{packet.slot} * SceneRing::SlotBytes;
+    Ui::Prepare(cmd, header, packet.data, frame);
+    if (timestamps) {
+        cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
+                            Timestamps * slot_index + 1, dl);
+    }
+    if (header.ui.only == 0) {
+        RecordWorld(cmd, slot_index, header, packet, offset);
+        // The game's Composite draws into its back buffer, or into the view's own target.
+        const vk::Extent2D world = Ui::BeginWorld(cmd, header);
+        if (world.width != 0) {
+            DeviceLost::Mark(d, cmd, DeviceLost::Pass::Composite);
+            Look::RecordComposite(cmd, packet.address, world);
+            Ui::EndWorld(cmd);
+        }
+    } else if (timestamps) {
+        // A frame of the screen drawing alone: its world passes take no time.
+        for (u32 t = 2; t < Timestamps - 1; t++) {
+            cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
+                                Timestamps * slot_index + t, dl);
+        }
+    }
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Ui);
+    Ui::Record(cmd, header, packet.data, packet.address, scene_ring.buffer, offset);
 
     const vk::Image image = swapchain->Image(index);
     Barrier(d, cmd, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
@@ -971,14 +1001,16 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                         .colorAttachmentCount = 1,
                         .pColorAttachments = &picture},
                        dl);
-    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Composite);
-    Look::RecordComposite(cmd, packet.address, swapchain->Extent());
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Present);
+    Ui::RecordPresent(cmd, header, swapchain->Extent());
     cmd.endRendering(dl);
     if (snapshot_wanted) {
         snapshot_wanted = false;
-        LogLight(packet);
-        Fog::Log(packet.data);
-        Look::LogAndReadMeter(cmd, packet.data);
+        if (header.ui.only == 0) {
+            LogLight(packet);
+            Fog::Log(packet.data);
+            Look::LogAndReadMeter(cmd, packet.data);
+        }
         RecordSnapshot(cmd, swapchain->Image(index));
         slot.snapshot = snapshot.mapped != nullptr;
     }

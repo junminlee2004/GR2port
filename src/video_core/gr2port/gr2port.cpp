@@ -15,8 +15,10 @@
 #include "video_core/gr2port/gr2port.h"
 #include "video_core/gr2port/hooks.h"
 #include "video_core/gr2port/meshes.h"
+#include "video_core/gr2port/movies.h"
 #include "video_core/gr2port/renderer.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/ui_capture.h"
 
 namespace Gr2Port {
 
@@ -28,6 +30,9 @@ constexpr u64 StubAreaOffset = 32_MB;
 
 // The frame graph FUN_0142ec00: the game's draw thread calls it once per frame.
 constexpr Hooks::Entry FrameGraph{0x142ec00, 6, Hooks::FramePrologue};
+
+// The draw thread's change to its next context, at the end of each frame.
+constexpr Hooks::Entry NextContext{0x16147e0, 6, Hooks::FramePrologue};
 
 // The particle manager's first and last steps of a frame, inside the frame graph.
 constexpr Hooks::Entry ParticleSetup{0x14a31c0, 6, Hooks::FramePrologue};
@@ -44,6 +49,14 @@ void PS4_SYSV_ABI OnParticleList(u32, const Hooks::Arguments* arguments, u64) {
 // FUN_0142ec00(T + 0xa0, view, ...): rdi is the frame graph, rsi the view the frame draws.
 void PS4_SYSV_ABI OnFrameGraph(u32, const Hooks::Registers* registers, u64) {
     Capture::OnFrame(registers->rdi, registers->rsi);
+}
+
+void PS4_SYSV_ABI OnFrameGraphEnd(u32, const Hooks::Arguments*, u64) {
+    UiCapture::OnFrameGraphEnd();
+}
+
+void PS4_SYSV_ABI OnNextContext(u32, const Hooks::Registers*, u64) {
+    Capture::OnFrameEnd();
 }
 
 } // namespace
@@ -70,6 +83,13 @@ void Install(VAddr module_base) {
         LOG_ERROR(Render_Vulkan, "GR2port: the frame graph's entry is not the expected code");
         return;
     }
+    UiCapture::Install(module_base);
+    if (Hooks::ObserveReturn(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraphEnd, 0) ==
+            Hooks::Result::Mismatch ||
+        Hooks::ObserveEntry(module_base, NextContext, c, StubAreaSize, &OnNextContext, 0) ==
+            Hooks::Result::Mismatch) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the screen drawing's hooks are not the expected code");
+    }
     if (Hooks::ObserveEntry(module_base, ParticleSetup, c, StubAreaSize, &OnParticleSetup, 0) ==
             Hooks::Result::Mismatch ||
         Hooks::ObserveReturn(module_base, ParticleList, c, StubAreaSize, &OnParticleList, 0) ==
@@ -79,6 +99,9 @@ void Install(VAddr module_base) {
     if (!Meshes::Install(module_base, c, StubAreaSize) ||
         !Textures::Install(module_base, c, StubAreaSize)) {
         return;
+    }
+    if (!Movies::Install(module_base, c, StubAreaSize)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the movie update is not the expected code");
     }
     EmulatedGpu::Install(module_base);
     Renderer::Start();

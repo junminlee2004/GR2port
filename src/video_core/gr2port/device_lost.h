@@ -39,6 +39,8 @@ enum class Pass : u32 {
     Bloom,
     Antialias,
     Composite,
+    Ui,
+    Present,
     Count,
 };
 

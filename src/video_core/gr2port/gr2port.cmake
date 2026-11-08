@@ -35,6 +35,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/meshes.h
     ${CMAKE_CURRENT_LIST_DIR}/metaballs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/metaballs.h
+    ${CMAKE_CURRENT_LIST_DIR}/movies.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/movies.h
     ${CMAKE_CURRENT_LIST_DIR}/overlays.cpp
     ${CMAKE_CURRENT_LIST_DIR}/overlays.h
     ${CMAKE_CURRENT_LIST_DIR}/particle_capture.cpp
@@ -58,6 +60,10 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.h
     ${CMAKE_CURRENT_LIST_DIR}/textures.cpp
     ${CMAKE_CURRENT_LIST_DIR}/textures.h
+    ${CMAKE_CURRENT_LIST_DIR}/ui.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ui.h
+    ${CMAKE_CURRENT_LIST_DIR}/ui_capture.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ui_capture.h
     ${CMAKE_CURRENT_LIST_DIR}/vegetation.cpp
     ${CMAKE_CURRENT_LIST_DIR}/velocity.cpp
     ${CMAKE_CURRENT_LIST_DIR}/velocity.h
@@ -208,6 +214,25 @@ gr2port_add_shader(pfx/metaball.frag metaball_frag)
 gr2port_add_shader(pfx/metaball.vert metaball_vert)
 gr2port_add_shader(pfx/metaball_skinned.vert metaball_skinned_vert)
 gr2port_add_shader(pfx/surface_blur.frag surface_blur_frag)
+gr2port_add_shader(pfx/ui_master.vert ui_master_vert)
+gr2port_add_shader(pfx/ui_pass.vert ui_pass_vert)
+gr2port_add_shader(pfx/ui_pass_flat.vert ui_pass_flat_vert)
+gr2port_add_shader(pfx/ui_skinned.vert ui_skinned_vert)
+gr2port_add_shader(pfx/ui_skinned_b.vert ui_skinned_b_vert)
+gr2port_add_shader(pfx/ui_transform.vert ui_transform_vert)
+gr2port_add_shader(pfx/ui_transform_b.vert ui_transform_b_vert)
+gr2port_add_shader(pfx/ui_blur.frag ui_blur_frag)
+gr2port_add_shader(pfx/ui_blur_history.frag ui_blur_history_frag)
+gr2port_add_shader(pfx/ui_color.frag ui_color_frag)
+gr2port_add_shader(pfx/ui_color_control.frag ui_color_control_frag)
+gr2port_add_shader(pfx/ui_copy.frag ui_copy_frag)
+gr2port_add_shader(pfx/ui_frame.frag ui_frame_frag)
+gr2port_add_shader(pfx/ui_gamma.frag ui_gamma_frag)
+gr2port_add_shader(pfx/ui_masked.frag ui_masked_frag)
+gr2port_add_shader(pfx/ui_movie.frag ui_movie_frag)
+gr2port_add_shader(pfx/ui_sprite.frag ui_sprite_frag)
+gr2port_add_shader(pfx/ui_threshold.frag ui_threshold_frag)
+gr2port_add_shader(ui_present.frag ui_present_frag)
 gr2port_add_shader(skin.comp skin_comp)
 gr2port_add_shader(effector.comp effector_comp)
 gr2port_add_shader(soft_body.comp soft_body_comp)
