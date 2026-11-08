@@ -1136,6 +1136,10 @@ public:
         };
         std::array<Entry, Scene::MaxEffectDraws> entries;
         const VAddr items = Load<VAddr>(view + ViewItems);
+        const u32 point_lights = Load<VAddr>(view + ViewPointLights) != 0
+                                     ? std::clamp<s32>(Load<s32>(view + ViewPointLightCount), 0,
+                                                       static_cast<s32>(Scene::MaxPointLights))
+                                     : 0;
         for (u32 list = 0; list < Scene::EffectLists; list++) {
             const VAddr bounds = view + ViewEffectLists + list * ViewEffectListBytes;
             const VAddr begin = Load<VAddr>(bounds);
@@ -1181,7 +1185,7 @@ public:
                 }
                 const u64 at = static_cast<u64>(entries[i].key & ItemKeyOffsetMask)
                                << ItemKeyOffsetShift;
-                AddEffect(items + at, list);
+                AddEffect(items + at, list, point_lights);
             }
         }
         std::memcpy(packet + Scene::EffectCommandsOffset, g_effect_commands.data(),
@@ -1494,8 +1498,8 @@ public:
         }
     }
 
-    // A G2_EF_Main item of one of the game's lists.
-    void AddEffect(VAddr item, u32 list) {
+    // A G2_EF_Main item of one of the game's lists, lit by point_lights of the view's lights.
+    void AddEffect(VAddr item, u32 list, u32 point_lights) {
         Scene::EffectHeader& effects = header.effects;
         const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
         const VAddr index_buffer = Load<VAddr>(item + ItemIndexBuffer);
@@ -1541,8 +1545,7 @@ public:
                     sizeof(out.vertex_constants));
         std::memcpy(out.pixel_constants, reinterpret_cast<const void*>(pixel_constants),
                     sizeof(out.pixel_constants));
-        // Point lights are not ported: the programs see none.
-        out.pixel_constants[EffectPointLightsWord] = 0;
+        out.pixel_constants[EffectPointLightsWord] = point_lights;
         out.mesh.vertices = vertices;
         out.mesh.skin = skin.stream;
         out.mesh.palette = skin.palette;

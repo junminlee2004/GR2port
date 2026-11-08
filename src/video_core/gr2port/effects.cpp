@@ -14,6 +14,7 @@
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/particles.h"
 #include "video_core/gr2port/pipeline.h"
+#include "video_core/gr2port/point_lights.h"
 #include "video_core/gr2port/self_translucent.h"
 #include "video_core/gr2port/shaders/effect_frag.h"
 #include "video_core/gr2port/shaders/effect_skinned_vert.h"
@@ -27,6 +28,8 @@ namespace {
 struct DrawPush {
     u64 draws;
     u64 lights;
+    u64 point_lights;
+    u64 light_grid;
 };
 
 struct BlendMode {
@@ -169,10 +172,11 @@ void DrawRuns(vk::CommandBuffer cmd, const Scene::EffectHeader& frame, const u8*
     std::array<Scene::EffectRun, Scene::MaxEffectDraws> runs;
     std::memcpy(runs.data(), packet + Scene::EffectRunsOffset,
                 frame.runs * sizeof(Scene::EffectRun));
-    // The point lights are not ported: the programs count none and never read the address.
     const DrawPush push{
         .draws = address + Scene::EffectDrawsOffset,
         .lights = address + Scene::ParticleLightOffset,
+        .point_lights = address + Scene::PointLightsOffset,
+        .light_grid = PointLights::GridAddress(),
     };
     cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
     for (u32 i = 0; i < frame.runs; i++) {
