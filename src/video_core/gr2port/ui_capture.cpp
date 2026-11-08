@@ -137,6 +137,8 @@ constexpr std::array<PixelProgram, static_cast<u32>(Scene::UiPixelProgram::Count
 constexpr u32 ReportFrames = 600;
 constexpr u32 LoggedUnknowns = 64;
 constexpr u32 RecentBuffers = 16;
+// TextureHandle's answer for a texture the renderer does not have yet.
+constexpr u32 NotReady = ~0u;
 
 VAddr g_base = 0;
 VAddr g_context = 0;
@@ -354,7 +356,7 @@ u32 Writer::TextureHandle(const u32* sharp) {
             LOG_INFO(Render_Vulkan, "GR2port UI: texture at {:#x} not ready: T# {:x}", base,
                      fmt::join(words, " "));
         }
-        return 0;
+        return NotReady;
     }
     const auto listed = g_dynamic.begin() + ui.dynamic;
     if (dynamic && ui.dynamic < g_dynamic.size() &&
@@ -477,6 +479,11 @@ void Writer::Draw(u32 opcode, const u32* body) {
         draw.ps_constants = constants_of(words.data() + TableConstants);
     } else if (pixel_program->constants) {
         draw.ps_constants = constants_of(ps_user + PsUserConstants);
+    }
+    // A texture the renderer does not have yet reads white, which a movie's colour conversion
+    // turns pink, so the draw is left out until the renderer has it.
+    if (draw.textures[0] == NotReady || draw.textures[1] == NotReady) {
+        return;
     }
 
     AddRun({
