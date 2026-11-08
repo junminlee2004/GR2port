@@ -21,6 +21,8 @@
 #include "video_core/gr2port/point_lights.h"
 #include "video_core/gr2port/self_translucent.h"
 #include "video_core/gr2port/shaders/collision_backup_comp.h"
+#include "video_core/gr2port/shaders/color_backup_comp.h"
+#include "video_core/gr2port/shaders/emitter_color_comp.h"
 #include "video_core/gr2port/shaders/gpu_emitter_spawn_comp.h"
 #include "video_core/gr2port/shaders/gpu_object_update_comp.h"
 #include "video_core/gr2port/shaders/gpu_particle_clear_comp.h"
@@ -156,6 +158,13 @@ struct SpawnPush {
     u64 emitter_out;
 };
 
+struct EmitterColorPush {
+    u64 emitter_in;
+    u64 description;
+    u64 color_out;
+    u64 per_scene;
+};
+
 // The programs without a skin read the members before weights.
 struct SamplePush {
     u64 vertices;
@@ -191,13 +200,24 @@ vk::DescriptorSetLayout g_draw_layout;
 vk::DescriptorPool g_pool;
 vk::DescriptorSet g_compute_curve_set;
 vk::DescriptorSet g_compute_depth_set;
+// ExtractEmitterColor reads the quarter copy of the albedo that BackupColorBuffer made the frame
+// before, then BackupColorBuffer makes this frame's.
+Pipeline g_emitter_color;
+Pipeline g_color_backup;
+// The layout of both copies' sets, which are written when their images are made. Pushed instead,
+// each copy reads another image on an RTX 2080 Ti, with validation clean.
+vk::DescriptorSetLayout g_backup_layout;
+vk::DescriptorSet g_compute_color_set;
+// The albedo and the copy.
+vk::DescriptorSet g_color_backup_set;
+Image g_color_copy;
+Buffer g_color_copy_size;
+bool g_color_copy_cleared = false;
 // BackupCollisionBuffer's copy of the world's depth, at the game's half of its 1920x1080 target,
 // which the move program's constants name; and the program that makes it.
 constexpr vk::Extent2D CollisionExtent{960, 540};
 Pipeline g_collision_backup;
-// The scene's depth and the copy, written when they are made. Pushed instead, the depth reads as
-// the characters' depth image on an RTX 2080 Ti, with validation clean.
-vk::DescriptorSetLayout g_collision_layout;
+// The scene's depth and the copy.
 vk::DescriptorSet g_collision_set;
 Image g_collision;
 Buffer g_collision_size;
@@ -264,9 +284,11 @@ void Build() {
     g_spawn = CreateComputePipeline(d, GPU_EMITTER_SPAWN_COMP, sizeof(SpawnPush), compute_sets);
     g_sample = CreateComputePipeline(d, GPU_SAMPLE_MESH_COMP, sizeof(SamplePush));
     g_sample_skinned = CreateComputePipeline(d, GPU_SAMPLE_SKINNED_MESH_COMP, sizeof(SamplePush));
-    const std::array collision_sets{g_collision_layout};
-    g_collision_backup =
-        CreateComputePipeline(d, COLLISION_BACKUP_COMP, sizeof(u64), collision_sets);
+    g_emitter_color =
+        CreateComputePipeline(d, EMITTER_COLOR_COMP, sizeof(EmitterColorPush), compute_sets);
+    const std::array backup_sets{g_backup_layout};
+    g_color_backup = CreateComputePipeline(d, COLOR_BACKUP_COMP, sizeof(u64), backup_sets);
+    g_collision_backup = CreateComputePipeline(d, COLLISION_BACKUP_COMP, sizeof(u64), backup_sets);
     using Programs = std::array<std::span<const u32>, ProgramCount>;
     const Programs sprite_pixels{
         SPRITE_PLAIN_FRAG,           SPRITE_PLAIN_SOFT_FRAG,   SPRITE_LIT_FRAG,
@@ -291,7 +313,8 @@ void Build() {
         {MODEL_VERT, vk::PrimitiveTopology::eTriangleList, model_pixels},
     }};
     bool built = g_update.pipeline && g_clear.pipeline && g_move.pipeline && g_spawn.pipeline &&
-                 g_sample.pipeline && g_sample_skinned.pipeline && g_collision_backup.pipeline;
+                 g_sample.pipeline && g_sample_skinned.pipeline && g_emitter_color.pipeline &&
+                 g_color_backup.pipeline && g_collision_backup.pipeline;
     for (u32 shape = 0; shape < ShapeCount; shape++) {
         for (u32 program = 0; program < ProgramCount; program++) {
             Pipeline& pipeline = g_draws[shape * ProgramCount + program];
@@ -410,6 +433,18 @@ void WriteSampledImage(vk::DescriptorSet set, u32 binding, vk::ImageView view,
     g_device->device.updateDescriptorSets(write, {}, g_device->dispatch);
 }
 
+void WriteStorageImage(vk::DescriptorSet set, u32 binding, vk::ImageView view) {
+    const vk::DescriptorImageInfo info{.imageView = view, .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::WriteDescriptorSet write{
+        .dstSet = set,
+        .dstBinding = binding,
+        .descriptorCount = 1,
+        .descriptorType = vk::DescriptorType::eStorageImage,
+        .pImageInfo = &info,
+    };
+    g_device->device.updateDescriptorSets(write, {}, g_device->dispatch);
+}
+
 Buffer CreateStorage(u64 bytes) {
     return g_memory->CreateBuffer(bytes,
                                   vk::BufferUsageFlagBits::eStorageBuffer |
@@ -435,7 +470,7 @@ bool CreatePool(vk::CommandBuffer cmd, const Scene::ParticleHeader& frame) {
     if (!g_colors.buffer) {
         return false;
     }
-    // Colour taken from the scene is not ported: emitters stay white.
+    // Emitters stay white until the first frame takes their colour from the albedo.
     const float one = 1.0f;
     u32 bits;
     std::memcpy(&bits, &one, sizeof(bits));
@@ -937,24 +972,24 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
         {1, Sampler, 1, Compute, &g_depth_sampler},
         {2, vk::DescriptorType::eStorageImage, 1, Compute},
     }};
-    g_collision_layout = CreateLayout(device, backup_bindings);
+    g_backup_layout = CreateLayout(device, backup_bindings);
     const std::array<vk::DescriptorPoolSize, 3> sizes{{
-        {Sampled, 11},
-        {Sampler, 7},
-        {vk::DescriptorType::eStorageImage, 1},
+        {Sampled, 13},
+        {Sampler, 9},
+        {vk::DescriptorType::eStorageImage, 2},
     }};
     g_pool = device.device
-                 .createDescriptorPool({.maxSets = 5,
+                 .createDescriptorPool({.maxSets = 7,
                                         .poolSizeCount = static_cast<u32>(sizes.size()),
                                         .pPoolSizes = sizes.data()},
                                        nullptr, dl)
                  .value;
     if (!g_curve_sampler || !g_depth_sampler || !g_compute_layout || !g_draw_layout ||
-        !g_collision_layout || !g_pool) {
+        !g_backup_layout || !g_pool) {
         return false;
     }
-    const std::array layouts{g_compute_layout, g_compute_layout, g_draw_layout, g_draw_layout,
-                             g_collision_layout};
+    const std::array layouts{g_compute_layout, g_compute_layout, g_draw_layout,  g_draw_layout,
+                             g_compute_layout, g_backup_layout,  g_backup_layout};
     const auto [result, sets] = device.device.allocateDescriptorSets(
         {.descriptorPool = g_pool,
          .descriptorSetCount = static_cast<u32>(layouts.size()),
@@ -967,7 +1002,9 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
     g_compute_depth_set = sets[1];
     g_draw_set = sets[2];
     g_copy_set = sets[3];
-    g_collision_set = sets[4];
+    g_compute_color_set = sets[4];
+    g_collision_set = sets[5];
+    g_color_backup_set = sets[6];
 
     g_curves =
         memory.CreateImage(CurveFormat, CurveExtent,
@@ -992,7 +1029,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
     return true;
 }
 
-bool Resize(vk::ImageView depth, vk::Extent2D extent) {
+bool Resize(vk::ImageView depth, vk::ImageView albedo, vk::Extent2D extent) {
     g_memory->Destroy(g_background);
     g_background = g_memory->CreateImage(g_scene_format, extent,
                                          vk::ImageUsageFlagBits::eSampled |
@@ -1020,6 +1057,32 @@ bool Resize(vk::ImageView depth, vk::Extent2D extent) {
         g_fog_ready = true;
     }
     g_depth_ready_frame = g_frames + FramesInFlight;
+    // A quarter of the render size, as the game's copy, which its extraction's constants name.
+    constexpr u32 CopyScale = 4;
+    const vk::Extent2D copy_extent{extent.width / CopyScale, extent.height / CopyScale};
+    g_memory->Destroy(g_color_copy);
+    g_color_copy =
+        g_memory->CreateImage(vk::Format::eR16G16B16A16Sfloat, copy_extent,
+                              vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage |
+                                  vk::ImageUsageFlagBits::eTransferDst,
+                              vk::ImageAspectFlagBits::eColor);
+    if (!g_color_copy_size.buffer) {
+        g_color_copy_size = g_memory->CreateBuffer(
+            4 * sizeof(float), vk::BufferUsageFlagBits::eStorageBuffer, Placement::Upload);
+    }
+    if (!g_color_copy.image || g_color_copy_size.mapped == nullptr) {
+        return false;
+    }
+    // u_f4Size: the copy's size, then the albedo's pixels to each of the copy's.
+    const std::array<float, 4> size{static_cast<float>(copy_extent.width),
+                                    static_cast<float>(copy_extent.height),
+                                    static_cast<float>(extent.width) / copy_extent.width,
+                                    static_cast<float>(extent.height) / copy_extent.height};
+    std::memcpy(g_color_copy_size.mapped, size.data(), sizeof(size));
+    g_color_copy_cleared = false;
+    WriteSampledImage(g_compute_color_set, 0, g_color_copy.view, vk::ImageLayout::eGeneral);
+    WriteSampledImage(g_color_backup_set, 0, albedo, vk::ImageLayout::eShaderReadOnlyOptimal);
+    WriteStorageImage(g_color_backup_set, 2, g_color_copy.view);
 
     g_memory->Destroy(g_collision);
     g_collision =
@@ -1043,18 +1106,7 @@ bool Resize(vk::ImageView depth, vk::Extent2D extent) {
     g_collision_cleared = false;
     WriteSampledImage(g_compute_depth_set, 0, g_collision.view, vk::ImageLayout::eGeneral);
     WriteSampledImage(g_collision_set, 0, depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal);
-    const vk::DescriptorImageInfo copy{
-        .imageView = g_collision.view,
-        .imageLayout = vk::ImageLayout::eGeneral,
-    };
-    const vk::WriteDescriptorSet write{
-        .dstSet = g_collision_set,
-        .dstBinding = 2,
-        .descriptorCount = 1,
-        .descriptorType = vk::DescriptorType::eStorageImage,
-        .pImageInfo = &copy,
-    };
-    g_device->device.updateDescriptorSets(write, {}, g_device->dispatch);
+    WriteStorageImage(g_collision_set, 2, g_collision.view);
     return true;
 }
 
@@ -1231,6 +1283,57 @@ void RecordCollision(vk::CommandBuffer cmd, const Image& depth) {
                   vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eNone, Tests,
                   vk::AccessFlagBits2::eDepthStencilAttachmentRead |
                       vk::AccessFlagBits2::eDepthStencilAttachmentWrite);
+    FullBarrier(cmd);
+}
+
+void RecordEmitterColors(vk::CommandBuffer cmd, const Scene::Header& header, u64 address) {
+    const Scene::ParticleHeader& frame = header.particles;
+    if (!g_ready.load(std::memory_order_acquire) || !g_pool_ready || frame.objects == 0 ||
+        !g_color_copy.image) {
+        return;
+    }
+    const auto& dl = g_device->dispatch;
+    if (!g_color_copy_cleared) {
+        // Until the first copy, emitters stay white.
+        g_color_copy_cleared = true;
+        const vk::ImageMemoryBarrier2 layout{
+            .dstStageMask = vk::PipelineStageFlagBits2::eClear,
+            .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            .oldLayout = vk::ImageLayout::eUndefined,
+            .newLayout = vk::ImageLayout::eGeneral,
+            .image = g_color_copy.image,
+            .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+        };
+        cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &layout}, dl);
+        cmd.clearColorImage(g_color_copy.image, vk::ImageLayout::eGeneral,
+                            vk::ClearColorValue{.float32 = std::array<float, 4>{1, 1, 1, 1}},
+                            vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+                            dl);
+    }
+    FullBarrier(cmd);
+    const EmitterColorPush colors{
+        .emitter_in = g_objects[g_next].address,
+        .description = g_description.address,
+        .color_out = g_colors.address,
+        .per_scene = address + Scene::ParticleColorSceneOffset,
+    };
+    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_emitter_color.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_emitter_color.layout, 0,
+                           g_compute_color_set, {}, dl);
+    cmd.pushConstants(g_emitter_color.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(colors),
+                      &colors, dl);
+    cmd.dispatch(Groups(frame.objects), 1, 1, dl);
+    FullBarrier(cmd);
+
+    constexpr u32 CopyGroupPixels = 8;
+    const u64 size = g_color_copy_size.address;
+    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_color_backup.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_color_backup.layout, 0,
+                           g_color_backup_set, {}, dl);
+    cmd.pushConstants(g_color_backup.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(size),
+                      &size, dl);
+    cmd.dispatch((g_color_copy.extent.width + CopyGroupPixels - 1) / CopyGroupPixels,
+                 (g_color_copy.extent.height + CopyGroupPixels - 1) / CopyGroupPixels, 1, dl);
     FullBarrier(cmd);
 }
 

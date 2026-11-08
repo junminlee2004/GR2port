@@ -1232,6 +1232,10 @@ inline constexpr u64 ParticleLightOffset = ParticleSceneOffset + ParticleSceneWo
 /// The fog's constants, for the fog programs.
 inline constexpr u64 ParticleFogOffset = ParticleLightOffset + 256;
 inline constexpr u32 ParticleFogWords = 36;
+/// ExtractEmitterColor's constants as the game's FUN_014a7350 sets them: the view's matrix and
+/// its projection, each transposed, both twice, then the size of the albedo's quarter copy.
+inline constexpr u64 ParticleColorSceneOffset = ParticleLightOffset + 512;
+inline constexpr u32 ParticleColorSceneWords = 68;
 inline constexpr u64 ParticleDrawsOffset = ParticleLightOffset + 1024;
 inline constexpr u64 ParticleCommandsOffset =
     ParticleDrawsOffset + MaxParticleDraws * sizeof(ParticleDraw);

@@ -23,8 +23,9 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
 /// texels with pitch texels a row, for the descriptions from destination on.
 void QueueCurve(u32 destination, u32 columns, VAddr texels, u32 pitch);
 
-/// With the GPU idle: points the system at the scene's depth and makes its copy of the scene.
-bool Resize(vk::ImageView depth, vk::Extent2D extent);
+/// With the GPU idle: points the system at the scene's depth and the world's albedo surface, and
+/// makes its copies of them.
+bool Resize(vk::ImageView depth, vk::ImageView albedo, vk::Extent2D extent);
 
 /// Whether the scene's depth holds a frame and is readable before this frame's world.
 bool DepthReady();
@@ -53,6 +54,11 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
 /// the view Resize was given, an attachment: copies it as the game's BackupCollisionBuffer does for
 /// the next frame's collisions, and leaves it an attachment.
 void RecordCollision(vk::CommandBuffer cmd, const Image& depth);
+
+/// Outside rendering, after the simulation and with the albedo surface Resize named readable:
+/// tints each object by the albedo under it in the last frame's quarter copy, as the game's
+/// ExtractEmitterColor does, then copies this frame's albedo for the next, as BackupColorBuffer.
+void RecordEmitterColors(vk::CommandBuffer cmd, const Scene::Header& header, u64 address);
 
 /// Outside rendering, with the scene's colour an attachment and depth readable: draws the items
 /// of the packet at offset in buffer, pass by pass in the game's order, and leaves depth readable.

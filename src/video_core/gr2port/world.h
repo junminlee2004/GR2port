@@ -33,6 +33,9 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
 /// light pass to sample; character_depth holds the characters' depth alone, for the occlusion.
 bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_depth);
 
+/// After Resize: the view of the albedo surface.
+vk::ImageView AlbedoView();
+
 /// Outside rendering, with depth ready as an attachment: clears the surfaces and depth and, when
 /// drawn, draws the world's draws and decals of the packet at address, which is at offset in
 /// buffer. Leaves the surfaces readable and depth an attachment.

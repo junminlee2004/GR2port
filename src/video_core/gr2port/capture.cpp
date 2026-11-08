@@ -2253,6 +2253,32 @@ void WriteSky(VAddr frame_graph, VAddr view, u8* packet, Writer& writer) {
     std::memcpy(packet + Scene::SkyOffset, &sky, sizeof(sky));
 }
 
+// ExtractEmitterColor's constants: FUN_014b3f50 transposes the view's matrix and its projection
+// and repeats them, and FUN_014a7350 takes a quarter of the render size, which the frame graph's
+// targets hold at +0x92d0.
+void WriteParticleColorScene(VAddr view, u8* packet) {
+    constexpr u64 ViewTargets = 0x10b0;
+    constexpr u64 TargetsSize = 0x92d0;
+    constexpr float Quarter = 0.25f;
+    const auto view_matrix = Load<std::array<float, 16>>(view + ViewMatrix);
+    const auto projection = Load<std::array<float, 16>>(view + ViewProjection);
+    std::array<float, Scene::ParticleColorSceneWords> words{};
+    for (u32 row = 0; row < 4; row++) {
+        for (u32 column = 0; column < 4; column++) {
+            words[row * 4 + column] = view_matrix[column * 4 + row];
+            words[16 + row * 4 + column] = projection[column * 4 + row];
+        }
+    }
+    std::copy_n(words.begin(), 32, words.begin() + 32);
+    const VAddr targets = Load<VAddr>(view + ViewTargets);
+    const auto size = targets != 0 ? Load<std::array<float, 2>>(targets + TargetsSize)
+                                   : std::array<float, 2>{1920.0f, 1080.0f};
+    words[64] = size[0] * Quarter;
+    words[65] = size[1] * Quarter;
+    words[66] = size[1] != 0.0f ? size[0] / size[1] : 0.0f;
+    std::memcpy(packet + Scene::ParticleColorSceneOffset, words.data(), sizeof(words));
+}
+
 // The values the game's exposure, Tonemap and Composite passes set up on the draw thread after the
 // capture, all from the view.
 void WriteGrade(VAddr view, u8* packet) {
@@ -2697,6 +2723,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     WriteShadows(view, packet, writer);
     WriteSky(frame_graph, view, packet, writer);
     WriteGrade(view, packet);
+    WriteParticleColorScene(view, packet);
     const u32 point_lights = WriteLight(frame_graph, view, packet);
     const FogHeader fog = WriteFog(frame_graph, view, packet);
     const VAddr hatching = Load<VAddr>(frame_graph + FrameGraphHatching);

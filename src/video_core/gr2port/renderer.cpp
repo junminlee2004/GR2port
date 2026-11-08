@@ -406,7 +406,7 @@ bool Thread::Recreate() {
                       !SelfTranslucent::Resize(SceneExtent);
     if (!needs_swapchain) {
         Fog::Resize(depth.view);
-        needs_swapchain = !Particles::Resize(depth.view, SceneExtent);
+        needs_swapchain = !Particles::Resize(depth.view, World::AlbedoView(), SceneExtent);
         Effects::Resize(depth.view, Glass::BehindView());
     }
     return !needs_swapchain;

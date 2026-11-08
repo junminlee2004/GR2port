@@ -452,6 +452,10 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_de
     return Metaballs::Resize(extent, g_surfaces[1].view);
 }
 
+vk::ImageView AlbedoView() {
+    return g_surfaces[0].view;
+}
+
 void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet,
                     bool drawn, u64 address, vk::Buffer buffer, u64 offset, const Image& depth) {
     const auto& dl = g_device->dispatch;
@@ -590,6 +594,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
                          dl);
     if (drawn) {
         Metaballs::RecordBlur(cmd, header, g_surfaces[1]);
+        Particles::RecordEmitterColors(cmd, header, address);
     }
 }
 
