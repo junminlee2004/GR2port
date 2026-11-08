@@ -36,6 +36,7 @@
 #include "video_core/gr2port/look.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
+#include "video_core/gr2port/motion_blur.h"
 #include "video_core/gr2port/overlays.h"
 #include "video_core/gr2port/particles.h"
 #include "video_core/gr2port/pipeline.h"
@@ -339,6 +340,7 @@ bool Thread::Init() {
         !SelfTranslucent::Start(d, *memory) ||
         !Particles::Start(d, *memory, Look::SceneFormat, DepthFormat) ||
         !PointLights::Start(d, *memory) || !ShadowTrace::Start(d, *memory) ||
+        !MotionBlur::Start(d, *memory, Look::SceneFormat) ||
         !Effects::Start(d, Look::SceneFormat, DepthFormat) ||
         !Enemies::Start(d, Look::SceneFormat, DepthFormat) ||
         !CharacterGlass::Start(d, Look::SceneFormat, DepthFormat) ||
@@ -473,8 +475,10 @@ bool Thread::Recreate() {
         !depth.image || !character_depth.image ||
         !Velocity::Resize(SceneExtent, depth.view, character_depth.view) ||
         !Look::Resize(SceneExtent, Ui::TargetFormat, depth.view) ||
-        !ShadowTrace::Resize(SceneExtent, depth.view) || !Ui::Resize(swapchain->Format()) ||
-        !ImGuiRelay::Resize(swapchain->Format()) ||
+        !ShadowTrace::Resize(SceneExtent, depth.view) ||
+        !MotionBlur::Resize(SceneExtent, Velocity::View(), depth.view, character_depth.view,
+                            Look::SceneImage(), Look::SceneView()) ||
+        !Ui::Resize(swapchain->Format()) || !ImGuiRelay::Resize(swapchain->Format()) ||
         !World::Resize(SceneExtent, depth.view, character_depth.view) ||
         !Glass::Resize(SceneExtent) || !Water::Resize(SceneExtent, Glass::BehindView()) ||
         !SelfTranslucent::Resize(SceneExtent);
@@ -1037,6 +1041,9 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                             Timestamps * slot_index + BloomTimestamp, dl);
     }
 
+    if (drawn) {
+        MotionBlur::Record(cmd, packet.address);
+    }
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Antialias);
     Look::RecordAntialias(cmd, packet.address);
 }

@@ -47,6 +47,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/overlays.h
     ${CMAKE_CURRENT_LIST_DIR}/particle_capture.cpp
     ${CMAKE_CURRENT_LIST_DIR}/particle_capture.h
+    ${CMAKE_CURRENT_LIST_DIR}/motion_blur.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/motion_blur.h
     ${CMAKE_CURRENT_LIST_DIR}/particles.cpp
     ${CMAKE_CURRENT_LIST_DIR}/particles.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.cpp
@@ -189,6 +191,11 @@ gr2port_add_shader(pfx/enemy_core.vert enemy_core_vert)
 gr2port_add_shader(pfx/enemy_core_skinned.vert enemy_core_skinned_vert)
 gr2port_add_shader(pfx/enemy_skinned.vert enemy_skinned_vert)
 gr2port_add_shader(pfx/shadow_trace.frag shadow_trace_frag)
+gr2port_add_shader(pfx/motion_blur.frag motion_blur_frag)
+gr2port_add_shader(pfx/motion_blur_compress.comp motion_blur_compress_comp)
+gr2port_add_shader(motion_blur.vert motion_blur_vert)
+gr2port_add_shader(motion_blur_tile.comp motion_blur_tile_comp)
+gr2port_add_shader(motion_blur_neighbor.comp motion_blur_neighbor_comp)
 gr2port_add_shader(pfx/water.frag water_frag)
 gr2port_add_shader(pfx/water.vert water_vert)
 gr2port_add_shader(pfx/gpu_emitter_spawn.comp gpu_emitter_spawn_comp)

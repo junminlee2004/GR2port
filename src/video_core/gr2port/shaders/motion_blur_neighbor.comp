@@ -1,0 +1,35 @@
+// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#version 460
+
+layout(local_size_x = 3, local_size_y = 3) in;
+
+layout(set = 0, binding = 0) uniform sampler2D tile_max;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D neighbor_max;
+
+// The game's 64 by 60 tiles.
+const ivec2 LastTile = ivec2(63, 59);
+
+shared uint fastest;
+
+// The game's MotionBlur neighbour maxima (CS 1c31508): a group per tile, whose 3 by 3 threads read
+// the tile and the tiles around it. The fastest, keyed as the tile maxima are, is the tile's.
+void main() {
+    const uint thread = gl_LocalInvocationID.y * 3u + gl_LocalInvocationID.x;
+    if (thread == 0u) {
+        fastest = 0u;
+    }
+    const ivec2 tile = ivec2(gl_WorkGroupID.xy);
+    const ivec2 neighbor =
+        clamp(tile + ivec2(gl_LocalInvocationID.xy) - ivec2(1), ivec2(0), LastTile);
+    const vec2 pixels = texelFetch(tile_max, neighbor, 0).xy;
+    const float length2 = pixels.x * pixels.x + pixels.y * pixels.y;
+    const uint key = (uint(clamp(10.0 * length2, 0.0, 4294967040.0)) << 16u) + thread;
+    barrier();
+    atomicMax(fastest, key);
+    barrier();
+    if (fastest == key) {
+        imageStore(neighbor_max, tile, vec4(pixels, 0.0, 0.0));
+    }
+}

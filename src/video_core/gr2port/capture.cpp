@@ -124,6 +124,16 @@ constexpr u64 TargetsSize = 0x92d0;
 constexpr float ShadowTraceRadius = 0.4f;
 constexpr float ShadowTraceDensity = 1.6f;
 constexpr float ShadowTraceJitter = 0.9f;
+// MotionBlur's velocity scale: the view's blur +0x208 over twice the frame's time +0x1080, which
+// counts as at least a 60th of a second. The targets' compressed image +0x8bd8 holds its size at
+// +0x14 and +0x16, and tiles span a 64th of its width and a 60th of its height.
+constexpr u64 ViewBlur = 0x208;
+constexpr u64 ViewFrameTime = 0x1080;
+constexpr float MinFrameTime = 1.0f / 60.0f;
+constexpr u64 TargetsCompressedWidth = 0x8bec;
+constexpr u64 TargetsCompressedHeight = 0x8bee;
+constexpr u32 MotionBlurTileColumns = 64;
+constexpr u32 MotionBlurTileRows = 60;
 constexpr u64 ViewShadowInfluence = 0x890;
 // View: V +0x20, inverse(V) +0x60, the cascade records from +0x400 every 0x110 ({valid, split,
 // depth bias constant, depth bias slope} and the cascade VP at +0x90), and the casters'
@@ -2982,6 +2992,32 @@ FogHeader WriteFog(VAddr frame_graph, VAddr view, u8* packet) {
     return header;
 }
 
+// Writes MotionBlur's constants into the packet.
+void WriteMotionBlur(VAddr frame_graph, VAddr view, u8* packet) {
+    const VAddr targets = Load<VAddr>(frame_graph + FrameGraphTargets);
+    if (targets == 0) {
+        return;
+    }
+    const float scale = 0.5f / std::max(MinFrameTime, Load<float>(view + ViewFrameTime)) *
+                        Load<float>(view + ViewBlur);
+    const auto size = Load<std::array<float, 4>>(targets + TargetsSize);
+    Scene::MotionBlur blur{
+        .velocity_scale = scale,
+        .tile_velocity_scale = scale,
+        .tile_width = Load<u16>(targets + TargetsCompressedWidth) / MotionBlurTileColumns,
+        .tile_height = Load<u16>(targets + TargetsCompressedHeight) / MotionBlurTileRows,
+        .blur_velocity_scale = scale,
+    };
+    std::memcpy(blur.target_size, size.data(), sizeof(blur.target_size));
+    std::memcpy(blur.tile_target_size, size.data(), sizeof(blur.tile_target_size));
+    std::memcpy(blur.blur_target_size, size.data(), sizeof(blur.blur_target_size));
+    std::memcpy(blur.inverse_z, reinterpret_cast<const void*>(view + ViewInverseConstants + 8),
+                sizeof(blur.inverse_z));
+    std::memcpy(blur.inverse_view, reinterpret_cast<const void*>(view + ViewInverseConstants),
+                sizeof(blur.inverse_view));
+    std::memcpy(packet + Scene::MotionBlurOffset, &blur, sizeof(blur));
+}
+
 // The first point light the capture copies is logged once, to check its fields.
 bool g_logged_point_light = false;
 
@@ -3219,6 +3255,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     WriteGrade(view, packet);
     WriteParticleColorScene(view, packet);
     const u32 point_lights = WriteLight(frame_graph, view, packet);
+    WriteMotionBlur(frame_graph, view, packet);
     const FogHeader fog = WriteFog(frame_graph, view, packet);
     const VAddr hatching = Load<VAddr>(frame_graph + FrameGraphHatching);
     writer.SetHatching(hatching != 0 ? Textures::Get(hatching) : 0);

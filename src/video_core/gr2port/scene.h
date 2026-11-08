@@ -1125,6 +1125,27 @@ struct ShadowTrace {
 };
 static_assert(sizeof(ShadowTrace) == 112);
 
+/// MotionBlur's constants, as its programs read them: the compression's (the game's target size,
+/// its inverse z and the velocity scale), the tile maxima's (the target size, the scale and a
+/// tile's size in pixels) and the reconstruction's (the inverse view constants, the target size
+/// and the scale).
+struct MotionBlur {
+    float target_size[4];
+    float inverse_z[2];
+    float velocity_scale;
+    float padding0;
+    float tile_target_size[4];
+    float tile_velocity_scale;
+    u32 tile_width;
+    u32 tile_height;
+    u32 padding1;
+    float inverse_view[4];
+    float blur_target_size[4];
+    float blur_velocity_scale;
+    float padding2[3];
+};
+static_assert(sizeof(MotionBlur) == 112);
+
 struct PointLight {
     float position[3];
     float range;
@@ -1380,7 +1401,8 @@ inline constexpr u64 CharacterGlassStatesOffset =
     CharacterGlassCommandsOffset + MaxCharacterGlassDraws * sizeof(Command);
 inline constexpr u64 ShadowTraceOffset =
     (CharacterGlassStatesOffset + MaxCharacterGlassDraws * sizeof(u32) + 15) & ~u64{15};
-inline constexpr u64 PacketBytes = ShadowTraceOffset + sizeof(ShadowTrace);
+inline constexpr u64 MotionBlurOffset = ShadowTraceOffset + sizeof(ShadowTrace);
+inline constexpr u64 PacketBytes = MotionBlurOffset + sizeof(MotionBlur);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
