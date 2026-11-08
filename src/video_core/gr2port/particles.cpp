@@ -213,6 +213,11 @@ std::atomic<bool> g_ready{false};
 std::thread g_builder;
 
 std::array<Pipeline, ShapeCount * ProgramCount> g_draws;
+// Pass 1's materials turn blending off: they replace the colour and clear the antialias history's
+// mark, with the programs before the fog's.
+constexpr u32 OpaqueMode = 1;
+constexpr u32 OpaquePrograms = FogFirstProgram;
+std::array<Pipeline, ShapeCount * OpaquePrograms> g_opaque;
 std::array<Pipeline, SelfTranslucentPrograms * 2> g_self_translucent;
 std::array<Pipeline, ShadowPrograms> g_shadow_pipelines;
 std::array<Pipeline, Scene::ParticleSurfaceVariants> g_surface_pipelines;
@@ -359,6 +364,38 @@ void Build() {
                                               .depth_compare = vk::CompareOp::eGreaterOrEqual,
                                               .premultiplied_blend = true,
                                               .clear_target_alpha = true,
+                                              .dynamic_depth_and_cull = true,
+                                              .push_constant_bytes = sizeof(DrawPush),
+                                              .set_layouts = draw_sets,
+                                          });
+            built = built && pipeline.pipeline;
+        }
+    }
+    constexpr vk::PipelineColorBlendAttachmentState Replace{
+        .blendEnable = true,
+        .srcColorBlendFactor = vk::BlendFactor::eOne,
+        .dstColorBlendFactor = vk::BlendFactor::eZero,
+        .colorBlendOp = vk::BlendOp::eAdd,
+        .srcAlphaBlendFactor = vk::BlendFactor::eZero,
+        .dstAlphaBlendFactor = vk::BlendFactor::eZero,
+        .alphaBlendOp = vk::BlendOp::eAdd,
+        .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+    };
+    for (u32 shape = 0; shape < ShapeCount; shape++) {
+        for (u32 program = 0; program < OpaquePrograms; program++) {
+            Pipeline& pipeline = g_opaque[shape * OpaquePrograms + program];
+            pipeline =
+                CreateGraphicsPipeline(d, {
+                                              .vertex = shapes[shape].vertex,
+                                              .fragment = shapes[shape].pixels[program],
+                                              .color = g_scene_format,
+                                              .depth = g_depth_format,
+                                              .topology = shapes[shape].topology,
+                                              .depth_test = true,
+                                              .depth_write = false,
+                                              .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                              .blend = &Replace,
                                               .dynamic_depth_and_cull = true,
                                               .push_constant_bytes = sizeof(DrawPush),
                                               .set_layouts = draw_sets,
@@ -1513,9 +1550,13 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
             cmd.setScissor(0, vk::Rect2D{{0, 0}, extent}, dl);
             cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
         }
-        if (run.pipeline != bound) {
-            bound = run.pipeline;
-            const Pipeline& pipeline = g_draws[run.pipeline];
+        const bool opaque = run.mode == OpaqueMode && program < OpaquePrograms;
+        const u32 key = run.pipeline + (opaque ? ShapeCount * ProgramCount : 0);
+        if (key != bound) {
+            bound = key;
+            const Pipeline& pipeline =
+                opaque ? g_opaque[run.pipeline / ProgramCount * OpaquePrograms + program]
+                       : g_draws[run.pipeline];
             const std::array sets{Textures::Set(), set};
             cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, sets, {},
