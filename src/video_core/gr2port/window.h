@@ -25,6 +25,10 @@ SDL_Window* Create();
 /// The window's size in pixels as of its last resize. Any thread.
 Size PixelSize();
 
+/// The SDL ids of the window and of the game's window, or 0 before Create. Any thread.
+u32 Id();
+u32 GameId();
+
 /// Sets the window's title without waiting.
 void SetTitle(std::string title);
 

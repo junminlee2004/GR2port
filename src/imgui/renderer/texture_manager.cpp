@@ -13,6 +13,7 @@
 #include "core/emulator_settings.h"
 #include "imgui_impl_vulkan.h"
 #include "texture_manager.h"
+#include "video_core/gr2port/imgui_relay.h"
 
 namespace ImGui {
 
@@ -175,6 +176,7 @@ void WorkerLoop() {
 
             auto texture = Vulkan::UploadTexture(pixels, vk::Format::eR8G8B8A8Unorm, width, height,
                                                  width * height * 4 * sizeof(stbi_uc));
+            Gr2Port::ImGuiRelay::KeepPixels(texture.im_texture, pixels, width, height);
             stbi_image_free((void*)pixels);
 
             core->upload_data = texture;

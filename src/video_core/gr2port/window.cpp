@@ -22,6 +22,7 @@ constexpr int InitialHeight = 720;
 
 SDL_Window* g_window = nullptr;
 std::atomic<SDL_WindowID> g_window_id{0};
+std::atomic<SDL_WindowID> g_game_id{0};
 // The pixel size, width in the high 32 bits.
 std::atomic<u64> g_size{0};
 
@@ -69,6 +70,9 @@ void SDLCALL CreateOnMainThread(void*) {
     int height = InitialHeight;
     SDL_GetWindowSizeInPixels(g_window, &width, &height);
     StoreSize(width, height);
+    if (game != nullptr) {
+        g_game_id.store(SDL_GetWindowID(game), std::memory_order_relaxed);
+    }
     g_window_id.store(SDL_GetWindowID(g_window), std::memory_order_relaxed);
     SDL_AddEventWatch(&WatchEvents, nullptr);
 }
@@ -95,6 +99,14 @@ SDL_Window* Create() {
 Size PixelSize() {
     const u64 size = g_size.load(std::memory_order_relaxed);
     return {static_cast<u32>(size >> 32), static_cast<u32>(size)};
+}
+
+u32 Id() {
+    return g_window_id.load(std::memory_order_relaxed);
+}
+
+u32 GameId() {
+    return g_game_id.load(std::memory_order_relaxed);
 }
 
 void SetTitle(std::string title) {

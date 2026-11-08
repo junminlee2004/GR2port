@@ -29,6 +29,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.h
     ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp
     ${CMAKE_CURRENT_LIST_DIR}/hooks.h
+    ${CMAKE_CURRENT_LIST_DIR}/imgui_relay.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/imgui_relay.h
     ${CMAKE_CURRENT_LIST_DIR}/look.cpp
     ${CMAKE_CURRENT_LIST_DIR}/look.h
     ${CMAKE_CURRENT_LIST_DIR}/memory.cpp
@@ -250,6 +252,8 @@ gr2port_add_shader(pfx/ui_movie.frag ui_movie_frag)
 gr2port_add_shader(pfx/ui_sprite.frag ui_sprite_frag)
 gr2port_add_shader(pfx/ui_threshold.frag ui_threshold_frag)
 gr2port_add_shader(ui_present.frag ui_present_frag)
+gr2port_add_shader(imgui_relay.vert imgui_relay_vert)
+gr2port_add_shader(imgui_relay.frag imgui_relay_frag)
 gr2port_add_shader(skin.comp skin_comp)
 gr2port_add_shader(effector.comp effector_comp)
 gr2port_add_shader(soft_body.comp soft_body_comp)

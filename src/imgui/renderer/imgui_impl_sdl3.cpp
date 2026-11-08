@@ -11,6 +11,7 @@
 #include "input/controller.h"
 #include "input/input_handler.h"
 #include "sdl_window.h"
+#include "video_core/gr2port/imgui_relay.h"
 
 // SDL
 #include <SDL3/SDL.h>
@@ -670,7 +671,7 @@ static void UpdateMouseCursor() {
         bool wasCursorVisible = SDL_CursorVisible();
         SDL_HideCursor();
 
-        if (wasCursorVisible) {
+        if (wasCursorVisible && !Gr2Port::ImGuiRelay::WarpBack()) {
             SDL_WarpMouseInWindow(SDL_GetKeyboardFocus(), bd->prev_mouse_pos.x,
                                   bd->prev_mouse_pos.y); // Force refresh the cursor state
         }

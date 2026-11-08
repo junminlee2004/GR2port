@@ -110,6 +110,9 @@ inline constexpr u64 MaxUiDataBytes = 4_MB;
 inline constexpr u32 UiAttributes = 6;
 /// The texture handles of the targets: the last MaxUiTargets of the texture array.
 inline constexpr u32 UiTargetHandles = (1u << 15) - MaxUiTargets;
+/// The texture handles of the emulator's ImGui textures: the MaxImGuiTextures below the targets'.
+inline constexpr u32 MaxImGuiTextures = 256;
+inline constexpr u32 ImGuiHandles = UiTargetHandles - MaxImGuiTextures;
 /// The game's primitive types of the screen drawing: triangle lists and strips.
 inline constexpr u32 UiPrimitiveList = 4;
 inline constexpr u32 UiPrimitiveStrip = 6;

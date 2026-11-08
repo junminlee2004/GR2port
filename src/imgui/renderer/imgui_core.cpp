@@ -21,6 +21,7 @@
 #include "imgui_internal.h"
 #include "sdl_window.h"
 #include "texture_manager.h"
+#include "video_core/gr2port/imgui_relay.h"
 #include "video_core/renderer_vulkan/vk_presenter.h"
 
 static void CheckVkResult(const vk::Result err) {
@@ -178,7 +179,8 @@ void Shutdown(const vk::Device& device) {
 }
 
 bool ProcessEvent(SDL_Event* event) {
-    Sdl::ProcessEvent(event);
+    SDL_Event relayed;
+    Sdl::ProcessEvent(Gr2Port::ImGuiRelay::ForImGui(event, relayed));
     switch (event->type) {
     // Don't block release/up events
     case SDL_EVENT_MOUSE_MOTION:
@@ -257,9 +259,11 @@ void Render(const vk::CommandBuffer& cmdbuf, const vk::ImageView& image_view,
             const vk::Extent2D& extent) {
     ImGui::Render();
     ImDrawData* draw_data = GetDrawData();
+    Gr2Port::ImGuiRelay::Capture(*draw_data);
     // Font atlas uploads are recorded ahead of the render pass that samples them.
     Vulkan::UpdateTextures(*draw_data, cmdbuf);
-    if (draw_data->CmdListsCount == 0) {
+    // GR2port: with no image view the frame only updates its textures.
+    if (draw_data->CmdListsCount == 0 || !image_view) {
         return;
     }
 

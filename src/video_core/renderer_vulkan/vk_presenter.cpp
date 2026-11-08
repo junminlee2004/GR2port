@@ -858,6 +858,9 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
         const auto reset = instance.GetDevice().resetFences(frame->present_done);
         ASSERT_MSG(reset == vk::Result::eSuccess,
                    "Unexpected error resetting present done fence: {}", vk::to_string(reset));
+        // ImGui runs on without a target, so its windows (and their prompts) reach GR2port's.
+        ImGui::Core::NewFrame(is_reusing_frame);
+        ImGui::Core::Render(present_scheduler.RawCommandBuffer(), {}, {});
         if (frame->ready_semaphore == draw_scheduler.GetWorkSemaphore()->Handle()) {
             draw_scheduler.WaitSubmitted(frame->ready_tick);
         }

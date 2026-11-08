@@ -9,6 +9,7 @@
 #include <imgui.h>
 
 #include "imgui_impl_vulkan.h"
+#include "video_core/gr2port/imgui_relay.h"
 
 #ifndef IM_MAX
 #define IM_MAX(A, B) (((A) >= (B)) ? (A) : (B))
@@ -482,6 +483,7 @@ void RemoveTexture(ImTextureID texture) {
     VkData* bd = GetBackendData();
     const InitInfo& v = bd->init_info;
     CheckVkErr(v.device.freeDescriptorSets(bd->descriptor_pool, {texture->descriptor_set}));
+    Gr2Port::ImGuiRelay::Forget(texture);
     delete texture;
 }
 

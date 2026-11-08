@@ -31,6 +31,7 @@
 #include "video_core/gr2port/enemies.h"
 #include "video_core/gr2port/fog.h"
 #include "video_core/gr2port/glass.h"
+#include "video_core/gr2port/imgui_relay.h"
 #include "video_core/gr2port/look.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
@@ -319,9 +320,9 @@ bool Thread::Init() {
                                           vk::BufferUsageFlagBits::eTransferSrc,
                                       Placement::Upload);
     if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
-        !Textures::Start(d, *memory) || !Ui::Start(d, *memory) || !Shadows::Start(d, *memory) ||
-        !Deformers::Start(d, *memory) || !Velocity::Start(d, *memory) ||
-        !Look::Start(d, *memory, DepthFormat) ||
+        !Textures::Start(d, *memory) || !Ui::Start(d, *memory) || !ImGuiRelay::Start(d, *memory) ||
+        !Shadows::Start(d, *memory) || !Deformers::Start(d, *memory) ||
+        !Velocity::Start(d, *memory) || !Look::Start(d, *memory, DepthFormat) ||
         !World::Start(d, *memory, DepthFormat, Look::SceneFormat) ||
         !Contours::Start(d, Look::SceneFormat, DepthFormat) ||
         !Fog::Start(d, *memory, Look::SceneFormat) ||
@@ -442,14 +443,14 @@ bool Thread::Recreate() {
                                          vk::ImageUsageFlagBits::eTransferSrc,
                                      vk::ImageAspectFlagBits::eDepth);
     }
-    needs_swapchain = !depth.image || !character_depth.image ||
-                      !Velocity::Resize(SceneExtent, depth.view, character_depth.view) ||
-                      !Look::Resize(SceneExtent, Ui::TargetFormat, depth.view) ||
-                      !Ui::Resize(swapchain->Format()) ||
-                      !World::Resize(SceneExtent, depth.view, character_depth.view) ||
-                      !Glass::Resize(SceneExtent) ||
-                      !Water::Resize(SceneExtent, Glass::BehindView()) ||
-                      !SelfTranslucent::Resize(SceneExtent);
+    needs_swapchain =
+        !depth.image || !character_depth.image ||
+        !Velocity::Resize(SceneExtent, depth.view, character_depth.view) ||
+        !Look::Resize(SceneExtent, Ui::TargetFormat, depth.view) ||
+        !Ui::Resize(swapchain->Format()) || !ImGuiRelay::Resize(swapchain->Format()) ||
+        !World::Resize(SceneExtent, depth.view, character_depth.view) ||
+        !Glass::Resize(SceneExtent) || !Water::Resize(SceneExtent, Glass::BehindView()) ||
+        !SelfTranslucent::Resize(SceneExtent);
     if (!needs_swapchain) {
         Fog::Resize(depth.view);
         needs_swapchain = !Particles::Resize(depth.view, World::AlbedoView(), SceneExtent);
@@ -1047,6 +1048,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
     }
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Ui);
     Ui::Record(cmd, header, packet.data, packet.address, scene_ring.buffer, offset);
+    ImGuiRelay::Update(cmd, frame, frame - FramesInFlight);
 
     const vk::Image image = swapchain->Image(index);
     Barrier(d, cmd, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
@@ -1066,6 +1068,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
                        dl);
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Present);
     Ui::RecordPresent(cmd, header, swapchain->Extent());
+    ImGuiRelay::Record(cmd, swapchain->Extent());
     cmd.endRendering(dl);
     if (snapshot_wanted) {
         snapshot_wanted = false;
