@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "video_core/gr2port/device.h"
 #include "video_core/gr2port/scene.h"
 
@@ -19,6 +21,23 @@ class Memory;
 namespace Gr2Port::Look {
 
 inline constexpr vk::Format SceneFormat = vk::Format::eR16G16B16A16Sfloat;
+
+/// The game's glow blend, colour (constant, one) and alpha (one, zero): the glow draws add their
+/// colour, the blend constant already in it, and write their alpha, which picks the blur's kernel.
+inline constexpr vk::PipelineColorBlendAttachmentState GlowBlend{
+    .blendEnable = true,
+    .srcColorBlendFactor = vk::BlendFactor::eOne,
+    .dstColorBlendFactor = vk::BlendFactor::eOne,
+    .colorBlendOp = vk::BlendOp::eAdd,
+    .srcAlphaBlendFactor = vk::BlendFactor::eOne,
+    .dstAlphaBlendFactor = vk::BlendFactor::eZero,
+    .alphaBlendOp = vk::BlendOp::eAdd,
+    .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                      vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+};
+
+/// Inside the glow's rendering, at the bloom's extent: draws the characters' glow.
+using GlowDraws = std::function<void(vk::CommandBuffer cmd, vk::Extent2D extent)>;
 
 /// After Textures::Start: creates the pipelines and the meter. depth_format is the scene's.
 bool Start(const Device& device, Memory& memory, vk::Format depth_format);
@@ -39,9 +58,9 @@ void RecordMeter(vk::CommandBuffer cmd, u64 packet_address);
 
 /// Outside rendering, with the scene's colour and depth readable: draws the game's bloom when the
 /// header's bloom flags say it runs, with the glow draws of the packet at packet_address, which is
-/// at offset in buffer.
+/// at offset in buffer, and the characters' glow by character_glow.
 void RecordBloom(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_address,
-                 vk::Buffer buffer, u64 offset);
+                 vk::Buffer buffer, u64 offset, const GlowDraws& character_glow);
 
 /// Outside rendering, with the scene's colour readable, after the bloom: tonemaps the scene and
 /// runs the game's antialias program on the result.

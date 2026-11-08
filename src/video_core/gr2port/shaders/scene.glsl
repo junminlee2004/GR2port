@@ -201,6 +201,7 @@ struct Character {
     uint normal_map;
     uint reflection;
     uint detail;
+    float glow;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Characters {

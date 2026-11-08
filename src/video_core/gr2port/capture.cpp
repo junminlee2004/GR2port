@@ -403,6 +403,18 @@ constexpr std::array<Category, 6> WorldCategories{{
 }};
 // G2_CH_Main: colour texture t1, decal texture t6.
 constexpr Category CharacterCategory{8, 0x68, 0x30, 0x70, 0xa0, None, 0x50, false, true};
+// The characters' glow, which the bloom adds: a G2_CH_Main item whose glow at +0x78, sRGB, is the
+// blend constant for red, green and blue.
+constexpr Category CharacterGlowCategory{.index = 9,
+                                         .constants = 0x68,
+                                         .texture = 0x30,
+                                         .material = 0x70,
+                                         .color_scale = 0xa0,
+                                         .texcoord_transform = None,
+                                         .decal = 0x50,
+                                         .character = true,
+                                         .glow = true};
+constexpr u64 CharacterGlow = 0x78;
 // G2_CH_Interior: its vertex constants are World and WorldViewProj; its pixel constants take 0xb0
 // bytes; the texture objects of its two cube maps are at +0x30 and +0x38.
 constexpr Category InteriorCategory{13, 0x40, None, 0x48, None, None, None, false, false, true};
@@ -973,7 +985,7 @@ public:
                 header.dropped++;
                 return;
             }
-            material_index = AddCharacter(item, constants, material);
+            material_index = AddCharacter(item, constants, material, category.glow);
         }
         if (category.interior) {
             if (material == 0 || header.characters == Scene::MaxCharacters) {
@@ -1030,8 +1042,9 @@ public:
             : category.lambert  ? Scene::DrawList::Lambert
             : category.vision
                 ? (category.glow ? Scene::DrawList::VisionGlow : Scene::DrawList::Vision)
-            : category.character ? Scene::DrawList::Character
-            : alpha_tested       ? (culled ? Scene::DrawList::AlphaCulled : Scene::DrawList::Alpha)
+            : category.character
+                ? (category.glow ? Scene::DrawList::CharacterGlow : Scene::DrawList::Character)
+            : alpha_tested ? (culled ? Scene::DrawList::AlphaCulled : Scene::DrawList::Alpha)
                            : (culled ? Scene::DrawList::OpaqueCulled : Scene::DrawList::Opaque);
         const u32 i = header.draws++;
         // The fields are written in order: the packet is write-combined.
@@ -2196,8 +2209,9 @@ private:
         return ++header.materials;
     }
 
-    // Writes a G2_CH_Main item's constants to the packet and returns their index plus 1.
-    u32 AddCharacter(VAddr item, VAddr vertex_constants, VAddr pixel_constants) {
+    // Writes a G2_CH_Main item's constants to the packet and returns their index plus 1; a glow
+    // item's blend constant too.
+    u32 AddCharacter(VAddr item, VAddr vertex_constants, VAddr pixel_constants, bool glow) {
         const auto handle = [item](u64 field) {
             const VAddr object = Load<VAddr>(item + field);
             return object != 0 ? Textures::Get(object) : 0;
@@ -2214,6 +2228,7 @@ private:
         out.normal_map = handle(CharacterNormalMap);
         out.reflection = handle(CharacterReflection);
         out.detail = handle(CharacterDetail);
+        out.glow = glow ? LinearGlow(Load<float>(item + CharacterGlow)) : 1.0f;
         return ++header.characters;
     }
 
@@ -3218,6 +3233,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     add_category(VisionCategory);
     add_category(VisionGlowCategory);
     add_category(CharacterCategory);
+    add_category(CharacterGlowCategory);
     add_category(SelfTranslucentCategory);
     add_category(InteriorCategory);
     ForEachItem(Load<s32>(view + ViewCategoryCount + ContourCategory * 4), ContourVertexConstants,

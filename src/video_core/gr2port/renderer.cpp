@@ -111,6 +111,7 @@ struct CharacterPush {
     std::array<float, 2> target_inverse;
     u64 point_lights;
     u64 light_grid;
+    u32 glow_pass;
 };
 
 struct Slot {
@@ -224,7 +225,8 @@ private:
     void LogLight(const SceneRing::Packet& packet);
     void DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const Pipeline& pipeline,
                         std::span<const vk::DescriptorSet> sets, const Scene::Header& header,
-                        const SceneRing::Packet& packet, u64 offset);
+                        const SceneRing::Packet& packet, u64 offset,
+                        vk::Extent2D extent = SceneExtent, bool glow_pass = false);
     void RecordSnapshot(vk::CommandBuffer cmd, vk::Image image);
     void SaveSnapshot();
     void Report();
@@ -246,6 +248,7 @@ private:
     Pipeline lambert_pipeline;
     Pipeline lambert_depth_pipeline;
     Pipeline vision_pipeline;
+    Pipeline character_glow_pipeline;
     u32 next = 0;
     // The number of the next frame to submit; frames up to frame - FramesInFlight are done once
     // the frame's slot is free.
@@ -413,10 +416,25 @@ bool Thread::Init() {
                                                     .push_constant_bytes = sizeof(CharacterPush),
                                                     .set_layouts = set_layouts,
                                                 });
+    // The characters' glow, category 9, added into the bloom where the scene's depth shows it.
+    character_glow_pipeline =
+        CreateGraphicsPipeline(d, {
+                                      .vertex = CHARACTER_VERT,
+                                      .fragment = CHARACTER_FRAG,
+                                      .color = Look::SceneFormat,
+                                      .depth = DepthFormat,
+                                      .cull = vk::CullModeFlagBits::eBack,
+                                      .depth_test = true,
+                                      .depth_write = false,
+                                      .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                                      .blend = &Look::GlowBlend,
+                                      .push_constant_bytes = sizeof(CharacterPush),
+                                      .set_layouts = set_layouts,
+                                  });
     if (!character_pipeline.pipeline || !character_depth_pipeline.pipeline ||
         !interior_pipeline.pipeline || !interior_depth_pipeline.pipeline ||
         !lambert_pipeline.pipeline || !lambert_depth_pipeline.pipeline ||
-        !vision_pipeline.pipeline) {
+        !vision_pipeline.pipeline || !character_glow_pipeline.pipeline) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -463,17 +481,17 @@ bool Thread::Recreate() {
     return !needs_swapchain;
 }
 
-// Inside a rendering at the scene's size: draws the packet's draws of a character list with
-// pipeline.
+// Inside a rendering at extent: draws the packet's draws of a character list with pipeline, as
+// the bloom's glow draws when glow_pass is set.
 void Thread::DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const Pipeline& pipeline,
                             std::span<const vk::DescriptorSet> sets, const Scene::Header& header,
-                            const SceneRing::Packet& packet, u64 offset) {
+                            const SceneRing::Packet& packet, u64 offset, vk::Extent2D extent,
+                            bool glow_pass) {
     const auto& dl = d.dispatch;
     const u32 count = header.draw_commands[static_cast<u32>(list)];
     if (count == 0) {
         return;
     }
-    const vk::Extent2D extent = SceneExtent;
     // A negative height keeps the game's y-up clip space.
     const vk::Viewport viewport{
         .x = 0.0f,
@@ -493,6 +511,7 @@ void Thread::DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const P
                            -1.0f / static_cast<float>(extent.height)},
         .point_lights = packet.address + Scene::PointLightsOffset,
         .light_grid = PointLights::GridAddress(),
+        .glow_pass = glow_pass ? 1u : 0u,
     };
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, sets, {}, dl);
@@ -992,7 +1011,13 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                             Timestamps * slot_index + MeterTimestamp, dl);
     }
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Bloom);
-    Look::RecordBloom(cmd, header, packet.address, scene_ring.buffer, offset);
+    const std::array glow_sets{Textures::Set(), Shadows::Set(), SelfTranslucent::Set()};
+    Look::RecordBloom(cmd, header, packet.address, scene_ring.buffer, offset,
+                      [&](vk::CommandBuffer glow_cmd, vk::Extent2D extent) {
+                          DrawCharacters(glow_cmd, Scene::DrawList::CharacterGlow,
+                                         character_glow_pipeline, glow_sets, header, packet, offset,
+                                         extent, true);
+                      });
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + BloomTimestamp, dl);

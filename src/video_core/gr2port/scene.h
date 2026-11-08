@@ -158,6 +158,9 @@ enum class DrawList : u32 {
     /// The televisions' glow, category 25: Vision draws for the bloom's image, whose word 9 holds
     /// the game's blend constant.
     VisionGlow,
+    /// The characters' glow, category 9: Character draws for the bloom's image, whose Character
+    /// holds the game's blend constant in glow.
+    CharacterGlow,
     /// G2_BG_Glass draws. material names a GlassMaterial, texture is the normal map.
     Glass,
     /// SelfTranslucent draws of the characters with stencil value 1, 2 and 3. world_view holds
@@ -657,7 +660,9 @@ struct Character {
     u32 normal_map;
     u32 reflection;
     u32 detail;
-    u32 padding[3];
+    /// A glow draw's blend constant, linear, the same for red, green and blue; 1 for the others.
+    float glow;
+    u32 padding[2];
 };
 static_assert(sizeof(Character) == 656);
 

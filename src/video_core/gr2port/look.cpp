@@ -77,20 +77,6 @@ struct GlowPush {
     std::array<float, 2> target_inverse;
 };
 
-// The game's glow blend, colour (constant, one) and alpha (one, zero): the draws add their colour,
-// the blend constant already in it, and write their alpha of 1, which the blur reads as its widest
-// kernel.
-constexpr vk::PipelineColorBlendAttachmentState GlowBlend{
-    .blendEnable = true,
-    .srcColorBlendFactor = vk::BlendFactor::eOne,
-    .dstColorBlendFactor = vk::BlendFactor::eOne,
-    .colorBlendOp = vk::BlendOp::eAdd,
-    .srcAlphaBlendFactor = vk::BlendFactor::eOne,
-    .dstAlphaBlendFactor = vk::BlendFactor::eZero,
-    .alphaBlendOp = vk::BlendOp::eAdd,
-    .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                      vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
-};
 // The depth copy shares the glow's rendering and writes no colour.
 constexpr vk::PipelineColorBlendAttachmentState NoColor{};
 
@@ -703,9 +689,11 @@ namespace {
 // The game's bloom passes 0 and 1b: the scene's depth at the bloom's size, then the televisions'
 // glow added into target where that depth shows them, which leaves target for the blur to read.
 void RecordGlow(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_address,
-                vk::Buffer buffer, u64 offset, const Image& target) {
+                vk::Buffer buffer, u64 offset, const Image& target,
+                const GlowDraws& character_glow) {
     const u32 count = header.draw_commands[static_cast<u32>(Scene::DrawList::VisionGlow)];
-    if (count == 0 || !g_glow_depth.image) {
+    const u32 characters = header.draw_commands[static_cast<u32>(Scene::DrawList::CharacterGlow)];
+    if ((count == 0 && characters == 0) || !g_glow_depth.image) {
         return;
     }
     const auto& dl = g_device->dispatch;
@@ -756,26 +744,32 @@ void RecordGlow(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_a
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_glow_depth_copy.layout, 0,
                            g_extract_set, {}, dl);
     cmd.draw(3, 1, 0, 0, dl);
-    // A negative height keeps the game's y-up clip space.
-    cmd.setViewport(
-        0, vk::Viewport{.y = height, .width = width, .height = -height, .maxDepth = 1.0f}, dl);
-    const GlowPush push{
-        .draws = packet_address + Scene::DrawsOffset,
-        .characters = packet_address + Scene::CharactersOffset,
-        .decals = packet_address + Scene::DecalsOffset,
-        .light = packet_address + Scene::LightOffset,
-        .target_inverse = {1.0f / width, -1.0f / height},
-    };
-    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_glow.pipeline, dl);
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_glow.layout, 0, Textures::Set(), {},
-                           dl);
-    cmd.pushConstants(g_glow.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push), &push,
-                      dl);
-    cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
-    const u32 first = Scene::FirstCommand(header, Scene::DrawList::VisionGlow);
-    cmd.drawIndexedIndirect(buffer,
-                            offset + Scene::CommandsOffset + u64{first} * sizeof(Scene::Command),
-                            count, sizeof(Scene::Command), dl);
+    if (count != 0) {
+        // A negative height keeps the game's y-up clip space.
+        cmd.setViewport(
+            0, vk::Viewport{.y = height, .width = width, .height = -height, .maxDepth = 1.0f}, dl);
+        const GlowPush push{
+            .draws = packet_address + Scene::DrawsOffset,
+            .characters = packet_address + Scene::CharactersOffset,
+            .decals = packet_address + Scene::DecalsOffset,
+            .light = packet_address + Scene::LightOffset,
+            .target_inverse = {1.0f / width, -1.0f / height},
+        };
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_glow.pipeline, dl);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_glow.layout, 0, Textures::Set(),
+                               {}, dl);
+        cmd.pushConstants(g_glow.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
+                          &push, dl);
+        cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
+        const u32 first = Scene::FirstCommand(header, Scene::DrawList::VisionGlow);
+        cmd.drawIndexedIndirect(
+            buffer, offset + Scene::CommandsOffset + u64{first} * sizeof(Scene::Command), count,
+            sizeof(Scene::Command), dl);
+    }
+    // The game draws category 9 after 25.
+    if (characters != 0) {
+        character_glow(cmd, target.extent);
+    }
     cmd.endRendering(dl);
     ImageBarrier(
         cmd, target.image, vk::ImageLayout::eColorAttachmentOptimal,
@@ -787,7 +781,7 @@ void RecordGlow(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_a
 } // namespace
 
 void RecordBloom(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_address,
-                 vk::Buffer buffer, u64 offset) {
+                 vk::Buffer buffer, u64 offset, const GlowDraws& character_glow) {
     const auto& dl = g_device->dispatch;
     const u32 bloom = header.bloom;
     if (!g_bloom_cleared) {
@@ -821,7 +815,7 @@ void RecordBloom(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_
                         1.0f / static_cast<float>(g_extent.height)},
     };
     BloomPass(cmd, g_bloom[current], g_extract, g_extract_set, &extract, sizeof(extract));
-    RecordGlow(cmd, header, packet_address, buffer, offset, g_bloom[current]);
+    RecordGlow(cmd, header, packet_address, buffer, offset, g_bloom[current], character_glow);
     const vk::Extent2D size = g_bloom[current].extent;
     const BlurPush across{
         .grade = grade,

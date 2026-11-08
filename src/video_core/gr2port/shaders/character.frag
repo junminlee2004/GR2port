@@ -24,6 +24,8 @@ layout(push_constant) uniform Constants {
     vec2 target_inverse;
     PointLights lights;
     LightGrid grid;
+    // 1 for the bloom's glow draws, category 9.
+    uint glow_pass;
 };
 
 layout(location = 0) in vec3 view_position;
@@ -290,8 +292,10 @@ void main() {
         result = mix(shadow_color * table.characters[index].vertex_shadow, result, vertex_color.y);
     }
 
-    // The colour or alpha of a glow.
+    // The colour or alpha of a glow. The alpha is the colour map's, which picks the bloom blur's
+    // kernel in a glow draw.
     const uint bloom_mode = table.characters[index].bloom_fresnel_mode;
+    float glow_alpha = mask;
     if (bloom_mode != 0u) {
         const float glow = SoftStep(
             table.characters[index].bloom_fresnel_border -
@@ -301,13 +305,17 @@ void main() {
             1.0 - n.z * n.z);
         if (bloom_mode == 1u) {
             result *= glow;
+        } else {
+            glow_alpha *= glow;
         }
     }
 
     // What SelfTranslucent drew shows through the skin, by how much skin lies over it.
     const float translucency = table.characters[index].self_translucency;
     if (translucency > 0.0) {
-        const ivec2 pixel = ivec2(gl_FragCoord.xy);
+        // Its images are the scene's size, and a glow draw's target is smaller.
+        const vec2 size = vec2(textureSize(sampler2D(self_translucent_color, clamp_sampler), 0));
+        const ivec2 pixel = ivec2(gl_FragCoord.xy * abs(target_inverse) * size);
         const vec3 inside =
             table.characters[index].self_translucency_scale *
             texelFetch(sampler2D(self_translucent_color, clamp_sampler), pixel, 0).rgb;
@@ -328,4 +336,8 @@ void main() {
                                                                       : mix(result, inside, share);
     }
     color = vec4(result, 0.0);
+    // A glow draw takes the game's blend constant.
+    if (glow_pass != 0u) {
+        color = vec4(result * table.characters[index].glow, glow_alpha);
+    }
 }
