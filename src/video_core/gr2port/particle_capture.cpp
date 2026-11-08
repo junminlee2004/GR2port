@@ -1093,8 +1093,27 @@ void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
             }
             continue;
         }
+        if (mode == Scene::ParticleSurfaceMode && kind != KindMesh) {
+            if (kind != KindSprite && kind != KindRibbon && kind != KindModel) {
+                out.unported++;
+                continue;
+            }
+            // Sprites, ribbons and models with their materials' G-buffer programs.
+            const u32 shape = kind - KindSprite;
+            const u32 soft = Load<u8>(material + MaterialSoft) != 0 ? 1 : 0;
+            const RunState state{Scene::ParticleSurfaceVariants + shape * 2 + soft, mode, tested,
+                                 write, cull};
+            if (kind == KindModel) {
+                writer.AddModel(state, camera, model_objects(), material, system, first, instances,
+                                true);
+            } else {
+                writer.AddSprite(state, camera, material, system, first, instances,
+                                 kind == KindSprite ? SpriteVertices : RibbonVertices);
+            }
+            continue;
+        }
         if (mode == Scene::ParticleSurfaceMode) {
-            if (kind != KindMesh || Load<s32>(material + MaterialMeshType) != MeshTypeSurface) {
+            if (Load<s32>(material + MaterialMeshType) != MeshTypeSurface) {
                 out.unported++;
                 continue;
             }

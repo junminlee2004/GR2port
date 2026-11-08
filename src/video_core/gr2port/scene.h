@@ -210,8 +210,10 @@ enum class ParticleShadowProgram : u32 {
 /// the second plus the cascade.
 inline constexpr u32 ParticleSurfaceMode = 6;
 inline constexpr u32 ParticleShadowMode = 32;
-/// The vertex and pixel programs of mesh particles in the world's surfaces, by what the mesh has.
+/// The vertex and pixel programs of mesh particles in the world's surfaces, by what the mesh has,
+/// then those of sprites, ribbons and models there, each plain and soft.
 inline constexpr u32 ParticleSurfaceVariants = 4;
+inline constexpr u32 ParticleSurfacePipelines = ParticleSurfaceVariants + 6;
 
 /// The pixel programs of the particle system that are ported. Sprites and ribbons share a set, and
 /// models have their own, in this order.

@@ -38,6 +38,8 @@
 #include "video_core/gr2port/shaders/model_fog_lit_frag.h"
 #include "video_core/gr2port/shaders/model_fog_lit_soft_frag.h"
 #include "video_core/gr2port/shaders/model_fog_soft_frag.h"
+#include "video_core/gr2port/shaders/model_gbuffer_frag.h"
+#include "video_core/gr2port/shaders/model_gbuffer_soft_frag.h"
 #include "video_core/gr2port/shaders/model_lit_frag.h"
 #include "video_core/gr2port/shaders/model_lit_soft_frag.h"
 #include "video_core/gr2port/shaders/model_plain_frag.h"
@@ -60,6 +62,8 @@
 #include "video_core/gr2port/shaders/sprite_fog_lit_frag.h"
 #include "video_core/gr2port/shaders/sprite_fog_lit_soft_frag.h"
 #include "video_core/gr2port/shaders/sprite_fog_soft_frag.h"
+#include "video_core/gr2port/shaders/sprite_gbuffer_frag.h"
+#include "video_core/gr2port/shaders/sprite_gbuffer_soft_frag.h"
 #include "video_core/gr2port/shaders/sprite_lit_frag.h"
 #include "video_core/gr2port/shaders/sprite_lit_soft_frag.h"
 #include "video_core/gr2port/shaders/sprite_plain_frag.h"
@@ -220,7 +224,7 @@ constexpr u32 OpaquePrograms = FogFirstProgram;
 std::array<Pipeline, ShapeCount * OpaquePrograms> g_opaque;
 std::array<Pipeline, SelfTranslucentPrograms * 2> g_self_translucent;
 std::array<Pipeline, ShadowPrograms> g_shadow_pipelines;
-std::array<Pipeline, Scene::ParticleSurfaceVariants> g_surface_pipelines;
+std::array<Pipeline, Scene::ParticleSurfacePipelines> g_surface_pipelines;
 Pipeline g_update;
 Pipeline g_clear;
 Pipeline g_move;
@@ -474,6 +478,31 @@ void Build() {
                                           .set_layouts = draw_sets,
                                       });
         built = built && g_surface_pipelines[i].pipeline;
+    }
+    const std::array<std::span<const u32>, 2> sprite_gbuffer{SPRITE_GBUFFER_FRAG,
+                                                             SPRITE_GBUFFER_SOFT_FRAG};
+    const std::array<std::span<const u32>, 2> model_gbuffer{MODEL_GBUFFER_FRAG,
+                                                            MODEL_GBUFFER_SOFT_FRAG};
+    for (u32 shape = 0; shape < ShapeCount; shape++) {
+        const bool model = shape == static_cast<u32>(Scene::ParticleShape::Model);
+        for (u32 soft = 0; soft < 2; soft++) {
+            Pipeline& pipeline =
+                g_surface_pipelines[Scene::ParticleSurfaceVariants + shape * 2 + soft];
+            pipeline = CreateGraphicsPipeline(
+                d, {
+                       .vertex = shapes[shape].vertex,
+                       .fragment = model ? model_gbuffer[soft] : sprite_gbuffer[soft],
+                       .colors = World::SurfaceFormats,
+                       .depth = g_depth_format,
+                       .topology = shapes[shape].topology,
+                       .depth_test = true,
+                       .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                       .dynamic_depth_and_cull = true,
+                       .push_constant_bytes = sizeof(DrawPush),
+                       .set_layouts = draw_sets,
+                   });
+            built = built && pipeline.pipeline;
+        }
     }
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - start)
