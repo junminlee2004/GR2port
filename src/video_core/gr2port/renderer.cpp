@@ -1161,11 +1161,13 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
             vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eNone,
             vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             vk::AccessFlagBits2::eColorAttachmentWrite);
+    // Black around a back buffer of another shape than the window.
     const vk::RenderingAttachmentInfo picture{
         .imageView = swapchain->View(index),
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-        .loadOp = vk::AttachmentLoadOp::eDontCare,
+        .loadOp = vk::AttachmentLoadOp::eClear,
         .storeOp = vk::AttachmentStoreOp::eStore,
+        .clearValue = {.color = vk::ClearColorValue{.float32 = std::array<float, 4>{0, 0, 0, 1}}},
     };
     cmd.beginRendering({.renderArea = {{0, 0}, swapchain->Extent()},
                         .layerCount = 1,

@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <span>
 #include <unordered_map>
@@ -496,13 +498,29 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
 
 void RecordPresent(vk::CommandBuffer cmd, const Scene::Header& header, vk::Extent2D extent) {
     const auto& dl = g_device->dispatch;
-    if (!HasImage(header, header.ui.picture)) {
+    if (!HasImage(header, header.ui.picture) || extent.width == 0 || extent.height == 0) {
         return;
     }
     const u32 picture = Scene::UiTargetHandles + header.ui.picture;
+    // The back buffer keeps its shape, centred in the window.
+    const vk::Extent2D source = g_images[header.ui.picture].extent;
+    const float scale =
+        std::min(static_cast<float>(extent.width) / static_cast<float>(source.width),
+                 static_cast<float>(extent.height) / static_cast<float>(source.height));
+    const vk::Extent2D fitted{
+        std::clamp(static_cast<u32>(std::lround(scale * static_cast<float>(source.width))), 1u,
+                   extent.width),
+        std::clamp(static_cast<u32>(std::lround(scale * static_cast<float>(source.height))), 1u,
+                   extent.height),
+    };
+    const vk::Rect2D area{{static_cast<s32>((extent.width - fitted.width) / 2),
+                           static_cast<s32>((extent.height - fitted.height) / 2)},
+                          fitted};
     const vk::Viewport viewport{
-        .width = static_cast<float>(extent.width),
-        .height = static_cast<float>(extent.height),
+        .x = static_cast<float>(area.offset.x),
+        .y = static_cast<float>(area.offset.y),
+        .width = static_cast<float>(fitted.width),
+        .height = static_cast<float>(fitted.height),
         .maxDepth = 1.0f,
     };
     const std::array sets{Textures::Set(), g_sampler_set};
@@ -511,7 +529,7 @@ void RecordPresent(vk::CommandBuffer cmd, const Scene::Header& header, vk::Exten
     cmd.pushConstants(g_present.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(picture),
                       &picture, dl);
     cmd.setViewport(0, viewport, dl);
-    cmd.setScissor(0, vk::Rect2D{{0, 0}, extent}, dl);
+    cmd.setScissor(0, area, dl);
     cmd.draw(3, 1, 0, 0, dl);
 }
 

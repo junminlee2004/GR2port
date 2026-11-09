@@ -45,7 +45,8 @@ void CopyTarget(vk::CommandBuffer cmd, u32 target, vk::Buffer buffer);
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet, u64 address,
             vk::Buffer buffer, u64 offset);
 
-/// Inside the window's rendering: draws the frame's back buffer over extent.
+/// Inside the window's rendering: draws the frame's back buffer at its own shape, centred in
+/// extent.
 void RecordPresent(vk::CommandBuffer cmd, const Scene::Header& header, vk::Extent2D extent);
 
 } // namespace Gr2Port::Ui
