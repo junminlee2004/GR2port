@@ -4,7 +4,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 -->
 <h1 align="center">
   <br>
-  <b>GR2port - a genuine native PC port for Gravity Rush 2 on PC</b>
+  <b>GR2port - a genuine native PC port for Gravity Rush 2</b>
   <br>
 </h1>
 
