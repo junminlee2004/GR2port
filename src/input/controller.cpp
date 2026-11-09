@@ -18,6 +18,7 @@
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
 #include "input/controller.h"
+#include "input/selected_pad.h"
 
 namespace Input {
 
@@ -376,6 +377,16 @@ void GameControllers::TryOpenSDLControllers() {
                 controllers[i]->DisconnectController();
                 controllers[i]->user_id = -1;
                 slot_taken[i] = false;
+            }
+        }
+    }
+
+    // The pad picked for player 1 takes the first free slot.
+    if (const std::string picked = Input::SelectedPad::Guid(); !picked.empty()) {
+        for (int j = 1; j < controller_count; j++) {
+            if (Input::SelectedPad::GuidOf(new_joysticks[j]) == picked) {
+                std::rotate(new_joysticks, new_joysticks + j, new_joysticks + j + 1);
+                break;
             }
         }
     }
