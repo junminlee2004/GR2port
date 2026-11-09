@@ -7,6 +7,8 @@ if (WIN32)
         ${CMAKE_CURRENT_LIST_DIR}/art.h
         ${CMAKE_CURRENT_LIST_DIR}/avatar.cpp
         ${CMAKE_CURRENT_LIST_DIR}/avatar.h
+        ${CMAKE_CURRENT_LIST_DIR}/key_bindings.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/key_bindings.h
         ${CMAKE_CURRENT_LIST_DIR}/launcher.cpp
         ${CMAKE_CURRENT_LIST_DIR}/launcher.h
         ${CMAKE_CURRENT_LIST_DIR}/setup_dialog.cpp

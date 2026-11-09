@@ -70,6 +70,12 @@
 #define MOTION_SHAKE 0x02000000
 #define MOUSE_GYRO_HOLD 0x04000000
 
+// GR2port: the game functions whose pad inputs depend on the game's control type.
+#define GR2_EVADE 0x08000000
+#define GR2_NORMAL_STYLE 0x08000001
+#define GR2_LUNAR_STYLE 0x08000002
+#define GR2_JUPITER_STYLE 0x08000003
+
 #define HOTKEY_FULLSCREEN 0xf0000001
 #define HOTKEY_PAUSE 0xf0000002
 #define HOTKEY_SIMPLE_FPS 0xf0000003
@@ -175,6 +181,10 @@ const std::map<std::string, u32> string_to_cbutton_map = {
     {"motion_tilt_left", MOTION_TILT_LEFT},
     {"motion_tilt_right", MOTION_TILT_RIGHT},
     {"motion_shake", MOTION_SHAKE},
+    {"gr2_evade", GR2_EVADE},
+    {"gr2_normal_style", GR2_NORMAL_STYLE},
+    {"gr2_lunar_style", GR2_LUNAR_STYLE},
+    {"gr2_jupiter_style", GR2_JUPITER_STYLE},
 
     // this is only for input
     {"back", SDL_GAMEPAD_BUTTON_BACK},
@@ -580,7 +590,7 @@ public:
 
 class ControllerAllOutputs {
 public:
-    static constexpr u64 output_count = 55;
+    static constexpr u64 output_count = 59;
     std::array<ControllerOutput, output_count> data = {
         // Important: these have to be the first, or else they will update in the wrong order
         ControllerOutput(LEFTJOYSTICK_HALFMODE),
@@ -618,6 +628,11 @@ public:
         ControllerOutput(MOTION_TILT_LEFT),
         ControllerOutput(MOTION_TILT_RIGHT),
         ControllerOutput(MOTION_SHAKE),
+
+        ControllerOutput(GR2_EVADE),
+        ControllerOutput(GR2_NORMAL_STYLE),
+        ControllerOutput(GR2_LUNAR_STYLE),
+        ControllerOutput(GR2_JUPITER_STYLE),
 
         // Axis mappings
         // ControllerOutput(SDL_GAMEPAD_BUTTON_INVALID, SDL_GAMEPAD_AXIS_LEFTX, false),

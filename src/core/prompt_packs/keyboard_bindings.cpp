@@ -7,11 +7,14 @@
 #include <fstream>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "common/elf_info.h"
 #include "core/emulator_settings.h"
 #include "core/prompt_packs/keyboard_prompts.h"
+#include "input/game_functions.h"
 #include "input/input_handler.h"
+#include "video_core/gr2port/settings.h"
 
 namespace PromptPacks::Keyboard {
 
@@ -163,6 +166,35 @@ constexpr std::array<std::string_view, 4> MoveOutputs{"axis_left_y_minus", "axis
 
 const Label Unbound{{}, "minus"};
 
+// The config outputs a line's key labels. A game function labels its pad input; Evade and the
+// styles label the R2 and touch pad prompts of the control type the game used last.
+std::vector<std::string_view> LabelledOutputs(std::string_view output, u32 type) {
+    const Input::GameFunctions::Function* const function = Input::GameFunctions::Find(output);
+    if (function == nullptr) {
+        return {output};
+    }
+    if (!function->output.empty()) {
+        return {function->output};
+    }
+    const bool type_a = type == 0;
+    if (output == "gr2_evade") {
+        if (type_a) {
+            return {"r2"};
+        }
+        return {"touchpad_center", "touchpad_swipe_up", "touchpad_swipe_down"};
+    }
+    if (output == "gr2_normal_style") {
+        return {type_a ? "touchpad_center" : "r2"};
+    }
+    if (type_a && output == "gr2_lunar_style") {
+        return {"touchpad_swipe_up"};
+    }
+    if (type_a && output == "gr2_jupiter_style") {
+        return {"touchpad_swipe_down"};
+    }
+    return {};
+}
+
 // The keys of the move label: WASD when each is one character, the arrow cluster for the arrow
 // keys, a dash when a direction has no key.
 Label MoveLabel(const std::array<std::optional<Label>, 4>& keys) {
@@ -191,6 +223,7 @@ std::map<std::string, Label> BoundLabels() {
     const std::string serial{Common::ElfInfo::Instance().GameSerial()};
     const auto path =
         Input::GetInputConfigFile(EmulatorSettings.IsUseUnifiedInputConfig() ? "default" : serial);
+    const u32 type = Gr2Port::Settings::Get().mouse.control_type;
     std::map<std::string, Label> labels;
     std::map<std::string, Label> outputs;
     std::ifstream in{path};
@@ -202,9 +235,6 @@ std::map<std::string, Label> BoundLabels() {
             continue;
         }
         const std::string output = line.substr(0, equal);
-        if (outputs.contains(output)) {
-            continue;
-        }
         // The last key of a combination is the one the prompt shows.
         std::optional<Label> label;
         std::string_view inputs{line};
@@ -220,8 +250,11 @@ std::map<std::string, Label> BoundLabels() {
             }
             inputs.remove_prefix(comma + 1);
         }
-        if (label) {
-            outputs.emplace(output, std::move(*label));
+        if (!label) {
+            continue;
+        }
+        for (const std::string_view labelled : LabelledOutputs(output, type)) {
+            outputs.emplace(std::string(labelled), *label);
         }
     }
     for (const auto& [output, button] : Outputs) {

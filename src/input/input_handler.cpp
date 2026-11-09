@@ -31,6 +31,7 @@
 #include "core/prompt_packs/prompt_packs.h"
 #include "imgui/settings_dialog_layer.h"
 #include "input/controller.h"
+#include "input/game_functions.h"
 #include "input/input_mouse.h"
 
 namespace Input {
@@ -59,36 +60,41 @@ constexpr std::string_view GetDefaultGlobalConfig() {
 constexpr std::string_view GetDefaultInputConfig() {
     return R"(#Feeling lost? Check out the Help section!
 
-# Keyboard and mouse bindings. The keyboard button prompts show these keys, and the mouse always
-# turns the camera.
+# Keyboard and mouse bindings, by the game's own functions: each key does its function in every
+# control type of the game's Controls option. The keyboard button prompts show these keys, and the
+# mouse turns the camera.
 
-axis_left_x_minus = a
-axis_left_x_plus = d
-axis_left_y_minus = w
-axis_left_y_plus = s
+gr2_move_forward = w
+gr2_move_back = s
+gr2_move_left = a
+gr2_move_right = d
 
-cross = space
-square = leftbutton
-triangle = f
-circle = r
+gr2_jump = space
+gr2_attack = leftbutton
+gr2_special_attack = f
+gr2_stasis_field = r
+gr2_shift_gravity = rightbutton
+gr2_return_gravity = q
+gr2_gravity_slide = lshift
 
-l1 = q
-r1 = rightbutton
-l2 = lshift
-r2 = e
-l3 = c
+gr2_evade = e
+gr2_lunar_style = mousewheelup
+gr2_jupiter_style = mousewheeldown
+gr2_normal_style = middlebutton
+gr2_panther = c
+gr2_reset_camera = unmapped
 
-pad_up = 1
-pad_right = 2
-pad_down = 3
-pad_left = 4
+gr2_photo_mode = 1
+gr2_map = 2
+gr2_gesture = 3
+gr2_first_person = 4
+gr2_pause = escape
 
-options = escape
-touchpad_center = middlebutton
-touchpad_swipe_up = mousewheelup
-touchpad_swipe_down = mousewheeldown
-touchpad_swipe_left = z
-touchpad_swipe_right = x
+gr2_zoom_in = unmapped
+gr2_flick_up = unmapped
+gr2_flick_down = unmapped
+gr2_flick_left = z
+gr2_flick_right = x
 
 # Controller bindings
 
@@ -737,6 +743,11 @@ void ParseInputConfig(const std::string game_id = "") {
         }
 
         // normal cases
+        // GR2port: a game function on the same pad input in every control type binds that input.
+        if (const auto* function = GameFunctions::Find(output_string);
+            function && !function->output.empty()) {
+            output_string = std::string(function->output);
+        }
         InputBinding binding = GetBindingFromString(input_string);
         if (binding.IsEmpty()) {
             LOG_WARNING(Input, "Invalid format at line: {}, data: \"{}\", skipping line.",
@@ -960,6 +971,13 @@ static Uint32 TwoFingerClickCallback(void* param, SDL_TimerID, Uint32) {
     return 0; // one-shot
 }
 
+// GR2port: where the bindings last put a stick axis of a gamepad, -127 to 127.
+static s16 OutputPosition(u8 gamepad_index, SDL_GamepadAxis axis) {
+    const auto& outputs = output_arrays[gamepad_index].data;
+    const auto it = std::ranges::find(outputs, ControllerOutput(SDL_GAMEPAD_BUTTON_INVALID, axis));
+    return it != outputs.end() ? it->old_param : 0;
+}
+
 void ControllerOutput::FinalizeUpdate(u8 gamepad_index) {
     auto PushSDLEvent = [&](u32 event_type) {
         if (new_button_state) {
@@ -1129,6 +1147,19 @@ void ControllerOutput::FinalizeUpdate(u8 gamepad_index) {
             break;
         case MOTION_SHAKE:
             controller->SetMotionShake(new_button_state);
+            break;
+        case GR2_EVADE:
+            GameFunctions::Evade(controller, new_button_state,
+                                 OutputPosition(gamepad_index, SDL_GAMEPAD_AXIS_LEFTX),
+                                 OutputPosition(gamepad_index, SDL_GAMEPAD_AXIS_LEFTY));
+            break;
+        case GR2_NORMAL_STYLE:
+        case GR2_LUNAR_STYLE:
+        case GR2_JUPITER_STYLE:
+            GameFunctions::ChangeStyle(
+                controller, static_cast<GameFunctions::Style>(button - GR2_NORMAL_STYLE),
+                new_button_state, OutputPosition(gamepad_index, SDL_GAMEPAD_AXIS_LEFTY),
+                OutputPosition(gamepad_index, SDL_GAMEPAD_AXIS_RIGHTY));
             break;
         default: // is a normal key (hopefully)
             controller->Button(SDLGamepadToOrbisButton(button), new_button_state);

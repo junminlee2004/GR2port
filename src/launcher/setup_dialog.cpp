@@ -9,6 +9,7 @@
 #include <cwctype>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -32,6 +33,7 @@
 #include "input/selected_pad.h"
 #include "launcher/art.h"
 #include "launcher/avatar.h"
+#include "launcher/key_bindings.h"
 #include "launcher/setup_dialog.h"
 #include "video_core/gr2port/settings.h"
 
@@ -142,6 +144,7 @@ enum Control : int {
     IdMouseNote,
     IdTouchSwipe,
     IdTouchSwipeNote,
+    IdKeyBindings,
     IdExtras,
     IdDefaults,
 };
@@ -267,6 +270,7 @@ constexpr int PromptsAutomaticTop = 252;
 constexpr int MouseNoteTop = 280;
 constexpr int TouchSwipeTop = 336;
 constexpr int TouchSwipeNoteTop = 356;
+constexpr RECT KeyBindingsButton{18, 396, 178, 419};
 
 // The button prompts setting's values, in the order of the combo box.
 constexpr std::array<std::pair<const wchar_t*, std::string_view>, 7> PromptChoices{{
@@ -387,6 +391,8 @@ struct Dialog {
     std::filesystem::path input_config;
     Deadzones deadzones{};
     bool touch_swipe = false;
+    // The keys of the game's functions as the Key Bindings dialog left them, to save on Ok.
+    std::optional<KeyBindings> key_bindings;
 };
 
 int Scaled(const Dialog& dialog, int value) {
@@ -1310,6 +1316,8 @@ void Build(HWND window, Dialog& dialog) {
         L"and the cursor stays free.",
         SS_LEFT, IdTouchSwipeNote,
         {LabelLeft, TouchSwipeNoteTop, ExtrasList.right, TouchSwipeNoteTop + 2 * InfoHeight}));
+    mouse_order.push_back(add_mouse(WC_BUTTONW, L"Key Bindings...", BS_PUSHBUTTON | WS_TABSTOP,
+                                    IdKeyBindings, KeyBindingsButton));
     KeepTabOrder(mouse_order);
 
     const HWND dlc_page = dialog.pages[DlcPage];
@@ -1448,6 +1456,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             ShowDeadzones(dialog, DefaultDeadzones());
             ShowMouse(dialog, Settings::Mouse{});
             Check(dialog, IdTouchSwipe, false);
+            dialog.key_bindings = DefaultKeyBindings();
         }
         break;
     case IdActivePad:
@@ -1471,6 +1480,15 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             ShowDefaultPad(dialog);
         }
         break;
+    case IdKeyBindings:
+        if (code == BN_CLICKED) {
+            const KeyBindings keys =
+                dialog.key_bindings ? *dialog.key_bindings : ReadKeyBindings(dialog.input_config);
+            if (auto edited = EditKeyBindings(window, keys, dialog.values.mouse.control_type)) {
+                dialog.key_bindings = std::move(edited);
+            }
+        }
+        break;
     case IdAvatar:
     case IdAvatarChoose:
         if (code == BN_CLICKED || code == STN_CLICKED) {
@@ -1484,6 +1502,10 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         Settings::Set(dialog.values);
         SaveOnline(window, dialog);
         SaveController(window, dialog);
+        if (dialog.key_bindings && !SaveKeyBindings(dialog.input_config, *dialog.key_bindings)) {
+            MessageBoxW(window, L"The key bindings could not be saved.", L"Key Bindings",
+                        MB_OK | MB_ICONWARNING);
+        }
         EndDialog(window, IDOK);
         break;
     case IDCANCEL:

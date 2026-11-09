@@ -56,6 +56,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/particles.cpp
     ${CMAKE_CURRENT_LIST_DIR}/particles.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/player_control.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/player_control.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.h
     ${CMAKE_CURRENT_LIST_DIR}/point_lights.cpp
     ${CMAKE_CURRENT_LIST_DIR}/point_lights.h

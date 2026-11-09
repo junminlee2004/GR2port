@@ -63,6 +63,9 @@ struct Mouse {
     /// "playstation", "xbox", "switch", "steamdeck", "steamcontroller" and "keyboard" always show
     /// those.
     std::string prompts{"auto"};
+    /// The control type of the game's Controls option as the game last used it, 0 to 4 for Type A
+    /// to Type E. The keyboard prompts label the buttons for it.
+    u32 control_type{0};
 };
 
 struct Values {
