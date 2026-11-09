@@ -35,8 +35,8 @@ constexpr int VersionBaseline = 14;
 constexpr int LogoLeft = 16;
 constexpr int LogoBottom = 12;
 constexpr int LogoWidth = 290;
-constexpr COLORREF MenuColor = RGB(255, 174, 0);
-constexpr COLORREF HotColor = RGB(255, 255, 255);
+// Menu text is white with a black outline, and all black under the pointer.
+constexpr float MenuOutline = 2.5f;
 
 enum class Item {
     Play,
@@ -191,13 +191,28 @@ void Paint(HWND window, const State& state) {
     DeleteDC(art);
 
     SetBkMode(frame, TRANSPARENT);
-    const HGDIOBJ old_font = SelectObject(frame, state.menu_font);
-    for (size_t i = 0; i < Entries.size(); ++i) {
-        SetTextColor(frame, static_cast<int>(i) == state.hot ? HotColor : MenuColor);
-        TextOutW(frame, state.item_rects[i].left, state.item_rects[i].top, Entries[i].text.data(),
-                 static_cast<int>(Entries[i].text.size()));
+    {
+        Gdiplus::Graphics graphics{frame};
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        const Gdiplus::FontFamily family{L"Verdana"};
+        const float scale = static_cast<float>(state.dpi) / USER_DEFAULT_SCREEN_DPI;
+        Gdiplus::Pen outline{Gdiplus::Color{255, 0, 0, 0}, MenuOutline * scale};
+        outline.SetLineJoin(Gdiplus::LineJoinRound);
+        const Gdiplus::SolidBrush white{Gdiplus::Color{255, 255, 255, 255}};
+        const Gdiplus::SolidBrush black{Gdiplus::Color{255, 0, 0, 0}};
+        for (size_t i = 0; i < Entries.size(); ++i) {
+            Gdiplus::GraphicsPath path;
+            path.AddString(Entries[i].text.data(), static_cast<INT>(Entries[i].text.size()),
+                           &family, Gdiplus::FontStyleRegular,
+                           static_cast<Gdiplus::REAL>(Scaled(state, MenuFontSize)),
+                           Gdiplus::PointF{static_cast<Gdiplus::REAL>(state.item_rects[i].left),
+                                           static_cast<Gdiplus::REAL>(state.item_rects[i].top)},
+                           Gdiplus::StringFormat::GenericTypographic());
+            graphics.DrawPath(&outline, &path);
+            graphics.FillPath(static_cast<int>(i) == state.hot ? &black : &white, &path);
+        }
     }
-    SelectObject(frame, state.version_font);
+    const HGDIOBJ old_font = SelectObject(frame, state.version_font);
     SetTextColor(frame, RGB(255, 255, 255));
     SetTextAlign(frame, TA_RIGHT | TA_BASELINE);
     TextOutW(frame, client.right - Scaled(state, VersionRight),
