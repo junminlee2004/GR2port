@@ -2,23 +2,24 @@
 SPDX-FileCopyrightText: 2026 GR2port
 SPDX-License-Identifier: GPL-2.0-or-later
 -->
-While GR2fork is focused on improving emulation of Gravity Rush 2 and Gravity Rush Remastered, it's priority is to remain architecturally conformant with upstream while maintaining general performance improvements in most or all games. Experimental optimizations for GPU emulation in both performance and accuracy aspects are applied here in preparation for merging with upstream. Expect frequent syncing with upstream.
+<h1 align="center">
+  <br>
+  <b>GR2port - a genuine native PC port for Gravity Rush 2 on PC</b>
+  <br>
+</h1>
+
+**No CPU emulation, No GPU emulation, No GPU command translation, No shader recompiler:** GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC. **The game's graphics were completely rewritten for PC** via a native Vulkan renderer that runs **handwritten plus recompiled GLSL shaders** that recreate visuals produced by the original GCN shaders. Each frame, GR2port takes the game's scene at the start of its frame graph and draws it on its own render thread, so the per-draw PS4 GPU commands are never built or translated. **All shader pipelines are precompiled** at boot and stored on disk so there is no shader stutter during gameplay. A runtime translates the firmware libraries on the PS4's Operating System called by the game to native PC solutions (no performance overhead).<br>
+<br>
 
 <img width="1904" height="1200" alt="ep03_5_12" src="https://github.com/user-attachments/assets/39858c3f-7500-4adb-ab9b-ecb0614aa6f8" />
 
 
-**Set up GR2fork with the Following Playlist:**
+**Check out the following playlist if your dump is in .PKG format:**
 https://www.youtube.com/watch?v=O8z6QPOaGDg&list=PLOgHncbXc__M&pp=sAgC
-
-**Play GR2fork Online With the Following Servers:**
-(Atlanta server)
-45.76.253.42
-
-**The steps to enabling GRR online is identical to GR2fork online except you do not have to enter ANYTHING in the http host override box**
 
 **Join the GR2fork discord server** (new) here for extended support. Anyone who wants to lurk for general game discussion surrounding gravity rush 1 and 2 are also welcome -> https://discord.gg/hnHRpzxGzG
 
-**Support My Project Here** for Restored Online and New Features in the Future: https://ko-fi.com/junminlee2004
+**Support My Project Here** for more projects in the Future: https://ko-fi.com/junminlee2004
 
 -------
 <img width="256" height="256" alt="20261025_030106_001" src="https://github.com/user-attachments/assets/5f28141c-570b-4010-9cd6-4ddb573217d6" /><img width="256" height="256![Uploading 20260525_051655_001.jpg…]()
