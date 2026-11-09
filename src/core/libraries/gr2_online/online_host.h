@@ -58,12 +58,12 @@ std::string BearerToken();
 std::vector<std::pair<std::string, std::string>> IdentityHeaders();
 
 struct Server {
-    std::string host; ///< Empty when none is configured: online play is off
+    std::string host;
     int port;
 };
 
-/// Where the game's requests go: httpHostOverride and httpHostOverridePort of the "GR2Fork"
-/// section, from the per-game file when it has them and from config.json otherwise. Read once.
+/// Where the game's requests go: GR2port's server, at httpHostOverridePort of the "GR2Fork"
+/// section from the per-game file or config.json, else 8443. Read once.
 const Server& GetServer();
 
 /// Calls cb after every sign-in and sign-out of a user, on the thread that changed the state.

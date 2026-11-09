@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <charconv>
 #include <chrono>
 #include <cstring>
 #include <fstream>
@@ -16,6 +15,7 @@
 #include "common/gravity_rush.h"
 #include "common/path_util.h"
 #include "core/emulator_settings.h"
+#include "core/game_check/game_patches.h"
 #include "core/libraries/gr2_online/online_host.h"
 #include "core/libraries/np/np_handler/np_handler.h"
 #include "core/user_settings.h"
@@ -118,9 +118,8 @@ void OnSessionState(s32 user_id, Np::NpManager::OrbisNpState state) {
     }
 }
 
-// The launcher of the game keeps the server address in its "GR2Fork" section, in both files.
-void ReadSection(const std::filesystem::path& path, Server& server, bool& have_host,
-                 bool& have_port) {
+// The launcher of the game keeps the server's port in its "GR2Fork" section, in both files.
+void ReadPort(const std::filesystem::path& path, Server& server, bool& have_port) {
     std::ifstream file{path};
     if (!file) {
         return;
@@ -130,11 +129,6 @@ void ReadSection(const std::filesystem::path& path, Server& server, bool& have_h
         return;
     }
     const auto& section = root.at("GR2Fork");
-    if (!have_host && section.contains("httpHostOverride") &&
-        section.at("httpHostOverride").is_string()) {
-        server.host = section.at("httpHostOverride").get<std::string>();
-        have_host = true;
-    }
     if (!have_port && section.contains("httpHostOverridePort") &&
         section.at("httpHostOverridePort").is_number_integer()) {
         // A number that is no port counts as not set.
@@ -146,35 +140,16 @@ void ReadSection(const std::filesystem::path& path, Server& server, bool& have_h
     }
 }
 
+// GR2port always plays on the same server.
 Server LoadServer() {
-    Server server{{}, DefaultPort};
-    bool have_host = false;
+    Server server{std::string(Gr2Port::GamePatches::GameServerHost), DefaultPort};
     bool have_port = false;
-    // The per-game file is read first, so a key it holds wins over the same key in config.json.
+    // The per-game file is read first, so a port it holds wins over the one in config.json.
     const std::string serial{Serial()};
-    ReadSection(Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs) / (serial + ".json"),
-                server, have_host, have_port);
-    ReadSection(Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "config.json", server,
-                have_host, have_port);
-    // A host typed as a URL keeps only its host and port: the scheme and the path are dropped.
-    if (const auto scheme = server.host.find("://"); scheme != std::string::npos) {
-        server.host.erase(0, scheme + 3);
-    }
-    if (const auto slash = server.host.find('/'); slash != std::string::npos) {
-        server.host.resize(slash);
-    }
-    // "host:port" in the host names the port too, and wins over the port key. An address with
-    // more than one colon is IPv6 and is left as it is.
-    if (const auto colon = server.host.rfind(':');
-        colon != std::string::npos && server.host.find(':') == colon) {
-        const char* end = server.host.data() + server.host.size();
-        int port = 0;
-        if (std::from_chars(server.host.data() + colon + 1, end, port).ec == std::errc{} &&
-            port > 0 && port <= 65535) {
-            server.port = port;
-        }
-        server.host.resize(colon);
-    }
+    ReadPort(Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs) / (serial + ".json"),
+             server, have_port);
+    ReadPort(Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "config.json", server,
+             have_port);
     return server;
 }
 
