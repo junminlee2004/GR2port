@@ -45,6 +45,11 @@ layout(push_constant) uniform Constants {
     BranchJobs scene_jobs;
     Effectors scene_effectors;
     Grid scene_grid;
+    // Scene::BranchTiming: the game's literals, which its frame-rate patches set.
+    float steady_phase;
+    float shaken_phase;
+    float start_phase;
+    float shake_frames;
 };
 
 const uint PointFloats = 4u;
@@ -54,7 +59,6 @@ const uint StateFloats = 3u;
 const uint MaskSteady = 8u;
 const float QuietSway = 0.03;
 const float ShakenSway = 0.1;
-const float ShakeSeconds = 7.1;
 
 vec3 Point(Words words, uint point) {
     const uint first = point * PointFloats;
@@ -147,17 +151,17 @@ void main() {
     float phase = state.values[first_state + 1u];
     float sway = QuietSway;
     if (hit == 2u) {
-        phase += 0.75;
+        phase += steady_phase;
     } else if (timer >= 1.0) {
         timer -= 1.0;
-        phase += 1.5;
+        phase += shaken_phase;
         sway = ShakenSway;
     } else if (timer != 0.0) {
         phase = 0.0;
         timer = hit == 0u ? 0.0 : timer;
     } else if (hit == 1u) {
-        timer = ShakeSeconds;
-        phase += 1.5;
+        timer = shake_frames;
+        phase += start_phase;
         sway = ShakenSway;
     }
     state.values[first_state] = timer;

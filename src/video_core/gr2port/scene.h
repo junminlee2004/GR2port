@@ -342,6 +342,16 @@ struct EffectHeader {
     u32 dropped_water;
 };
 
+/// The Branch kernel's per-frame literals, which the game's frame-rate patches set: the phase's
+/// step on a steady hit, while shaken and as a shake starts, and the frames a shake lasts.
+struct BranchTiming {
+    float steady_phase;
+    float shaken_phase;
+    float start_phase;
+    float shake_frames;
+};
+static_assert(sizeof(BranchTiming) == 16);
+
 /// The start of each packet.
 struct Header {
     u64 frame;
@@ -439,6 +449,8 @@ struct Header {
     u32 dropped_branch_jobs;
     u32 branches;
     u32 dropped_branches;
+    /// The Branch kernel's literals in the game's program, read in frames with Branch records.
+    BranchTiming branch_timing;
     /// WorldDecal records written, and decals not drawn (no colour map).
     u32 world_decals;
     u32 dropped_world_decals;

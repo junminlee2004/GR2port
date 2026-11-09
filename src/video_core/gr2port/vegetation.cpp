@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
+#include <cstring>
 
+#include "common/logging/log.h"
 #include "video_core/gr2port/deformers.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/pipeline.h"
@@ -54,6 +56,7 @@ struct BranchKernelPush {
     u64 jobs;
     u64 effectors;
     u64 grid;
+    Scene::BranchTiming timing;
 };
 
 const Device* g_device = nullptr;
@@ -64,6 +67,7 @@ Pipeline g_branch_kernel;
 Pipeline g_branches;
 Pipeline g_leaves;
 Pipeline g_leaf_shadows;
+Scene::BranchTiming g_logged_timing{};
 
 void Bind(vk::CommandBuffer cmd, const Pipeline& pipeline, const void* push, u32 push_bytes) {
     const auto& dl = g_device->dispatch;
@@ -72,6 +76,18 @@ void Bind(vk::CommandBuffer cmd, const Pipeline& pipeline, const void* push, u32
                            {}, dl);
     cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, push_bytes, push,
                       dl);
+}
+
+// Logs the Branch kernel's timing when it changes.
+void LogTiming(const Scene::BranchTiming& timing) {
+    if (std::memcmp(&timing, &g_logged_timing, sizeof(timing)) == 0) {
+        return;
+    }
+    g_logged_timing = timing;
+    LOG_INFO(Render_Vulkan,
+             "GR2port: Branch kernel timing: phase steps {} on a steady hit, {} while shaken, "
+             "{} as a shake starts; shake timer {} frames",
+             timing.steady_phase, timing.shaken_phase, timing.start_phase, timing.shake_frames);
 }
 
 } // namespace
@@ -156,10 +172,12 @@ void RecordKernels(vk::CommandBuffer cmd, const Scene::Header& header, u64 addre
     };
     cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &before}, dl);
     if (header.branch_jobs != 0) {
+        LogTiming(header.branch_timing);
         const BranchKernelPush push{
             .jobs = address + Scene::BranchJobsOffset,
             .effectors = address + Scene::EffectorsOffset,
             .grid = Deformers::GridAddress(),
+            .timing = header.branch_timing,
         };
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_branch_kernel.pipeline, dl);
         cmd.pushConstants(g_branch_kernel.layout, vk::ShaderStageFlagBits::eCompute, 0,

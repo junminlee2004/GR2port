@@ -703,6 +703,11 @@ constexpr u64 BranchVertexCount = 0xcc;
 constexpr u32 BranchVertexBytes = 16;
 constexpr u32 BranchStateBytes = 12;
 constexpr u32 BranchGroupSize = 64;
+// The literal operands of the Branch kernel's program at 0x1c1a8d0, as in Scene::BranchTiming.
+constexpr u64 BranchSteadyPhase = 0x1c1b134 - 0x400000;
+constexpr u64 BranchShakenPhase = 0x1c1b15c - 0x400000;
+constexpr u64 BranchStartPhase = 0x1c1b1a0 - 0x400000;
+constexpr u64 BranchShakeFrames = 0x1c1b1a8 - 0x400000;
 constexpr u32 PositionHalfFloat = 7;
 // A branch ribbon item: the texture, hull and domain constants as a leaf item's. Its hull constants
 // start with its segments, its domain constants hold the eye +0x80, then the texture's range, the
@@ -934,6 +939,10 @@ public:
 
     void SetSpheres(u32 count) {
         header.spheres = count;
+    }
+
+    void SetBranchTiming(const Scene::BranchTiming& timing) {
+        header.branch_timing = timing;
     }
 
     void SetHatching(u32 handle) {
@@ -3178,6 +3187,17 @@ GridConstants ReadGridConstants(VAddr view) {
     return grid;
 }
 
+// The Branch kernel's literals as the loaded executable holds them, with its patches applied.
+Scene::BranchTiming ReadBranchTiming() {
+    const VAddr eboot = MemoryPatcher::g_eboot_address;
+    return {
+        .steady_phase = Load<float>(eboot + BranchSteadyPhase),
+        .shaken_phase = Load<float>(eboot + BranchShakenPhase),
+        .start_phase = Load<float>(eboot + BranchStartPhase),
+        .shake_frames = Load<float>(eboot + BranchShakeFrames),
+    };
+}
+
 } // namespace
 
 // The view's target for the world's picture; the back buffer when 0.
@@ -3286,6 +3306,9 @@ void OnFrame(VAddr frame_graph, VAddr view) {
             for (u32 e = first_soft_body; e < end_soft_body; e++) {
                 writer.AddSoftBody(record(e), grid);
             }
+        }
+        if (first_branch < end_branch) {
+            writer.SetBranchTiming(ReadBranchTiming());
         }
         for (u32 e = first_branch; e < end_branch; e++) {
             writer.AddBranchJob(record(e));
