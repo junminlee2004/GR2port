@@ -10,6 +10,8 @@
 #include <SDL3/SDL_video.h>
 
 #include "common/logging/log.h"
+#include "input/controller.h"
+#include "input/input_mouse.h"
 #include "video_core/gr2port/capture.h"
 #include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/settings.h"
@@ -103,8 +105,9 @@ void SDLCALL CreateOnMainThread(void*) {
     if (display.fullscreen) {
         EnterFullscreen(screen, display);
     }
-    // The mouse always turns the camera: while the window has focus, the cursor is hidden and held.
-    if (!SDL_SetWindowRelativeMouseMode(g_window, true)) {
+    // The mouse turns the camera: while the window has focus, the cursor is hidden and held. Touch
+    // pad swipes need a free cursor instead.
+    if (!Input::IsTouchpadSwipeEnabled() && !SDL_SetWindowRelativeMouseMode(g_window, true)) {
         LOG_ERROR(Render_Vulkan, "GR2port: the window cannot hold the mouse: {}", SDL_GetError());
     }
     int width = initial_width;

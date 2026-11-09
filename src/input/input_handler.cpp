@@ -824,9 +824,14 @@ void ParseInputConfig(const std::string game_id = "") {
         LOG_WARNING(Input, "touchpad_swipe_combo_enabled is true but the hold input is unmapped; "
                            "the combo layer is inert");
     }
-    // GR2port: the mouse always turns the camera, whatever the config says.
-    SetMouseToJoystick(2);
-    SetMouseMode(MouseMode::Joystick);
+    // GR2port: the mouse turns the camera, whatever the config says, unless touch pad swipes take
+    // its left button and a free cursor.
+    if (IsTouchpadSwipeEnabled()) {
+        SetMouseMode(MouseMode::Off);
+    } else {
+        SetMouseToJoystick(2);
+        SetMouseMode(MouseMode::Joystick);
+    }
     std::sort(connections.begin(), connections.end());
     for (auto& c : connections) {
         LOG_DEBUG(Input, "Binding: {} : {}", c.output->ToString(), c.binding.ToString());

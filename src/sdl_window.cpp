@@ -29,6 +29,7 @@
 #include "input/input_handler.h"
 #include "input/input_mouse.h"
 #include "sdl_window.h"
+#include "video_core/gr2port/window.h"
 #include "video_core/renderdoc.h"
 
 #ifdef __APPLE__
@@ -299,9 +300,18 @@ void WindowSDL::WaitEvent() {
     case SDL_EVENT_MOUSE_TO_TOUCHPAD:
         // GR2port: the mouse always turns the camera, so its mode does not change.
         break;
-    case SDL_EVENT_MOUSE_TO_TOUCHPAD_SWIPE:
-        Input::EnableTouchpadSwipe(!Input::IsTouchpadSwipeEnabled());
+    case SDL_EVENT_MOUSE_TO_TOUCHPAD_SWIPE: {
+        // GR2port: swipes take the left button and a free cursor, so the mouse stops turning the
+        // camera while they are on.
+        const bool swipe = !Input::IsTouchpadSwipeEnabled();
+        Input::EnableTouchpadSwipe(swipe);
+        Input::SetMouseMode(swipe ? Input::MouseMode::Off : Input::MouseMode::Joystick);
+        SDL_SetWindowRelativeMouseMode(this->GetSDLWindow(), !swipe);
+        if (SDL_Window* const window = SDL_GetWindowFromID(Gr2Port::Window::Id())) {
+            SDL_SetWindowRelativeMouseMode(window, !swipe);
+        }
         break;
+    }
     case SDL_EVENT_ADD_VIRTUAL_USER:
         for (int i = 0; i < 4; i++) {
             if (controllers[i]->user_id == -1) {

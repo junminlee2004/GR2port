@@ -140,6 +140,8 @@ enum Control : int {
     IdPrompts,
     IdPromptsAutomatic,
     IdMouseNote,
+    IdTouchSwipe,
+    IdTouchSwipeNote,
     IdExtras,
     IdDefaults,
 };
@@ -263,6 +265,8 @@ constexpr int SpeedHigh = 300;
 constexpr int PromptsTop = 226;
 constexpr int PromptsAutomaticTop = 252;
 constexpr int MouseNoteTop = 280;
+constexpr int TouchSwipeTop = 336;
+constexpr int TouchSwipeNoteTop = 356;
 
 // The button prompts setting's values, in the order of the combo box.
 constexpr std::array<std::pair<const wchar_t*, std::string_view>, 7> PromptChoices{{
@@ -378,9 +382,11 @@ struct Dialog {
     bool pad_picked = false;
     // The default gamepad's GUID as Ok saves it; empty for none.
     std::string default_pad;
-    // The input config that holds the stick deadzones, and the deadzones it holds.
+    // The input config that holds the stick deadzones and the touch pad swipe switch, and their
+    // values in it.
     std::filesystem::path input_config;
     Deadzones deadzones{};
+    bool touch_swipe = false;
 };
 
 int Scaled(const Dialog& dialog, int value) {
@@ -635,8 +641,16 @@ Deadzones ReadDeadzones(const std::filesystem::path& file) {
     return deadzones;
 }
 
-// Rewrites the stick deadzone lines of the input config and adds the missing ones at its end.
-bool SaveDeadzones(const std::filesystem::path& file, const Deadzones& deadzones) {
+// A line of the input config to write: the start of the line it replaces, as Compact gives it,
+// and the line.
+struct ConfigLine {
+    std::string prefix;
+    std::string line;
+};
+
+// Rewrites the input config's lines that start with each prefix and adds the missing ones at its
+// end.
+bool SaveConfigLines(const std::filesystem::path& file, const std::vector<ConfigLine>& changes) {
     std::vector<std::string> lines;
     {
         std::ifstream in(file);
@@ -644,23 +658,19 @@ bool SaveDeadzones(const std::filesystem::path& file, const Deadzones& deadzones
             lines.push_back(std::move(line));
         }
     }
-    const auto deadzone_line = [&](size_t stick) {
-        return "analog_deadzone = " + std::string(Sticks[stick].name) + ", " +
-               std::to_string(deadzones[stick][0]) + ", " + std::to_string(deadzones[stick][1]);
-    };
-    std::array<bool, Sticks.size()> written{};
+    std::vector<bool> written(changes.size());
     for (std::string& line : lines) {
         const std::string compact = Compact(line);
-        for (size_t i = 0; i < Sticks.size(); ++i) {
-            if (compact.starts_with(DeadzonePrefix(Sticks[i]))) {
-                line = deadzone_line(i);
+        for (size_t i = 0; i < changes.size(); ++i) {
+            if (compact.starts_with(changes[i].prefix)) {
+                line = changes[i].line;
                 written[i] = true;
             }
         }
     }
-    for (size_t i = 0; i < Sticks.size(); ++i) {
+    for (size_t i = 0; i < changes.size(); ++i) {
         if (!written[i]) {
-            lines.push_back(deadzone_line(i));
+            lines.push_back(changes[i].line);
         }
     }
     std::ofstream out(file, std::ios::trunc);
@@ -668,6 +678,34 @@ bool SaveDeadzones(const std::filesystem::path& file, const Deadzones& deadzones
         out << line << '\n';
     }
     return !out.fail();
+}
+
+std::vector<ConfigLine> DeadzoneLines(const Deadzones& deadzones) {
+    std::vector<ConfigLine> lines;
+    for (size_t i = 0; i < Sticks.size(); ++i) {
+        lines.push_back(
+            {DeadzonePrefix(Sticks[i]), "analog_deadzone = " + std::string(Sticks[i].name) + ", " +
+                                            std::to_string(deadzones[i][0]) + ", " +
+                                            std::to_string(deadzones[i][1])});
+    }
+    return lines;
+}
+
+constexpr std::string_view TouchSwipePrefix = "touchpad_swipe_enabled=";
+
+// Whether the input config turns touch pad swipes on: its last touchpad_swipe_enabled line.
+bool ReadTouchSwipe(const std::filesystem::path& file) {
+    bool on = false;
+    std::ifstream in(file);
+    for (std::string line; std::getline(in, line);) {
+        const std::string compact = Compact(line);
+        if (compact.starts_with(TouchSwipePrefix)) {
+            const std::string_view value =
+                std::string_view{compact}.substr(TouchSwipePrefix.size());
+            on = value == "true" || value == "1";
+        }
+    }
+    return on;
 }
 
 Deadzones DefaultDeadzones() {
@@ -828,7 +866,8 @@ void ShowPads(Dialog& dialog) {
 }
 
 // The Controller tab shows config.json's controller settings and the deadzones of the input
-// config the game reads. The gamepads are listed when the tab is shown.
+// config the game reads, and the Mouse && Keyboard tab that config's touch pad swipe switch. The
+// gamepads are listed when the tab is shown.
 void ShowController(Dialog& dialog) {
     for (const Toggle& toggle : Toggles) {
         Check(dialog, toggle.id, (EmulatorSettings.*toggle.get)());
@@ -837,11 +876,13 @@ void ShowController(Dialog& dialog) {
         EmulatorSettings.IsUseUnifiedInputConfig() ? "default" : GameCheck::TitleId());
     dialog.deadzones = ReadDeadzones(dialog.input_config);
     ShowDeadzones(dialog, dialog.deadzones);
+    dialog.touch_swipe = ReadTouchSwipe(dialog.input_config);
+    Check(dialog, IdTouchSwipe, dialog.touch_swipe);
     dialog.default_pad = EmulatorSettings.GetDefaultControllerId();
 }
 
-// Saves the check boxes and the default gamepad to config.json and the deadzones to the input
-// config. The gamepad picked plays as player 1 in this run.
+// Saves the check boxes and the default gamepad to config.json and the deadzones and the touch pad
+// swipe switch to the input config. The gamepad picked plays as player 1 in this run.
 void SaveController(HWND window, const Dialog& dialog) {
     for (const Toggle& toggle : Toggles) {
         (EmulatorSettings.*toggle.set)(Checked(dialog, toggle.id), false);
@@ -852,9 +893,18 @@ void SaveController(HWND window, const Dialog& dialog) {
     if (dialog.pad_picked && pad >= 0 && pad < static_cast<int>(dialog.pads.size())) {
         Input::SelectedPad::Set(dialog.pads[pad].guid);
     }
+    std::vector<ConfigLine> lines;
     const Deadzones deadzones = ShownDeadzones(dialog);
-    if (deadzones != dialog.deadzones && !SaveDeadzones(dialog.input_config, deadzones)) {
-        MessageBoxW(window, L"The stick deadzones could not be saved.", L"Controller",
+    if (deadzones != dialog.deadzones) {
+        lines = DeadzoneLines(deadzones);
+    }
+    const bool touch_swipe = Checked(dialog, IdTouchSwipe);
+    if (touch_swipe != dialog.touch_swipe) {
+        lines.push_back({std::string(TouchSwipePrefix), std::string("touchpad_swipe_enabled = ") +
+                                                            (touch_swipe ? "true" : "false")});
+    }
+    if (!lines.empty() && !SaveConfigLines(dialog.input_config, lines)) {
+        MessageBoxW(window, L"The input config could not be saved.", L"Controller",
                     MB_OK | MB_ICONWARNING);
     }
 }
@@ -1247,10 +1297,19 @@ void Build(HWND window, Dialog& dialog) {
         {ComboLeft, PromptsAutomaticTop, ExtrasList.right, PromptsAutomaticTop + InfoHeight}));
     mouse_order.push_back(add_mouse(
         WC_STATICW,
-        L"The mouse always turns the camera. The game's Camera Sensitivity option scales both. "
+        L"The mouse turns the camera. The game's Camera Sensitivity option scales both. "
         L"Automatic follows the controller of player 1, or the keyboard when none is connected.",
         SS_LEFT, IdMouseNote,
         {LabelLeft, MouseNoteTop, ExtrasList.right, MouseNoteTop + 3 * InfoHeight}));
+    mouse_order.push_back(add_mouse(
+        WC_BUTTONW, L"Touchscreen to Touch Pad Swipes", BS_AUTOCHECKBOX | WS_TABSTOP, IdTouchSwipe,
+        {LabelLeft, TouchSwipeTop, ExtrasList.right, TouchSwipeTop + CheckHeight}));
+    mouse_order.push_back(add_mouse(
+        WC_STATICW,
+        L"Turns off mouse camera control. Touches and left-button drags become touch pad swipes, "
+        L"and the cursor stays free.",
+        SS_LEFT, IdTouchSwipeNote,
+        {LabelLeft, TouchSwipeNoteTop, ExtrasList.right, TouchSwipeNoteTop + 2 * InfoHeight}));
     KeepTabOrder(mouse_order);
 
     const HWND dlc_page = dialog.pages[DlcPage];
@@ -1388,6 +1447,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             }
             ShowDeadzones(dialog, DefaultDeadzones());
             ShowMouse(dialog, Settings::Mouse{});
+            Check(dialog, IdTouchSwipe, false);
         }
         break;
     case IdActivePad:
