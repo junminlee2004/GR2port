@@ -1,4 +1,5 @@
 //  SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+//  SPDX-FileCopyrightText: Copyright 2026 GR2port
 //  SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <map>
@@ -33,9 +34,7 @@ int SettingsWindow::GetComboIndex(std::string selection, std::vector<std::string
 }
 
 void SettingsWindow::LoadSettings(std::string profile) {
-    // Global-only settings
     EmulatorSettings.Load();
-    scanDepthSetting = EmulatorSettings.GetBigPictureFolderDepth();
 
     const bool isSpecific = currentProfile != "Global";
     if (isSpecific) {
@@ -186,75 +185,55 @@ void SettingsWindow::SaveInstallDirs() {
     if (!isGlobal) {
         EmulatorSettings.Load(profile);
     }
-
-    if (!isGameRunning) {
-        GetProfileInfo();
-    }
 }
 
-void SettingsWindow::GetProfileInfo() {
-    GetGameIconInfo(profileIcons);
-
-    BigPictureMode::IconInfo global;
-    global.title = "Global";
-    profileIcons.emplace(profileIcons.begin(), global);
-}
-
-SettingsWindow::SettingsWindow(bool gameRunning) : isGameRunning(gameRunning) {
+SettingsWindow::SettingsWindow() {
     auto resource = cmrc::res::get_filesystem();
-    auto loadTexture = [&](const std::string& resourcePath,
-                           std::variant<SDL_Texture*, ImGui::RefCountedTexture>& texture) {
+    auto loadTexture = [&](const std::string& resourcePath, ImGui::RefCountedTexture& texture) {
         auto file = resource.open(resourcePath);
         std::vector<u8> texData = std::vector<u8>(file.begin(), file.end());
-        gameRunning ? texture = ImGui::RefCountedTexture::DecodePngTexture(texData)
-                    : texture = BigPictureMode::LoadSdlTextureData(texData);
+        texture = ImGui::RefCountedTexture::DecodePngTexture(texData);
     };
 
-    loadTexture("src/resources/big_picture/settings.png", generalTexture);
-    loadTexture("src/resources/big_picture/experimental.png", experimentalTexture);
-    loadTexture("src/resources/big_picture/graphics.png", graphicsTexture);
-    loadTexture("src/resources/big_picture/controller.png", inputTexture);
-    loadTexture("src/resources/big_picture/trophy.png", trophyTexture);
-    loadTexture("src/resources/big_picture/log.png", logTexture);
-    loadTexture("src/resources/big_picture/folder.png", foldersTexture);
-    loadTexture("src/resources/big_picture/profiles.png", profilesTexture);
+    loadTexture("src/resources/icons/settings.png", generalTexture);
+    loadTexture("src/resources/icons/experimental.png", experimentalTexture);
+    loadTexture("src/resources/icons/graphics.png", graphicsTexture);
+    loadTexture("src/resources/icons/controller.png", inputTexture);
+    loadTexture("src/resources/icons/trophy.png", trophyTexture);
+    loadTexture("src/resources/icons/log.png", logTexture);
+    loadTexture("src/resources/icons/folder.png", foldersTexture);
 
     auto languageKeys = std::views::keys(languageMap);
     languageOptions.assign(languageKeys.begin(), languageKeys.end());
 
     currentProfile = "Global";
     m_GameInstallDirs = EmulatorSettings.GetAllGameInstallDirs();
-    currentCategory = isGameRunning ? SettingsCategory::General : SettingsCategory::Profiles;
 
     bool customConfigFound = false;
-    if (isGameRunning) {
-        runningGameSerial = std::string(Common::ElfInfo::Instance().GameSerial());
-        std::filesystem::path customConfigFile =
-            Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs) /
-            (runningGameSerial + ".json");
+    runningGameSerial = std::string(Common::ElfInfo::Instance().GameSerial());
+    std::filesystem::path customConfigFile =
+        Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs) /
+        (runningGameSerial + ".json");
 
-        if (std::filesystem::exists(customConfigFile)) {
-            customConfigFound = true;
-            currentProfile =
-                runningGameSerial + " - " + std::string(Common::ElfInfo::Instance().Title());
-        }
-    } else {
-        GetProfileInfo();
+    if (std::filesystem::exists(customConfigFile)) {
+        customConfigFound = true;
+        currentProfile =
+            runningGameSerial + " - " + std::string(Common::ElfInfo::Instance().Title());
     }
 
     customConfigFound ? LoadSettings(runningGameSerial) : LoadSettings("Global");
 }
 
 void SettingsWindow::Prepare() {
-    uiScale = EmulatorSettings.GetBigPictureScale() / 1000.f;
+    uiScale = EmulatorSettings.GetSettingsWindowScale() / 1000.f;
 }
 
 void SettingsWindow::DeInit() {
     EmulatorSettings.Load();
-    EmulatorSettings.SetBigPictureScale(static_cast<int>(uiScale * 1000));
+    EmulatorSettings.SetSettingsWindowScale(static_cast<int>(uiScale * 1000));
     EmulatorSettings.Save();
 
-    if (isGameRunning && !runningGameSerial.empty()) {
+    if (!runningGameSerial.empty()) {
         EmulatorSettings.Load(runningGameSerial);
     }
 }
@@ -301,8 +280,7 @@ void SettingsWindow::SetupWindow() {
         ImGui::SetKeyboardFocusHere();
     }
 
-    SettingsCategory firstCategory =
-        isGameRunning ? SettingsCategory::General : SettingsCategory::Profiles;
+    SettingsCategory firstCategory = SettingsCategory::General;
     SettingsCategory lastCategory =
         currentProfile != "Global" ? SettingsCategory::Experimental : SettingsCategory::Log;
 
@@ -339,10 +317,6 @@ void SettingsWindow::DrawCategoryTabs() {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(30.0f * uiScale, 0.0f));
 
     // Must add categories in enum order for L1/R1 to work correctly
-    if (!isGameRunning) {
-        AddCategory("Profiles", profilesTexture, SettingsCategory::Profiles);
-    }
-
     AddCategory("General", generalTexture, SettingsCategory::General);
     AddCategory("Graphics", graphicsTexture, SettingsCategory::Graphics);
     AddCategory("Input", inputTexture, SettingsCategory::Input);
@@ -359,8 +333,7 @@ void SettingsWindow::DrawCategoryTabs() {
     ImGui::EndChild();
 }
 
-void SettingsWindow::AddCategory(std::string name,
-                                 std::variant<SDL_Texture*, ImGui::RefCountedTexture> texture,
+void SettingsWindow::AddCategory(std::string name, const ImGui::RefCountedTexture& texture,
                                  SettingsCategory category) {
     ImGui::SameLine();
     ImGui::BeginGroup();
@@ -370,12 +343,7 @@ void SettingsWindow::AddCategory(std::string name,
         ? ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonHovered])
         : ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.235f, 0.392f, 0.624f, 1.00f));
 
-    ImTextureID id = nullptr;
-    if (std::holds_alternative<SDL_Texture*>(texture)) {
-        id = ImTextureID(std::get<SDL_Texture*>(texture));
-    } else if (std::holds_alternative<ImGui::RefCountedTexture>(texture)) {
-        id = std::get<ImGui::RefCountedTexture>(texture).GetTexture().im_id;
-    }
+    const ImTextureID id = texture.GetTexture().im_id;
 
     if (id != nullptr) {
         if (ImGui::ImageButton(name.c_str(), id,
@@ -407,9 +375,7 @@ void SettingsWindow::DrawMainContent(bool* open, const std::function<void()>& ap
     Overlay::TextCentered(centeredText.c_str());
     ImGui::Separator();
 
-    if (currentCategory == SettingsCategory::Profiles) {
-        DrawProfileSelector();
-    } else if (currentCategory == SettingsCategory::Folders) {
+    if (currentCategory == SettingsCategory::Folders) {
         DrawGameFolderManager();
     } else {
         DrawSettingsTable(currentCategory);
@@ -486,116 +452,6 @@ void SettingsWindow::DrawMainContent(bool* open, const std::function<void()>& ap
     }
 }
 
-void SettingsWindow::DrawProfileSelector() {
-    ImGuiChildFlags child_flags = ImGuiChildFlags_Borders | ImGuiChildFlags_NavFlattened;
-
-    ImGuiWindowFlags window_flags =
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse;
-
-    ImVec4 settingsColor = ImVec4(0.1f, 0.1f, 0.12f, 0.8f); // Darker gray
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, settingsColor);
-    ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
-
-    ImGui::BeginChild("Profile Selection", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()),
-                      child_flags, window_flags);
-
-    ImGui::PopStyleColor();
-
-    if (ImGui::BeginTable("ProfilesTable", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders)) {
-        ImGui::TableSetupColumn("CreateDeleteButton", ImGuiTableColumnFlags_WidthFixed,
-                                400.0f * uiScale);
-        ImGui::TableSetupColumn("Profile");
-
-        for (int i = 0; i < profileIcons.size(); i++) {
-            const std::filesystem::path customConfigFile =
-                Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs) /
-                (profileIcons[i].serial + ".json");
-            const bool gameConfigExists = std::filesystem::exists(customConfigFile);
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            std::string deleteButtonLabel = "Delete game-specific config##" + std::to_string(i);
-
-            if (gameConfigExists) {
-                // Different shades of red depending on button state
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.0f, 0.0f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.0f, 0.0f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.5f, 0.0f, 0.0f, 1.0f));
-
-                if (ImGui::Button(deleteButtonLabel.c_str(),
-                                  ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
-                    deleteProfileIndex = i;
-                }
-
-                ImGui::PopStyleColor(3);
-            }
-
-            ImGui::TableNextColumn();
-            std::string profileLabel = i == 0
-                                           ? "Global"
-                                           : profileIcons[i].serial + " - " +
-                                                 profileIcons[i].title + "##" + std::to_string(i);
-            if (ImGui::Button(profileLabel.c_str(),
-                              ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
-
-                currentProfile = profileLabel;
-                if (currentProfile == "Global") {
-                    LoadSettings("Global");
-                } else {
-                    LoadSettings(profileIcons[i].serial);
-                    if (!gameConfigExists) {
-                        SaveSettings(profileIcons[i].serial);
-                    }
-                }
-            }
-        }
-
-        ImGui::EndTable();
-    }
-
-    if (deleteProfileIndex != -1) {
-        ImGui::OpenPopup("Confirm Delete");
-    }
-
-    ImGui::PopStyleVar(3);
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    if (ImGui::BeginPopupModal("Confirm Delete", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        const std::string title = profileIcons[deleteProfileIndex].title;
-        const std::string message = "Delete game-specific config file for " + title + "?";
-        const std::filesystem::path path =
-            Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs) /
-            (profileIcons[deleteProfileIndex].serial + ".json");
-
-        ImGui::Text("%s", message.c_str());
-        ImGui::Separator();
-
-        if (ImGui::Button("OK", ImVec2(120 * uiScale, 0))) {
-            try {
-                std::filesystem::remove(path);
-            } catch (const std::exception& e) {
-                LOG_ERROR(ImGui, "Could not delete config file {}: {}", path.string(), e.what());
-            }
-
-            deleteProfileIndex = -1;
-            currentProfile = "Global";
-            LoadSettings("Global");
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-
-        if (ImGui::Button("Cancel", ImVec2(120 * uiScale, 0))) {
-            deleteProfileIndex = -1;
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
-    }
-
-    ImGui::EndChild();
-}
-
 void SettingsWindow::DrawGameFolderManager() {
     ImGuiChildFlags child_flags = ImGuiChildFlags_Borders | ImGuiChildFlags_NavFlattened;
 
@@ -615,29 +471,6 @@ void SettingsWindow::DrawGameFolderManager() {
         ImGui::SetNextWindowPos(viewport->Pos);
         ImGui::SetNextWindowSize(viewport->Size);
     }
-
-    float buttonWidth = ImGui::GetItemRectSize().x;
-    ImGui::PushItemWidth(buttonWidth);
-    if (ImGui::SliderInt("Folder Scan Depth", &scanDepthSetting, 0, 5)) {
-        std::string profile;
-        const bool isGlobal = currentProfile == "Global";
-        if (!isGlobal) {
-            profile = currentProfile.substr(0, 9);
-            EmulatorSettings.Load();
-        }
-
-        EmulatorSettings.SetBigPictureFolderDepth(scanDepthSetting);
-        EmulatorSettings.Save();
-
-        if (!isGlobal) {
-            EmulatorSettings.Load(profile);
-        }
-
-        if (!isGameRunning) {
-            GetProfileInfo();
-        }
-    }
-    ImGui::PopItemWidth();
 
     if (ImGuiFileDialog::Instance()->Display("OpenFolder", child_flags | ImGuiWindowFlags_NoMove)) {
         if (ImGuiFileDialog::Instance()->IsOk()) {

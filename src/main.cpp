@@ -24,7 +24,6 @@
 #include "core/ipc/ipc.h"
 #include "core/user_settings.h"
 #include "emulator.h"
-#include "imgui/big_picture/big_picture.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -65,8 +64,6 @@ int main(int argc, char* argv[]) {
     bool showFps = false;
     bool configClean = false;
     bool configGlobal = false;
-    bool bigPicture = false;
-    bool sameProcess = false;
     bool append_log{};
 
     std::optional<std::filesystem::path> addGameFolder;
@@ -82,10 +79,6 @@ int main(int argc, char* argv[]) {
     app.add_option("-p,--patch", patchFile, "Patch file to apply");
     app.add_flag("-i,--ignore-game-patch", ignoreGamePatch,
                  "Disable automatic loading of game patches");
-
-    app.add_flag("-b,--big-picture", bigPicture, "Start in Big Picture Mode");
-    app.add_flag("--same-process", sameProcess,
-                 "Launch the game in the same process when using Big Picture Mode");
 
     app.add_option("-f,--fullscreen", fullscreenStr, "Fullscreen mode (true|false)");
 
@@ -110,17 +103,6 @@ int main(int argc, char* argv[]) {
 
     // ---- Capture args after `--` verbatim ----
     app.allow_extras();
-
-    // ---- No-args behavior ----
-    if (argc == 1) {
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "shadPS4",
-                                 "This is a CLI application. Please use the '-b' flag for Big "
-                                 "Picture mode, or QTLauncher for a standalone GUI:\n"
-                                 "https://github.com/shadps4-emu/shadps4-qtlauncher/releases",
-                                 nullptr);
-        std::cout << app.help();
-        return -1;
-    }
 
     try {
         bool double_dash_found = false;
@@ -161,11 +143,6 @@ int main(int argc, char* argv[]) {
     // Load configurations
     EmulatorSettings.Load();
     UserSettings.Load();
-
-    if (bigPicture) {
-        BigPictureMode::Launch(argv[0], sameProcess);
-        return 0;
-    }
 
     // ---- Utility commands ----
     if (addGameFolder) {

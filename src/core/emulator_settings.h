@@ -206,8 +206,7 @@ struct GeneralSettings {
     Setting<bool> discord_rpc_enabled{false};
     Setting<bool> show_fps_counter{false};
     Setting<int> console_language{1};
-    Setting<int> big_picture_scale{1000};
-    Setting<int> big_picture_folder_depth{2};
+    Setting<int> settings_window_scale{1000};
     Setting<bool> redzone_patches{false};
     // return a vector of override descriptors (runtime, but tiny)
     std::vector<OverrideItem> GetOverrideableFields() const {
@@ -236,8 +235,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GeneralSettings, install_dirs, addon_install_
                                    extra_dmem_in_mbytes, extra_fmem_in_mbytes,
                                    trophy_popup_disabled, trophy_notification_duration, show_splash,
                                    trophy_notification_side, discord_rpc_enabled, show_fps_counter,
-                                   console_language, big_picture_scale, big_picture_folder_depth,
-                                   redzone_patches)
+                                   console_language, settings_window_scale, redzone_patches)
 
 // -------------------------------
 // Network settings
@@ -1146,8 +1144,7 @@ public:
     SETTING_FORWARD_BOOL(m_general, DiscordRPCEnabled, discord_rpc_enabled)
     SETTING_FORWARD_BOOL(m_general, ShowFpsCounter, show_fps_counter)
     SETTING_FORWARD(m_general, ConsoleLanguage, console_language)
-    SETTING_FORWARD(m_general, BigPictureScale, big_picture_scale)
-    SETTING_FORWARD(m_general, BigPictureFolderDepth, big_picture_folder_depth)
+    SETTING_FORWARD(m_general, SettingsWindowScale, settings_window_scale)
     SETTING_FORWARD_BOOL(m_general, RedZonePatchingEnabled, redzone_patches)
 
     // Network settings

@@ -1,15 +1,13 @@
 // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #include <functional>
 #include <map>
-#include <variant>
-#include <SDL3/SDL.h>
 #include <imgui.h>
 
-#include "big_picture.h"
 #include "core/emulator_settings.h"
 #include "imgui/imgui_texture.h"
 
@@ -18,13 +16,12 @@ namespace ImGuiEmuSettings {
 class SettingsWindow {
 
 public:
-    SettingsWindow(bool gameRunning);
+    SettingsWindow();
     void Prepare();
     void DrawSettings(bool* open, const std::function<void()>& applySettings);
 
 private:
     enum class SettingsCategory {
-        Profiles,
         General,
         Graphics,
         Input,
@@ -40,14 +37,12 @@ private:
 
     void SetupWindow();
     void DeInit();
-    void GetProfileInfo();
 
     void DrawMainContent(bool* open, const std::function<void()>& applySettings);
     void DrawSettingsTable(SettingsCategory);
-    void DrawProfileSelector();
     void DrawGameFolderManager();
     void DrawCategoryTabs();
-    void AddCategory(std::string name, std::variant<SDL_Texture*, ImGui::RefCountedTexture> texture,
+    void AddCategory(std::string name, const ImGui::RefCountedTexture& texture,
                      SettingsCategory category);
 
     void AddSettingCheckbox(std::string name, bool& value);
@@ -56,26 +51,22 @@ private:
     void AddSettingCombo(std::string name, int& value, std::vector<std::string> options);
     int GetComboIndex(std::string selection, std::vector<std::string> options);
 
-    std::vector<BigPictureMode::IconInfo> profileIcons = {};
     std::vector<GameInstallDir> m_GameInstallDirs = {};
 
     float uiScale = 1.0f;
-    SettingsCategory currentCategory = SettingsCategory::Profiles;
+    SettingsCategory currentCategory = SettingsCategory::General;
     std::string currentProfile = "Global";
 
     std::string runningGameSerial = "";
-    bool isGameRunning = false;
     bool closeOnSave = false;
-    int deleteProfileIndex = -1;
 
-    std::variant<SDL_Texture*, ImGui::RefCountedTexture> profilesTexture;
-    std::variant<SDL_Texture*, ImGui::RefCountedTexture> generalTexture;
-    std::variant<SDL_Texture*, ImGui::RefCountedTexture> experimentalTexture;
-    std::variant<SDL_Texture*, ImGui::RefCountedTexture> graphicsTexture;
-    std::variant<SDL_Texture*, ImGui::RefCountedTexture> inputTexture;
-    std::variant<SDL_Texture*, ImGui::RefCountedTexture> trophyTexture;
-    std::variant<SDL_Texture*, ImGui::RefCountedTexture> logTexture;
-    std::variant<SDL_Texture*, ImGui::RefCountedTexture> foldersTexture;
+    ImGui::RefCountedTexture generalTexture;
+    ImGui::RefCountedTexture experimentalTexture;
+    ImGui::RefCountedTexture graphicsTexture;
+    ImGui::RefCountedTexture inputTexture;
+    ImGui::RefCountedTexture trophyTexture;
+    ImGui::RefCountedTexture logTexture;
+    ImGui::RefCountedTexture foldersTexture;
 
     //////////////////// options for comboboxes
     const std::map<std::string, int> languageMap = {{"Arabic", 21},
@@ -173,9 +164,6 @@ private:
     bool pipelineCacheArchiveSetting;
     int extraDmemSetting;
     int vblankFrequencySetting;
-
-    // Folders tab
-    int scanDepthSetting;
 };
 
 } // namespace ImGuiEmuSettings

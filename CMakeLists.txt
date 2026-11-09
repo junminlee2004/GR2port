@@ -1311,6 +1311,10 @@ set(IMGUI src/imgui/imgui_config.h
           src/imgui/shadnet_notifications_layer.h
           src/imgui/notifications_layer.cpp
           src/imgui/notifications_layer.h
+          src/imgui/settings_dialog_imgui.cpp
+          src/imgui/settings_dialog_imgui.h
+          src/imgui/settings_dialog_layer.cpp
+          src/imgui/settings_dialog_layer.h
           src/imgui/renderer/imgui_core.cpp
           src/imgui/renderer/imgui_core.h
           src/imgui/renderer/imgui_impl_sdl3.cpp
@@ -1323,16 +1327,6 @@ set(IMGUI src/imgui/imgui_config.h
           src/imgui/renderer/font_stack.h
           src/imgui/renderer/texture_manager.cpp
           src/imgui/renderer/texture_manager.h
-          src/imgui/big_picture/big_picture.cpp
-          src/imgui/big_picture/big_picture.h
-          src/imgui/big_picture/settings_dialog_imgui.cpp
-          src/imgui/big_picture/settings_dialog_imgui.h
-          src/imgui/big_picture/settings_dialog_layer.cpp
-          src/imgui/big_picture/settings_dialog_layer.h
-          src/imgui/big_picture/imgui_impl_sdl3_big_picture.cpp
-          src/imgui/big_picture/imgui_impl_sdl3_big_picture.h
-          src/imgui/big_picture/imgui_impl_sdlrenderer3.cpp
-          src/imgui/big_picture/imgui_impl_sdlrenderer3.h
 )
 
 set(INPUT src/input/controller.cpp
@@ -1558,14 +1552,14 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CMakeRC.cmake")
 cmrc_add_resource_library(embedded-resources
         ALIAS res::embedded
         NAMESPACE res
-        src/resources/big_picture/controller.png
-        src/resources/big_picture/experimental.png
-        src/resources/big_picture/folder.png
-        src/resources/big_picture/graphics.png
-        src/resources/big_picture/log.png
-        src/resources/big_picture/profiles.png
-        src/resources/big_picture/settings.png
-        src/resources/big_picture/trophy.png
+        src/resources/icons/controller.png
+        src/resources/icons/experimental.png
+        src/resources/icons/folder.png
+        src/resources/icons/graphics.png
+        src/resources/icons/log.png
+        src/resources/icons/profiles.png
+        src/resources/icons/settings.png
+        src/resources/icons/trophy.png
         src/resources/bronze.png
         src/resources/gold.png
         src/resources/platinum.png

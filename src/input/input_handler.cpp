@@ -28,7 +28,7 @@
 #include "core/emulator_settings.h"
 #include "core/emulator_state.h"
 #include "core/prompt_packs/prompt_packs.h"
-#include "imgui/big_picture/settings_dialog_layer.h"
+#include "imgui/settings_dialog_layer.h"
 #include "input/controller.h"
 #include "input/input_mouse.h"
 
