@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+# SPDX-FileCopyrightText: Copyright 2026 GR2port
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 option(ENABLE_GR2_FSR3 "Build the Gravity Rush 2 FSR 3.1 and FSR 4 upscaler module" ON)
