@@ -3,9 +3,7 @@ SPDX-FileCopyrightText: 2026 GR2port
 SPDX-License-Identifier: GPL-2.0-or-later
 -->
 <h1 align="center">
-  <br>
   <b>GR2port - a genuine native PC port for Gravity Rush 2</b>
-  <br>
 </h1>
 
 **No CPU emulation, No GPU emulation, No GPU command translation, No shader recompiler:** GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC. **The game's graphics were completely rewritten for PC** via a native Vulkan renderer that runs **handwritten plus recompiled GLSL shaders** that recreate visuals produced by the original GCN shaders. Each frame, GR2port takes the game's scene at the start of its frame graph and draws it on its own render thread, so the per-draw PS4 GPU commands are never built or translated. **The CPU overhead of the native renderer was measured to be only 0.8ms**. **All shader pipelines are precompiled** at boot and stored on disk so there is no shader stutter during gameplay. A runtime translates the firmware libraries on the PS4's Operating System called by the game to native PC solutions (no performance overhead).<br>
