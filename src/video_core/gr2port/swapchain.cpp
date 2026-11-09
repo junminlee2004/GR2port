@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <array>
+#include <span>
 
 #include "common/logging/log.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/gr2port/swapchain.h"
 
 namespace Gr2Port {
@@ -20,9 +23,24 @@ vk::SurfaceFormatKHR PickFormat(const std::vector<vk::SurfaceFormatKHR>& formats
     return formats.front();
 }
 
+// Without VSync frames show at once, double buffering waits for the display, and triple buffering
+// replaces the frame that waits. FIFO is the one mode every device has.
 vk::PresentModeKHR PickMode(const std::vector<vk::PresentModeKHR>& modes) {
-    for (const vk::PresentModeKHR wanted :
-         {vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eImmediate}) {
+    static constexpr std::array NoVSync{vk::PresentModeKHR::eImmediate,
+                                        vk::PresentModeKHR::eMailbox};
+    static constexpr std::array TripleBuffered{vk::PresentModeKHR::eMailbox};
+    std::span<const vk::PresentModeKHR> preferred;
+    switch (Settings::Get().display.vsync) {
+    case Settings::VSync::Off:
+        preferred = NoVSync;
+        break;
+    case Settings::VSync::TripleBuffered:
+        preferred = TripleBuffered;
+        break;
+    case Settings::VSync::DoubleBuffered:
+        break;
+    }
+    for (const vk::PresentModeKHR wanted : preferred) {
         if (std::ranges::find(modes, wanted) != modes.end()) {
             return wanted;
         }

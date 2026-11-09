@@ -11,14 +11,12 @@
 #include "common/logging/log.h"
 #include "video_core/gr2port/capture.h"
 #include "video_core/gr2port/emulated_gpu.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/gr2port/window.h"
 
 namespace Gr2Port::Window {
 
 namespace {
-
-constexpr int InitialWidth = 1280;
-constexpr int InitialHeight = 720;
 
 SDL_Window* g_window = nullptr;
 std::atomic<SDL_WindowID> g_window_id{0};
@@ -45,16 +43,51 @@ bool SDLCALL WatchEvents(void*, SDL_Event* event) {
     return true;
 }
 
+SDL_DisplayID ChosenDisplay(const Settings::Display& display) {
+    if (display.monitor) {
+        const SDL_Point point{display.monitor->x, display.monitor->y};
+        if (const SDL_DisplayID id = SDL_GetDisplayForPoint(&point); id != 0) {
+            return id;
+        }
+    }
+    return SDL_GetPrimaryDisplay();
+}
+
+// Exclusive fullscreen switches the monitor to the closest mode; otherwise the window covers the
+// monitor at its desktop mode.
+void EnterFullscreen(SDL_DisplayID screen, const Settings::Display& display) {
+    SDL_DisplayMode mode{};
+    const SDL_DisplayMode* wanted = nullptr;
+    if (display.exclusive &&
+        SDL_GetClosestFullscreenDisplayMode(
+            screen, static_cast<int>(display.width), static_cast<int>(display.height),
+            static_cast<float>(display.refresh_rate), false, &mode)) {
+        wanted = &mode;
+    }
+    if (!SDL_SetWindowFullscreenMode(g_window, wanted) ||
+        !SDL_SetWindowFullscreen(g_window, true)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: no fullscreen: {}", SDL_GetError());
+    }
+}
+
 void SDLCALL CreateOnMainThread(void*) {
     int count = 0;
     SDL_Window** windows = SDL_GetWindows(&count);
     SDL_Window* const game = count > 0 ? windows[0] : nullptr;
     SDL_free(windows);
 
+    const Settings::Display display = Settings::Get().display;
+    const SDL_DisplayID screen = ChosenDisplay(display);
+    const int initial_width = static_cast<int>(display.width);
+    const int initial_height = static_cast<int>(display.height);
     const SDL_PropertiesID props = SDL_CreateProperties();
     SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "GR2port");
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, InitialWidth);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, InitialHeight);
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER,
+                          SDL_WINDOWPOS_CENTERED_DISPLAY(screen));
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER,
+                          SDL_WINDOWPOS_CENTERED_DISPLAY(screen));
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, initial_width);
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, initial_height);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_VULKAN_BOOLEAN, true);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
     if (game != nullptr) {
@@ -66,8 +99,11 @@ void SDLCALL CreateOnMainThread(void*) {
         LOG_ERROR(Render_Vulkan, "GR2port: no window: {}", SDL_GetError());
         return;
     }
-    int width = InitialWidth;
-    int height = InitialHeight;
+    if (display.fullscreen) {
+        EnterFullscreen(screen, display);
+    }
+    int width = initial_width;
+    int height = initial_height;
     SDL_GetWindowSizeInPixels(g_window, &width, &height);
     StoreSize(width, height);
     if (game != nullptr) {

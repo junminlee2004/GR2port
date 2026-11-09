@@ -64,6 +64,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/scene_ring.h
     ${CMAKE_CURRENT_LIST_DIR}/self_translucent.cpp
     ${CMAKE_CURRENT_LIST_DIR}/self_translucent.h
+    ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/settings.h
     ${CMAKE_CURRENT_LIST_DIR}/shadow_trace.cpp
     ${CMAKE_CURRENT_LIST_DIR}/shadow_trace.h
     ${CMAKE_CURRENT_LIST_DIR}/shadows.cpp
