@@ -12,6 +12,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 <br>
 
 <img width="1904" height="1200" alt="ep03_5_12" src="https://github.com/user-attachments/assets/39858c3f-7500-4adb-ab9b-ecb0614aa6f8" /></b>
+Screenshot © Sony Interactive Entertainment LLC. Not covered by this project's GPL 2.0 license.
 </b>
 
 **Check out the following playlist if your dump is in .PKG format:**
@@ -23,7 +24,8 @@ https://www.youtube.com/watch?v=O8z6QPOaGDg&list=PLOgHncbXc__M&pp=sAgC
 
 -------
 <img width="256" height="256" alt="20261025_030106_001" src="https://github.com/user-attachments/assets/5f28141c-570b-4010-9cd6-4ddb573217d6" /><img width="256" height="256![Uploading 20260525_051655_001.jpg…]()
-" alt="20261025_031040_001" src="https://github.com/user-attachments/assets/fb09aaee-6adb-415c-9206-d292dd9e8cb5" /><img width="256" height="256" alt="20260705_103536_001" src="https://github.com/user-attachments/assets/b2f5e6f9-75f1-4548-9c19-e61deb38d46f" />
+" alt="20261025_031040_001" src="https://github.com/user-attachments/assets/fb09aaee-6adb-415c-9206-d292dd9e8cb5" /><img width="256" height="256" alt="20260705_103536_001" src="https://github.com/user-attachments/assets/b2f5e6f9-75f1-4548-9c19-e61deb38d46f" /><br>
+Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's GPL 2.0 license.
 
 **System Requirements**
 
