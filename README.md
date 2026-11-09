@@ -29,9 +29,9 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 
 **System Requirements**
 
-| | 1080p 30 (locked) | 1080p 30 (locked) | 4K 60 (locked) | 4K 120 (locked) |
+| | 1080p 60 (locked) | 1080p 60 (locked) | 4K 60 (locked) | 4K 120 (locked) |
 |---|---|---|---|---|
-| CPU | Ryzen 5 1600 | intel i7 4790 | Ryzen 7 5800X | Ryzen 7 9700X |
+| CPU | intel i5 3470 | intel i7 4790 | Ryzen 5 1600 | Ryzen 5 3600 |
 | GPU | GTX 960 4 GB | RX 570 4 GB | RTX 3060 8 GB | RTX 3080 Ti 12 GB |
 | RAM | 12 GB | 12 GB | 12 GB | 12 GB |
 | Storage | SSD | SSD | SSD | SSD |
@@ -58,16 +58,6 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 - SSAO - TAA ghosting fix patch
 - FSR 3.1 + FSR 4.1 support (Windows + Linux) + DLSS support (Windows Only)
 - XBOX, NINTENDO and STEAM (Steam Deck, Steam Controller) button prompts for GR2 and GRR
-
-**Included General QOL features**
-- All GR2fork improvements are region agnostic
-- massive general performance improvements
-- massive performance improvements with precise (offloaded) readbacks
-- massive performance improvements with asynchronous readback linear images
-- touchpad press, double finger touchpad and single finger touchpad press mapping
-- touchpad swipe mapping
-- gamepad shake mapping
-- hold L3 to convert face buttons to directional touchpad swipes (can be mapped to whatever)
 
 # Keyboard and Mouse Mappings
 
