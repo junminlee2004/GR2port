@@ -100,8 +100,8 @@ constexpr u32 BloomInterval = SurfacesInterval + 7;
 constexpr u32 PictureInterval = SurfacesInterval + 8;
 constexpr u32 ReportFrames = 600;
 constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
-// The game's render size. The picture scales it to the window.
-constexpr vk::Extent2D SceneExtent{1920, 1080};
+// The scene's size until a world frame names the game's target for its picture: the game's own.
+constexpr vk::Extent2D DefaultSceneExtent{1920, 1080};
 // A frame with more indices than this is not drawn: its items are not what the capture expects.
 constexpr u64 MaxFrameIndices = 48u << 20;
 
@@ -225,7 +225,8 @@ private:
     void Frame(const SceneRing::Packet& packet);
     void RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Header& header,
                      const SceneRing::Packet& packet, u64 offset);
-    void Record(Slot& slot, u32 index, const SceneRing::Packet& packet);
+    void Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
+                const Scene::Header& header);
     void ReadTimes(u32 slot_index);
     void LogScene(const Scene::Header& header, const SceneRing::Packet& packet);
     void LogShadows(const Scene::Header& header, const SceneRing::Packet& packet);
@@ -233,12 +234,14 @@ private:
     void LogLight(const SceneRing::Packet& packet);
     void DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const Pipeline& pipeline,
                         std::span<const vk::DescriptorSet> sets, const Scene::Header& header,
-                        const SceneRing::Packet& packet, u64 offset,
-                        vk::Extent2D extent = SceneExtent, bool glow_pass = false);
+                        const SceneRing::Packet& packet, u64 offset, vk::Extent2D extent,
+                        bool glow_pass = false);
     void RecordSnapshot(vk::CommandBuffer cmd, vk::Image image);
     void SaveSnapshot();
     void Report();
     bool Recreate();
+    bool ResizeScene(vk::Extent2D extent);
+    bool SizeScene(const Scene::Header& header, const u8* packet);
 
     Device d;
     std::unique_ptr<Memory> memory;
@@ -246,6 +249,9 @@ private:
     std::unique_ptr<Swapchain> swapchain;
     std::array<Slot, FramesInFlight> slots;
     vk::QueryPool timestamps;
+    // The size of the scene's images, 0 by 0 before they are made, and a size they did not fit at.
+    vk::Extent2D scene_extent;
+    vk::Extent2D refused_extent;
     Image depth;
     // The characters' depth alone, for the ambient occlusion.
     Image character_depth;
@@ -460,39 +466,71 @@ bool Thread::Recreate() {
     if (d.device.waitIdle(d.dispatch) != vk::Result::eSuccess) {
         return false;
     }
-    needs_swapchain = !swapchain->Create(size.width, size.height);
-    if (needs_swapchain) {
+    needs_swapchain = !swapchain->Create(size.width, size.height) ||
+                      !Ui::Resize(swapchain->Format()) || !ImGuiRelay::Resize(swapchain->Format());
+    if (!needs_swapchain) {
+        // The screen's pipelines take the window's format.
+        SavePipelineCache(d);
+    }
+    return !needs_swapchain;
+}
+
+// Makes the scene's images at extent. When one is not made, the scene has none.
+bool Thread::ResizeScene(vk::Extent2D extent) {
+    if (d.device.waitIdle(d.dispatch) != vk::Result::eSuccess) {
         return false;
     }
+    scene_extent = vk::Extent2D{};
     for (Image* image : {&depth, &character_depth}) {
         memory->Destroy(*image);
-        *image = memory->CreateImage(DepthFormat, SceneExtent,
+        *image = memory->CreateImage(DepthFormat, extent,
                                      vk::ImageUsageFlagBits::eDepthStencilAttachment |
                                          vk::ImageUsageFlagBits::eSampled |
                                          vk::ImageUsageFlagBits::eTransferSrc,
                                      vk::ImageAspectFlagBits::eDepth);
     }
-    needs_swapchain =
-        !depth.image || !character_depth.image ||
-        !Velocity::Resize(SceneExtent, depth.view, character_depth.view) ||
-        !Look::Resize(SceneExtent, Ui::TargetFormat, depth.view) ||
-        !ShadowTrace::Resize(SceneExtent, depth.view) ||
-        !MotionBlur::Resize(SceneExtent, Velocity::View(), depth.view, character_depth.view,
+    if (!depth.image || !character_depth.image ||
+        !Velocity::Resize(extent, depth.view, character_depth.view) ||
+        !Look::Resize(extent, Ui::TargetFormat, depth.view) ||
+        !ShadowTrace::Resize(extent, depth.view) ||
+        !MotionBlur::Resize(extent, Velocity::View(), depth.view, character_depth.view,
                             Look::SceneImage(), Look::SceneView()) ||
-        !Ui::Resize(swapchain->Format()) || !ImGuiRelay::Resize(swapchain->Format()) ||
-        !World::Resize(SceneExtent, depth.view, character_depth.view) ||
-        !Glass::Resize(SceneExtent) || !Water::Resize(SceneExtent, Glass::BehindView()) ||
-        !SelfTranslucent::Resize(SceneExtent);
-    if (!needs_swapchain) {
-        Fog::Resize(depth.view);
-        needs_swapchain = !Particles::Resize(depth.view, World::AlbedoView(), SceneExtent);
-        Effects::Resize(depth.view, Glass::BehindView());
+        !World::Resize(extent, depth.view, character_depth.view) || !Glass::Resize(extent) ||
+        !Water::Resize(extent, Glass::BehindView()) || !SelfTranslucent::Resize(extent)) {
+        return false;
     }
-    if (!needs_swapchain) {
-        // The picture's and the screen's pipelines take the window's format.
-        SavePipelineCache(d);
+    Fog::Resize(depth.view);
+    if (!Particles::Resize(depth.view, World::AlbedoView(), extent)) {
+        return false;
     }
-    return !needs_swapchain;
+    Effects::Resize(depth.view, Glass::BehindView());
+    scene_extent = extent;
+    // The picture's pipeline is made with the first images.
+    SavePipelineCache(d);
+    LOG_INFO(Render_Vulkan, "GR2port: the scene is drawn at {}x{}", extent.width, extent.height);
+    return true;
+}
+
+// Gives the scene the size of the game's target for the world's picture, which the game's render
+// resolution sets, or keeps its size on frames that name none. False when the scene has no images.
+bool Thread::SizeScene(const Scene::Header& header, const u8* packet) {
+    vk::Extent2D extent = scene_extent.width != 0 ? scene_extent : DefaultSceneExtent;
+    if (header.ui.only == 0 && header.ui.world < std::min(header.ui.targets, Scene::MaxUiTargets)) {
+        Scene::UiTarget target;
+        std::memcpy(&target, packet + Scene::UiTargetsOffset + header.ui.world * sizeof(target),
+                    sizeof(target));
+        const vk::Extent2D world{target.width, target.height};
+        if (world != refused_extent) {
+            extent = world;
+        }
+    }
+    if (extent == scene_extent || ResizeScene(extent)) {
+        return true;
+    }
+    LOG_ERROR(Render_Vulkan, "GR2port: no room for the scene's images at {}x{}", extent.width,
+              extent.height);
+    refused_extent = extent;
+    return extent != DefaultSceneExtent && ResizeScene(DefaultSceneExtent);
 }
 
 // Inside a rendering at extent: draws the packet's draws of a character list with pipeline, as
@@ -740,6 +778,7 @@ void Thread::LogShadows(const Scene::Header& header, const SceneRing::Packet& pa
 void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Header& header,
                          const SceneRing::Packet& packet, u64 offset) {
     const auto& dl = d.dispatch;
+    const vk::Extent2D extent = scene_extent;
     const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices;
     stats.refused += header.indices > MaxFrameIndices;
     if (drawn) {
@@ -839,19 +878,18 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
             .clearValue = {.depthStencil = {.depth = 0.0f}},
         };
         cmd.beginRendering(
-            {.renderArea = {{0, 0}, SceneExtent}, .layerCount = 1, .pDepthAttachment = &characters},
-            dl);
+            {.renderArea = {{0, 0}, extent}, .layerCount = 1, .pDepthAttachment = &characters}, dl);
         const std::array depth_sets{Textures::Set()};
         DrawCharacters(cmd, Scene::DrawList::Lambert, lambert_depth_pipeline, depth_sets, header,
-                       packet, offset);
-        Enemies::RecordDepth(cmd, header, packet.address, scene_ring.buffer, offset, SceneExtent);
+                       packet, offset, extent);
+        Enemies::RecordDepth(cmd, header, packet.address, scene_ring.buffer, offset, extent);
         // The screens' depth takes the interiors' pipeline: the same vertex program and state.
         DrawCharacters(cmd, Scene::DrawList::Vision, interior_depth_pipeline, depth_sets, header,
-                       packet, offset);
+                       packet, offset, extent);
         DrawCharacters(cmd, Scene::DrawList::Character, character_depth_pipeline, depth_sets,
-                       header, packet, offset);
+                       header, packet, offset, extent);
         DrawCharacters(cmd, Scene::DrawList::Interior, interior_depth_pipeline, depth_sets, header,
-                       packet, offset);
+                       packet, offset, extent);
         cmd.endRendering(dl);
         Barrier(d, cmd, character_depth.image, vk::ImageLayout::eDepthStencilAttachmentOptimal,
                 vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
@@ -875,7 +913,6 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                 vk::PipelineStageFlagBits2::eFragmentShader,
             vk::AccessFlagBits2::eNone, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             vk::AccessFlagBits2::eColorAttachmentWrite);
-    const vk::Extent2D extent = SceneExtent;
     const vk::RenderingAttachmentInfo lit{
         .imageView = Look::SceneView(),
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -938,13 +975,14 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Characters);
         const std::array sets{Textures::Set(), Shadows::Set(), SelfTranslucent::Set()};
         DrawCharacters(cmd, Scene::DrawList::Lambert, lambert_pipeline, sets, header, packet,
-                       offset);
+                       offset, extent);
         Enemies::RecordForward(cmd, header, packet.address, scene_ring.buffer, offset, extent);
-        DrawCharacters(cmd, Scene::DrawList::Vision, vision_pipeline, sets, header, packet, offset);
+        DrawCharacters(cmd, Scene::DrawList::Vision, vision_pipeline, sets, header, packet, offset,
+                       extent);
         DrawCharacters(cmd, Scene::DrawList::Character, character_pipeline, sets, header, packet,
-                       offset);
+                       offset, extent);
         DrawCharacters(cmd, Scene::DrawList::Interior, interior_pipeline, sets, header, packet,
-                       offset);
+                       offset, extent);
     }
     if (header.sky != 0) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Sky);
@@ -1054,10 +1092,10 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Bloom);
     const std::array glow_sets{Textures::Set(), Shadows::Set(), SelfTranslucent::Set()};
     Look::RecordBloom(cmd, header, packet.address, scene_ring.buffer, offset,
-                      [&](vk::CommandBuffer glow_cmd, vk::Extent2D extent) {
+                      [&](vk::CommandBuffer glow_cmd, vk::Extent2D glow_extent) {
                           DrawCharacters(glow_cmd, Scene::DrawList::CharacterGlow,
                                          character_glow_pipeline, glow_sets, header, packet, offset,
-                                         extent, true);
+                                         glow_extent, true);
                       });
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
@@ -1071,7 +1109,8 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     Look::RecordAntialias(cmd, packet.address);
 }
 
-void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
+void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
+                    const Scene::Header& header) {
     const vk::CommandBuffer cmd = slot.commands;
     const auto& dl = d.dispatch;
     const u32 slot_index = static_cast<u32>(&slot - slots.data());
@@ -1082,9 +1121,6 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, timestamps,
                             Timestamps * slot_index, dl);
     }
-    // One read of the header: the packet is write-combined.
-    Scene::Header header;
-    std::memcpy(&header, packet.data, sizeof(header));
     memory->Refresh(frame);
     Meshes::Update(cmd, frame, frame - FramesInFlight);
     Textures::Update(cmd, frame, frame - FramesInFlight);
@@ -1239,7 +1275,10 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet) {
 void Thread::Frame(const SceneRing::Packet& packet) {
     const auto& dl = d.dispatch;
     const auto start = std::chrono::steady_clock::now();
-    if (needs_swapchain && !Recreate()) {
+    // One read of the header: the packet is write-combined.
+    Scene::Header header;
+    std::memcpy(&header, packet.data, sizeof(header));
+    if ((needs_swapchain && !Recreate()) || !SizeScene(header, packet.data)) {
         SceneRing::Release(packet.slot);
         return;
     }
@@ -1270,7 +1309,7 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     }
     (void)d.device.resetFences(slot.done, dl);
     (void)d.device.resetCommandPool(slot.pool, {}, dl);
-    Record(slot, index, packet);
+    Record(slot, index, packet, header);
     slot.scene = packet.slot;
 
     const vk::SemaphoreSubmitInfo wait{

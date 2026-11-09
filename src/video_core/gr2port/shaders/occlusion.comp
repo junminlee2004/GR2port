@@ -30,7 +30,8 @@ const float SumWeight = 1.25;
 const float DepthThreshold = 0.065;
 const float MaxFrames = 26.0;
 const float SamplesPerFrame = 4.0;
-// The disk's size in pixels at distance 1 per unit of radius, at the game's 1080 lines.
+// The disk's size in pixels at distance 1 per unit of radius at the game's own 1080 lines. At
+// other heights the disk keeps its share of the scene's height.
 const float DiskPixels = 500.0;
 const float GameLines = 1080.0;
 const float TurnsPerRadian = 0.15915494;
