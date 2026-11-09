@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#pragma code_page(65001)
+
 #include "winresrc.h"
 
 #define xstr(s) str(s)
@@ -10,7 +12,7 @@
 LANGUAGE LANG_NEUTRAL, 0x8
 
 // ICON
-IDI_ICON1 ICON "shadps4.ico"
+IDI_ICON1 ICON "gravity_rush_2.ico"
 
 // VERSION
 VS_VERSION_INFO VERSIONINFO
@@ -27,12 +29,12 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "CompanyName", "\0"
-            VALUE "FileDescription", "shadPS4 - PlayStation 4 Emulator\0"
+            VALUE "FileDescription", "Gravity Rush 2\0"
             VALUE "FileVersion", xstr(EMULATOR_VERSION_MAJOR) "." xstr(EMULATOR_VERSION_MINOR) "." xstr(EMULATOR_VERSION_PATCH) ".0\0"
-            VALUE "InternalName", "shadPS4\0"
+            VALUE "InternalName", "Gravity Rush 2\0"
             VALUE "LegalCopyright", "Copyright 2025 shadPS4 Team\0"
-            VALUE "OriginalFilename", "shadPS4.exe\0"
-            VALUE "ProductName", "shadPS4\0"
+            VALUE "OriginalFilename", "Gravity Rush 2™.exe\0"
+            VALUE "ProductName", "Gravity Rush 2\0"
             VALUE "ProductVersion", xstr(EMULATOR_VERSION_MAJOR) "." xstr(EMULATOR_VERSION_MINOR) "." xstr(EMULATOR_VERSION_PATCH) ".0\0"
         END
     END

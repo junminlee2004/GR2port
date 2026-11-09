@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <memory>
@@ -29,14 +30,27 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include "launcher/launcher.h"
 #elif defined(__APPLE__)
 #include <sys/sysctl.h>
 #endif
 
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
+    Gr2Port::Launcher::AttachTerminal();
     SetConsoleOutputCP(CP_UTF8);
 #endif
+
+    // -nolauncher starts the game at once. CLI11 takes no long names after a single dash.
+    [[maybe_unused]] bool noLauncher = false;
+    for (int i = 1; i < argc && std::string(argv[i]) != "--"; i++) {
+        if (std::string(argv[i]) == "-nolauncher") {
+            noLauncher = true;
+            std::copy(argv + i + 1, argv + argc, argv + i);
+            argc--;
+            i--;
+        }
+    }
 
 #if defined(__APPLE__) && defined(ARCH_X86_64)
     // KosmicKrisp only supports Apple Silicon. Check that we are not running on an Intel Mac.
@@ -165,6 +179,12 @@ int main(int argc, char* argv[]) {
     }
     PromptPacks::InstallBundled();
 
+#ifdef _WIN32
+    if (!noLauncher && !IPC::Instance().IsEnabled() && !Gr2Port::Launcher::Run()) {
+        return 0;
+    }
+#endif
+
     // ---- Apply flags ----
     if (patchFile)
         MemoryPatcher::patch_file = *patchFile;
@@ -197,7 +217,15 @@ int main(int argc, char* argv[]) {
     }
 
     auto* emulator = Common::Singleton<Core::Emulator>::Instance();
+#ifdef _WIN32
+    // argv is in the ANSI code page, and restarts read the name as UTF-8.
+    std::wstring module(32768, L'\0');
+    module.resize(GetModuleFileNameW(nullptr, module.data(), static_cast<DWORD>(module.size())));
+    static const std::string executable = Common::FS::PathToUTF8String(module);
+    emulator->executableName = executable.c_str();
+#else
     emulator->executableName = argv[0];
+#endif
     emulator->waitForDebuggerBeforeRun = waitForDebugger;
     emulator->Run(game->root, gameArgs, overrideRoot, mounts, env_vars, append_log);
 
