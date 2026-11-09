@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include "common/logging/log.h"
+#include "core/game_check/game_patches.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/shaders/fullscreen_vert.h"
@@ -30,6 +31,8 @@
 #include "video_core/gr2port/shaders/ui_skinned_b_vert.h"
 #include "video_core/gr2port/shaders/ui_skinned_vert.h"
 #include "video_core/gr2port/shaders/ui_sprite_frag.h"
+#include "video_core/gr2port/shaders/ui_text_flat_geom.h"
+#include "video_core/gr2port/shaders/ui_text_geom.h"
 #include "video_core/gr2port/shaders/ui_threshold_frag.h"
 #include "video_core/gr2port/shaders/ui_transform_b_vert.h"
 #include "video_core/gr2port/shaders/ui_transform_vert.h"
@@ -63,6 +66,39 @@ constexpr std::array<u32, PixelPrograms> PixelInputs{1, 2, 1, 2, 1, 3, 3, 3, 2, 
 std::array<Pipeline, VertexPrograms * PixelPrograms> g_pairs;
 Pipeline g_present;
 u32 g_open_target = Scene::MaxUiTargets;
+// The shape of the screen the game lays its screen drawing out for.
+constexpr float LayoutAspect = 16.0f / 9.0f;
+// The pipelines run ui_text.glsl: the chosen aspect is not 16:9, so the game stretches its screen
+// drawing.
+bool g_narrow_text = false;
+
+// The draws' device address, then ui_text.glsl's scale.
+struct Push {
+    u64 draws;
+    std::array<float, 2> text_scale;
+};
+
+std::span<const u32> GeometryCode(u32 vertex_program) {
+    if (!g_narrow_text) {
+        return {};
+    }
+    return VertexOutputs[vertex_program] == 1 ? std::span<const u32>{UI_TEXT_FLAT_GEOM}
+                                              : std::span<const u32>{UI_TEXT_GEOM};
+}
+
+// The scale that gives text its 16:9 shape in a target with the back buffer's shape; 1 for
+// targets of other shapes and for a 16:9 back buffer.
+std::array<float, 2> TextScale(vk::Extent2D screen, vk::Extent2D target) {
+    if (!g_narrow_text || screen.height == 0 || target.height == 0) {
+        return {1.0f, 1.0f};
+    }
+    const float aspect = static_cast<float>(screen.width) / static_cast<float>(screen.height);
+    const float shape = static_cast<float>(target.width) / static_cast<float>(target.height);
+    if (std::abs(shape - aspect) > 0.01f) {
+        return {1.0f, 1.0f};
+    }
+    return {std::min(1.0f, LayoutAspect / aspect), std::min(1.0f, aspect / LayoutAspect)};
+}
 
 void TargetBarrier(vk::CommandBuffer cmd, u32 target, vk::ImageLayout from, vk::ImageLayout to,
                    vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
@@ -243,11 +279,12 @@ const Pipeline& PipelineFor(const Scene::UiRun& run) {
         const std::array sets{Textures::SetLayout(), g_sampler_layout};
         entry->second = CreateGraphicsPipeline(*g_device, {
                                                               .vertex = VertexCode(run.vertex),
+                                                              .geometry = GeometryCode(run.vertex),
                                                               .fragment = PixelCode(run.pixel),
                                                               .color = TargetFormat,
                                                               .blend = &blend,
                                                               .dynamic_topology = true,
-                                                              .push_constant_bytes = sizeof(u64),
+                                                              .push_constant_bytes = sizeof(Push),
                                                               .set_layouts = sets,
                                                           });
         LOG_INFO(Render_Vulkan, "GR2port UI: pipeline of programs {} {}, blend {:#x}: {}",
@@ -304,6 +341,17 @@ bool Start(const Device& device, Memory& memory) {
         return false;
     }
     g_sampler_set = sets.front();
+    const float aspect = GamePatches::AspectRatio();
+    if (std::abs(aspect - LayoutAspect) > 0.01f) {
+        g_narrow_text = device.geometry_shaders;
+        if (g_narrow_text) {
+            LOG_INFO(Render_Vulkan, "GR2port UI: text keeps its 16:9 shape on a {:.3f} screen",
+                     aspect);
+        } else {
+            LOG_WARNING(Render_Vulkan, "GR2port UI: no geometry shaders; text stretches to {:.3f}",
+                        aspect);
+        }
+    }
     if (!device.dynamic_blend) {
         LOG_WARNING(Render_Vulkan,
                     "GR2port UI: the device has no dynamic blend; pipelines are made on first use");
@@ -319,11 +367,12 @@ bool Start(const Device& device, Memory& memory) {
             Pipeline& pipeline = g_pairs[vertex * PixelPrograms + pixel];
             pipeline = CreateGraphicsPipeline(device, {
                                                           .vertex = VertexCode(vertex),
+                                                          .geometry = GeometryCode(vertex),
                                                           .fragment = PixelCode(pixel),
                                                           .color = TargetFormat,
                                                           .dynamic_topology = true,
                                                           .dynamic_blend = true,
-                                                          .push_constant_bytes = sizeof(u64),
+                                                          .push_constant_bytes = sizeof(Push),
                                                           .set_layouts = pipeline_sets,
                                                       });
             if (!pipeline.pipeline) {
@@ -433,6 +482,8 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
     std::array<Scene::UiRun, Scene::MaxUiRuns> runs;
     std::memcpy(runs.data(), packet + Scene::UiRunsOffset, count * sizeof(Scene::UiRun));
     const u64 draws = address + Scene::UiDrawsOffset;
+    const vk::Extent2D screen =
+        HasImage(header, header.ui.picture) ? g_images[header.ui.picture].extent : vk::Extent2D{};
     const std::array sets{Textures::Set(), g_sampler_set};
     for (u32 i = 0; i < count; i++) {
         const Scene::UiRun& run = runs[i];
@@ -470,12 +521,14 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
                                          dl);
         }
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, sets, {}, dl);
-        cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(draws),
-                          &draws, dl);
         cmd.setPrimitiveTopology(run.topology == Scene::UiPrimitiveStrip
                                      ? vk::PrimitiveTopology::eTriangleStrip
                                      : vk::PrimitiveTopology::eTriangleList,
                                  dl);
+        const Push push{.draws = draws,
+                        .text_scale = TextScale(screen, g_images[run.target].extent)};
+        cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
+                          &push, dl);
         const vk::Viewport viewport{
             .x = run.viewport[0],
             .y = run.viewport[1],

@@ -1279,9 +1279,15 @@ struct UiDraw {
     UiAttribute attributes[UiAttributes];
     u32 index_bits;
     u32 first_index;
-    u32 padding[2];
+    /// UiDrawText for text: its first texture is a linear image the game writes the text into.
+    u32 flags;
+    u32 padding;
 };
 static_assert(sizeof(UiDraw) == 160);
+inline constexpr u32 UiDrawText = 1;
+/// With UiDrawText: the vertex program places the text by the 4x4 matrix at the start of its
+/// constants, whose origin is the point the game lays the text out from.
+inline constexpr u32 UiDrawAnchored = 2;
 
 /// Consecutive screen draws of one target, pair of programs, blend, primitive type and viewport:
 /// x, y, width and height, with a negative height where the game's y scale is.

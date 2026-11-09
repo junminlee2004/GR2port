@@ -286,7 +286,7 @@ private:
     u64 Copy(VAddr from, u64 bytes);
     u64 CopyShared(VAddr from, u64 bytes);
     bool CopyInputs(VAddr table, u32 inputs, Scene::UiDraw& draw);
-    u32 TextureHandle(const u32* sharp);
+    u32 TextureHandle(const u32* sharp, bool* linear = nullptr);
     void AddRun(const Scene::UiRun& state);
 
     u8* packet;
@@ -356,7 +356,7 @@ bool Writer::CopyInputs(VAddr table, u32 inputs, Scene::UiDraw& draw) {
     return true;
 }
 
-u32 Writer::TextureHandle(const u32* sharp) {
+u32 Writer::TextureHandle(const u32* sharp, bool* linear) {
     const u64 base = SharpAddress(sharp);
     if (base == 0) {
         return 0;
@@ -368,6 +368,9 @@ u32 Writer::TextureHandle(const u32* sharp) {
     }
     bool dynamic = false;
     const u32 handle = Textures::GetBySharp(sharp, dynamic);
+    if (linear != nullptr) {
+        *linear = dynamic;
+    }
     if (handle == 0) {
         ui.unknown_textures++;
         if (g_logged_textures < LoggedUnknowns &&
@@ -489,9 +492,22 @@ void Writer::Draw(u32 opcode, const u32* body) {
         const u32 point = (words[2] >> 20 & 3) == 0 ? 2 : 0;
         return clamp | point;
     };
+    const auto pixel_index = static_cast<u32>(pixel_program - PixelPrograms.begin());
     if (pixel_program->textures != 0) {
-        draw.textures[0] = TextureHandle(ps_user);
+        bool linear = false;
+        draw.textures[0] = TextureHandle(ps_user, &linear);
         draw.samplers[0] = sampler_of(ps_user + PsUserSampler);
+        // The game writes text into linear images; movies and photos are linear too.
+        if (linear && pixel_index != static_cast<u32>(Scene::UiPixelProgram::Movie) &&
+            pixel_index != static_cast<u32>(Scene::UiPixelProgram::Photo)) {
+            draw.flags |= Scene::UiDrawText;
+            const auto vertex_index =
+                static_cast<Scene::UiVertexProgram>(vertex_program - VertexPrograms.begin());
+            if (vertex_index == Scene::UiVertexProgram::Transform ||
+                vertex_index == Scene::UiVertexProgram::TransformB) {
+                draw.flags |= Scene::UiDrawAnchored;
+            }
+        }
     }
     std::array<u32, 16> table_words{};
     if (pixel_program->textures == 2) {
