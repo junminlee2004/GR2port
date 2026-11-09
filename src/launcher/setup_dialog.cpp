@@ -140,7 +140,8 @@ enum Control : int {
     IdShiftVerticalValue,
     IdPromptsLabel,
     IdPrompts,
-    IdPromptsAutomatic,
+    IdPadPromptsLabel,
+    IdPadPrompts,
     IdMouseNote,
     IdTouchSwipe,
     IdTouchSwipeNote,
@@ -245,18 +246,18 @@ constexpr std::array Sticks{
         IdLeftStickGroup,
         L"Left Stick Deadzone",
         "leftjoystick",
-        {18, 288, 290, 412},
+        {18, 288, 290, 396},
         {Slider{IdLeftMinLabel, IdLeftMin, IdLeftMinValue, L"Min Deadzone (def:2 max:127)", 2, 306},
          Slider{IdLeftMaxLabel, IdLeftMax, IdLeftMaxValue, L"Max Deadzone (def:127 max:127)", 127,
-                354}}},
+                348}}},
     Stick{IdRightStickGroup,
           L"Right Stick Deadzone",
           "rightjoystick",
-          {300, 288, 577, 412},
+          {300, 288, 577, 396},
           {Slider{IdRightMinLabel, IdRightMin, IdRightMinValue, L"Min Deadzone (def:2 max:127)", 2,
                   306},
            Slider{IdRightMaxLabel, IdRightMax, IdRightMaxValue, L"Max Deadzone (def:127 max:127)",
-                  127, 354}}},
+                  127, 348}}},
 };
 
 // The minimum and maximum deadzone of each stick.
@@ -266,7 +267,8 @@ using Deadzones = std::array<std::array<int, 2>, Sticks.size()>;
 constexpr int SpeedLow = 10;
 constexpr int SpeedHigh = 300;
 constexpr int PromptsTop = 226;
-constexpr int PromptsAutomaticTop = 252;
+// The Controller tab shows the same setting below the sticks.
+constexpr int PadPromptsTop = 402;
 constexpr int MouseNoteTop = 280;
 constexpr int TouchSwipeTop = 336;
 constexpr int TouchSwipeNoteTop = 356;
@@ -771,8 +773,11 @@ void ShowSliderValue(const Dialog& dialog, HWND bar) {
 void ShowMouse(const Dialog& dialog, const Settings::Mouse& mouse) {
     const auto prompts = std::ranges::find(PromptChoices, std::string_view{mouse.prompts},
                                            &std::pair<const wchar_t*, std::string_view>::second);
-    Select(Item(dialog, IdPrompts),
-           prompts != PromptChoices.end() ? static_cast<int>(prompts - PromptChoices.begin()) : 0);
+    for (const int combo : {IdPrompts, IdPadPrompts}) {
+        Select(Item(dialog, combo), prompts != PromptChoices.end()
+                                        ? static_cast<int>(prompts - PromptChoices.begin())
+                                        : 0);
+    }
     for (const Camera& camera : Cameras) {
         for (const Speed& speed : camera.speeds) {
             const int value =
@@ -783,14 +788,21 @@ void ShowMouse(const Dialog& dialog, const Settings::Mouse& mouse) {
     }
 }
 
-// What the Automatic setting starts the game with, from the pads connected now.
+// The Automatic choice names the prompts it starts the game with, from the pads connected now.
 void ShowAutomaticPrompts(const Dialog& dialog) {
     const std::string layout = PromptPacks::AutomaticLayout();
     const std::string_view setting = layout == "off" ? "playstation" : std::string_view{layout};
     const auto choice = std::ranges::find(PromptChoices, setting,
                                           &std::pair<const wchar_t*, std::string_view>::second);
     const std::wstring name = choice != PromptChoices.end() ? choice->first : L"PlayStation";
-    SetWindowTextW(Item(dialog, IdPromptsAutomatic), (L"Automatic starts with: " + name).c_str());
+    const std::wstring text = std::wstring(PromptChoices[0].first) + L" (" + name + L")";
+    for (const int id : {IdPrompts, IdPadPrompts}) {
+        const HWND combo = Item(dialog, id);
+        const int selected = Selected(combo);
+        SendMessageW(combo, CB_DELETESTRING, 0, 0);
+        SendMessageW(combo, CB_INSERTSTRING, 0, reinterpret_cast<LPARAM>(text.c_str()));
+        Select(combo, selected);
+    }
 }
 
 Settings::Mouse ReadMouse(const Dialog& dialog) {
@@ -1259,6 +1271,12 @@ void Build(HWND window, Dialog& dialog) {
             controller_order.push_back(bar);
         }
     }
+    controller_order.push_back(
+        add(WC_STATICW, L"Button Prompts", SS_LEFT | SS_CENTERIMAGE, IdPadPromptsLabel,
+            {LabelLeft, PadPromptsTop, LabelLeft + LabelWidth, PadPromptsTop + ComboHeight}));
+    controller_order.push_back(
+        add(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, IdPadPrompts,
+            {ComboLeft, PadPromptsTop, ComboLeft + ComboWidth, PadPromptsTop + ComboListHeight}));
     KeepTabOrder(controller_order);
 
     const HWND mouse_page = dialog.pages[MousePage];
@@ -1295,12 +1313,11 @@ void Build(HWND window, Dialog& dialog) {
     mouse_order.push_back(
         add_mouse(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, IdPrompts,
                   {ComboLeft, PromptsTop, ComboLeft + ComboWidth, PromptsTop + ComboListHeight}));
-    for (const auto& [name, value] : PromptChoices) {
-        AddText(Item(dialog, IdPrompts), name);
+    for (const int combo : {IdPrompts, IdPadPrompts}) {
+        for (const auto& [name, value] : PromptChoices) {
+            AddText(Item(dialog, combo), name);
+        }
     }
-    mouse_order.push_back(add_mouse(
-        WC_STATICW, L"", SS_LEFT, IdPromptsAutomatic,
-        {ComboLeft, PromptsAutomaticTop, ExtrasList.right, PromptsAutomaticTop + InfoHeight}));
     mouse_order.push_back(add_mouse(
         WC_STATICW,
         L"The mouse turns the camera. The game's Camera Sensitivity option scales both. "
@@ -1459,6 +1476,14 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             dialog.key_bindings = DefaultKeyBindings();
         }
         break;
+    case IdPrompts:
+    case IdPadPrompts:
+        // Both tabs show the one setting.
+        if (code == CBN_SELCHANGE) {
+            Select(Item(dialog, id == IdPrompts ? IdPadPrompts : IdPrompts),
+                   Selected(Item(dialog, id)));
+        }
+        break;
     case IdActivePad:
         if (code == CBN_SELCHANGE) {
             dialog.pad_picked = true;
@@ -1560,7 +1585,7 @@ INT_PTR CALLBACK DialogProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
             if (shown == ControllerPage) {
                 ShowPads(*dialog);
             }
-            if (shown == MousePage) {
+            if (shown == ControllerPage || shown == MousePage) {
                 ShowAutomaticPrompts(*dialog);
             }
             for (size_t i = 0; i < PageCount; ++i) {
