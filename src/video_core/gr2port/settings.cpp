@@ -91,6 +91,10 @@ Values FromJson(const json& root) {
     mouse.foot_vertical = ReadU32(section, "mouse_foot_vertical", mouse.foot_vertical);
     mouse.shift_horizontal = ReadU32(section, "mouse_shift_horizontal", mouse.shift_horizontal);
     mouse.shift_vertical = ReadU32(section, "mouse_shift_vertical", mouse.shift_vertical);
+    if (const auto prompts = section.find("prompts");
+        prompts != section.end() && prompts->is_string()) {
+        mouse.prompts = prompts->get<std::string>();
+    }
     Display& display = values.display;
     display.fullscreen = ReadBool(section, "fullscreen", display.fullscreen);
     display.exclusive = ReadBool(section, "exclusive_fullscreen", display.exclusive);
@@ -143,6 +147,7 @@ json ToJson(const Values& values) {
         {"mouse_foot_vertical", values.mouse.foot_vertical},
         {"mouse_shift_horizontal", values.mouse.shift_horizontal},
         {"mouse_shift_vertical", values.mouse.shift_vertical},
+        {"prompts", values.mouse.prompts},
     };
 }
 

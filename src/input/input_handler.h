@@ -4,6 +4,7 @@
 #pragma once
 
 #include <array>
+#include <filesystem>
 #include <map>
 #include <string>
 #include <unordered_set>
@@ -383,6 +384,10 @@ const std::map<std::string, u32> string_to_keyboard_key_map = {
 };
 
 void ParseInputConfig(const std::string game_id);
+
+// The input config file of a game, made from default.ini when it is missing. "default" and
+// "global" name the shared ones.
+std::filesystem::path GetInputConfigFile(const std::string& game_id);
 
 class InputBinding {
 public:

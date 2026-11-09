@@ -59,6 +59,9 @@ struct Mouse {
     u32 foot_vertical{100};
     u32 shift_horizontal{100};
     u32 shift_vertical{100};
+    /// Button prompts: "auto" shows the connected pad's, or the keyboard's when none is connected;
+    /// "keyboard" and "controller" always show those.
+    std::string prompts{"auto"};
 };
 
 struct Values {

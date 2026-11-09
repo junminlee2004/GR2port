@@ -1,0 +1,3506 @@
+{
+ "format": 1,
+ "slots": [
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_01.gnf",
+   "index": null,
+   "button": "circle",
+   "center": [
+    65.0,
+    66.0
+   ],
+   "recipe": "face_key",
+   "cap": 35.0,
+   "max_width": 47.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_01_b.gnf",
+   "index": null,
+   "button": "circle",
+   "center": [
+    32.4554234769688,
+    33.5445765230312
+   ],
+   "recipe": "face_key_b",
+   "cap": 17.5,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    22,
+    18,
+    12
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_02.gnf",
+   "index": null,
+   "button": "cross",
+   "center": [
+    64.98606147248034,
+    66.0
+   ],
+   "recipe": "face_key",
+   "cap": 35.0,
+   "max_width": 47.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_02_b.gnf",
+   "index": null,
+   "button": "cross",
+   "center": [
+    32.5,
+    33.5
+   ],
+   "recipe": "face_key_b",
+   "cap": 17.5,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    22,
+    18,
+    12
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_03.gnf",
+   "index": null,
+   "button": "square",
+   "center": [
+    65.0,
+    66.0
+   ],
+   "recipe": "face_key",
+   "cap": 35.0,
+   "max_width": 47.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_03_b.gnf",
+   "index": null,
+   "button": "square",
+   "center": [
+    32.5,
+    33.5
+   ],
+   "recipe": "face_key_b",
+   "cap": 17.5,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    22,
+    18,
+    12
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_04.gnf",
+   "index": null,
+   "button": "triangle",
+   "center": [
+    65.0,
+    66.0
+   ],
+   "recipe": "face_key",
+   "cap": 35.0,
+   "max_width": 47.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_04_b.gnf",
+   "index": null,
+   "button": "triangle",
+   "center": [
+    32.5,
+    33.5
+   ],
+   "recipe": "face_key_b",
+   "cap": 17.5,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    22,
+    18,
+    12
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_05.gnf",
+   "index": null,
+   "button": "R1",
+   "center": [
+    67.0,
+    65.0
+   ],
+   "recipe": "shoulder_key",
+   "cap": 36.0,
+   "max_width": 62.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_05_b.gnf",
+   "index": null,
+   "button": "R1",
+   "center": [
+    34.0,
+    33.0
+   ],
+   "recipe": "shoulder_key_b",
+   "cap": 18.0,
+   "max_width": 32.0,
+   "style": "knockout",
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_06.gnf",
+   "index": null,
+   "button": "R2",
+   "center": [
+    68.0,
+    66.5
+   ],
+   "recipe": "shoulder_key",
+   "cap": 36.0,
+   "max_width": 52.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_06_b.gnf",
+   "index": null,
+   "button": "R2",
+   "center": [
+    34.0,
+    34.0
+   ],
+   "recipe": "shoulder_key_b",
+   "cap": 18.0,
+   "max_width": 28.0,
+   "style": "knockout",
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_07.gnf",
+   "index": null,
+   "button": "L1",
+   "center": [
+    62.5,
+    65.0
+   ],
+   "recipe": "shoulder_key",
+   "cap": 36.0,
+   "max_width": 63.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_07_b.gnf",
+   "index": null,
+   "button": "L1",
+   "center": [
+    32.0,
+    32.0
+   ],
+   "recipe": "shoulder_key_b",
+   "cap": 18.0,
+   "max_width": 32.0,
+   "style": "knockout",
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_08.gnf",
+   "index": null,
+   "button": "L2",
+   "center": [
+    62.0,
+    66.5
+   ],
+   "recipe": "shoulder_key",
+   "cap": 36.0,
+   "max_width": 52.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_08_b.gnf",
+   "index": null,
+   "button": "L2",
+   "center": [
+    32.0,
+    34.0
+   ],
+   "recipe": "shoulder_key_b",
+   "cap": 18.0,
+   "max_width": 28.0,
+   "style": "knockout",
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_16.gnf",
+   "index": null,
+   "button": "Lstick",
+   "center": [
+    66.0,
+    59.0
+   ],
+   "recipe": "stick_key",
+   "cap": 30.0,
+   "max_width": 38.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_17.gnf",
+   "index": null,
+   "button": "Rstick",
+   "center": [
+    66.0,
+    59.0
+   ],
+   "recipe": "stick_key",
+   "cap": 30.0,
+   "max_width": 38.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_19.gnf",
+   "index": null,
+   "button": "L3",
+   "center": [
+    66.0,
+    64.0
+   ],
+   "recipe": "stick_key",
+   "cap": 30.0,
+   "max_width": 38.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_20.gnf",
+   "index": null,
+   "button": "R3",
+   "center": [
+    66.0,
+    64.0
+   ],
+   "recipe": "stick_key",
+   "cap": 30.0,
+   "max_width": 38.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_13.gnf",
+   "index": null,
+   "button": "touchpad",
+   "center": [
+    64.98606147248034,
+    66.0
+   ],
+   "recipe": "touch_symbol",
+   "cap": 31.724137931034484,
+   "max_width": 37.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_21.gnf",
+   "index": null,
+   "button": "touchpad",
+   "center": [
+    64.98606147248034,
+    66.0
+   ],
+   "recipe": "touch_symbol",
+   "cap": 31.724137931034484,
+   "max_width": 37.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_22.gnf",
+   "index": null,
+   "button": "touchpad",
+   "center": [
+    64.98606147248034,
+    66.0
+   ],
+   "recipe": "touch_symbol",
+   "cap": 31.724137931034484,
+   "max_width": 37.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_13_b.gnf",
+   "index": null,
+   "button": "touchpad",
+   "center": [
+    32.5,
+    33.5
+   ],
+   "recipe": "touch_symbol",
+   "cap": 15.862068965517242,
+   "max_width": 18.5,
+   "style": "color",
+   "rgb": [
+    22,
+    18,
+    12
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_21_b.gnf",
+   "index": null,
+   "button": "touchpad",
+   "center": [
+    32.5,
+    33.5
+   ],
+   "recipe": "touch_symbol",
+   "cap": 15.862068965517242,
+   "max_width": 18.5,
+   "style": "color",
+   "rgb": [
+    22,
+    18,
+    12
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_22_b.gnf",
+   "index": null,
+   "button": "touchpad",
+   "center": [
+    32.5,
+    33.5
+   ],
+   "recipe": "touch_symbol",
+   "cap": 15.862068965517242,
+   "max_width": 18.5,
+   "style": "color",
+   "rgb": [
+    22,
+    18,
+    12
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_18.gnf",
+   "index": null,
+   "button": "OPTIONS",
+   "center": [
+    97.0,
+    66.0
+   ],
+   "recipe": "pill_key",
+   "cap": 28.0,
+   "max_width": 92.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/photomode_key_23.gnf",
+   "index": null,
+   "button": "SHARE",
+   "center": [
+    97.0,
+    67.0
+   ],
+   "recipe": "pill_key",
+   "cap": 28.0,
+   "max_width": 72.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/qte_tbn_01.gnf",
+   "index": null,
+   "button": "circle",
+   "center": [
+    63.516050386021945,
+    64.04429093864283
+   ],
+   "recipe": "qte_face",
+   "cap": 40.0,
+   "max_width": 65.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/qte_tbn_02.gnf",
+   "index": null,
+   "button": "cross",
+   "center": [
+    63.516050386021945,
+    64.04429093864283
+   ],
+   "recipe": "qte_face",
+   "cap": 40.0,
+   "max_width": 65.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/qte_tbn_03.gnf",
+   "index": null,
+   "button": "square",
+   "center": [
+    63.516050386021945,
+    64.04429093864283
+   ],
+   "recipe": "qte_face",
+   "cap": 40.0,
+   "max_width": 65.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/qte_tbn_04.gnf",
+   "index": null,
+   "button": "triangle",
+   "center": [
+    63.516050386021945,
+    64.04429093864283
+   ],
+   "recipe": "qte_face",
+   "cap": 40.0,
+   "max_width": 65.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/qte_tbn_05.gnf",
+   "index": null,
+   "button": "R1",
+   "center": [
+    66.0,
+    63.5
+   ],
+   "recipe": "qte_tab",
+   "cap": 35.0,
+   "max_width": 50.0,
+   "style": "qte",
+   "rows": [
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     217
+    ],
+    [
+     215,
+     212,
+     218
+    ],
+    [
+     215,
+     213,
+     218
+    ],
+    [
+     216,
+     214,
+     219
+    ],
+    [
+     218,
+     216,
+     221
+    ],
+    [
+     221,
+     219,
+     223
+    ],
+    [
+     224,
+     222,
+     226
+    ],
+    [
+     226,
+     225,
+     228
+    ],
+    [
+     227,
+     227,
+     230
+    ],
+    [
+     228,
+     228,
+     231
+    ],
+    [
+     228,
+     228,
+     231
+    ],
+    [
+     228,
+     229,
+     231
+    ],
+    [
+     228,
+     229,
+     231
+    ],
+    [
+     229,
+     229,
+     231
+    ],
+    [
+     229,
+     229,
+     231
+    ],
+    [
+     229,
+     230,
+     231
+    ],
+    [
+     229,
+     230,
+     231
+    ],
+    [
+     229,
+     230,
+     230
+    ],
+    [
+     228,
+     230,
+     230
+    ],
+    [
+     228,
+     230,
+     230
+    ],
+    [
+     228,
+     230,
+     230
+    ],
+    [
+     228,
+     231,
+     231
+    ],
+    [
+     228,
+     231,
+     231
+    ],
+    [
+     229,
+     231,
+     231
+    ],
+    [
+     229,
+     231,
+     230
+    ],
+    [
+     229,
+     231,
+     230
+    ],
+    [
+     229,
+     231,
+     230
+    ],
+    [
+     229,
+     231,
+     230
+    ],
+    [
+     230,
+     231,
+     229
+    ],
+    [
+     230,
+     231,
+     229
+    ],
+    [
+     230,
+     230,
+     229
+    ],
+    [
+     230,
+     230,
+     229
+    ],
+    [
+     230,
+     230,
+     229
+    ],
+    [
+     230,
+     230,
+     229
+    ],
+    [
+     230,
+     230,
+     229
+    ],
+    [
+     230,
+     230,
+     229
+    ],
+    [
+     230,
+     230,
+     229
+    ],
+    [
+     231,
+     230,
+     229
+    ],
+    [
+     231,
+     230,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ],
+    [
+     231,
+     231,
+     229
+    ]
+   ],
+   "side_rows": [
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     15,
+     0,
+     30
+    ],
+    [
+     16,
+     0,
+     30
+    ],
+    [
+     16,
+     0,
+     30
+    ],
+    [
+     16,
+     0,
+     30
+    ],
+    [
+     16,
+     1,
+     31
+    ],
+    [
+     16,
+     1,
+     32
+    ],
+    [
+     17,
+     3,
+     34
+    ],
+    [
+     18,
+     5,
+     38
+    ],
+    [
+     20,
+     9,
+     43
+    ],
+    [
+     22,
+     14,
+     49
+    ],
+    [
+     25,
+     20,
+     56
+    ],
+    [
+     27,
+     26,
+     62
+    ],
+    [
+     29,
+     31,
+     68
+    ],
+    [
+     29,
+     36,
+     72
+    ],
+    [
+     29,
+     40,
+     75
+    ],
+    [
+     28,
+     44,
+     76
+    ],
+    [
+     27,
+     47,
+     77
+    ],
+    [
+     26,
+     50,
+     77
+    ],
+    [
+     26,
+     53,
+     76
+    ],
+    [
+     25,
+     56,
+     75
+    ],
+    [
+     24,
+     59,
+     73
+    ],
+    [
+     22,
+     61,
+     71
+    ],
+    [
+     21,
+     63,
+     68
+    ],
+    [
+     19,
+     64,
+     64
+    ],
+    [
+     19,
+     65,
+     61
+    ],
+    [
+     19,
+     66,
+     57
+    ],
+    [
+     22,
+     68,
+     55
+    ],
+    [
+     27,
+     71,
+     53
+    ],
+    [
+     32,
+     73,
+     50
+    ],
+    [
+     38,
+     76,
+     48
+    ],
+    [
+     44,
+     78,
+     45
+    ],
+    [
+     50,
+     79,
+     42
+    ],
+    [
+     55,
+     80,
+     39
+    ],
+    [
+     59,
+     80,
+     35
+    ],
+    [
+     63,
+     80,
+     32
+    ],
+    [
+     67,
+     79,
+     29
+    ],
+    [
+     70,
+     79,
+     26
+    ],
+    [
+     72,
+     77,
+     23
+    ],
+    [
+     74,
+     76,
+     21
+    ],
+    [
+     75,
+     74,
+     20
+    ],
+    [
+     76,
+     73,
+     19
+    ],
+    [
+     77,
+     71,
+     18
+    ],
+    [
+     77,
+     70,
+     17
+    ],
+    [
+     77,
+     69,
+     17
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ],
+    [
+     77,
+     68,
+     16
+    ]
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/qte_tbn_07.gnf",
+   "index": null,
+   "button": "L1",
+   "center": [
+    64.0,
+    64.0
+   ],
+   "recipe": "qte_tab",
+   "cap": 34.0,
+   "max_width": 50.0,
+   "style": "qte",
+   "rows": [
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     229,
+     233
+    ],
+    [
+     231,
+     230,
+     234
+    ],
+    [
+     231,
+     230,
+     234
+    ],
+    [
+     230,
+     230,
+     234
+    ],
+    [
+     230,
+     231,
+     234
+    ],
+    [
+     230,
+     231,
+     235
+    ],
+    [
+     229,
+     231,
+     234
+    ],
+    [
+     229,
+     231,
+     234
+    ],
+    [
+     229,
+     232,
+     234
+    ],
+    [
+     229,
+     232,
+     234
+    ],
+    [
+     229,
+     233,
+     235
+    ],
+    [
+     229,
+     233,
+     235
+    ],
+    [
+     229,
+     234,
+     235
+    ],
+    [
+     229,
+     234,
+     235
+    ],
+    [
+     229,
+     234,
+     234
+    ],
+    [
+     229,
+     235,
+     234
+    ],
+    [
+     229,
+     235,
+     234
+    ],
+    [
+     229,
+     235,
+     234
+    ],
+    [
+     230,
+     235,
+     234
+    ],
+    [
+     230,
+     235,
+     233
+    ],
+    [
+     231,
+     235,
+     233
+    ],
+    [
+     231,
+     236,
+     233
+    ],
+    [
+     232,
+     236,
+     232
+    ],
+    [
+     232,
+     236,
+     232
+    ],
+    [
+     232,
+     236,
+     232
+    ],
+    [
+     233,
+     236,
+     231
+    ],
+    [
+     233,
+     236,
+     231
+    ],
+    [
+     234,
+     236,
+     230
+    ],
+    [
+     234,
+     236,
+     230
+    ],
+    [
+     235,
+     236,
+     230
+    ],
+    [
+     235,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ],
+    [
+     236,
+     236,
+     230
+    ]
+   ],
+   "side_rows": null,
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/button_circle.gnf",
+   "index": null,
+   "button": "circle",
+   "center": [
+    32.0,
+    31.5
+   ],
+   "recipe": "button_disc",
+   "cap": 19.0,
+   "max_width": 26.4,
+   "style": "glow",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "sigma": 1.6,
+   "opacity": 0.55,
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/button_cross.gnf",
+   "index": null,
+   "button": "cross",
+   "center": [
+    32.0,
+    31.5
+   ],
+   "recipe": "button_disc",
+   "cap": 19.0,
+   "max_width": 26.4,
+   "style": "glow",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "sigma": 1.6,
+   "opacity": 0.55,
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/common_rlbtn.gnf",
+   "index": null,
+   "button": "L1",
+   "center": [
+    32.5,
+    32.3
+   ],
+   "recipe": "rlbtn",
+   "cap": 14.5,
+   "max_width": 30.0,
+   "style": "knockout",
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/common_rlbtn.gnf",
+   "index": null,
+   "button": "R1",
+   "center": [
+    95.5,
+    32.3
+   ],
+   "recipe": "rlbtn",
+   "cap": 14.5,
+   "max_width": 30.0,
+   "style": "knockout",
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/common_rlbtn.gnf",
+   "index": null,
+   "button": "L2",
+   "center": [
+    32.0,
+    96.3
+   ],
+   "recipe": "rlbtn",
+   "cap": 14.5,
+   "max_width": 29.0,
+   "style": "knockout",
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/common_rlbtn.gnf",
+   "index": null,
+   "button": "R2",
+   "center": [
+    95.5,
+    96.3
+   ],
+   "recipe": "rlbtn",
+   "cap": 14.5,
+   "max_width": 30.0,
+   "style": "knockout",
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/kashi_sel_btn_1.gnf",
+   "index": null,
+   "button": "triangle",
+   "center": [
+    73.5,
+    78.0
+   ],
+   "recipe": "kashi",
+   "cap": 84.0,
+   "max_width": 94.4,
+   "style": "neon",
+   "core": [
+    198.16000366210938,
+    242.6800079345703,
+    225.32000732421875
+   ],
+   "glow": [
+    52.0,
+    211.0,
+    149.0
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/kashi_sel_btn_2.gnf",
+   "index": null,
+   "button": "circle",
+   "center": [
+    76.0,
+    78.0
+   ],
+   "recipe": "kashi",
+   "cap": 84.0,
+   "max_width": 94.4,
+   "style": "neon",
+   "core": [
+    252.48001098632812,
+    190.04000854492188,
+    207.40000915527344
+   ],
+   "glow": [
+    246.0,
+    0.0,
+    120.0
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/kashi_sel_btn_3.gnf",
+   "index": null,
+   "button": "cross",
+   "center": [
+    76.0,
+    78.0
+   ],
+   "recipe": "kashi",
+   "cap": 84.0,
+   "max_width": 94.4,
+   "style": "neon",
+   "core": [
+    206.5600128173828,
+    238.48001098632812,
+    254.16000366210938
+   ],
+   "glow": [
+    82.0,
+    196.0,
+    252.0
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/kashi_sel_btn_4.gnf",
+   "index": null,
+   "button": "square",
+   "center": [
+    77.0,
+    79.0
+   ],
+   "recipe": "kashi",
+   "cap": 84.0,
+   "max_width": 94.4,
+   "style": "neon",
+   "core": [
+    248.0,
+    204.8800048828125,
+    253.60000610351562
+   ],
+   "glow": [
+    230.0,
+    76.0,
+    250.0
+   ],
+   "offset": 0
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/costume_page_num.gcdv",
+   "index": 1,
+   "button": "L1",
+   "center": [
+    33.5,
+    33.0
+   ],
+   "recipe": "page_ring_rgba",
+   "cap": 18.0,
+   "max_width": 23.5,
+   "style": "ring",
+   "ring": [
+    33.0,
+    32.5,
+    18.75
+   ],
+   "offset": 35264
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/costume_page_num.gcdv",
+   "index": 2,
+   "button": "R1",
+   "center": [
+    33.0,
+    33.0
+   ],
+   "recipe": "page_ring_rgba",
+   "cap": 18.0,
+   "max_width": 23.5,
+   "style": "ring",
+   "ring": [
+    33.0,
+    32.5,
+    18.75
+   ],
+   "offset": 51904
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/film_page_num.gcdv",
+   "index": 1,
+   "button": "L1",
+   "center": [
+    33.5,
+    33.0
+   ],
+   "recipe": "page_ring_rgba",
+   "cap": 18.0,
+   "max_width": 23.5,
+   "style": "ring",
+   "ring": [
+    33.0,
+    32.5,
+    18.75
+   ],
+   "offset": 35264
+  },
+  {
+   "archive": "Gravite2_Chunk0.psarc",
+   "member": "gcd/film_page_num.gcdv",
+   "index": 2,
+   "button": "R1",
+   "center": [
+    33.0,
+    33.0
+   ],
+   "recipe": "page_ring_rgba",
+   "cap": 18.0,
+   "max_width": 23.5,
+   "style": "ring",
+   "ring": [
+    33.0,
+    32.5,
+    18.75
+   ],
+   "offset": 51904
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 11,
+   "button": "R2",
+   "center": [
+    23.5,
+    19.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 587728
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 2,
+   "button": "R2",
+   "center": [
+    22.5,
+    20.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 78544
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 2,
+   "button": "R2",
+   "center": [
+    22.5,
+    68.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 78544
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 2,
+   "button": "R2",
+   "center": [
+    22.5,
+    115.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 78544
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 12,
+   "button": "R2",
+   "center": [
+    23.5,
+    21.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 597200
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 12,
+   "button": "triangle",
+   "center": [
+    93.5,
+    21.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 22.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 597200
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 12,
+   "button": "R2",
+   "center": [
+    23.5,
+    68.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 597200
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 12,
+   "button": "square",
+   "center": [
+    94.5,
+    68.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 22.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 597200
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 12,
+   "button": "circle",
+   "center": [
+    141.5,
+    68.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 23.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 597200
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 12,
+   "button": "R2",
+   "center": [
+    23.5,
+    115.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 597200
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 12,
+   "button": "cross",
+   "center": [
+    94.5,
+    116.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 22.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 597200
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 1,
+   "button": "R1",
+   "center": [
+    26.5,
+    19.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 32.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 57808
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 0,
+   "button": "R1",
+   "center": [
+    26.5,
+    19.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 32.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 5696
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 1,
+   "button": "triangle",
+   "center": [
+    27.5,
+    89.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 22.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 57808
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 0,
+   "button": "triangle",
+   "center": [
+    27.5,
+    89.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 22.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 5696
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 1,
+   "button": "circle",
+   "center": [
+    27.5,
+    159.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 22.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 57808
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 0,
+   "button": "circle",
+   "center": [
+    27.5,
+    159.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 22.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 5696
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 1,
+   "button": "square",
+   "center": [
+    27.5,
+    230.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 22.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 57808
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 0,
+   "button": "square",
+   "center": [
+    27.5,
+    230.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 22.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 5696
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 1,
+   "button": "cross",
+   "center": [
+    27.5,
+    300.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 22.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 57808
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 0,
+   "button": "cross",
+   "center": [
+    27.5,
+    300.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.5,
+   "max_width": 22.4,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 5696
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 6,
+   "button": "R2",
+   "center": [
+    23.5,
+    23.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 438992
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 4,
+   "button": "R2",
+   "center": [
+    23.5,
+    23.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 361024
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 6,
+   "button": "Lstick",
+   "center": [
+    93.0,
+    22.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 14.5,
+   "max_width": 21.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 438992
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 4,
+   "button": "Lstick",
+   "center": [
+    93.0,
+    22.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 14.5,
+   "max_width": 21.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 361024
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 5,
+   "button": "L1",
+   "center": [
+    27.0,
+    20.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 32.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 418256
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 3,
+   "button": "L1",
+   "center": [
+    27.0,
+    20.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 32.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 340288
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 7,
+   "button": "touchpad",
+   "center": [
+    25.482062780269057,
+    19.538863976083707
+   ],
+   "recipe": "touch_symbol",
+   "cap": 15.22758620689655,
+   "max_width": 17.759999999999998,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 466128
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 5,
+   "button": "touchpad",
+   "center": [
+    25.482062780269057,
+    19.538863976083707
+   ],
+   "recipe": "touch_symbol",
+   "cap": 15.22758620689655,
+   "max_width": 17.759999999999998,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 388160
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 0,
+   "button": "swipe_up",
+   "center": [
+    48.48206278026906,
+    19.538863976083707
+   ],
+   "recipe": "keyset_images",
+   "cap": 15.22758620689655,
+   "max_width": 17.759999999999998,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 16592
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 0,
+   "button": "touchpad",
+   "center": [
+    48.48206278026906,
+    61.538863976083704
+   ],
+   "recipe": "touch_symbol",
+   "cap": 15.22758620689655,
+   "max_width": 17.759999999999998,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 16592
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 0,
+   "button": "swipe_down",
+   "center": [
+    48.48206278026906,
+    103.5388639760837
+   ],
+   "recipe": "keyset_images",
+   "cap": 15.22758620689655,
+   "max_width": 17.759999999999998,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 16592
+  }
+ ]
+}

@@ -34,8 +34,10 @@
 #include "common/types.h"
 #include "core/file_sys/fs.h"
 #include "core/game_check/game_patches.h"
+#include "core/prompt_packs/keyboard_prompts.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "input/selected_pad.h"
+#include "video_core/gr2port/settings.h"
 
 CMRC_DECLARE(gr2port_prompt_mods);
 
@@ -99,6 +101,8 @@ struct Pack {
     std::filesystem::path dir;
     bool motion_controls{true};
     bool has_input_override{};
+    // The keyboard pack: its members are blank and slots.json says where the bound keys go.
+    bool has_slots{};
     std::vector<Member> members;
     std::vector<CodePatch> code;
     CodeState code_state{CodeState::None};
@@ -122,7 +126,13 @@ constexpr std::array Gr2ModPacks{
 };
 
 // Button prompt layouts; each one's pack is the folder of the same name.
-constexpr std::array<std::string_view, 4> Layouts{"xbox", "switch", "steamdeck", "steamcontroller"};
+constexpr std::array<std::string_view, 5> Layouts{"xbox", "switch", "steamdeck", "steamcontroller",
+                                                  "keyboard"};
+
+// The font the keyboard prompts draw key names in: the game's own DIN Round Bold.
+constexpr std::string_view KeyFontArchive = "gravite2_chunk0.psarc";
+constexpr std::string_view KeyFontArchiveName = "Gravite2_Chunk0.psarc";
+constexpr std::string_view KeyFontPath = "font/dinroundoffcpro-bold.ttf";
 
 // The GR2 packs built into the executable, written to the user folder before the game starts.
 constexpr std::string_view BundledPacks = "src/resources/prompt_mods/GR2";
@@ -181,8 +191,12 @@ std::string LayoutOfPad(SDL_JoystickID id) {
 }
 
 // The layout of the pad that plays as player 1, else of the first pad with a layout; "off" for a
-// PlayStation pad or none, which keeps the game's own prompts.
+// PlayStation pad, which keeps the game's own prompts, and "keyboard" when no pad is connected.
 std::string ConnectedPadLayout() {
+    const std::string prompts = Gr2Port::Settings::Get().mouse.prompts;
+    if (prompts == "keyboard") {
+        return "keyboard";
+    }
     if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD)) {
         LOG_WARNING(Input, "Cannot check the pad type: {}", SDL_GetError());
         return "off";
@@ -191,6 +205,9 @@ std::string ConnectedPadLayout() {
     int count = 0;
     SDL_JoystickID* ids = SDL_GetGamepads(&count);
     std::string layout;
+    if ((ids == nullptr || count == 0) && prompts != "controller") {
+        layout = "keyboard";
+    }
     if (ids != nullptr) {
         const std::string picked = Input::SelectedPad::Guid();
         const auto chosen = std::find_if(ids, ids + count, [&](SDL_JoystickID id) {
@@ -548,6 +565,7 @@ std::optional<Pack> LoadPack(const std::string& game, const std::string& folder,
     pack.motion_controls = Field<bool>(root, "motion_controls").value_or(true);
     std::error_code ec;
     pack.has_input_override = std::filesystem::is_regular_file(pack.dir / "input.ini", ec);
+    pack.has_slots = std::filesystem::is_regular_file(pack.dir / "slots.json", ec);
     LOG_INFO(Loader, "Prompt packs: {} {} {} with {} members", game, folder,
              Field<std::string>(root, "version").value_or("(no version)"), pack.members.size());
     return pack;
@@ -1007,6 +1025,10 @@ std::unordered_map<std::string, std::shared_ptr<const Overlay>> BuildOverlays(
                 want(source.archive, source.archive_name, source.path);
             }
         }
+        if (pack.has_slots) {
+            want(std::string(KeyFontArchive), std::string(KeyFontArchiveName),
+                 std::string(KeyFontPath));
+        }
     }
     for (auto& [name, archive] : archives) {
         if (name == opened) {
@@ -1041,6 +1063,13 @@ std::unordered_map<std::string, std::shared_ptr<const Overlay>> BuildOverlays(
                 RevertCodePatches(pack);
             }
             continue;
+        }
+        if (pack.has_slots) {
+            const auto font =
+                ReadOriginal(archives, std::string(KeyFontArchive), std::string(KeyFontPath));
+            if (font) {
+                Keyboard::Compose(pack.dir / "slots.json", *font, Keyboard::BoundLabels(), members);
+            }
         }
     }
 
