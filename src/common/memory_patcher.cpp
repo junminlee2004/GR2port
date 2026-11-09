@@ -13,6 +13,8 @@
 #include "common/path_util.h"
 #include "core/emulator_state.h"
 #include "core/file_format/psf.h"
+#include "core/game_check/game_check.h"
+#include "core/game_check/game_patches.h"
 #include "memory_patcher.h"
 
 namespace MemoryPatcher {
@@ -129,9 +131,11 @@ std::string convertValueToHex(const std::string type, const std::string valueStr
 
 void ApplyPendingPatches();
 
-void ApplyPatchesFromXML(std::filesystem::path path) {
+// path names a patch file; with text, text is the XML itself.
+void ApplyPatchesFromXML(std::filesystem::path path, std::string_view text = {}) {
     pugi::xml_document doc;
-    pugi::xml_parse_result result = doc.load_file(path.c_str());
+    pugi::xml_parse_result result =
+        text.empty() ? doc.load_file(path.c_str()) : doc.load_buffer(text.data(), text.size());
 
     auto* param_sfo = Common::Singleton<PSF>::Instance();
     auto app_version = param_sfo->GetString("APP_VER").value_or("Unknown version");
@@ -142,7 +146,9 @@ void ApplyPatchesFromXML(std::filesystem::path path) {
              it != patchXML.children().end(); ++it) {
 
             if (std::string(it->name()) == "Metadata") {
-                if (std::string(it->attribute("isEnabled").value()) == "true") {
+                if (Gr2Port::GamePatches::IsEnabled(
+                        it->attribute("Name").value(), it->attribute("Category").value(),
+                        std::string(it->attribute("isEnabled").value()) == "true")) {
                     std::string currentPatchName = it->attribute("Name").value();
                     std::string metadataAppVer = it->attribute("AppVer").value();
                     std::string metadataAppElf = it->attribute("AppElf").value();
@@ -231,46 +237,8 @@ void OnGameLoaded() {
             ApplyPatchesFromXML(file_path);
         }
     } else if (EmulatorState::GetInstance()->IsAutoPatchesLoadEnabled()) {
-        for (auto const& repo : std::filesystem::directory_iterator(patch_dir)) {
-            if (!repo.is_directory()) {
-                continue;
-            }
-
-            const auto files_json_path = repo.path() / "files.json";
-
-            if (!std::filesystem::is_regular_file(files_json_path)) {
-                LOG_ERROR(Loader, "The folder '{}' does not contain the files.json file.",
-                          repo.path().filename().string());
-                continue;
-            }
-
-            std::ifstream json_file{files_json_path};
-            nlohmann::json available_patches;
-
-            if (!json_file.is_open()) {
-                LOG_ERROR(Loader, "Could not open patch index: {}", files_json_path.string());
-                continue;
-            }
-
-            try {
-                available_patches = nlohmann::json::parse(json_file);
-            } catch (const nlohmann::json::parse_error& e) {
-                LOG_ERROR(Loader, "Could not parse patch index {}: {}", files_json_path.string(),
-                          e.what());
-                continue;
-            }
-
-            std::filesystem::path game_patch_file;
-            for (auto const& [filename, serials] : available_patches.items()) {
-                if (std::find(serials.begin(), serials.end(), g_game_serial) != serials.end()) {
-                    game_patch_file = repo.path() / filename;
-                    break;
-                }
-            }
-            if (std::filesystem::exists(game_patch_file)) {
-                ApplyPatchesFromXML(game_patch_file);
-            }
-        }
+        // The Gravity Rush 2 patches are built into the executable; no patch folder is read.
+        ApplyPatchesFromXML({}, Gr2Port::GameCheck::PatchXml());
     }
     ApplyPendingPatches();
 }

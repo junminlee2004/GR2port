@@ -21,6 +21,7 @@
 #include "core/emulator_settings.h"
 #include "core/emulator_state.h"
 #include "core/file_sys/fs.h"
+#include "core/game_check/game_check.h"
 #include "core/ipc/ipc.h"
 #include "core/user_settings.h"
 #include "emulator.h"
@@ -52,7 +53,6 @@ int main(int argc, char* argv[]) {
     CLI::App app{"shadPS4 Emulator CLI"};
 
     // ---- CLI state ----
-    std::optional<std::string> gamePath;
     std::vector<std::string> gameArgs;
     std::optional<std::filesystem::path> overrideRoot;
     std::optional<int> waitPid;
@@ -74,8 +74,6 @@ int main(int argc, char* argv[]) {
     static std::vector<std::string> env_vars;
 
     // ---- Options ----
-    app.add_option("guest_arg", gamePath, "Game path or ID"); // positional
-    app.add_option("-g,--game", gamePath, "Game path or ID");
     app.add_option("-p,--patch", patchFile, "Patch file to apply");
     app.add_flag("-i,--ignore-game-patch", ignoreGamePatch,
                  "Disable automatic loading of game patches");
@@ -159,14 +157,10 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    if (!gamePath.has_value()) {
-        if (!gameArgs.empty()) {
-            gamePath = gameArgs.front();
-            gameArgs.erase(gameArgs.begin());
-        } else {
-            LOG_ERROR(Debug, "Please provide a game path or ID.");
-            return 1;
-        }
+    // GR2port starts only Gravity Rush 2 v1.11 from its own folder, and checks the dump each time.
+    const std::optional<Gr2Port::GameCheck::Game> game = Gr2Port::GameCheck::Find();
+    if (!game) {
+        return 1;
     }
 
     // ---- Apply flags ----
@@ -200,46 +194,10 @@ int main(int argc, char* argv[]) {
         EmulatorSettings.SetUserfaultfdTracking(true);
     }
 
-    // ---- Resolve game path or ID ----
-    std::filesystem::path ebootPath(*gamePath);
-    const auto archive_component_exists = [](const std::filesystem::path& p) -> bool {
-        std::filesystem::path accum;
-        for (const auto& comp : p) {
-            accum /= comp;
-            if (comp.extension() == ".zar") {
-                return std::filesystem::is_regular_file(accum);
-            }
-        }
-        return false;
-    };
-    if (!std::filesystem::exists(ebootPath) && !archive_component_exists(ebootPath)) {
-        bool found = false;
-        for (const auto& installDir : EmulatorSettings.GetGameInstallDirs()) {
-            if (auto foundPath = Common::FS::FindGameByID(installDir, *gamePath, 0)) {
-                ebootPath = *foundPath;
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            for (const auto& installDir : EmulatorSettings.GetGameInstallDirs()) {
-                if (auto foundPath = Common::FS::FindGameByID(installDir, *gamePath, 5)) {
-                    ebootPath = *foundPath;
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (!found) {
-            LOG_ERROR(Debug, "Game ID or file path not found: {}", *gamePath);
-            return 1;
-        }
-    }
-
     auto* emulator = Common::Singleton<Core::Emulator>::Instance();
     emulator->executableName = argv[0];
     emulator->waitForDebuggerBeforeRun = waitForDebugger;
-    emulator->Run(ebootPath, gameArgs, overrideRoot, mounts, env_vars, append_log);
+    emulator->Run(game->root, gameArgs, overrideRoot, mounts, env_vars, append_log);
 
     return 0;
 }

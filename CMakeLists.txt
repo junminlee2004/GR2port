@@ -1567,6 +1567,7 @@ cmrc_add_resource_library(embedded-resources
         src/resources/silver.png
         src/resources/trophy.wav)
 target_link_libraries(shadps4 PRIVATE res::embedded)
+include("${CMAKE_CURRENT_SOURCE_DIR}/src/core/game_check/game_check.cmake")
 
 # ImGui resources
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/imgui/renderer)
