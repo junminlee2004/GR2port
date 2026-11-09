@@ -70,6 +70,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/shadow_trace.h
     ${CMAKE_CURRENT_LIST_DIR}/shadows.cpp
     ${CMAKE_CURRENT_LIST_DIR}/shadows.h
+    ${CMAKE_CURRENT_LIST_DIR}/splash.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/splash.h
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/swapchain.h
     ${CMAKE_CURRENT_LIST_DIR}/textures.cpp

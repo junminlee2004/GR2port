@@ -55,6 +55,7 @@
 #include "video_core/gr2port/shaders/vision_frag.h"
 #include "video_core/gr2port/shadow_trace.h"
 #include "video_core/gr2port/shadows.h"
+#include "video_core/gr2port/splash.h"
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
 #include "video_core/gr2port/ui.h"
@@ -331,6 +332,10 @@ bool Thread::Init() {
     if (!memory->Create()) {
         return false;
     }
+    // The window shows the game's boot picture while the pipelines below are built.
+    swapchain = std::make_unique<Swapchain>(d);
+    Splash::Show(d, *memory, *swapchain, slots[0].pool, slots[0].commands, slots[0].done,
+                 slots[0].acquired);
     scene_ring = memory->CreateBuffer(SceneRing::Slots * SceneRing::SlotBytes,
                                       vk::BufferUsageFlagBits::eStorageBuffer |
                                           vk::BufferUsageFlagBits::eIndirectBuffer |
@@ -455,7 +460,6 @@ bool Thread::Init() {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
-    swapchain = std::make_unique<Swapchain>(d);
     needs_swapchain = true;
     SavePipelineCache(d);
     return true;
