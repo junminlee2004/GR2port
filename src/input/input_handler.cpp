@@ -58,42 +58,36 @@ constexpr std::string_view GetDefaultGlobalConfig() {
 constexpr std::string_view GetDefaultInputConfig() {
     return R"(#Feeling lost? Check out the Help section!
 
-# Keyboard bindings
-
-triangle = kp8
-circle = kp6
-cross = kp2
-square = kp4
-# Alternatives for users without a keypad
-triangle = c
-circle = b
-cross = n
-square = v
-
-l1 = q
-r1 = u
-l2 = e
-r2 = o
-l3 = x
-r3 = m
-
-options = enter
-touchpad_center = space
-
-pad_up = up
-pad_down = down
-pad_left = left
-pad_right = right
+# Keyboard and mouse bindings. The keyboard button prompts show these keys, and the mouse always
+# turns the camera.
 
 axis_left_x_minus = a
 axis_left_x_plus = d
 axis_left_y_minus = w
 axis_left_y_plus = s
 
-axis_right_x_minus = j
-axis_right_x_plus = l
-axis_right_y_minus = i
-axis_right_y_plus = k
+cross = space
+square = leftbutton
+triangle = f
+circle = r
+
+l1 = q
+r1 = rightbutton
+l2 = lshift
+r2 = e
+l3 = c
+
+pad_up = 1
+pad_right = 2
+pad_down = 3
+pad_left = 4
+
+options = escape
+touchpad_center = middlebutton
+touchpad_swipe_up = mousewheelup
+touchpad_swipe_down = mousewheeldown
+touchpad_swipe_left = z
+touchpad_swipe_right = x
 
 # Controller bindings
 
@@ -829,6 +823,9 @@ void ParseInputConfig(const std::string game_id = "") {
         LOG_WARNING(Input, "touchpad_swipe_combo_enabled is true but the hold input is unmapped; "
                            "the combo layer is inert");
     }
+    // GR2port: the mouse always turns the camera, whatever the config says.
+    SetMouseToJoystick(2);
+    SetMouseMode(MouseMode::Joystick);
     std::sort(connections.begin(), connections.end());
     for (auto& c : connections) {
         LOG_DEBUG(Input, "Binding: {} : {}", c.output->ToString(), c.binding.ToString());

@@ -86,6 +86,11 @@ Values FromJson(const json& root) {
     }
     const json& section = *it;
     ReadGame(section, values.game);
+    Mouse& mouse = values.mouse;
+    mouse.foot_horizontal = ReadU32(section, "mouse_foot_horizontal", mouse.foot_horizontal);
+    mouse.foot_vertical = ReadU32(section, "mouse_foot_vertical", mouse.foot_vertical);
+    mouse.shift_horizontal = ReadU32(section, "mouse_shift_horizontal", mouse.shift_horizontal);
+    mouse.shift_vertical = ReadU32(section, "mouse_shift_vertical", mouse.shift_vertical);
     Display& display = values.display;
     display.fullscreen = ReadBool(section, "fullscreen", display.fullscreen);
     display.exclusive = ReadBool(section, "exclusive_fullscreen", display.exclusive);
@@ -134,6 +139,10 @@ json ToJson(const Values& values) {
         {"render_size", game.render_size},
         {"dlc_entitlements", game.dlc_entitlements},
         {"extras", std::move(extras)},
+        {"mouse_foot_horizontal", values.mouse.foot_horizontal},
+        {"mouse_foot_vertical", values.mouse.foot_vertical},
+        {"mouse_shift_horizontal", values.mouse.shift_horizontal},
+        {"mouse_shift_vertical", values.mouse.shift_vertical},
     };
 }
 

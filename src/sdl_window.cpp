@@ -294,17 +294,9 @@ void WindowSDL::WaitEvent() {
         Input::ParseInputConfig(std::string(Common::ElfInfo::Instance().GameSerial()));
         break;
     case SDL_EVENT_MOUSE_TO_JOYSTICK:
-        SDL_SetWindowRelativeMouseMode(this->GetSDLWindow(),
-                                       Input::ToggleMouseModeTo(Input::MouseMode::Joystick));
-        break;
     case SDL_EVENT_MOUSE_TO_GYRO:
-        SDL_SetWindowRelativeMouseMode(this->GetSDLWindow(),
-                                       Input::ToggleMouseModeTo(Input::MouseMode::Gyro));
-        break;
     case SDL_EVENT_MOUSE_TO_TOUCHPAD:
-        SDL_SetWindowRelativeMouseMode(this->GetSDLWindow(),
-                                       Input::ToggleMouseModeTo(Input::MouseMode::Touchpad));
-        SDL_SetWindowRelativeMouseMode(this->GetSDLWindow(), false);
+        // GR2port: the mouse always turns the camera, so its mode does not change.
         break;
     case SDL_EVENT_MOUSE_TO_TOUCHPAD_SWIPE:
         Input::EnableTouchpadSwipe(!Input::IsTouchpadSwipeEnabled());

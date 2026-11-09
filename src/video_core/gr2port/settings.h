@@ -52,9 +52,19 @@ struct Game {
     std::map<std::string, bool> extras;
 };
 
+/// Mouse look speeds, in percent of the base speed: on foot and while shifting gravity, each
+/// horizontal and vertical.
+struct Mouse {
+    u32 foot_horizontal{100};
+    u32 foot_vertical{100};
+    u32 shift_horizontal{100};
+    u32 shift_vertical{100};
+};
+
 struct Values {
     Display display;
     Game game;
+    Mouse mouse;
 };
 
 /// Any thread: the settings, read from config.json on first use.

@@ -6,6 +6,7 @@
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
+#include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_video.h>
 
 #include "common/logging/log.h"
@@ -101,6 +102,10 @@ void SDLCALL CreateOnMainThread(void*) {
     }
     if (display.fullscreen) {
         EnterFullscreen(screen, display);
+    }
+    // The mouse always turns the camera: while the window has focus, the cursor is hidden and held.
+    if (!SDL_SetWindowRelativeMouseMode(g_window, true)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the window cannot hold the mouse: {}", SDL_GetError());
     }
     int width = initial_width;
     int height = initial_height;

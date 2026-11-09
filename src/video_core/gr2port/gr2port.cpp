@@ -15,6 +15,7 @@
 #include "video_core/gr2port/gr2port.h"
 #include "video_core/gr2port/hooks.h"
 #include "video_core/gr2port/meshes.h"
+#include "video_core/gr2port/mouse_camera.h"
 #include "video_core/gr2port/movies.h"
 #include "video_core/gr2port/renderer.h"
 #include "video_core/gr2port/textures.h"
@@ -84,6 +85,7 @@ void Install(VAddr module_base) {
         return;
     }
     UiCapture::Install(module_base);
+    MouseCamera::Install(module_base, c, StubAreaSize);
     if (Hooks::ObserveReturn(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraphEnd, 0) ==
             Hooks::Result::Mismatch ||
         Hooks::ObserveEntry(module_base, NextContext, c, StubAreaSize, &OnNextContext, 0) ==

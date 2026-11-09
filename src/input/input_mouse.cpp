@@ -11,6 +11,7 @@
 #include "common/types.h"
 #include "input/controller.h"
 #include "input/input_handler.h"
+#include "input/mouse_look.h"
 #include "input_mouse.h"
 
 #include <common/singleton.h>
@@ -229,12 +230,21 @@ void EmulateJoystick(GameController* controller, u32 interval) {
     float angle = atan2(d_y, d_x);
     float a_x = cos(angle) * output_speed, a_y = sin(angle) * output_speed;
 
+    // GR2port: a still mouse centres the stick once, so a pad's stick keeps working beside it.
+    // While a camera takes the mouse directly, the mouse does not move the stick.
+    static bool moved = false;
+    if (MouseLook::Add(d_x, d_y)) {
+        d_x = 0;
+        d_y = 0;
+    }
     if (d_x != 0 || d_y != 0) {
         controller->Axis(axis_x, GetAxis(-0x80, 0x7f, a_x), false);
         controller->Axis(axis_y, GetAxis(-0x80, 0x7f, a_y), false);
-    } else {
+        moved = true;
+    } else if (moved) {
         controller->Axis(axis_x, GetAxis(-0x80, 0x7f, 0), false);
         controller->Axis(axis_y, GetAxis(-0x80, 0x7f, 0), false);
+        moved = false;
     }
 }
 

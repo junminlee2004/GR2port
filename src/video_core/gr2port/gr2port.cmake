@@ -41,6 +41,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/meshes.h
     ${CMAKE_CURRENT_LIST_DIR}/metaballs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/metaballs.h
+    ${CMAKE_CURRENT_LIST_DIR}/mouse_camera.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/mouse_camera.h
     ${CMAKE_CURRENT_LIST_DIR}/movies.cpp
     ${CMAKE_CURRENT_LIST_DIR}/movies.h
     ${CMAKE_CURRENT_LIST_DIR}/overlays.cpp
