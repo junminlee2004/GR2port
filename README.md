@@ -11,8 +11,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
 **No CPU emulation, No GPU emulation, No GPU command translation, No shader recompiler:** GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC. **The game's graphics were completely rewritten for PC** via a native Vulkan renderer that runs **handwritten plus recompiled GLSL shaders** that recreate visuals produced by the original GCN shaders. Each frame, GR2port takes the game's scene at the start of its frame graph and draws it on its own render thread, so the per-draw PS4 GPU commands are never built or translated. **The CPU overhead of the native renderer was measured to be only 0.8ms**. **All shader pipelines are precompiled** at boot and stored on disk so there is no shader stutter during gameplay. A runtime translates the firmware libraries on the PS4's Operating System called by the game to native PC solutions (no performance overhead).<br>
 <br>
 
-<img width="1904" height="1200" alt="ep03_5_12" src="https://github.com/user-attachments/assets/39858c3f-7500-4adb-ab9b-ecb0614aa6f8" />
-
+<img width="1904" height="1200" alt="ep03_5_12" src="https://github.com/user-attachments/assets/39858c3f-7500-4adb-ab9b-ecb0614aa6f8" /></b>
+</b>
 
 **Check out the following playlist if your dump is in .PKG format:**
 https://www.youtube.com/watch?v=O8z6QPOaGDg&list=PLOgHncbXc__M&pp=sAgC
@@ -115,9 +115,7 @@ Keyboard and mouse inputs can be customized in the settings menu by clicking the
 
 # Contributing
 
-If you want to contribute, please read the [**CONTRIBUTING.md**](https://github.com/shadps4-emu/shadPS4/blob/main/CONTRIBUTING.md) file.\
-Open a PR and we'll check it :)
-
+If you want to contribute, please feel free :)
 
 # Special Thanks
 
