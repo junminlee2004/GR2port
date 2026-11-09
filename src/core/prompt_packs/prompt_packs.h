@@ -37,4 +37,9 @@ std::filesystem::path InputOverrideFile();
 /// Whether motion sensors may be enabled while the button prompt pack is in use.
 bool MotionAllowed();
 
+/// Before the game starts: writes the GR2 packs built into the executable to the prompt_mods
+/// folder of the user folder, each one whose manifest is missing there or different. Gravity
+/// Rush 2 shows the button prompts of the pad that plays it, and that pack's input presets.
+void InstallBundled();
+
 } // namespace PromptPacks

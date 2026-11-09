@@ -19,6 +19,8 @@
 #include <utility>
 #include <vector>
 
+#include <SDL3/SDL.h>
+#include <cmrc/cmrc.hpp>
 #include <nlohmann/json.hpp>
 #include <zlib.h>
 
@@ -31,7 +33,11 @@
 #include "common/string_util.h"
 #include "common/types.h"
 #include "core/file_sys/fs.h"
+#include "core/game_check/game_patches.h"
 #include "core/prompt_packs/prompt_packs.h"
+#include "input/selected_pad.h"
+
+CMRC_DECLARE(gr2port_prompt_mods);
 
 namespace PromptPacks {
 
@@ -117,6 +123,114 @@ constexpr std::array Gr2ModPacks{
 
 // Button prompt layouts; each one's pack is the folder of the same name.
 constexpr std::array<std::string_view, 4> Layouts{"xbox", "switch", "steamdeck", "steamcontroller"};
+
+// The GR2 packs built into the executable, written to the user folder before the game starts.
+constexpr std::string_view BundledPacks = "src/resources/prompt_mods/GR2";
+
+// Valve's pads. Under Steam Input SDL reports the vendor and product of the pad behind Steam's
+// virtual gamepad.
+constexpr Uint16 ValveVendor = 0x28DE;
+constexpr Uint16 SteamDeckProduct = 0x1205;
+constexpr Uint16 SteamVirtualGamepadProduct = 0x11FF;
+constexpr std::array<Uint16, 11> SteamControllerProducts{
+    0x1101, 0x1102, 0x1105, 0x1106, 0x1142, 0x1201, 0x1202, 0x1302, 0x1303, 0x1304, 0x1305,
+};
+
+std::string LayoutOfType(SDL_GamepadType type) {
+    switch (type) {
+    case SDL_GAMEPAD_TYPE_XBOX360:
+    case SDL_GAMEPAD_TYPE_XBOXONE:
+        return "xbox";
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO:
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
+        return "switch";
+    default:
+        return {};
+    }
+}
+
+std::string LayoutOfValvePad(Uint16 product) {
+    if (product == SteamDeckProduct) {
+        return "steamdeck";
+    }
+    if (std::find(SteamControllerProducts.begin(), SteamControllerProducts.end(), product) !=
+        SteamControllerProducts.end()) {
+        return "steamcontroller";
+    }
+    // Steam's virtual gamepad without the information of the pad behind it. Steam sets
+    // SteamDeck=1 on a Steam Deck, where that pad is most likely the built-in controls.
+    const char* deck = SDL_getenv("SteamDeck");
+    if (product == SteamVirtualGamepadProduct && deck != nullptr && std::string_view(deck) == "1") {
+        return "steamdeck";
+    }
+    return {};
+}
+
+std::string LayoutOfPad(SDL_JoystickID id) {
+    const Uint16 vendor = SDL_GetGamepadVendorForID(id);
+    const Uint16 product = SDL_GetGamepadProductForID(id);
+    const SDL_GamepadType type = SDL_GetGamepadTypeForID(id);
+    std::string layout = vendor == ValveVendor ? LayoutOfValvePad(product) : std::string{};
+    if (layout.empty()) {
+        layout = LayoutOfType(type);
+    }
+    const char* type_name = SDL_GetGamepadStringForType(type);
+    LOG_INFO(Input, "Pad {:04x}:{:04x} ({}): button prompt layout \"{}\"", vendor, product,
+             type_name != nullptr ? type_name : "unknown", layout);
+    return layout;
+}
+
+// The layout of the pad that plays as player 1, else of the first pad with a layout; "off" for a
+// PlayStation pad or none, which keeps the game's own prompts.
+std::string ConnectedPadLayout() {
+    if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD)) {
+        LOG_WARNING(Input, "Cannot check the pad type: {}", SDL_GetError());
+        return "off";
+    }
+    SDL_UpdateJoysticks();
+    int count = 0;
+    SDL_JoystickID* ids = SDL_GetGamepads(&count);
+    std::string layout;
+    if (ids != nullptr) {
+        const std::string picked = Input::SelectedPad::Guid();
+        const auto chosen = std::find_if(ids, ids + count, [&](SDL_JoystickID id) {
+            return !picked.empty() && Input::SelectedPad::GuidOf(id) == picked;
+        });
+        if (chosen != ids + count) {
+            layout = LayoutOfPad(*chosen);
+        } else {
+            for (int i = 0; i < count && layout.empty(); ++i) {
+                layout = LayoutOfPad(ids[i]);
+            }
+        }
+        SDL_free(ids);
+    }
+    SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
+    return layout.empty() ? "off" : layout;
+}
+
+// Writes the embedded folder at from, with all it holds, to the folder to.
+bool WriteTree(const cmrc::embedded_filesystem& files, const std::string& from,
+               const std::filesystem::path& to) {
+    std::error_code ec;
+    std::filesystem::create_directories(to, ec);
+    for (const auto& entry : files.iterate_directory(from)) {
+        const std::string name = entry.filename();
+        if (entry.is_directory()) {
+            if (!WriteTree(files, from + "/" + name, to / name)) {
+                return false;
+            }
+            continue;
+        }
+        const cmrc::file file = files.open(from + "/" + name);
+        std::ofstream out{to / name, std::ios::binary | std::ios::trunc};
+        out.write(file.begin(), static_cast<std::streamsize>(file.size()));
+        if (!out) {
+            return false;
+        }
+    }
+    return true;
+}
 
 // An archive as the game sees it with the pack applied: the patched table of contents, the
 // original bytes after it, then the replaced members.
@@ -446,7 +560,8 @@ PackSet LoadPacks() {
         return set;
     }
     const std::string game = is_gr2 ? "GR2" : "GRR";
-    const std::string layout = ReadLayout(is_gr2 ? "gr2PromptLayout" : "grrPromptLayout");
+    // GR2 shows the buttons of the pad that plays it.
+    const std::string layout = is_gr2 ? ConnectedPadLayout() : ReadLayout("grrPromptLayout");
     if (std::find(Layouts.begin(), Layouts.end(), layout) != Layouts.end()) {
         if (auto pack = LoadPack(game, layout, "layout")) {
             set.layout = set.packs.size();
@@ -461,7 +576,11 @@ PackSet LoadPacks() {
     }
     const auto mods = Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "prompt_mods" / game;
     for (const ModPack& mod : Gr2ModPacks) {
-        if (!ReadSetting<bool>(mod.key).value_or(true)) {
+        // GR2port's launcher holds the Halloween items' switch.
+        const bool on = std::string_view{mod.folder} == "halloween"
+                            ? Gr2Port::GamePatches::HalloweenItems()
+                            : ReadSetting<bool>(mod.key).value_or(true);
+        if (!on) {
             continue;
         }
         std::error_code ec;
@@ -921,6 +1040,7 @@ std::unordered_map<std::string, std::shared_ptr<const Overlay>> BuildOverlays(
             if (pack.code_state == CodeState::Applied) {
                 RevertCodePatches(pack);
             }
+            continue;
         }
     }
 
@@ -1153,6 +1273,32 @@ std::filesystem::path InputOverrideFile() {
 bool MotionAllowed() {
     const Pack* pack = LayoutPack();
     return pack == nullptr || pack->motion_controls;
+}
+
+void InstallBundled() {
+    const auto files = cmrc::gr2port_prompt_mods::get_filesystem();
+    const auto installed =
+        Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "prompt_mods" / "GR2";
+    for (const auto& entry : files.iterate_directory(std::string{BundledPacks})) {
+        if (!entry.is_directory()) {
+            continue;
+        }
+        // A pack whose manifest matches the built-in one is left as it is.
+        const std::string from = std::string{BundledPacks} + "/" + entry.filename();
+        const cmrc::file manifest = files.open(from + "/pack.json");
+        const auto dir = installed / entry.filename();
+        const auto current = ReadHostFile(dir / "pack.json");
+        if (current && current->size() == manifest.size() &&
+            std::memcmp(current->data(), manifest.begin(), manifest.size()) == 0) {
+            continue;
+        }
+        if (WriteTree(files, from, dir)) {
+            LOG_INFO(Loader, "Prompt packs: installed the built-in GR2 {} pack", entry.filename());
+        } else {
+            LOG_ERROR(Loader, "Prompt packs: the built-in GR2 {} pack could not be written to {}",
+                      entry.filename(), Common::FS::PathToUTF8String(dir));
+        }
+    }
 }
 
 } // namespace PromptPacks

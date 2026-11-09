@@ -13,3 +13,13 @@ cmrc_add_resource_library(gr2port-patches
     NAMESPACE gr2port_patches
     src/resources/patches/GravityDaze2-Orbis.xml)
 target_link_libraries(shadps4 PRIVATE res::gr2port_patches)
+
+# GR2Launcher's GR2 packs: button prompts and input presets for each pad type, and the Halloween
+# photo items. The executable writes them to the user folder before the game starts.
+file(GLOB_RECURSE GR2PORT_PROMPT_MODS RELATIVE ${CMAKE_SOURCE_DIR} CONFIGURE_DEPENDS
+    ${CMAKE_SOURCE_DIR}/src/resources/prompt_mods/GR2/*)
+cmrc_add_resource_library(gr2port-prompt-mods
+    ALIAS res::gr2port_prompt_mods
+    NAMESPACE gr2port_prompt_mods
+    ${GR2PORT_PROMPT_MODS})
+target_link_libraries(shadps4 PRIVATE res::gr2port_prompt_mods)

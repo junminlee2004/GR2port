@@ -23,6 +23,7 @@
 #include "core/file_sys/fs.h"
 #include "core/game_check/game_check.h"
 #include "core/ipc/ipc.h"
+#include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
 #include "emulator.h"
 
@@ -162,6 +163,7 @@ int main(int argc, char* argv[]) {
     if (!game) {
         return 1;
     }
+    PromptPacks::InstallBundled();
 
     // ---- Apply flags ----
     if (patchFile)
