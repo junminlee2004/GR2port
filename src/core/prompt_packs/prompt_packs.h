@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <string_view>
 
 #include "core/file_sys/ifile.h"
@@ -36,6 +37,11 @@ std::filesystem::path InputOverrideFile();
 
 /// Whether motion sensors may be enabled while the button prompt pack is in use.
 bool MotionAllowed();
+
+/// The button prompts GR2 starts with on the launcher's Automatic setting: the layout of the pad
+/// that plays as player 1, "keyboard" when no pad is connected, "off" for the game's own
+/// PlayStation prompts.
+std::string AutomaticLayout();
 
 /// Before the game starts: writes the GR2 packs built into the executable to the prompt_mods
 /// folder of the user folder, each one whose manifest is missing there or different. Gravity

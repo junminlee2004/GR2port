@@ -26,6 +26,7 @@
 #include "core/emulator_settings.h"
 #include "core/game_check/game_check.h"
 #include "core/game_check/game_patches.h"
+#include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
 #include "input/input_handler.h"
 #include "input/selected_pad.h"
@@ -137,6 +138,7 @@ enum Control : int {
     IdShiftVerticalValue,
     IdPromptsLabel,
     IdPrompts,
+    IdPromptsAutomatic,
     IdMouseNote,
     IdExtras,
     IdDefaults,
@@ -259,13 +261,18 @@ using Deadzones = std::array<std::array<int, 2>, Sticks.size()>;
 constexpr int SpeedLow = 10;
 constexpr int SpeedHigh = 300;
 constexpr int PromptsTop = 226;
-constexpr int MouseNoteTop = 262;
+constexpr int PromptsAutomaticTop = 252;
+constexpr int MouseNoteTop = 280;
 
 // The button prompts setting's values, in the order of the combo box.
-constexpr std::array<std::pair<const wchar_t*, std::string_view>, 3> PromptChoices{{
+constexpr std::array<std::pair<const wchar_t*, std::string_view>, 7> PromptChoices{{
     {L"Automatic", "auto"},
+    {L"PlayStation", "playstation"},
+    {L"Xbox", "xbox"},
+    {L"Nintendo Switch", "switch"},
+    {L"Steam Deck", "steamdeck"},
+    {L"Steam Controller", "steamcontroller"},
     {L"Keyboard and Mouse", "keyboard"},
-    {L"Controller", "controller"},
 }};
 
 struct Speed {
@@ -730,6 +737,16 @@ void ShowMouse(const Dialog& dialog, const Settings::Mouse& mouse) {
             SetWindowTextW(Item(dialog, speed.value), Percent(value).c_str());
         }
     }
+}
+
+// What the Automatic setting starts the game with, from the pads connected now.
+void ShowAutomaticPrompts(const Dialog& dialog) {
+    const std::string layout = PromptPacks::AutomaticLayout();
+    const std::string_view setting = layout == "off" ? "playstation" : std::string_view{layout};
+    const auto choice = std::ranges::find(PromptChoices, setting,
+                                          &std::pair<const wchar_t*, std::string_view>::second);
+    const std::wstring name = choice != PromptChoices.end() ? choice->first : L"PlayStation";
+    SetWindowTextW(Item(dialog, IdPromptsAutomatic), (L"Automatic starts with: " + name).c_str());
 }
 
 Settings::Mouse ReadMouse(const Dialog& dialog) {
@@ -1226,9 +1243,12 @@ void Build(HWND window, Dialog& dialog) {
         AddText(Item(dialog, IdPrompts), name);
     }
     mouse_order.push_back(add_mouse(
+        WC_STATICW, L"", SS_LEFT, IdPromptsAutomatic,
+        {ComboLeft, PromptsAutomaticTop, ExtrasList.right, PromptsAutomaticTop + InfoHeight}));
+    mouse_order.push_back(add_mouse(
         WC_STATICW,
         L"The mouse always turns the camera. The game's Camera Sensitivity option scales both. "
-        L"Automatic shows the keys when no controller is connected.",
+        L"Automatic follows the controller of player 1, or the keyboard when none is connected.",
         SS_LEFT, IdMouseNote,
         {LabelLeft, MouseNoteTop, ExtrasList.right, MouseNoteTop + 3 * InfoHeight}));
     KeepTabOrder(mouse_order);
@@ -1457,6 +1477,9 @@ INT_PTR CALLBACK DialogProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
             const auto shown = static_cast<size_t>(SendMessageW(dialog->tab, TCM_GETCURSEL, 0, 0));
             if (shown == ControllerPage) {
                 ShowPads(*dialog);
+            }
+            if (shown == MousePage) {
+                ShowAutomaticPrompts(*dialog);
             }
             for (size_t i = 0; i < PageCount; ++i) {
                 ShowWindow(dialog->pages[i], i == shown ? SW_SHOW : SW_HIDE);

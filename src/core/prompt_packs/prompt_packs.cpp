@@ -193,10 +193,6 @@ std::string LayoutOfPad(SDL_JoystickID id) {
 // The layout of the pad that plays as player 1, else of the first pad with a layout; "off" for a
 // PlayStation pad, which keeps the game's own prompts, and "keyboard" when no pad is connected.
 std::string ConnectedPadLayout() {
-    const std::string prompts = Gr2Port::Settings::Get().mouse.prompts;
-    if (prompts == "keyboard") {
-        return "keyboard";
-    }
     if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD)) {
         LOG_WARNING(Input, "Cannot check the pad type: {}", SDL_GetError());
         return "off";
@@ -205,7 +201,7 @@ std::string ConnectedPadLayout() {
     int count = 0;
     SDL_JoystickID* ids = SDL_GetGamepads(&count);
     std::string layout;
-    if ((ids == nullptr || count == 0) && prompts != "controller") {
+    if (ids == nullptr || count == 0) {
         layout = "keyboard";
     }
     if (ids != nullptr) {
@@ -224,6 +220,19 @@ std::string ConnectedPadLayout() {
     }
     SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
     return layout.empty() ? "off" : layout;
+}
+
+// The layout GR2 starts with: the launcher's choice, else the connected pad's. "playstation" is the
+// game's own prompts.
+std::string StartLayout() {
+    const std::string prompts = Gr2Port::Settings::Get().mouse.prompts;
+    if (prompts == "playstation") {
+        return "off";
+    }
+    if (std::find(Layouts.begin(), Layouts.end(), prompts) != Layouts.end()) {
+        return prompts;
+    }
+    return ConnectedPadLayout();
 }
 
 // Writes the embedded folder at from, with all it holds, to the folder to.
@@ -579,7 +588,7 @@ PackSet LoadPacks() {
     }
     const std::string game = is_gr2 ? "GR2" : "GRR";
     // GR2 shows the buttons of the pad that plays it.
-    const std::string layout = is_gr2 ? ConnectedPadLayout() : ReadLayout("grrPromptLayout");
+    const std::string layout = is_gr2 ? StartLayout() : ReadLayout("grrPromptLayout");
     if (std::find(Layouts.begin(), Layouts.end(), layout) != Layouts.end()) {
         if (auto pack = LoadPack(game, layout, "layout")) {
             set.layout = set.packs.size();
@@ -1328,6 +1337,10 @@ void InstallBundled() {
                       entry.filename(), Common::FS::PathToUTF8String(dir));
         }
     }
+}
+
+std::string AutomaticLayout() {
+    return ConnectedPadLayout();
 }
 
 } // namespace PromptPacks
