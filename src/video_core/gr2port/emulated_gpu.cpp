@@ -49,7 +49,7 @@ void Start(AmdGpu::Liverpool* liverpool, Vulkan::Rasterizer* rasterizer) {
     }
     g_liverpool = liverpool;
     g_rasterizer = rasterizer;
-    if (std::getenv("GR2PORT_NO_FORK") != nullptr) {
+    if (std::getenv("GR2PORT_FORK") == nullptr) {
         liverpool->BindRasterizer(nullptr);
         g_on.store(false, std::memory_order_relaxed);
         UpdateDrawLoop();

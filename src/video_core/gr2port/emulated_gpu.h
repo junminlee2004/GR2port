@@ -15,8 +15,8 @@ class Rasterizer;
 
 // Turns GR2fork's GPU emulation off and on: without a rasterizer the command processor parses the
 // game's commands, signals its fences and flips, and draws nothing. GR2port's own frames do not
-// depend on it. GR2PORT_NO_FORK in the environment starts it off, and F3 toggles it, since menus
-// exist only in GR2fork's window. While it is off the game's per-item draw loop does not run.
+// depend on it. It starts off unless GR2PORT_FORK is in the environment, and F3 toggles it. While
+// it is off the game's per-item draw loop does not run.
 namespace Gr2Port::EmulatedGpu {
 
 /// When the executable loads, with its base address.
