@@ -12,7 +12,7 @@
 #include "core/libraries/kernel/threads/exception.h"
 #include "core/libraries/kernel/threads/pthread.h"
 #include "core/signals.h"
-#include "emulator.h"
+#include "GR2port.h"
 #include "video_core/gr2port/fault_report.h"
 
 #ifdef _WIN32

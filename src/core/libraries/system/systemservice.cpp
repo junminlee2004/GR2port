@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <cstdlib>
@@ -11,7 +12,7 @@
 #include "core/libraries/music/music_player_service.h"
 #include "core/libraries/system/systemservice.h"
 #include "core/libraries/system/systemservice_error.h"
-#include "emulator.h"
+#include "GR2port.h"
 
 namespace Libraries::SystemService {
 

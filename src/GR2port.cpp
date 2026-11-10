@@ -48,7 +48,7 @@
 #include "core/linker.h"
 #include "core/memory.h"
 #include "core/user_settings.h"
-#include "emulator.h"
+#include "GR2port.h"
 #include "video_core/cache_storage.h"
 #include "video_core/gr2_fsr3/dlss_streamline.h"
 #include "video_core/renderdoc.h"

@@ -1345,8 +1345,8 @@ set(INPUT src/input/controller.cpp
           src/input/input_mouse.h
 )
 
-set(EMULATOR src/emulator.cpp
-             src/emulator.h
+set(EMULATOR src/GR2port.cpp
+             src/GR2port.h
              src/sdl_window.h
              src/sdl_window.cpp
 )
@@ -1391,8 +1391,8 @@ add_executable(shadps4
     ${EMULATOR}
     ${SHADNET}
     src/main.cpp
-    src/emulator.cpp
-    src/emulator.h
+    src/GR2port.cpp
+    src/GR2port.h
     src/sdl_window.h
     src/sdl_window.cpp
 )

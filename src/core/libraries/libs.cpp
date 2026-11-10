@@ -88,7 +88,7 @@
 #include "core/libraries/vr_tracker/vr_tracker.h"
 #include "core/libraries/web_browser_dialog/webbrowserdialog.h"
 #include "core/libraries/zlib/zlib_sce.h"
-#include "emulator.h"
+#include "GR2port.h"
 
 #include <array>
 
