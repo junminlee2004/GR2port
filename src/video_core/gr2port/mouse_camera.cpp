@@ -35,6 +35,16 @@ constexpr VAddr PitchInverted = 0x1f2cac4;
 constexpr VAddr YawInverted = 0x1f2cac5;
 constexpr VAddr Sensitivity = 0x1f2cac8;
 
+// The cameras read the right stick only while the stick lock is 0 and the active pad's input byte
+// is set (FUN_0155be10, FUN_01567bd0). The pad index is the high half of the camera mode word;
+// mode 1 makes FUN_01567bd0 set a new lock before it reads the stick.
+constexpr VAddr StickLock = 0x1f2ef60;
+constexpr VAddr CameraMode = 0x1f2f510;
+constexpr VAddr ActivePad = 0x1f2f514;
+constexpr VAddr Pads = 0x1eeec80;
+constexpr u64 PadBytes = 0x900;
+constexpr u64 PadInput = 0x710;
+
 // Radians the camera turns per mouse count at the default sensitivity, about 0.023 degrees.
 constexpr float RadiansPerCount = 0.0004f;
 
@@ -88,11 +98,22 @@ T Read(VAddr address) {
     return value;
 }
 
+// Whether the game's cameras take the right stick now.
+bool StickTurnsCamera() {
+    const VAddr pads = Read<VAddr>(Pads);
+    if (Read<s32>(StickLock) != 0 || pads == 0) {
+        return false;
+    }
+    const VAddr pad = pads + u64{Read<u32>(ActivePad)} * PadBytes;
+    return *reinterpret_cast<const u8*>(pad + PadInput) != 0;
+}
+
 // Turns the orientation quaternion at address by the mouse's movement since the last call, in the
 // space of frame: yaw before the orientation, pitch after it. Returns whether the mouse moved.
-bool TurnByMouse(VAddr orientation, const Quaternion& frame, const Speeds& speeds) {
+// While the game ignores the stick, the movement is dropped, as the stick's would be.
+bool TurnByMouse(VAddr orientation, const Quaternion& frame, const Speeds& speeds, bool takes) {
     const auto [dx, dy] = Input::MouseLook::Take();
-    if (dx == 0.0f && dy == 0.0f) {
+    if (!takes || (dx == 0.0f && dy == 0.0f)) {
         return false;
     }
     const float scale = RadiansPerCount * Read<float>(Sensitivity);
@@ -123,11 +144,13 @@ bool PS4_SYSV_ABI OnTurn(float weight, u64 state, u64 orientation, u64 frame, u6
     const bool turned = g_turn(weight, state, orientation, frame, up, out);
     Quaternion base;
     std::memcpy(&base, reinterpret_cast<const void*>(frame), sizeof(base));
-    return TurnByMouse(orientation, base, shifting ? g_shift : g_foot) || turned;
+    return TurnByMouse(orientation, base, shifting ? g_shift : g_foot, StickTurnsCamera()) ||
+           turned;
 }
 
 void PS4_SYSV_ABI OnFollow(u32, const Hooks::Registers* registers, u64) {
-    TurnByMouse(registers->rdi + FollowOrientation, Identity, g_foot);
+    const bool takes = static_cast<u32>(Read<u64>(CameraMode)) != 1 && StickTurnsCamera();
+    TurnByMouse(registers->rdi + FollowOrientation, Identity, g_foot, takes);
 }
 
 } // namespace
