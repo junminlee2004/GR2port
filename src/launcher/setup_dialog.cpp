@@ -165,8 +165,8 @@ enum Control : int {
     IdAntialias,
     IdBloomLabel,
     IdBloom,
-    IdVideoMemoryLabel,
-    IdVideoMemory,
+    IdTextureStreamingLabel,
+    IdTextureStreaming,
     IdGraphicsNote,
     IdDefaults,
 };
@@ -369,11 +369,12 @@ constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
 // The Graphics tab: the preset, then each pass's choice. Quality choices are in the order of
 // Settings::Quality; switches put On first.
 constexpr int PresetTop = 88;
-constexpr int VideoMemoryTop = 302;
+constexpr int TextureStreamingTop = 302;
 constexpr int GraphicsNoteTop = 345;
-// The Video Memory choices below Auto, in MB; those smaller than the GPU's memory are offered.
-constexpr std::array<u32, 9> VideoMemorySizes{1024, 1536, 2048,  3072, 4096,
-                                              6144, 8192, 12288, 16384};
+// The Texture Streaming choices after Auto, in MB. One at least the GPU's memory keeps within the
+// driver's budget, as Auto does.
+constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  4096,  6144, 8192,
+                                                    10240, 11264, 12288, 16384, 24576, 32768};
 // GPUs with at least this much memory of their own are taken for discrete ones.
 constexpr u64 DiscreteBytes = 1ull << 30;
 constexpr std::array<const wchar_t*, 4> QualityChoices{L"PS4 Original", L"Medium", L"Low", L"Off"};
@@ -448,8 +449,8 @@ struct Dialog {
     bool touch_swipe = false;
     // The keys of the game's functions as the Key Bindings dialog left them, to save on Ok.
     std::optional<KeyBindings> key_bindings;
-    // The MB of each Video Memory choice; 0 for Auto.
-    std::vector<u32> video_memory;
+    // The MB of each Texture Streaming choice; 0 for Auto.
+    std::vector<u32> texture_streaming;
 };
 
 int Scaled(const Dialog& dialog, int value) {
@@ -1132,9 +1133,10 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.motion_blur = Selected(Item(dialog, IdMotionBlur)) != 1;
     graphics.antialiasing = Selected(Item(dialog, IdAntialias)) != 1;
     graphics.bloom = Selected(Item(dialog, IdBloom)) != 1;
-    const int video_memory = Selected(Item(dialog, IdVideoMemory));
-    if (video_memory >= 0 && video_memory < static_cast<int>(dialog.video_memory.size())) {
-        graphics.video_memory_mb = dialog.video_memory[video_memory];
+    const int texture_streaming = Selected(Item(dialog, IdTextureStreaming));
+    if (texture_streaming >= 0 &&
+        texture_streaming < static_cast<int>(dialog.texture_streaming.size())) {
+        graphics.texture_streaming_mb = dialog.texture_streaming[texture_streaming];
     }
     graphics.preset = std::string(Settings::MatchPreset(ReadGame(dialog), graphics));
     return graphics;
@@ -1212,35 +1214,33 @@ std::wstring Gigabytes(u64 megabytes) {
     return text + L" GB";
 }
 
-// Auto, naming the GPU and its memory, then the sizes below that memory, then saved when it is
-// none of them.
-void FillVideoMemory(Dialog& dialog, u32 saved) {
-    const HWND combo = Item(dialog, IdVideoMemory);
+// Auto, naming the GPU and its memory, then the sizes, then saved when it is none of them.
+void FillTextureStreaming(Dialog& dialog, u32 saved) {
+    const HWND combo = Item(dialog, IdTextureStreaming);
     const VideoCard card = FindVideoCard();
     const u64 card_megabytes = card.bytes >> 20;
     std::wstring automatic = L"Auto";
     if (card.bytes != 0) {
         automatic += L" (" + Gigabytes(card_megabytes) + L", " + card.name + L")";
     }
-    dialog.video_memory = {0};
+    dialog.texture_streaming = {0};
     AddText(combo, automatic);
-    for (const u32 size : VideoMemorySizes) {
-        if (card.bytes == 0 || size < card_megabytes) {
-            dialog.video_memory.push_back(size);
-            AddText(combo, Gigabytes(size));
-        }
+    for (const u32 size : TextureStreamingSizes) {
+        dialog.texture_streaming.push_back(size);
+        AddText(combo, Gigabytes(size));
     }
-    if (std::ranges::find(dialog.video_memory, saved) == dialog.video_memory.end()) {
-        dialog.video_memory.push_back(saved);
+    if (std::ranges::find(dialog.texture_streaming, saved) == dialog.texture_streaming.end()) {
+        dialog.texture_streaming.push_back(saved);
         AddText(combo, Gigabytes(saved));
     }
 }
 
-void ShowVideoMemory(const Dialog& dialog, u32 megabytes) {
-    const auto found = std::ranges::find(dialog.video_memory, megabytes);
-    Select(Item(dialog, IdVideoMemory), found != dialog.video_memory.end()
-                                            ? static_cast<int>(found - dialog.video_memory.begin())
-                                            : 0);
+void ShowTextureStreaming(const Dialog& dialog, u32 megabytes) {
+    const auto found = std::ranges::find(dialog.texture_streaming, megabytes);
+    Select(Item(dialog, IdTextureStreaming),
+           found != dialog.texture_streaming.end()
+               ? static_cast<int>(found - dialog.texture_streaming.begin())
+               : 0);
 }
 
 void Show(Dialog& dialog, const Settings::Display& display) {
@@ -1422,19 +1422,21 @@ void Build(HWND window, Dialog& dialog) {
             AddText(Item(dialog, row.combo), choice);
         }
     }
-    graphics_order.push_back(MakeControl(
-        dialog, graphics_page, page_origin, WC_STATICW, L"Video Memory", SS_LEFT | SS_CENTERIMAGE,
-        IdVideoMemoryLabel, LabelLeft, VideoMemoryTop, LabelWidth, ComboHeight));
+    graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_STATICW,
+                                         L"Texture Streaming", SS_LEFT | SS_CENTERIMAGE,
+                                         IdTextureStreamingLabel, LabelLeft, TextureStreamingTop,
+                                         LabelWidth, ComboHeight));
     graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_COMBOBOXW, L"",
-                                         CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, IdVideoMemory,
-                                         ComboLeft, VideoMemoryTop, ComboWidth, ComboListHeight));
-    FillVideoMemory(dialog, dialog.values.graphics.video_memory_mb);
+                                         CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,
+                                         IdTextureStreaming, ComboLeft, TextureStreamingTop,
+                                         ComboWidth, ComboListHeight));
+    FillTextureStreaming(dialog, dialog.values.graphics.texture_streaming_mb);
     graphics_order.push_back(MakeControl(
         dialog, graphics_page, page_origin, WC_STATICW,
         L"Steam Deck also sets Aspect Ratio to 16:10 and Render Resolution to 720p on the Display "
-        L"tab: 1280 x 800. Changing a choice makes the preset Custom. With Video Memory below the "
-        L"GPU's own, textures keep fewer mip levels: first those not drawn for a while, then the "
-        L"largest.",
+        L"tab: 1280 x 800. Changing a choice makes the preset Custom. With Texture Streaming "
+        L"below the GPU's memory, textures keep fewer mip levels: first those not drawn for a "
+        L"while, then the largest.",
         SS_LEFT, IdGraphicsNote, LabelLeft, GraphicsNoteTop, ExtrasList.right - LabelLeft,
         4 * InfoHeight));
     KeepTabOrder(graphics_order);
@@ -1664,7 +1666,7 @@ void Build(HWND window, Dialog& dialog) {
     Show(dialog, dialog.values.display);
     ShowGame(dialog, dialog.values.game);
     ShowGraphics(dialog, dialog.values.graphics);
-    ShowVideoMemory(dialog, dialog.values.graphics.video_memory_mb);
+    ShowTextureStreaming(dialog, dialog.values.graphics.texture_streaming_mb);
     ShowPreset(dialog);
     ShowController(dialog);
     ShowMouse(dialog, dialog.values.mouse);
@@ -1720,7 +1722,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             Show(dialog, Settings::Display{});
             ShowGame(dialog, Settings::Game{});
             ShowGraphics(dialog, Settings::Graphics{});
-            ShowVideoMemory(dialog, Settings::Graphics{}.video_memory_mb);
+            ShowTextureStreaming(dialog, Settings::Graphics{}.texture_streaming_mb);
             ShowPreset(dialog);
             for (const Toggle& toggle : Toggles) {
                 Check(dialog, toggle.id, toggle.fallback);

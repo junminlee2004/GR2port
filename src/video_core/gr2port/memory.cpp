@@ -60,8 +60,8 @@ bool Memory::Create() {
         LOG_ERROR(Render_Vulkan, "GR2port: no memory allocator");
         return false;
     }
-    // The Video Memory setting, or GR2PORT_VRAM_MB in the environment, which tests set.
-    u64 megabytes = Settings::Get().graphics.video_memory_mb;
+    // The Texture Streaming setting, or GR2PORT_VRAM_MB in the environment, which tests set.
+    u64 megabytes = Settings::Get().graphics.texture_streaming_mb;
     if (const char* forced = std::getenv("GR2PORT_VRAM_MB"); forced != nullptr) {
         megabytes = std::strtoull(forced, nullptr, 10);
     }

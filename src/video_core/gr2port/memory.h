@@ -47,7 +47,7 @@ class Memory {
 public:
     explicit Memory(const Device& device) : d{device} {}
 
-    /// The Video Memory setting caps the budget at that many MB, as a smaller GPU's;
+    /// The Texture Streaming setting caps the budget at that many MB, as a smaller GPU's;
     /// GR2PORT_VRAM_MB in the environment overrides it.
     bool Create();
 
