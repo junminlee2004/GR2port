@@ -1,0 +1,60 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// The emitters the update and spawn programs run on: each one an owner holds, and each that lost
+// its owner fewer than Settled steps ago. Without an owner, two steps of those programs leave an
+// emitter as it is, and after a third both copies of the pool hold it, so the programs skip it
+// from then on. A change in whether its description spawns starts the count again.
+
+#version 460
+
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+layout(local_size_x = 64) in;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Input {
+    uint w[];
+};
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Output {
+    uint w[];
+};
+
+layout(push_constant) uniform Constants {
+    // Two words per emitter, the owner in the first.
+    Input owners;
+    // The last step's emitters, 32 words each; word 8 names the description.
+    Input emitters;
+    // 64 words each; the spawn program spawns for a description whose word 4 is 1.
+    Input descriptions;
+    // Per emitter: the steps without an owner, and SpawnBit.
+    Output steps;
+    // The list's length, the dispatch's three group counts, then the emitters.
+    Output listing;
+    uint objects;
+};
+
+const uint Settled = 4u;
+const uint SpawnBit = 0x100u;
+const uint StepMask = 0xffu;
+
+void main() {
+    const uint emitter = gl_GlobalInvocationID.x;
+    if (emitter >= objects) {
+        return;
+    }
+    const bool owned = owners.w[2u * emitter] != 0u;
+    const uint description = emitters.w[32u * emitter + 8u];
+    const uint spawns = descriptions.w[64u * description + 4u] == 1u ? SpawnBit : 0u;
+    const uint last = steps.w[emitter];
+    uint count = 0u;
+    if (!owned && (last & SpawnBit) == spawns) {
+        count = min((last & StepMask) + 1u, Settled);
+    }
+    steps.w[emitter] = count | spawns;
+    if (count < Settled) {
+        const uint slot = atomicAdd(listing.w[0], 1u);
+        listing.w[4u + slot] = emitter;
+        atomicMax(listing.w[1], slot / 64u + 1u);
+    }
+}

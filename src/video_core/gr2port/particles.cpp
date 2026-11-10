@@ -18,6 +18,7 @@
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/particles.h"
+#include "video_core/gr2port/pass_times.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/point_lights.h"
 #include "video_core/gr2port/self_translucent.h"
@@ -46,6 +47,7 @@
 #include "video_core/gr2port/shaders/model_plain_soft_frag.h"
 #include "video_core/gr2port/shaders/model_shadow_vert.h"
 #include "video_core/gr2port/shaders/model_vert.h"
+#include "video_core/gr2port/shaders/particle_active_comp.h"
 #include "video_core/gr2port/shaders/particle_effect_frag.h"
 #include "video_core/gr2port/shaders/particle_effect_shadow_frag.h"
 #include "video_core/gr2port/shaders/particle_effect_shadow_vert.h"
@@ -93,6 +95,8 @@ namespace {
 
 // The programs' groups: 64 threads wide.
 constexpr u32 GroupThreads = 64;
+// The active list's words: its length and the dispatch's group counts come first.
+constexpr u32 ActiveListWord = 4;
 // The library's buffers: gpuDescription and gpuMaterials.
 constexpr u64 DescriptionBytes = u64{0x8000} * 0x100;
 constexpr u64 MaterialBytes = u64{0x10000} * 0x230;
@@ -182,6 +186,17 @@ struct UpdatePush {
     u64 owner_in;
     u64 description;
     u64 emitter_out;
+    u64 active;
+};
+
+struct ActivePush {
+    u64 owners;
+    u64 emitters;
+    u64 descriptions;
+    u64 steps;
+    u64 active;
+    u32 objects;
+    u32 padding;
 };
 
 struct MovePush {
@@ -199,6 +214,7 @@ struct SpawnPush {
     u64 description;
     u64 particle_out;
     u64 emitter_out;
+    u64 active;
 };
 
 struct EmitterColorPush {
@@ -239,6 +255,7 @@ std::array<Pipeline, SelfTranslucentPrograms * 2> g_self_translucent;
 std::array<Pipeline, ShadowPrograms> g_shadow_pipelines;
 std::array<Pipeline, Scene::ParticleSurfacePipelines> g_surface_pipelines;
 Pipeline g_update;
+Pipeline g_active_pipeline;
 Pipeline g_clear;
 Pipeline g_move;
 Pipeline g_spawn;
@@ -289,6 +306,10 @@ Buffer g_noise;
 Buffer g_colors;
 std::array<Buffer, 2> g_particles;
 std::array<Buffer, 2> g_objects;
+// Per emitter, the steps since its owner let it go; and the list of emitters the update and spawn
+// programs run on, after its length and its dispatch.
+Buffer g_steps;
+Buffer g_active;
 u32 g_next = 0;
 u32 g_generation = 0;
 u64 g_frames = 0;
@@ -330,6 +351,7 @@ void Build() {
     const std::array compute_sets{g_compute_layout};
     const std::array draw_sets{Textures::SetLayout(), g_draw_layout};
     g_update = CreateComputePipeline(d, GPU_OBJECT_UPDATE_COMP, sizeof(UpdatePush), compute_sets);
+    g_active_pipeline = CreateComputePipeline(d, PARTICLE_ACTIVE_COMP, sizeof(ActivePush));
     g_clear = CreateComputePipeline(d, GPU_PARTICLE_CLEAR_COMP, sizeof(u64));
     g_move = CreateComputePipeline(d, GPU_PARTICLE_MOVE_COMP, sizeof(MovePush), compute_sets);
     g_spawn = CreateComputePipeline(d, GPU_EMITTER_SPAWN_COMP, sizeof(SpawnPush), compute_sets);
@@ -363,9 +385,10 @@ void Build() {
         {SPRITE_RIBBON_VERT, vk::PrimitiveTopology::eTriangleStrip, sprite_pixels},
         {MODEL_VERT, vk::PrimitiveTopology::eTriangleList, model_pixels},
     }};
-    bool built = g_update.pipeline && g_clear.pipeline && g_move.pipeline && g_spawn.pipeline &&
-                 g_sample.pipeline && g_sample_skinned.pipeline && g_emitter_color.pipeline &&
-                 g_color_backup.pipeline && g_collision_backup.pipeline;
+    bool built = g_update.pipeline && g_active_pipeline.pipeline && g_clear.pipeline &&
+                 g_move.pipeline && g_spawn.pipeline && g_sample.pipeline &&
+                 g_sample_skinned.pipeline && g_emitter_color.pipeline && g_color_backup.pipeline &&
+                 g_collision_backup.pipeline;
     for (u32 shape = 0; shape < ShapeCount; shape++) {
         for (u32 program = 0; program < ProgramCount; program++) {
             Pipeline& pipeline = g_draws[shape * ProgramCount + program];
@@ -618,6 +641,16 @@ bool CreatePool(vk::CommandBuffer cmd, const Scene::ParticleHeader& frame) {
         cmd.fillBuffer(g_objects[i].buffer, 0, VK_WHOLE_SIZE, 0, dl);
     }
     const u64 objects = frame.object_bytes / Scene::ParticleObjectBytes;
+    g_steps = CreateStorage(objects * sizeof(u32));
+    g_active = g_memory->CreateBuffer(ActiveListWord * sizeof(u32) + objects * sizeof(u32),
+                                      vk::BufferUsageFlagBits::eStorageBuffer |
+                                          vk::BufferUsageFlagBits::eIndirectBuffer |
+                                          vk::BufferUsageFlagBits::eTransferDst,
+                                      Placement::Device);
+    if (!g_steps.buffer || !g_active.buffer) {
+        return false;
+    }
+    cmd.fillBuffer(g_steps.buffer, 0, VK_WHOLE_SIZE, 0, dl);
     g_colors = CreateStorage(objects * ColorStride);
     if (!g_colors.buffer) {
         return false;
@@ -1321,6 +1354,7 @@ void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const 
     CopyLiveDescriptions(cmd, frame, packet, buffer, offset);
     CopyCurves(cmd);
     FullBarrier(cmd);
+    PassTimes::Mark(cmd, PassTimes::Pass::SimCopies);
 
     const u32 last = g_next;
     const u32 next = 1 - last;
@@ -1329,20 +1363,39 @@ void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const 
     const u32 object_groups = Groups(frame.objects);
     const u32 particle_groups = Groups(frame.particles);
 
+    // The list starts empty, its dispatch at no groups.
+    constexpr std::array<u32, ActiveListWord> empty{0, 0, 1, 1};
+    cmd.updateBuffer(g_active.buffer, 0, sizeof(empty), empty.data(), dl);
+    FullBarrier(cmd);
+    const ActivePush list{
+        .owners = owners,
+        .emitters = g_objects[last].address,
+        .descriptions = g_description.address,
+        .steps = g_steps.address,
+        .active = g_active.address,
+        .objects = frame.objects,
+    };
+    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_active_pipeline.pipeline, dl);
+    cmd.pushConstants(g_active_pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(list),
+                      &list, dl);
+    cmd.dispatch(object_groups, 1, 1, dl);
+    FullBarrier(cmd);
     const UpdatePush update{
         .emitter_in = g_objects[last].address,
         .effect_in = effects,
         .owner_in = owners,
         .description = g_description.address,
         .emitter_out = g_objects[next].address,
+        .active = g_active.address,
     };
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_update.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_update.layout, 0, g_compute_curve_set,
                            {}, dl);
     cmd.pushConstants(g_update.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(update),
                       &update, dl);
-    cmd.dispatch(object_groups, 1, 1, dl);
+    cmd.dispatchIndirect(g_active.buffer, sizeof(u32), dl);
     FullBarrier(cmd);
+    PassTimes::Mark(cmd, PassTimes::Pass::SimUpdate);
 
     const u64 clear_out = g_particles[next].address;
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_clear.pipeline, dl);
@@ -1350,6 +1403,7 @@ void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const 
                       &clear_out, dl);
     cmd.dispatch(particle_groups, 1, 1, dl);
     FullBarrier(cmd);
+    PassTimes::Mark(cmd, PassTimes::Pass::SimClear);
 
     const MovePush move{
         .particle_in = g_particles[last].address,
@@ -1368,20 +1422,23 @@ void RecordSimulation(vk::CommandBuffer cmd, const Scene::Header& header, const 
         cmd.dispatch(particle_groups, 1, 1, dl);
     }
     FullBarrier(cmd);
+    PassTimes::Mark(cmd, PassTimes::Pass::SimMove);
 
     const SpawnPush spawn{
         .effect_in = effects,
         .description = g_description.address,
         .particle_out = g_particles[next].address,
         .emitter_out = g_objects[next].address,
+        .active = g_active.address,
     };
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_spawn.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_spawn.layout, 0, g_compute_curve_set,
                            {}, dl);
     cmd.pushConstants(g_spawn.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(spawn), &spawn,
                       dl);
-    cmd.dispatch(object_groups, 1, 1, dl);
+    cmd.dispatchIndirect(g_active.buffer, sizeof(u32), dl);
     FullBarrier(cmd);
+    PassTimes::Mark(cmd, PassTimes::Pass::SimSpawn);
     DeviceLost::Mark(*g_device, cmd, DeviceLost::Pass::MeshSampling);
     RecordSamples(cmd, frame, packet, address, next);
     g_next = next;
