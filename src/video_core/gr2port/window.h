@@ -27,4 +27,8 @@ Size PixelSize();
 u32 Id();
 u32 GameId();
 
+/// Main thread: switches the window between windowed and fullscreen as the settings choose it, on
+/// the monitor it is on. Returns false before the window exists.
+bool ToggleFullscreen();
+
 } // namespace Gr2Port::Window

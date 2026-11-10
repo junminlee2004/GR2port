@@ -263,10 +263,20 @@ void WindowSDL::WaitEvent() {
     case SDL_EVENT_QUIT:
         is_open = false;
         break;
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        // GR2port: its window is not SDL's last one, so closing it quits here.
+        if (event.window.windowID == Gr2Port::Window::Id()) {
+            is_open = false;
+        }
+        break;
     case SDL_EVENT_QUIT_DIALOG:
         Overlay::ToggleQuitWindow();
         break;
     case SDL_EVENT_TOGGLE_FULLSCREEN: {
+        // GR2port: the game is played in GR2port's window.
+        if (Gr2Port::Window::ToggleFullscreen()) {
+            break;
+        }
         if (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) {
             SDL_SetWindowFullscreen(window, 0);
         } else {

@@ -79,7 +79,8 @@ void SDLCALL CreateOnMainThread(void*) {
     const int initial_width = static_cast<int>(display.width);
     const int initial_height = static_cast<int>(display.height);
     const SDL_PropertiesID props = SDL_CreateProperties();
-    SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "GR2port");
+    // "Gravity Rush 2(TM)" in UTF-8.
+    SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "Gravity Rush 2\xE2\x84\xA2");
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER,
                           SDL_WINDOWPOS_CENTERED_DISPLAY(screen));
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER,
@@ -138,6 +139,20 @@ u32 Id() {
 
 u32 GameId() {
     return g_game_id.load(std::memory_order_relaxed);
+}
+
+bool ToggleFullscreen() {
+    if (g_window == nullptr) {
+        return false;
+    }
+    if ((SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) != 0) {
+        if (!SDL_SetWindowFullscreen(g_window, false)) {
+            LOG_ERROR(Render_Vulkan, "GR2port: no windowed mode: {}", SDL_GetError());
+        }
+    } else {
+        EnterFullscreen(SDL_GetDisplayForWindow(g_window), Settings::Get().display);
+    }
+    return true;
 }
 
 } // namespace Gr2Port::Window
