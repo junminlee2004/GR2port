@@ -31,6 +31,7 @@
 #include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/enemies.h"
 #include "video_core/gr2port/fog.h"
+#include "video_core/gr2port/frame_stats.h"
 #include "video_core/gr2port/glass.h"
 #include "video_core/gr2port/imgui_relay.h"
 #include "video_core/gr2port/look.h"
@@ -132,6 +133,19 @@ struct Slot {
     // The frame's image is copied to the snapshot buffer.
     bool snapshot = false;
 };
+
+// The stats at the F10 counter's last publication, which the next one takes the difference to.
+struct Published {
+    std::chrono::steady_clock::time_point time{};
+    u64 game_frames = 0;
+    u32 frames = 0;
+    u32 timed = 0;
+    double work_ms = 0.0;
+    double wait_ms = 0.0;
+    double gpu_ms = 0.0;
+    u64 capture_ns = 0;
+};
+constexpr auto PublishPeriod = std::chrono::milliseconds{500};
 
 struct Stats {
     u64 game_frames = 0;
@@ -242,6 +256,7 @@ private:
     void RecordSnapshot(vk::CommandBuffer cmd, vk::Image image);
     void SaveSnapshot();
     void Report();
+    void PublishStats();
     bool Recreate();
     bool ResizeScene(vk::Extent2D extent);
     bool SizeScene(const Scene::Header& header, const u8* packet);
@@ -281,6 +296,7 @@ private:
     bool snapshot_wanted = false;
     bool needs_swapchain = false;
     Stats stats;
+    Published published;
     // The launcher's graphics settings, read once at start.
     Settings::Graphics graphics = Settings::Get().graphics;
 };
@@ -1610,14 +1626,35 @@ void Thread::Report() {
     };
     log_gaps("game frames", stats.game_gaps);
     log_gaps("presents", stats.present_gaps);
-    const double capture_ms =
-        static_cast<double>(stats.capture_ns + stats.particle_capture_ns) * 1e-6 / frames;
-    Window::SetTitle(fmt::format("GR2port | game {:.0f} fps | capture {:.2f} ms | render thread "
-                                 "{:.2f} ms | GPU {:.2f} ms{}",
-                                 game_fps, capture_ms, stats.work_ms / frames, gpu_ms,
-                                 EmulatedGpu::On() ? "" : " | GR2fork off"));
     stats = {.game_frames = game_frames, .skipped = skipped, .start = now};
+    published = {.time = now, .game_frames = game_frames};
     snapshot_wanted = true;
+}
+
+void Thread::PublishStats() {
+    const auto now = std::chrono::steady_clock::now();
+    if (now - published.time < PublishPeriod) {
+        return;
+    }
+    const u64 game_frames = Capture::Frames();
+    const u64 capture_ns = stats.capture_ns + stats.particle_capture_ns;
+    if (published.time != std::chrono::steady_clock::time_point{} &&
+        stats.frames > published.frames) {
+        const double seconds = std::chrono::duration<double>(now - published.time).count();
+        const double frames = stats.frames - published.frames;
+        const u32 timed = stats.timed - published.timed;
+        FrameStats::Publish({
+            .drawing = true,
+            .fork = EmulatedGpu::On(),
+            .game_fps = static_cast<double>(game_frames - published.game_frames) / seconds,
+            .gpu_ms = timed > 0 ? (stats.gpu_ms[0] - published.gpu_ms) / timed : 0.0,
+            .render_ms = (stats.work_ms - published.work_ms) / frames,
+            .wait_ms = (stats.wait_ms - published.wait_ms) / frames,
+            .capture_ms = static_cast<double>(capture_ns - published.capture_ns) * 1e-6 / frames,
+        });
+    }
+    published = {now,           game_frames,   stats.frames,    stats.timed,
+                 stats.work_ms, stats.wait_ms, stats.gpu_ms[0], capture_ns};
 }
 
 void Thread::Run() {
@@ -1636,6 +1673,7 @@ void Thread::Run() {
         }
         seen = packet.frame;
         Frame(packet);
+        PublishStats();
         if (stats.frames >= ReportFrames) {
             Report();
         }

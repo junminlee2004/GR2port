@@ -25,6 +25,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/enemies.h
     ${CMAKE_CURRENT_LIST_DIR}/fog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/fog.h
+    ${CMAKE_CURRENT_LIST_DIR}/frame_stats.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/frame_stats.h
     ${CMAKE_CURRENT_LIST_DIR}/glass.cpp
     ${CMAKE_CURRENT_LIST_DIR}/glass.h
     ${CMAKE_CURRENT_LIST_DIR}/gr2port.cpp

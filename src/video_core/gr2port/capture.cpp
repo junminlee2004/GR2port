@@ -20,13 +20,13 @@
 #include "video_core/gr2port/capture_math.h"
 #include "video_core/gr2port/deformers.h"
 #include "video_core/gr2port/emulated_gpu.h"
+#include "video_core/gr2port/frame_stats.h"
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/particle_capture.h"
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/scene_ring.h"
 #include "video_core/gr2port/textures.h"
 #include "video_core/gr2port/ui_capture.h"
-#include "video_core/gr2port/window.h"
 
 namespace Gr2Port::Capture {
 
@@ -3255,7 +3255,7 @@ void LogFrameRate(std::chrono::steady_clock::time_point now, bool capturing) {
              rate, std::chrono::duration<double, std::milli>(g_rate_longest).count(),
              g_rate_long_gaps, renderer, fork);
     if (!capturing) {
-        Window::SetTitle(fmt::format("GR2port off | game {:.0f} fps | GR2fork {}", rate, fork));
+        FrameStats::Publish({.fork = EmulatedGpu::On(), .game_fps = rate});
     }
     g_rate_frames = 0;
     g_rate_long_gaps = 0;

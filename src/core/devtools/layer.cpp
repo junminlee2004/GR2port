@@ -17,6 +17,7 @@
 #include "imgui_internal.h"
 #include "options.h"
 #include "video_core/gr2_fsr3/gr2_fsr3.h"
+#include "video_core/gr2port/frame_stats.h"
 #include "video_core/renderer_vulkan/vk_presenter.h"
 #include "widget/frame_dump.h"
 #include "widget/frame_graph.h"
@@ -283,16 +284,8 @@ void L::DrawAdvanced() {
 }
 
 void L::DrawSimple() {
-    const float frameRate = DebugState.Framerate;
-    if (frameRate < 10) {
-        PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f)); // Red
-    } else if (frameRate >= 10 && frameRate < 20) {
-        PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.5f, 0.0f, 1.0f)); // Orange
-    } else {
-        PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f)); // White
-    }
-    Text("%d FPS (%.1f ms)", static_cast<int>(std::round(frameRate)), 1000.0f / frameRate);
-    PopStyleColor();
+    // GR2port: the frame rates and GR2port's timings, white with a black outline.
+    Gr2Port::FrameStats::Draw(DebugState.Framerate);
 }
 
 static void LoadSettings(const char* line) {
@@ -427,7 +420,8 @@ void L::Draw() {
     if (show_simple_fps) {
         if (Begin("Video Info", nullptr,
                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration |
-                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking)) {
+                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking |
+                      ImGuiWindowFlags_NoBackground)) {
             if (visibility_toggled) {
                 fps_pinned = true;
                 visibility_toggled = false;

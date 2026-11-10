@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <string>
-
 #include "common/types.h"
 
 struct SDL_Window;
@@ -28,8 +26,5 @@ Size PixelSize();
 /// The SDL ids of the window and of the game's window, or 0 before Create. Any thread.
 u32 Id();
 u32 GameId();
-
-/// Sets the window's title without waiting.
-void SetTitle(std::string title);
 
 } // namespace Gr2Port::Window

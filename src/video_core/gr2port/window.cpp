@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <atomic>
-#include <utility>
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
@@ -117,14 +116,6 @@ void SDLCALL CreateOnMainThread(void*) {
     SDL_AddEventWatch(&WatchEvents, nullptr);
 }
 
-void SDLCALL SetTitleOnMainThread(void* data) {
-    const auto* title = static_cast<std::string*>(data);
-    if (g_window != nullptr) {
-        SDL_SetWindowTitle(g_window, title->c_str());
-    }
-    delete title;
-}
-
 } // namespace
 
 SDL_Window* Create() {
@@ -147,13 +138,6 @@ u32 Id() {
 
 u32 GameId() {
     return g_game_id.load(std::memory_order_relaxed);
-}
-
-void SetTitle(std::string title) {
-    auto* data = new std::string(std::move(title));
-    if (!SDL_RunOnMainThread(&SetTitleOnMainThread, data, false)) {
-        delete data;
-    }
 }
 
 } // namespace Gr2Port::Window
