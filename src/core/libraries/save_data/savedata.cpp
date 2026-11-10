@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <cstring>
@@ -470,8 +471,7 @@ static Error saveDataMount(const OrbisSaveDataMount2* mount_info,
             LOG_INFO(Lib_SaveData, "called with invalid block size");
         }
 
-        const auto root_save =
-            EmulatorSettings.GetHomeDir() / std::to_string(mount_info->userId) / "savedata";
+        const auto root_save = Common::FS::GetUserPath(Common::FS::PathType::SaveDataDir);
         fs::create_directories(root_save);
         const auto available = fs::space(root_save).available;
 

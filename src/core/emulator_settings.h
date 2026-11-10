@@ -960,12 +960,12 @@ public:
     const std::vector<bool> GetGameInstallDirsEnabled();
     const std::vector<GameInstallDir>& GetAllGameInstallDirs() const;
 
-    std::filesystem::path GetHomeDir();
-    void SetHomeDir(const std::filesystem::path& dir);
     std::filesystem::path GetSysModulesDir();
     void SetSysModulesDir(const std::filesystem::path& dir);
+    /// The folder the settings name for dumped system fonts, or empty.
     std::filesystem::path GetFontsDir();
     void SetFontsDir(const std::filesystem::path& dir);
+    /// The folder the settings name for additional content, or empty.
     std::filesystem::path GetAddonInstallDir();
     void SetAddonInstallDir(const std::filesystem::path& dir);
 

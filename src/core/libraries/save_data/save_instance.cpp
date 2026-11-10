@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <iostream>
@@ -46,15 +47,15 @@ static const std::unordered_map<int, std::string> default_title = {
 
 namespace Libraries::SaveData {
 
+// Every user's saves are the player's: one folder per title, beside the others in userdata.
 fs::path SaveInstance::MakeTitleSavePath(Libraries::UserService::OrbisUserServiceUserId user_id,
                                          std::string_view game_serial) {
-    return EmulatorSettings.GetHomeDir() / std::to_string(user_id) / "savedata" / game_serial;
+    return Common::FS::GetUserPath(Common::FS::PathType::SaveDataDir) / game_serial;
 }
 
 fs::path SaveInstance::MakeDirSavePath(OrbisUserServiceUserId user_id, std::string_view game_serial,
                                        std::string_view dir_name) {
-    return EmulatorSettings.GetHomeDir() / std::to_string(user_id) / "savedata" / game_serial /
-           dir_name;
+    return MakeTitleSavePath(user_id, game_serial) / dir_name;
 }
 
 uint64_t SaveInstance::GetMaxBlockFromSFO(const PSF& psf) {

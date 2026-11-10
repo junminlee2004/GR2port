@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <fstream>
@@ -15,16 +16,13 @@
 #include <sys/param.h>
 #endif
 
-#ifndef MAX_PATH
 #ifdef _WIN32
-// This is the maximum number of UTF-16 code units permissible in Windows file paths
-#define MAX_PATH 260
-#include <Shlobj.h>
 #include <windows.h>
-#else
+#endif
+
+#ifndef MAX_PATH
 // This is the maximum number of UTF-8 code units permissible in all other OSes' file paths
 #define MAX_PATH 1024
-#endif
 #endif
 
 namespace Common::FS {
@@ -58,7 +56,8 @@ static CFURLRef UntranslocateBundlePath(const CFURLRef bundle_path) {
     return nullptr;
 }
 
-static std::optional<std::filesystem::path> GetBundleParentDirectory() {
+// The app bundle that holds the executable, or the folder that does when there is none.
+static std::optional<std::filesystem::path> GetBundleDirectory() {
     if (CFBundleRef bundle_ref = CFBundleGetMainBundle()) {
         if (CFURLRef bundle_url_ref = CFBundleCopyBundleURL(bundle_ref)) {
             SCOPE_EXIT {
@@ -76,8 +75,7 @@ static std::optional<std::filesystem::path> GetBundleParentDirectory() {
             if (CFURLGetFileSystemRepresentation(
                     untranslocated_url_ref ? untranslocated_url_ref : bundle_url_ref, true,
                     reinterpret_cast<u8*>(app_bundle_path), sizeof(app_bundle_path))) {
-                std::filesystem::path bundle_path{app_bundle_path};
-                return bundle_path.parent_path();
+                return std::filesystem::path{app_bundle_path};
             }
         }
     }
@@ -85,28 +83,37 @@ static std::optional<std::filesystem::path> GetBundleParentDirectory() {
 }
 #endif
 
-static auto UserPaths = [] {
-    // Try the portable user directory first.
-    auto user_dir = std::filesystem::current_path() / PORTABLE_DIR;
-    if (!std::filesystem::exists(user_dir)) {
-        // If it doesn't exist, use the standard path for the platform instead.
-        // NOTE: On Windows we currently just create the portable directory instead.
-#ifdef __APPLE__
-        user_dir =
-            std::filesystem::path(getenv("HOME")) / "Library" / "Application Support" / "shadPS4";
-#elif defined(__linux__)
-        const char* xdg_data_home = getenv("XDG_DATA_HOME");
-        if (xdg_data_home != nullptr && strlen(xdg_data_home) > 0) {
-            user_dir = std::filesystem::path(xdg_data_home) / "shadPS4";
-        } else {
-            user_dir = std::filesystem::path(getenv("HOME")) / ".local" / "share" / "shadPS4";
+// The folder that holds the executable, or on macOS the one that holds its app bundle.
+static fs::path ExecutableDirectory() {
+#ifdef _WIN32
+    std::wstring path(MAX_PATH, L'\0');
+    for (;;) {
+        const DWORD length =
+            GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+        if (length == 0) {
+            return fs::current_path();
         }
-#elif _WIN32
-        TCHAR appdata[MAX_PATH] = {0};
-        SHGetFolderPath(NULL, CSIDL_APPDATA, NULL, 0, appdata);
-        user_dir = std::filesystem::path(appdata) / "shadPS4";
-#endif
+        if (length < path.size()) {
+            path.resize(length);
+            return fs::path{path}.parent_path();
+        }
+        path.resize(path.size() * 2);
     }
+#elif defined(__APPLE__)
+    if (const auto bundle = GetBundleDirectory()) {
+        return bundle->extension() == ".app" ? bundle->parent_path() : *bundle;
+    }
+    return fs::current_path();
+#else
+    std::error_code ec;
+    const auto executable = fs::read_symlink("/proc/self/exe", ec);
+    return ec ? fs::current_path() : executable.parent_path();
+#endif
+}
+
+static auto UserPaths = [] {
+    // GR2port keeps every file of its own in userdata beside the executable, made if missing.
+    const auto user_dir = ExecutableDirectory() / PORTABLE_DIR;
 
     std::unordered_map<PathType, fs::path> paths;
 
@@ -120,36 +127,11 @@ static auto UserPaths = [] {
     create_path(PathType::ScreenshotsDir, user_dir / SCREENSHOTS_DIR);
     create_path(PathType::ShaderDir, user_dir / SHADER_DIR);
     create_path(PathType::GameDataDir, user_dir / GAMEDATA_DIR);
-    create_path(PathType::TempDataDir, user_dir / TEMPDATA_DIR);
     create_path(PathType::SysModuleDir, user_dir / SYSMODULES_DIR);
-    create_path(PathType::DownloadDir, user_dir / DOWNLOAD_DIR);
     create_path(PathType::CapturesDir, user_dir / CAPTURES_DIR);
-    create_path(PathType::CheatsDir, user_dir / CHEATS_DIR);
-    create_path(PathType::PatchesDir, user_dir / PATCHES_DIR);
-    create_path(PathType::MetaDataDir, user_dir / METADATA_DIR);
-    create_path(PathType::CustomTrophy, user_dir / CUSTOM_TROPHY);
-    create_path(PathType::CustomConfigs, user_dir / CUSTOM_CONFIGS);
     create_path(PathType::CacheDir, user_dir / CACHE_DIR);
-    create_path(PathType::FontsDir, user_dir / FONTS_DIR);
     create_path(PathType::TrophyDir, user_dir / TROPHY_DIR);
-    create_path(PathType::HomeDir, user_dir / HOME_DIR);
-    create_path(PathType::CustomModulesDir, user_dir / CUSTOM_MODULES_DIR);
-    create_path(PathType::LicensesDir, user_dir / LICENSES_DIR);
-
-    std::ofstream notice_file(user_dir / CUSTOM_TROPHY / "Notice.txt");
-    if (notice_file.is_open()) {
-        notice_file
-            << "++++++++++++++++++++++++++++++++\n+ Custom Trophy Images / Sound "
-               "+\n++++++++++++++++++++++++++++++++\n\nYou can add custom images to the "
-               "trophies.\n*We recommend a square resolution image, for example 200x200, 500x500, "
-               "the same size as the height and width.\nIn this folder ('user\\custom_trophy'), "
-               "add the files with the following "
-               "names:\n\nbronze.png\nsilver.png\ngold.png\nplatinum.png\n\nYou can add a custom "
-               "sound for trophy notifications.\n*By default, no audio is played unless it is in "
-               "this folder and you are using the QT version.\nIn this folder "
-               "('user\\custom_trophy'), add the files with the following names:\n\ntrophy.mp3";
-        notice_file.close();
-    }
+    create_path(PathType::SaveDataDir, user_dir / SAVEDATA_DIR);
 
     return paths;
 }();

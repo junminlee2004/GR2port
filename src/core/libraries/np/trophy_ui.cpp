@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <filesystem>
@@ -56,33 +57,9 @@ TrophyUI::TrophyUI(const std::filesystem::path& trophyIconPath, const std::strin
         pathString += "bronze.png";
     }
 
-    const auto CustomTrophy_Dir = Common::FS::GetUserPath(Common::FS::PathType::CustomTrophy);
-    std::string customPath;
-
-    if (trophy_type == "P" && fs::exists(CustomTrophy_Dir / "platinum.png")) {
-        customPath = (CustomTrophy_Dir / "platinum.png").string();
-    } else if (trophy_type == "G" && fs::exists(CustomTrophy_Dir / "gold.png")) {
-        customPath = (CustomTrophy_Dir / "gold.png").string();
-    } else if (trophy_type == "S" && fs::exists(CustomTrophy_Dir / "silver.png")) {
-        customPath = (CustomTrophy_Dir / "silver.png").string();
-    } else if (trophy_type == "B" && fs::exists(CustomTrophy_Dir / "bronze.png")) {
-        customPath = (CustomTrophy_Dir / "bronze.png").string();
-    }
-
-    std::vector<u8> imgdata;
     auto resource = cmrc::res::get_filesystem();
-    if (!customPath.empty()) {
-        std::ifstream file(customPath, std::ios::binary);
-        if (file) {
-            imgdata = std::vector<u8>(std::istreambuf_iterator<char>(file),
-                                      std::istreambuf_iterator<char>());
-        } else {
-            LOG_ERROR(Lib_NpTrophy, "Could not open custom file for trophy in {}", customPath);
-        }
-    } else {
-        auto file = resource.open(pathString);
-        imgdata = std::vector<u8>(file.begin(), file.end());
-    }
+    auto file = resource.open(pathString);
+    const std::vector<u8> imgdata(file.begin(), file.end());
 
     trophy_type_icon = RefCountedTexture::DecodePngTexture(imgdata);
 
@@ -135,27 +112,9 @@ TrophyUI::TrophyUI(const std::filesystem::path& trophyIconPath, const std::strin
         return;
     }
 
-    const auto musicPathMp3 = CustomTrophy_Dir / "trophy.mp3";
-    const auto musicPathWav = CustomTrophy_Dir / "trophy.wav";
-    std::vector<unsigned char> sound_data;
-
-    if (std::filesystem::exists(musicPathMp3)) {
-        std::ifstream file(musicPathMp3, std::ios::binary);
-        sound_data = std::vector<unsigned char>((std::istreambuf_iterator<char>(file)),
-                                                std::istreambuf_iterator<char>());
-        file.close();
-        PlayMp3(sound_data);
-    } else if (std::filesystem::exists(musicPathWav)) {
-        std::ifstream file(musicPathWav, std::ios::binary);
-        sound_data = std::vector<unsigned char>((std::istreambuf_iterator<char>(file)),
-                                                std::istreambuf_iterator<char>());
-        file.close();
-        PlayWav(sound_data);
-    } else {
-        auto soundFile = resource.open("src/resources/trophy.wav");
-        sound_data = std::vector<unsigned char>(soundFile.begin(), soundFile.end());
-        PlayWav(sound_data);
-    }
+    auto soundFile = resource.open("src/resources/trophy.wav");
+    std::vector<unsigned char> sound_data(soundFile.begin(), soundFile.end());
+    PlayWav(sound_data);
 }
 
 TrophyUI::~TrophyUI() {

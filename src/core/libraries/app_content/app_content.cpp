@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -466,38 +467,6 @@ static void LoadAddonFolder(const std::filesystem::path& addon_path, u32 service
     }
 }
 
-static void LoadLicenses(std::string_view service_id, u32 service_label) {
-    const std::filesystem::path& licenses_dir =
-        Common::FS::GetUserPath(Common::FS::PathType::LicensesDir);
-    std::filesystem::path ridx_path = licenses_dir / fmt::format("{}.idx", service_id);
-    std::filesystem::path rifa_path = licenses_dir / fmt::format("{}.rif", service_id);
-
-    if (!std::filesystem::exists(ridx_path) || !std::filesystem::exists(rifa_path)) {
-        return;
-    }
-
-    RIF rif;
-    if (!rif.Open(ridx_path, rifa_path)) {
-        LOG_ERROR(Lib_AppContent, "Could not open license file for {}", service_id);
-        return;
-    }
-
-    LOG_INFO(Lib_AppContent, "Checking license {} for additional entitlements", service_id);
-    const auto& entitlements = rif.GetLicenseOnlyEntitlements();
-    for (const auto& entitlement : entitlements) {
-        LOG_INFO(Lib_AppContent, "License-only entitlement {} found for service_label {}",
-                 entitlement.first, service_label);
-        if (!CanAddEntitlement(service_label, entitlement.first)) {
-            continue;
-        }
-        auto& info = addcont_info[addcont_count++];
-        info.service_label = service_label;
-        entitlement.first.copy(info.entitlement_label, entitlement.first.length());
-        info.status = OrbisAppContentAddcontDownloadStatus::NoExtraData;
-        std::memcpy(info.key.data, entitlement.second.data, sizeof(info.key.data));
-    }
-}
-
 int PS4_SYSV_ABI sceAppContentInitialize(const OrbisAppContentInitParam* initParam,
                                          OrbisAppContentBootParam* bootParam) {
     if (sdk_ver >= Common::ElfInfo::FW_150 && is_initialized) {
@@ -548,13 +517,12 @@ int PS4_SYSV_ABI sceAppContentInitialize(const OrbisAppContentInitParam* initPar
         } else if (srv.service_id.length() >= 16) {
             path = addons_dir / srv.service_id.substr(7, 9);
         }
-        if (!path.empty() && std::filesystem::exists(path)) {
+        if (!addons_dir.empty() && !path.empty() && std::filesystem::exists(path)) {
             if (std::ranges::find(addon_paths, path) == addon_paths.end()) {
                 addon_paths.push_back(path);
             }
             LoadAddonFolder(path, srv.service_label);
         }
-        LoadLicenses(srv.service_id, srv.service_label);
     }
 
     if (addcont_count > 0) {
@@ -620,25 +588,9 @@ int PS4_SYSV_ABI sceAppContentTemporaryDataMount2(OrbisAppContentTemporaryDataOp
         return ORBIS_APP_CONTENT_ERROR_PARAMETER;
     }
 
-    auto* param_sfo = Common::Singleton<PSF>::Instance();
-    const auto tid = !title_id.empty() ? title_id : param_sfo->GetString("TITLE_ID").value_or("");
-    const auto mount_temp_dir = Common::FS::GetUserPath(Common::FS::PathType::TempDataDir) / tid;
-
-    std::error_code ec;
-    if (option == ORBIS_APP_CONTENT_TEMPORARY_DATA_OPTION_FORMAT) {
-        std::filesystem::remove_all(mount_temp_dir, ec);
-    }
-    std::filesystem::create_directories(mount_temp_dir, ec);
-
-    static constexpr std::string_view TmpMount = "/temp0";
-    TmpMount.copy(mountPoint->data, TmpMount.size());
-    mountPoint->data[TmpMount.size()] = '\0';
-
-    auto* mnt = Common::Singleton<Core::FileSys::MntPoints>::Instance();
-    mnt->Mount(mount_temp_dir, std::string{TmpMount});
-
-    LOG_INFO(Lib_AppContent, "option = {}, mountPoint = {}", option, mountPoint->data);
-    return ORBIS_OK;
+    // GR2port keeps no temporary data folder; Gravity Rush 2 does not ask for one.
+    LOG_WARNING(Lib_AppContent, "option = {}: no temporary data folder", option);
+    return ORBIS_APP_CONTENT_ERROR_NOT_FOUND;
 }
 
 int PS4_SYSV_ABI sceAppContentTemporaryDataUnmount(const OrbisAppContentMountPoint* mountPoint) {

@@ -264,21 +264,16 @@ std::map<s32, std::string> ExtractTrophies(std::string_view npbind_guest,
             }
         }
 
-        // Move extracted trophy contents into each user's folder
-        for (User user : UserSettings.GetUserManager().GetValidUsers()) {
-            auto const user_trophy_file = EmulatorSettings.GetHomeDir() /
-                                          std::to_string(user.user_id) / "trophy" /
-                                          (np_comm_id + ".xml");
-            if (!std::filesystem::exists(user_trophy_file)) {
-                auto temp = user_trophy_file.parent_path();
-                std::filesystem::create_directories(temp);
-                std::error_code ec;
-                const auto tropconf = trophy_output_dir / "Xml" / "TROPCONF.XML";
-                std::filesystem::copy_file(tropconf, user_trophy_file, ec);
-                if (ec) {
-                    LOG_ERROR(Loader, "Failed to copy {} to {}: {}", tropconf.string(),
-                              user_trophy_file.string(), ec.message());
-                }
+        // The player's trophy progress starts as a copy of the trophy list, beside its folder.
+        const auto progress_file =
+            Common::FS::GetUserPath(Common::FS::PathType::TrophyDir) / (np_comm_id + ".xml");
+        if (!std::filesystem::exists(progress_file)) {
+            std::error_code ec;
+            const auto tropconf = trophy_output_dir / "Xml" / "TROPCONF.XML";
+            std::filesystem::copy_file(tropconf, progress_file, ec);
+            if (ec) {
+                LOG_ERROR(Loader, "Failed to copy {} to {}: {}", tropconf.string(),
+                          progress_file.string(), ec.message());
             }
         }
     }
@@ -699,18 +694,6 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
     const auto& mount_data_dir = Common::FS::GetUserPath(Common::FS::PathType::GameDataDir);
     mnt->Mount(mount_data_dir, "/data");
 
-    // Mounting temp folders
-    const auto& mount_temp_dir = Common::FS::GetUserPath(Common::FS::PathType::TempDataDir) / id;
-    std::filesystem::create_directory(mount_temp_dir);
-    mnt->Mount(mount_temp_dir, "/temp");
-
-    const auto& mount_download_dir =
-        Common::FS::GetUserPath(Common::FS::PathType::DownloadDir) / id;
-    if (!std::filesystem::exists(mount_download_dir)) {
-        std::filesystem::create_directory(mount_download_dir);
-    }
-    mnt->Mount(mount_download_dir, "/download0");
-
     const auto mount_usb_dir = Libraries::UsbStorage::GetUsbMountPath();
     std::error_code ec_usb;
     std::filesystem::create_directories(mount_usb_dir, ec_usb);
@@ -722,37 +705,9 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
     }
     VideoCore::SetOutputDir(mount_captures_dir, id);
 
-    // Mount system fonts
-    const auto& fonts_dir = EmulatorSettings.GetFontsDir();
-    if (!std::filesystem::exists(fonts_dir)) {
-        std::filesystem::create_directory(fonts_dir);
-    }
-
-    // Fonts are mounted into the sandboxed system directory, construct the appropriate path.
-    const char* sandbox_root = Libraries::Kernel::sceKernelGetFsSandboxRandomWord();
-    std::string guest_font_dir = "/";
-    guest_font_dir.append(sandbox_root).append("/common/font");
-    const auto& host_font_dir = fonts_dir / "font";
-    if (!std::filesystem::exists(host_font_dir)) {
-        std::filesystem::create_directory(host_font_dir);
-    }
-    mnt->Mount(host_font_dir, guest_font_dir);
-
-    // There is a second font directory, mount that too.
-    guest_font_dir.append("2");
-    const auto& host_font2_dir = fonts_dir / "font2";
-    if (!std::filesystem::exists(host_font2_dir)) {
-        std::filesystem::create_directory(host_font2_dir);
-    }
-    mnt->Mount(host_font2_dir, guest_font_dir);
-
     for (auto const& mount_pair : mounts) {
         LOG_INFO(Loader, "Mounting {} to {}", mount_pair.first.string(), mount_pair.second);
         mnt->Mount(mount_pair.first, mount_pair.second);
-    }
-
-    if (std::filesystem::is_empty(host_font_dir) || std::filesystem::is_empty(host_font2_dir)) {
-        LOG_WARNING(Loader, "No dumped system fonts, expect missing text or instability");
     }
 
     auto env_max = std::min<u64>(env_vars.size(), 63);

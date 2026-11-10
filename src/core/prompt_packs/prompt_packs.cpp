@@ -375,13 +375,11 @@ std::optional<std::vector<u8>> ReadHostFile(const std::filesystem::path& path) {
     return bytes;
 }
 
-// Reads a GR2Fork setting from the per-game file first, then from config.json, like the other
-// GR2Fork settings. A value of another type is ignored.
+// Reads a GR2Fork setting from config.json, like the other GR2Fork settings. A value of another
+// type is ignored.
 template <typename T>
 std::optional<T> ReadSetting(const char* key) {
-    const std::string serial{Common::ElfInfo::Instance().GameSerial()};
     const std::array files{
-        Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs) / (serial + ".json"),
         Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "config.json",
     };
     for (const auto& path : files) {

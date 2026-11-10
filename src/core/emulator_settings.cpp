@@ -177,17 +177,6 @@ const std::vector<bool> EmulatorSettingsImpl::GetGameInstallDirsEnabled() {
     return enabled_dirs;
 }
 
-std::filesystem::path EmulatorSettingsImpl::GetHomeDir() {
-    if (m_general.home_dir.value.empty()) {
-        return Common::FS::GetUserPath(Common::FS::PathType::HomeDir);
-    }
-    return m_general.home_dir.value;
-}
-
-void EmulatorSettingsImpl::SetHomeDir(const std::filesystem::path& dir) {
-    m_general.home_dir.value = dir;
-}
-
 std::filesystem::path EmulatorSettingsImpl::GetSysModulesDir() {
     if (m_general.sys_modules_dir.value.empty()) {
         return Common::FS::GetUserPath(Common::FS::PathType::SysModuleDir);
@@ -200,9 +189,6 @@ void EmulatorSettingsImpl::SetSysModulesDir(const std::filesystem::path& dir) {
 }
 
 std::filesystem::path EmulatorSettingsImpl::GetFontsDir() {
-    if (m_general.font_dir.value.empty()) {
-        return Common::FS::GetUserPath(Common::FS::PathType::FontsDir);
-    }
     return m_general.font_dir.value;
 }
 
@@ -211,9 +197,6 @@ void EmulatorSettingsImpl::SetFontsDir(const std::filesystem::path& dir) {
 }
 
 std::filesystem::path EmulatorSettingsImpl::GetAddonInstallDir() {
-    if (m_general.addon_install_dir.value.empty()) {
-        return Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "addcont";
-    }
     return m_general.addon_install_dir.value;
 }
 
@@ -287,114 +270,35 @@ json MergeOverExisting(const std::filesystem::path& path, const json& fresh) {
 
 bool EmulatorSettingsImpl::Save(const std::string& serial) {
     try {
-        if (!serial.empty()) {
-            const auto cfgDir = Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs);
-            std::filesystem::create_directories(cfgDir);
-            const auto path = cfgDir / (serial + ".json");
+        // ── Global config.json ─────────────────────────────────────
+        const auto path = Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "config.json";
 
-            json j = json::object();
+        SetConfigVersion(Common::g_scm_rev);
 
-            // An override is compared against config.json as it is on disk, so each group is saved
-            // from a copy that takes its base values from the file.
-            const auto configPath =
-                Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "config.json";
-            json global = MergeOverExisting(configPath, json::object());
-            global["Input"].update(TranslateLauncherGyroKeys(global));
-            const auto withDiskBase = [&global](auto group, const char* section) {
-                json base = group;
-                base.update(global.value(section, json::object()));
-                base.get_to(group);
-                return group;
-            };
+        json j;
+        j["General"] = m_general;
+        j["Network"] = m_network;
+        j["Log"] = m_log;
+        j["Debug"] = m_debug;
+        j["Input"] = m_input;
+        j["Audio"] = m_audio;
+        j["GPU"] = m_gpu;
+        j["Vulkan"] = m_vulkan;
 
-            json generalObj = json::object();
-            SaveGroupGameSpecific(withDiskBase(m_general, "General"), generalObj);
+        // Preserve keys unknown to this build and keep the launcher's copy of the gyro
+        // toggles in step with ours.
+        json existing = MergeOverExisting(path, j);
+        MirrorGyroKeysForLauncher(existing, existing["Input"]);
+        // Builds without the Network section read the network settings from General.
+        existing["General"].update(j["Network"]);
 
-            json networkObj = json::object();
-            SaveGroupGameSpecific(withDiskBase(m_network, "Network"), networkObj);
-            j["Network"] = networkObj;
-
-            json existing = MergeOverExisting(path, json::object());
-            if (existing["General"].is_object()) {
-                SyncLegacyNetworkKeys(existing["General"], generalObj, networkObj);
-            }
-            j["General"] = generalObj;
-
-            json logObj = json::object();
-            SaveGroupGameSpecific(withDiskBase(m_log, "Log"), logObj);
-            j["Log"] = logObj;
-
-            json debugObj = json::object();
-            SaveGroupGameSpecific(withDiskBase(m_debug, "Debug"), debugObj);
-            j["Debug"] = debugObj;
-
-            json inputObj = json::object();
-            SaveGroupGameSpecific(withDiskBase(m_input, "Input"), inputObj);
-            j["Input"] = inputObj;
-
-            json audioObj = json::object();
-            SaveGroupGameSpecific(withDiskBase(m_audio, "Audio"), audioObj);
-            j["Audio"] = audioObj;
-
-            json gpuObj = json::object();
-            SaveGroupGameSpecific(withDiskBase(m_gpu, "GPU"), gpuObj);
-            j["GPU"] = gpuObj;
-
-            json vulkanObj = json::object();
-            SaveGroupGameSpecific(withDiskBase(m_vulkan, "Vulkan"), vulkanObj);
-            j["Vulkan"] = vulkanObj;
-
-            // The launcher's copy of a gyro toggle is written or removed along with ours.
-            MirrorGyroKeysForLauncher(j, j["Input"]);
-            json merged = MergeOverExisting(path, j);
-            // redzone_patches replaces the legacy red-zone section, which Load folds into it.
-            merged.erase("WindowsGuestRedZoneProtection");
-            for (const auto& [section, values] : j.items()) {
-                if (merged[section].empty()) {
-                    merged.erase(section);
-                }
-            }
-
-            std::ofstream out(path);
-            if (!out) {
-                LOG_ERROR(Config, "Failed to open game config for writing: {}", path.string());
-                return false;
-            }
-            out << std::setw(2) << merged;
-            return !out.fail();
-
-        } else {
-            // ── Global config.json ─────────────────────────────────────
-            const auto path =
-                Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "config.json";
-
-            SetConfigVersion(Common::g_scm_rev);
-
-            json j;
-            j["General"] = m_general;
-            j["Network"] = m_network;
-            j["Log"] = m_log;
-            j["Debug"] = m_debug;
-            j["Input"] = m_input;
-            j["Audio"] = m_audio;
-            j["GPU"] = m_gpu;
-            j["Vulkan"] = m_vulkan;
-
-            // Preserve keys unknown to this build and keep the launcher's copy of the gyro
-            // toggles in step with ours.
-            json existing = MergeOverExisting(path, j);
-            MirrorGyroKeysForLauncher(existing, existing["Input"]);
-            // Builds without the Network section read the network settings from General.
-            existing["General"].update(j["Network"]);
-
-            std::ofstream out(path);
-            if (!out) {
-                LOG_ERROR(Config, "Failed to open config for writing: {}", path.string());
-                return false;
-            }
-            out << std::setw(2) << existing;
-            return !out.fail();
+        std::ofstream out(path);
+        if (!out) {
+            LOG_ERROR(Config, "Failed to open config for writing: {}", path.string());
+            return false;
         }
+        out << std::setw(2) << existing;
+        return !out.fail();
     } catch (const std::exception& e) {
         LOG_ERROR(Config, "Error saving settings: {}", e.what());
         return false;
@@ -431,145 +335,81 @@ bool EmulatorSettingsImpl::Load(const std::string& serial) {
     ClearGameSpecificOverrides();
 
     try {
-        if (serial.empty()) {
-            // ── Global config ──────────────────────────────────────────
-            const auto userDir = Common::FS::GetUserPath(Common::FS::PathType::UserDir);
-            const auto configPath = userDir / "config.json";
+        // Games have no settings files of their own: config.json alone holds them.
+        if (!serial.empty()) {
+            return false;
+        }
+        // ── Global config ──────────────────────────────────────────
+        const auto userDir = Common::FS::GetUserPath(Common::FS::PathType::UserDir);
+        const auto configPath = userDir / "config.json";
 
-            if (std::ifstream in{configPath}; in.good()) {
-                json gj;
-                in >> gj;
-
-                auto mergeGroup = [&gj](auto& group, const char* section) {
-                    if (!gj.contains(section))
-                        return;
-                    json current = group;
-                    current.update(gj.at(section));
-                    group = current.get<std::remove_reference_t<decltype(group)>>();
-                };
-
-                mergeGroup(m_general, "General");
-                mergeGroup(m_network, "Network");
-                if (gj.contains("General") && gj["General"].is_object()) {
-                    MigrateNetworkKeys(gj["General"], gj.value("Network", json::object()));
-                }
-                mergeGroup(m_log, "Log");
-                mergeGroup(m_debug, "Debug");
-                mergeGroup(m_input, "Input");
-                mergeGroup(m_audio, "Audio");
-                mergeGroup(m_gpu, "GPU");
-                mergeGroup(m_vulkan, "Vulkan");
-
-                if (const json launcher = TranslateLauncherGyroKeys(gj); !launcher.empty()) {
-                    json current = m_input;
-                    current.update(launcher);
-                    m_input = current.get<InputSettings>();
-                }
-            } else {
-                if (std::filesystem::exists(Common::FS::GetUserPath(Common::FS::PathType::UserDir) /
-                                            "config.toml")) {
-                    SDL_MessageBoxButtonData btns[2]{
-                        {0, 0, "Update"},
-                        {0, 1, "Defaults"},
-                    };
-                    SDL_MessageBoxData msg_box{
-                        0,
-                        nullptr,
-                        "Config Migration",
-                        "The shadPS4 config backend has been updated, and you only have "
-                        "the old version of the config. Do you wish to update it "
-                        "automatically, or continue with the default config?",
-                        2,
-                        btns,
-                        nullptr,
-                    };
-                    int result = 1;
-                    SDL_ShowMessageBox(&msg_box, &result);
-                    if (result == 0) {
-                        if (TransferSettings()) {
-                            Save();
-                            return true;
-                        } else {
-                            SDL_ShowSimpleMessageBox(0, "Config Migration",
-                                                     "Error transferring settings, exiting.",
-                                                     nullptr);
-                            std::quick_exit(1);
-                        }
-                    }
-                }
-                SetDefaultValues();
-                Save();
-            }
-            if (GetConfigVersion() != Common::g_scm_rev) {
-                Save();
-            }
-            return true;
-        } else {
-            // ── Per-game override file ─────────────────────────────────
-            // Never reloads global settings. Only applies
-            // game_specific_value overrides on top of the already-loaded
-            // base configuration.
-            const auto gamePath =
-                Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs) / (serial + ".json");
-
-            if (!std::filesystem::exists(gamePath)) {
-                return false;
-            }
-
-            std::ifstream in(gamePath);
-            if (!in) {
-                return false;
-            }
-
+        if (std::ifstream in{configPath}; in.good()) {
             json gj;
             in >> gj;
 
-            std::vector<std::string> changed;
+            auto mergeGroup = [&gj](auto& group, const char* section) {
+                if (!gj.contains(section))
+                    return;
+                json current = group;
+                current.update(gj.at(section));
+                group = current.get<std::remove_reference_t<decltype(group)>>();
+            };
 
-            if (gj.contains("General"))
-                ApplyGroupOverrides(m_general, gj.at("General"), changed);
-            if (gj.contains("Network"))
-                ApplyGroupOverrides(m_network, gj.at("Network"), changed);
+            mergeGroup(m_general, "General");
+            mergeGroup(m_network, "Network");
             if (gj.contains("General") && gj["General"].is_object()) {
-                json legacy = json::object();
-                const json network = gj.value("Network", json::object());
-                for (const auto& item : m_network.GetOverrideableFields()) {
-                    if (gj["General"].contains(item.key) && !network.contains(item.key)) {
-                        legacy[item.key] = gj["General"][item.key];
+                MigrateNetworkKeys(gj["General"], gj.value("Network", json::object()));
+            }
+            mergeGroup(m_log, "Log");
+            mergeGroup(m_debug, "Debug");
+            mergeGroup(m_input, "Input");
+            mergeGroup(m_audio, "Audio");
+            mergeGroup(m_gpu, "GPU");
+            mergeGroup(m_vulkan, "Vulkan");
+
+            if (const json launcher = TranslateLauncherGyroKeys(gj); !launcher.empty()) {
+                json current = m_input;
+                current.update(launcher);
+                m_input = current.get<InputSettings>();
+            }
+        } else {
+            if (std::filesystem::exists(Common::FS::GetUserPath(Common::FS::PathType::UserDir) /
+                                        "config.toml")) {
+                SDL_MessageBoxButtonData btns[2]{
+                    {0, 0, "Update"},
+                    {0, 1, "Defaults"},
+                };
+                SDL_MessageBoxData msg_box{
+                    0,
+                    nullptr,
+                    "Config Migration",
+                    "The shadPS4 config backend has been updated, and you only have "
+                    "the old version of the config. Do you wish to update it "
+                    "automatically, or continue with the default config?",
+                    2,
+                    btns,
+                    nullptr,
+                };
+                int result = 1;
+                SDL_ShowMessageBox(&msg_box, &result);
+                if (result == 0) {
+                    if (TransferSettings()) {
+                        Save();
+                        return true;
+                    } else {
+                        SDL_ShowSimpleMessageBox(0, "Config Migration",
+                                                 "Error transferring settings, exiting.", nullptr);
+                        std::quick_exit(1);
                     }
                 }
-                ApplyGroupOverrides(m_network, legacy, changed);
             }
-            if (gj.contains("Log"))
-                ApplyGroupOverrides(m_log, gj.at("Log"), changed);
-            if (gj.contains("Debug"))
-                ApplyGroupOverrides(m_debug, gj.at("Debug"), changed);
-            if (gj.contains("Input"))
-                ApplyGroupOverrides(m_input, gj.at("Input"), changed);
-            if (const json launcher = TranslateLauncherGyroKeys(gj); !launcher.empty())
-                ApplyGroupOverrides(m_input, launcher, changed);
-            if (gj.contains("Audio"))
-                ApplyGroupOverrides(m_audio, gj.at("Audio"), changed);
-            if (gj.contains("GPU"))
-                ApplyGroupOverrides(m_gpu, gj.at("GPU"), changed);
-            if (gj.contains("Vulkan"))
-                ApplyGroupOverrides(m_vulkan, gj.at("Vulkan"), changed);
-
-            // Backwards compat for red-zone setting
-            if (gj.contains("WindowsGuestRedZoneProtection") &&
-                gj["WindowsGuestRedZoneProtection"].contains(
-                    "windows_guest_red_zone_protection_mode") &&
-                !gj.contains(json::json_pointer("/General/redzone_patches"))) {
-                m_general.redzone_patches.set(
-                    gj["WindowsGuestRedZoneProtection"]["windows_guest_red_zone_protection_mode"] ==
-                        "StaticPatching",
-                    true);
-            }
-
-            PrintChangedSummary(changed);
-            EmulatorState::GetInstance()->SetGameSpecifigConfigUsed(true);
-            return true;
+            SetDefaultValues();
+            Save();
         }
+        if (GetConfigVersion() != Common::g_scm_rev) {
+            Save();
+        }
+        return true;
     } catch (const std::exception& e) {
         UNREACHABLE_MSG("Error loading settings: {}", e.what());
         return false;

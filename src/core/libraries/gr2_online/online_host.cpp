@@ -144,10 +144,6 @@ void ReadPort(const std::filesystem::path& path, Server& server, bool& have_port
 Server LoadServer() {
     Server server{std::string(Gr2Port::GamePatches::GameServerHost), DefaultPort};
     bool have_port = false;
-    // The per-game file is read first, so a port it holds wins over the one in config.json.
-    const std::string serial{Serial()};
-    ReadPort(Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs) / (serial + ".json"),
-             server, have_port);
     ReadPort(Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "config.json", server,
              have_port);
     return server;
@@ -254,10 +250,6 @@ void OnSignInChange(std::function<void(s32 user_id, bool signed_in)> cb) {
 
 void Notify(std::string text) {
     ImGui::ShadNetNotify::Push(ImGui::ShadNetNotify::Kind::Info, std::move(text));
-}
-
-std::filesystem::path UserHome(s32 user_id) {
-    return EmulatorSettings.GetHomeDir() / std::to_string(user_id);
 }
 
 } // namespace Libraries::Gr2Online::Host

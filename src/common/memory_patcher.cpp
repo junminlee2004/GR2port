@@ -228,15 +228,8 @@ void ApplyPatchesFromXML(std::filesystem::path path, std::string_view text = {})
 }
 
 void OnGameLoaded() {
-    std::filesystem::path patch_dir = Common::FS::GetUserPath(Common::FS::PathType::PatchesDir);
     if (!patch_file.empty()) {
-
-        auto file_path = (patch_dir / patch_file).native();
-        if (std::filesystem::exists(patch_file)) {
-            ApplyPatchesFromXML(patch_file);
-        } else {
-            ApplyPatchesFromXML(file_path);
-        }
+        ApplyPatchesFromXML(patch_file);
     } else if (EmulatorState::GetInstance()->IsAutoPatchesLoadEnabled()) {
         // The Gravity Rush 2 patches are built into the executable; no patch folder is read.
         ApplyPatchesFromXML({}, Gr2Port::GameCheck::PatchXml());

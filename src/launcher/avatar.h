@@ -14,7 +14,7 @@ namespace Gr2Port::Launcher::Avatar {
 
 inline constexpr int Side = 128;
 
-/// <home>/<user id>/gr2_avatar.png, which the game uploads for that user.
+/// userdata/gr2_avatar.png, the player's picture, which the game uploads for any user.
 std::filesystem::path Path(int user_id);
 
 /// The picture made from the image at source, turned as its EXIF data says; null when the file

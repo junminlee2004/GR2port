@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -1018,8 +1019,8 @@ int PS4_SYSV_ABI sceNpTrophyRegisterContext(OrbisNpTrophyContext context,
 
         const auto trophy_base =
             Common::FS::GetUserPath(Common::FS::PathType::TrophyDir) / np_comm_id;
-        ctx.xml_save_file = EmulatorSettings.GetHomeDir() / std::to_string(ctx.user_id) / "trophy" /
-                            (np_comm_id + ".xml");
+        ctx.xml_save_file =
+            Common::FS::GetUserPath(Common::FS::PathType::TrophyDir) / (np_comm_id + ".xml");
         ctx.xml_dir = trophy_base / "Xml";
         ctx.icons_dir = trophy_base / "Icons";
         ctx.trophy_xml_path = GetTrophyXmlPath(ctx.xml_dir, EmulatorSettings.GetConsoleLanguage());

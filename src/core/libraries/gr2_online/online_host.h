@@ -24,7 +24,7 @@ constexpr int OnlineVersion = 1;
 /// The running title is Gravity Rush 2.
 bool IsGravityRush2();
 
-/// Serial of the running title. Its saves are in UserHome(user) / "savedata" / Serial().
+/// Serial of the running title. Its saves are in userdata/savedata/Serial().
 std::string_view Serial();
 
 /// The user the game plays as, player 1. -1 when there is none.
@@ -72,8 +72,5 @@ void OnSignInChange(std::function<void(s32 user_id, bool signed_in)> cb);
 
 /// Shows a notice in the shadNet notification layer.
 void Notify(std::string text);
-
-/// Home directory of a user: gr2_avatar.png and savedata/ are in it.
-std::filesystem::path UserHome(s32 user_id);
 
 } // namespace Libraries::Gr2Online::Host

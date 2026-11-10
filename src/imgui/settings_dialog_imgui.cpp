@@ -209,19 +209,8 @@ SettingsWindow::SettingsWindow() {
     currentProfile = "Global";
     m_GameInstallDirs = EmulatorSettings.GetAllGameInstallDirs();
 
-    bool customConfigFound = false;
     runningGameSerial = std::string(Common::ElfInfo::Instance().GameSerial());
-    std::filesystem::path customConfigFile =
-        Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs) /
-        (runningGameSerial + ".json");
-
-    if (std::filesystem::exists(customConfigFile)) {
-        customConfigFound = true;
-        currentProfile =
-            runningGameSerial + " - " + std::string(Common::ElfInfo::Instance().Title());
-    }
-
-    customConfigFound ? LoadSettings(runningGameSerial) : LoadSettings("Global");
+    LoadSettings("Global");
 }
 
 void SettingsWindow::Prepare() {

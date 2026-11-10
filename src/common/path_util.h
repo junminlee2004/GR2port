@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2021 yuzu Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -10,50 +11,30 @@
 namespace Common::FS {
 
 enum class PathType {
-    UserDir,          // Where shadPS4 stores its data.
-    LogDir,           // Where log files are stored.
-    ScreenshotsDir,   // Where screenshots are stored.
-    ShaderDir,        // Where shaders are stored.
-    TempDataDir,      // Where game temp data is stored.
-    GameDataDir,      // Where game data is stored.
-    SysModuleDir,     // Where system modules are stored.
-    DownloadDir,      // Where downloads/temp files are stored.
-    CapturesDir,      // Where rdoc captures are stored.
-    CheatsDir,        // Where cheats are stored.
-    PatchesDir,       // Where patches are stored.
-    MetaDataDir,      // Where game metadata (e.g. trophies and menu backgrounds) is stored.
-    CustomTrophy,     // Where custom files for trophies are stored.
-    CustomConfigs,    // Where custom files for different games are stored.
-    CacheDir,         // Where pipeline and shader cache is stored.
-    FontsDir,         // Where dumped system fonts are stored.
-    TrophyDir,        // Where general trophy metadata is stored.
-    HomeDir,          // PS4 home directory
-    CustomModulesDir, // Where custom modules are stored.
-    LicensesDir,      // Where license files are stored.
+    UserDir,        // Where GR2port stores its data: userdata beside the executable.
+    LogDir,         // Where log files are stored.
+    ScreenshotsDir, // Where screenshots are stored.
+    ShaderDir,      // Where shaders are stored.
+    GameDataDir,    // Where game data is stored.
+    SysModuleDir,   // Where system modules are stored.
+    CapturesDir,    // Where rdoc captures are stored.
+    CacheDir,       // Where pipeline and shader cache is stored.
+    TrophyDir,      // Where trophy metadata and the player's trophy progress are stored.
+    SaveDataDir,    // Where the game's saves are stored.
 };
 
-constexpr auto PORTABLE_DIR = "user";
+constexpr auto PORTABLE_DIR = "userdata";
 
 // Sub-directories contained within a user data directory
 constexpr auto LOG_DIR = "log";
 constexpr auto SCREENSHOTS_DIR = "screenshots";
 constexpr auto SHADER_DIR = "shader";
 constexpr auto GAMEDATA_DIR = "data";
-constexpr auto TEMPDATA_DIR = "temp";
 constexpr auto SYSMODULES_DIR = "sys_modules";
-constexpr auto DOWNLOAD_DIR = "download";
 constexpr auto CAPTURES_DIR = "captures";
-constexpr auto CHEATS_DIR = "cheats";
-constexpr auto PATCHES_DIR = "patches";
-constexpr auto METADATA_DIR = "game_data";
-constexpr auto CUSTOM_TROPHY = "custom_trophy";
-constexpr auto CUSTOM_CONFIGS = "custom_configs";
 constexpr auto CACHE_DIR = "cache";
-constexpr auto FONTS_DIR = "fonts";
 constexpr auto TROPHY_DIR = "trophy";
-constexpr auto HOME_DIR = "home";
-constexpr auto CUSTOM_MODULES_DIR = "custom_modules";
-constexpr auto LICENSES_DIR = "licenses";
+constexpr auto SAVEDATA_DIR = "savedata";
 
 // Filenames
 constexpr auto LOG_FILE = "shad_log.txt";

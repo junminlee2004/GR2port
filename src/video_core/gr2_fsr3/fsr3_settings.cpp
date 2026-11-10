@@ -153,8 +153,6 @@ constexpr auto Keys = std::to_array<Key>({
 
 using KeySet = std::array<bool, Keys.size()>;
 
-// The keys the per-game file holds. Save writes these into it and the others into config.json.
-KeySet g_per_game{};
 std::once_flag g_load_once;
 
 // fsr4AssetDir is a string beside the table. It is read once; Save keeps it as the files hold it.
@@ -163,11 +161,6 @@ std::filesystem::path g_fsr4_asset_dir;
 
 std::mutex g_status_mutex;
 Settings::Status g_status;
-
-std::filesystem::path GameFile() {
-    const std::string serial{Common::ElfInfo::Instance().GameSerial()};
-    return Common::FS::GetUserPath(Common::FS::PathType::CustomConfigs) / (serial + ".json");
-}
 
 std::filesystem::path GlobalFile() {
     return Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "config.json";
@@ -258,11 +251,8 @@ void LoadFiles() {
     for (const Key& key : Keys) {
         key.value->store(key.default_value, std::memory_order_relaxed);
     }
-    // The per-game file is read first, so a key it holds wins over the same key in config.json.
     KeySet taken{};
     std::optional<std::string> asset_dir;
-    ReadFile(GameFile(), taken, asset_dir);
-    g_per_game = taken;
     ReadFile(GlobalFile(), taken, asset_dir);
 
     // JSON strings are UTF-8. A relative folder starts from the user folder.
@@ -296,9 +286,9 @@ bool WriteText(const std::filesystem::path& path, const std::string& text) {
     return !file.fail();
 }
 
-// Sets the keys that belong to the file in its "GR2Fork" section and keeps the rest of the file.
-// Refuses a file that holds anything but a JSON object.
-bool WriteFile(const std::filesystem::path& path, bool per_game) {
+// Sets the keys in the file's "GR2Fork" section and keeps the rest of the file. Refuses a file
+// that holds anything but a JSON object.
+bool WriteFile(const std::filesystem::path& path) {
     nlohmann::json root = nlohmann::json::object();
     if (std::ifstream file{path}; file) {
         root = nlohmann::json::parse(file, nullptr, false);
@@ -312,10 +302,8 @@ bool WriteFile(const std::filesystem::path& path, bool per_game) {
     if (!section.is_object()) {
         section = nlohmann::json::object();
     }
-    for (std::size_t i = 0; i < Keys.size(); ++i) {
-        if (g_per_game[i] == per_game) {
-            section[Keys[i].name] = Encode(Keys[i], Keys[i].value->load(std::memory_order_relaxed));
-        }
+    for (const Key& key : Keys) {
+        section[key.name] = Encode(key, key.value->load(std::memory_order_relaxed));
     }
     const std::string text = root.dump(2);
     std::filesystem::path temporary = path;
@@ -433,14 +421,7 @@ Settings::Status Settings::ReadStatus() {
 
 bool Settings::Save() {
     std::call_once(g_load_once, LoadFiles);
-    bool saved = true;
-    if (std::ranges::contains(g_per_game, false)) {
-        saved = WriteFile(GlobalFile(), false);
-    }
-    if (std::ranges::contains(g_per_game, true)) {
-        saved = WriteFile(GameFile(), true) && saved;
-    }
-    return saved;
+    return WriteFile(GlobalFile());
 }
 
 void DrawMenu() {

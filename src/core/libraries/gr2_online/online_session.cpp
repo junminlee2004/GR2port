@@ -165,10 +165,11 @@ void OnSignIn(s32 user_id, bool signed_in) {
 }
 
 // The server keeps a picture for each player and cannot read the files of the client, so the
-// picture of the user, <home>/<user id>/gr2_avatar.png, is sent to it as it is. The server files
-// it under X-GR2-Player and scales it itself.
+// player's picture, userdata/gr2_avatar.png, is sent to it as it is. The server files it under
+// X-GR2-Player and scales it itself.
 void UploadAvatar(s32 user_id) {
-    std::ifstream file{Host::UserHome(user_id) / "gr2_avatar.png", std::ios::binary};
+    std::ifstream file{Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "gr2_avatar.png",
+                       std::ios::binary};
     if (!file) {
         return;
     }
@@ -224,7 +225,7 @@ void CheckDustyTokens(s32 user_id) {
     const float want = static_cast<float>(total);
 
     // Only the saves of the running title: no file of another game is opened.
-    const auto saves = Host::UserHome(user_id) / "savedata" / Host::Serial();
+    const auto saves = Common::FS::GetUserPath(Common::FS::PathType::SaveDataDir) / Host::Serial();
     std::error_code ec;
     for (std::filesystem::recursive_directory_iterator it{saves, ec}, end; !ec && it != end;
          it.increment(ec)) {

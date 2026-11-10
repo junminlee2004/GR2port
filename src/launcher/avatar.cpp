@@ -6,7 +6,7 @@
 #include <system_error>
 #include <vector>
 
-#include "core/emulator_settings.h"
+#include "common/path_util.h"
 #include "launcher/avatar.h"
 
 namespace Gr2Port::Launcher::Avatar {
@@ -61,7 +61,7 @@ bool PngEncoder(CLSID& clsid) {
 } // namespace
 
 std::filesystem::path Path(int user_id) {
-    return EmulatorSettings.GetHomeDir() / std::to_string(user_id) / "gr2_avatar.png";
+    return Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "gr2_avatar.png";
 }
 
 std::unique_ptr<Gdiplus::Bitmap> Make(const std::filesystem::path& source) {
