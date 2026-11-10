@@ -21,14 +21,15 @@ void PhotoReadback::Arm(u32 width, u32 height) noexcept {
 }
 
 bool PhotoReadback::Download(Frame& frame) {
-    // Both are null when libSceGnmDriver is LLE. SendCommand has no shortcut for the GPU command
-    // thread and would wait on itself there.
-    if (!presenter || !liverpool || liverpool->OnGpuThread()) {
+    // Both are null when libSceGnmDriver is LLE; the rasterizer is null without GR2fork's
+    // renderer. SendCommand has no shortcut for the GPU command thread and would wait on itself
+    // there.
+    if (!presenter || !liverpool || !presenter->GetRasterizer() || liverpool->OnGpuThread()) {
         return false;
     }
     bool downloaded = false;
     liverpool->SendCommand<true>(
-        [&] { downloaded = DownloadOnGpuThread(presenter->GetRasterizer(), frame); });
+        [&] { downloaded = DownloadOnGpuThread(*presenter->GetRasterizer(), frame); });
     return downloaded;
 }
 

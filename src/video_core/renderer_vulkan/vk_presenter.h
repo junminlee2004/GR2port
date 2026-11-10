@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -65,8 +66,9 @@ public:
         return window;
     }
 
-    Rasterizer& GetRasterizer() const {
-        return *rasterizer.get();
+    /// GR2port: null unless GR2fork's renderer runs.
+    Rasterizer* GetRasterizer() const {
+        return rasterizer.get();
     }
 
     bool IsHDRSupported() const {
@@ -81,14 +83,16 @@ public:
         pp_settings.hdr = enable ? 1 : 0;
     }
 
-    VideoCore::Image& RegisterVideoOutSurface(
-        const Libraries::VideoOut::BufferAttributeGroup& attribute, VAddr cpu_address) {
+    void RegisterVideoOutSurface(const Libraries::VideoOut::BufferAttributeGroup& attribute,
+                                 VAddr cpu_address) {
         vo_buffers_addr.emplace_back(cpu_address);
+        if (texture_cache == nullptr) {
+            return;
+        }
         auto desc = VideoCore::TextureCache::ImageDesc{attribute, cpu_address};
-        const auto image_id = texture_cache.FindImage(desc);
-        auto& image = texture_cache.GetImage(image_id);
+        const auto image_id = texture_cache->FindImage(desc);
+        auto& image = texture_cache->GetImage(image_id);
         image.usage.vo_surface = 1u;
-        return image;
     }
 
     bool IsVideoOutSurface(const AmdGpu::ColorBuffer& color_buffer) const;
@@ -126,7 +130,7 @@ private:
     Swapchain swapchain;
     Runtime runtime;
     std::unique_ptr<Rasterizer> rasterizer;
-    VideoCore::TextureCache& texture_cache;
+    VideoCore::TextureCache* texture_cache;
     vk::UniqueCommandPool command_pool;
     std::vector<Frame> present_frames;
     std::queue<Frame*> free_queue;

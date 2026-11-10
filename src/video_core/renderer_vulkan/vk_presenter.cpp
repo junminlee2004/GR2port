@@ -19,6 +19,7 @@
 #include "imgui/shadnet_notifications_layer.h"
 #include "sdl_window.h"
 #include "video_core/buffer_cache/buffer.h"
+#include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/overlays.h"
 #include "video_core/renderdoc.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
@@ -471,8 +472,10 @@ Presenter::Presenter(Frontend::WindowSDL& window_, AmdGpu::Liverpool* liverpool_
       draw_scheduler{instance, EmulatorSettings.IsVkRecordThread()},
       present_scheduler{instance, false}, flip_scheduler{instance, false},
       swapchain{instance, window}, runtime{instance, draw_scheduler},
-      rasterizer{std::make_unique<Rasterizer>(instance, draw_scheduler, runtime, liverpool)},
-      texture_cache{rasterizer->GetTextureCache()} {
+      rasterizer{Gr2Port::EmulatedGpu::Wanted()
+                     ? std::make_unique<Rasterizer>(instance, draw_scheduler, runtime, liverpool)
+                     : nullptr},
+      texture_cache{rasterizer ? &rasterizer->GetTextureCache() : nullptr} {
     const u32 num_images = swapchain.GetImageCount();
     const vk::Device device = instance.GetDevice();
 
@@ -668,9 +671,13 @@ static vk::Format GetFrameViewFormat(const Libraries::VideoOut::PixelFormat form
 
 Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& attribute,
                                VAddr cpu_address) {
+    // GR2port: without GR2fork's renderer nothing draws into the buffer.
+    if (texture_cache == nullptr) {
+        return PrepareBlankFrame(false);
+    }
     auto desc = VideoCore::TextureCache::ImageDesc{attribute, cpu_address};
-    const auto image_id = texture_cache.FindImage(desc);
-    texture_cache.UpdateImage(image_id);
+    const auto image_id = texture_cache->FindImage(desc);
+    texture_cache->UpdateImage(image_id);
 
     Frame* frame = GetRenderFrame();
 
@@ -705,7 +712,7 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& 
     // Exclude alpha from output frame to avoid blending with UI.
     view_info.mapping.a = AmdGpu::CompSwizzle::One;
 
-    auto& image = texture_cache.GetImage(image_id);
+    auto& image = texture_cache->GetImage(image_id);
     vk::ImageView image_view = image.FindViewHandle(view_info);
     const vk::Extent2D image_size = {image.info.size.width, image.info.size.height};
     expected_ratio = static_cast<float>(image_size.width) / static_cast<float>(image_size.height);

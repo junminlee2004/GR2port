@@ -101,7 +101,7 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
     if (!EmulatorSettings.IsNullGPU()) {
         liverpool->BindRasterizer(this);
     }
-    Gr2Port::EmulatedGpu::Start(liverpool, this);
+    Gr2Port::EmulatedGpu::Start(liverpool);
     memory->SetRasterizer(this);
     auto& skipcache = Skipcache::Framework::Instance();
     const u32 sc_mode = EmulatorSettings.GetAdaptiveSkipCachesMode();

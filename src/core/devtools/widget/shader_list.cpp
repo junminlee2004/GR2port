@@ -1,4 +1,5 @@
 //  SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+//  SPDX-FileCopyrightText: Copyright 2026 GR2port
 //  SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <fstream>
@@ -58,7 +59,7 @@ void ShaderList::Selection::ReloadShader(DebugStateType::ShaderDump& value) {
     if (spv.empty()) {
         return;
     }
-    auto& cache = presenter->GetRasterizer().GetPipelineCache();
+    auto& cache = presenter->GetRasterizer()->GetPipelineCache();
     if (const auto m = cache.ReplaceShader(value.module, spv); m) {
         value.module = *m;
     }

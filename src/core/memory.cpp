@@ -132,7 +132,7 @@ u64 MemoryManager::ClampRangeSizeSlow(VAddr virtual_addr, u64 size) {
 
 void MemoryManager::SetPrtArea(u32 id, VAddr address, u64 size) {
     PrtArea& area = prt_areas[id];
-    if (area.mapped) {
+    if (area.mapped && rasterizer) {
         rasterizer->UnmapMemory(area.start, area.end - area.start);
     }
 
@@ -142,7 +142,9 @@ void MemoryManager::SetPrtArea(u32 id, VAddr address, u64 size) {
 
     // Pretend the entire PRT area is mapped to avoid GPU tracking errors.
     // The caches will use CopySparseMemory to fetch data which avoids unmapped areas.
-    rasterizer->MapMemory(address, size);
+    if (rasterizer) {
+        rasterizer->MapMemory(address, size);
+    }
 }
 
 void MemoryManager::CopySparseMemory(VAddr virtual_addr, u8* dest, u64 size) {
@@ -512,7 +514,7 @@ s32 MemoryManager::Free(PAddr phys_addr, u64 size, bool is_checked) {
 
     // Early unmap from GPU to avoid deadlocking.
     for (auto& [addr, unmap_size] : remove_list) {
-        if (IsValidGpuMapping(addr, unmap_size)) {
+        if (rasterizer && IsValidGpuMapping(addr, unmap_size)) {
             rasterizer->UnmapMemory(addr, unmap_size);
         }
     }
@@ -614,7 +616,9 @@ s32 MemoryManager::PoolCommit(VAddr virtual_addr, u64 size, MemoryProt prot, s32
 
         // Perform an address space mapping for each physical area
         void* out_addr = impl.Map(current_addr, size_to_map, new_dmem_area.base);
-        rasterizer->RegisterMemory(current_addr, size_to_map);
+        if (rasterizer) {
+            rasterizer->RegisterMemory(current_addr, size_to_map);
+        }
 
         // Tracy memory tracking breaks from merging memory areas. Disabled for now.
         // TRACK_ALLOC(out_addr, size_to_map, "VMEM");
@@ -630,7 +634,7 @@ s32 MemoryManager::PoolCommit(VAddr virtual_addr, u64 size, MemoryProt prot, s32
     MergeAdjacent(vma_map, new_vma_handle);
 
     lk2.unlock();
-    if (IsValidGpuMapping(mapped_addr, size)) {
+    if (rasterizer && IsValidGpuMapping(mapped_addr, size)) {
         rasterizer->MapMemory(mapped_addr, size);
     }
 
@@ -748,7 +752,7 @@ s32 MemoryManager::MapMemory(void** out_addr, VAddr virtual_addr, u64 size, Memo
     }
 
     // Perform early GPU unmap to avoid potential deadlocks
-    if (IsValidGpuMapping(virtual_addr, size)) {
+    if (rasterizer && IsValidGpuMapping(virtual_addr, size)) {
         rasterizer->UnmapMemory(virtual_addr, size);
     }
 
@@ -789,7 +793,9 @@ s32 MemoryManager::MapMemory(void** out_addr, VAddr virtual_addr, u64 size, Memo
 
             // Perform an address space mapping for each physical area
             void* out_addr = impl.Map(current_addr, size_to_map, new_fmem_area.base, is_exec);
-            rasterizer->RegisterMemory(current_addr, size_to_map);
+            if (rasterizer) {
+                rasterizer->RegisterMemory(current_addr, size_to_map);
+            }
 
             // Tracy memory tracking breaks from merging memory areas. Disabled for now.
             // TRACK_ALLOC(out_addr, size_to_map, "VMEM");
@@ -847,7 +853,9 @@ s32 MemoryManager::MapMemory(void** out_addr, VAddr virtual_addr, u64 size, Memo
         // Flexible address space mappings were performed while finding direct memory areas.
         if (type != VMAType::Flexible) {
             impl.Map(mapped_addr, size, phys_addr, is_exec);
-            rasterizer->RegisterMemory(mapped_addr, size);
+            if (rasterizer) {
+                rasterizer->RegisterMemory(mapped_addr, size);
+            }
             // Tracy memory tracking breaks from merging memory areas. Disabled for now.
             // TRACK_ALLOC(mapped_addr, size, "VMEM");
         }
@@ -855,7 +863,7 @@ s32 MemoryManager::MapMemory(void** out_addr, VAddr virtual_addr, u64 size, Memo
         lk2.unlock();
 
         // If this is not a reservation, then map to GPU and address space
-        if (IsValidGpuMapping(mapped_addr, size)) {
+        if (rasterizer && IsValidGpuMapping(mapped_addr, size)) {
             rasterizer->MapMemory(mapped_addr, size);
         }
     }
@@ -937,7 +945,7 @@ s32 MemoryManager::MapFile(void** out_addr, VAddr virtual_addr, u64 size, Memory
     }
 
     // Perform early GPU unmap to avoid potential deadlocks
-    if (IsValidGpuMapping(virtual_addr, size)) {
+    if (rasterizer && IsValidGpuMapping(virtual_addr, size)) {
         rasterizer->UnmapMemory(virtual_addr, size);
     }
 
@@ -982,7 +990,9 @@ s32 MemoryManager::MapFile(void** out_addr, VAddr virtual_addr, u64 size, Memory
                       map_ctx);
     if (prot != Core::MemoryProt::CpuRead) {
         // read-only mappings cannot be registered with userfaultfd in writeprotect mode
-        rasterizer->RegisterMemory(mapped_addr, size);
+        if (rasterizer) {
+            rasterizer->RegisterMemory(mapped_addr, size);
+        }
     }
 
     *out_addr = std::bit_cast<void*>(mapped_addr);
@@ -1005,7 +1015,7 @@ s32 MemoryManager::PoolDecommit(VAddr virtual_addr, u64 size) {
     }
 
     // Perform early GPU unmap to avoid potential deadlocks
-    if (IsValidGpuMapping(virtual_addr, size)) {
+    if (rasterizer && IsValidGpuMapping(virtual_addr, size)) {
         rasterizer->UnmapMemory(virtual_addr, size);
     }
 
@@ -1067,7 +1077,9 @@ s32 MemoryManager::PoolDecommit(VAddr virtual_addr, u64 size) {
     // Unmap from address space
     u64 size_to_unmap = size;
     VAddr unmapped_addr = impl.Unmap(virtual_addr, &size_to_unmap);
-    rasterizer->RegisterMemory(unmapped_addr, size_to_unmap);
+    if (rasterizer) {
+        rasterizer->RegisterMemory(unmapped_addr, size_to_unmap);
+    }
 
     // Tracy memory tracking breaks from merging memory areas. Disabled for now.
     // TRACK_FREE(virtual_addr, "VMEM");
@@ -1091,7 +1103,7 @@ s32 MemoryManager::UnmapMemory(VAddr virtual_addr, u64 size) {
     }
 
     // If the requested range has GPU access, unmap from GPU.
-    if (IsValidGpuMapping(virtual_addr, size)) {
+    if (rasterizer && IsValidGpuMapping(virtual_addr, size)) {
         rasterizer->UnmapMemory(virtual_addr, size);
     }
 
@@ -1164,7 +1176,9 @@ u64 MemoryManager::UnmapBytesFromEntry(VAddr virtual_addr, VirtualMemoryArea vma
         // Unmap the memory region.
         u64 size_to_unmap = size_in_vma;
         VAddr unmapped_addr = impl.Unmap(virtual_addr, &size_to_unmap);
-        rasterizer->RegisterMemory(unmapped_addr, size_to_unmap);
+        if (rasterizer) {
+            rasterizer->RegisterMemory(unmapped_addr, size_to_unmap);
+        }
 
         // Tracy memory tracking breaks from merging memory areas. Disabled for now.
         // TRACK_FREE(virtual_addr, "VMEM");
