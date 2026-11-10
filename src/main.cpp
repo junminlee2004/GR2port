@@ -145,7 +145,7 @@ int main(int argc, char* argv[]) {
         Core::Debugger::WaitForPid(*waitPid);
 
     // Initialize main log with default config
-    Common::Log::Setup("shadps4.log");
+    Common::Log::Setup(Common::FS::LOG_FILE);
 
     LOG_INFO(Debug, "Run: {}", fmt::join(std::span(argv, argc), " "));
 

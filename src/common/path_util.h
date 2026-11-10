@@ -37,7 +37,7 @@ constexpr auto TROPHY_DIR = "trophy";
 constexpr auto SAVEDATA_DIR = "savedata";
 
 // Filenames
-constexpr auto LOG_FILE = "shad_log.txt";
+constexpr auto LOG_FILE = "log.txt";
 
 /**
  * Validates a given path.

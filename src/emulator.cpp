@@ -443,10 +443,8 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
 
     EmulatorSettings.Load(id);
     Gr2Port::GamePatches::ApplySettings();
-    // Switch to configured log
-    Common::Log::Switch((!id.empty() && EmulatorSettings.IsLogSeparate()) ? id + ".log"
-                                                                          : "shad_log.txt",
-                        append_log);
+    // The game's log replaces what was logged before it in the same file.
+    Common::Log::Switch(Common::FS::LOG_FILE, append_log);
 
     auto guest_eboot_path = "/app0/" + eboot_name.generic_string();
 
@@ -471,126 +469,7 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
     ASSERT_MSG(mnt->Exists(guest_eboot_path), "Guest app's main executable {} does not exist",
                guest_eboot_path);
 
-    LOG_INFO(Loader, "Starting shadps4 emulator v{} ", Common::g_version);
-    LOG_INFO(Loader, "Revision {}", Common::g_scm_rev);
-    LOG_INFO(Loader, "Branch {}", Common::g_scm_branch);
-    LOG_INFO(Loader, "Description {}", Common::g_scm_desc);
-    LOG_INFO(Loader, "Remote {}", Common::g_scm_remote_url);
-
-    LOG_INFO(Config, "Game-specific config used: {}",
-             EmulatorState::GetInstance()->IsGameSpecifigConfigUsed());
-
-    LOG_INFO(Config, "General isNeo: {}", EmulatorSettings.IsNeo());
-    LOG_INFO(Config, "General isDevKit: {}", EmulatorSettings.IsDevKit());
-    LOG_INFO(Config, "General isConnectedToNetwork: {}", EmulatorSettings.IsConnectedToNetwork());
-    LOG_INFO(Config, "General isShadNetEnabled: {}", EmulatorSettings.IsShadNetEnabled());
-#ifdef _WIN32
-    LOG_INFO(Config, "General isRedZonePatchingEnabled: {}",
-             EmulatorSettings.IsRedZonePatchingEnabled());
-#endif
-    LOG_INFO(Config, "General p2pPort: {}", EmulatorSettings.GetP2PPort());
-    LOG_INFO(Config, "Log sync: {}", EmulatorSettings.IsLogSync());
-    LOG_INFO(Config, "Log skipDuplicate: {}", EmulatorSettings.IsLogSkipDuplicate());
-#ifdef _WIN32
-    LOG_INFO(Config, "Log type: {}", EmulatorSettings.GetLogType());
-#endif
-    LOG_INFO(Config, "GPU isNullGpu: {}", EmulatorSettings.IsNullGPU());
-    LOG_INFO(Config, "GPU readbacksMode: {}", EmulatorSettings.GetReadbacksMode());
-    LOG_INFO(Config, "GPU adaptiveSkipCaches: {}", EmulatorSettings.GetAdaptiveSkipCachesMode());
-    LOG_INFO(Config, "GPU pendingPopThrottle: {}", EmulatorSettings.GetPendingPopThrottle());
-    LOG_INFO(Config, "GPU streamCopyWorkers: {}", EmulatorSettings.GetStreamCopyWorkers());
-    LOG_INFO(Config, "GPU runtimeInfoStampGate: {}", EmulatorSettings.IsRuntimeInfoStampGate());
-    LOG_INFO(Config, "GPU occludeAll: {}", EmulatorSettings.IsOccludeAll());
-    LOG_INFO(Config, "GPU flushDrawInterval: {}", EmulatorSettings.GetFlushDrawInterval());
-    LOG_INFO(Config, "GPU pipelineKeyStampReuse: {}", EmulatorSettings.IsPipelineKeyStampReuse());
-    LOG_INFO(Config, "GPU shaderParamsMemo: {}", EmulatorSettings.IsShaderParamsMemo());
-    LOG_INFO(Config, "GPU specFpCanonical: {}", EmulatorSettings.GetSpecFpCanonical());
-    LOG_INFO(Config, "GPU textureViewMemo: {}", EmulatorSettings.IsTextureViewMemo());
-    LOG_INFO(Config, "GPU descDeltaInplace: {}", EmulatorSettings.IsDescDeltaInplace());
-    LOG_INFO(Config, "GPU bindLinePrefetch: {}", EmulatorSettings.IsBindLinePrefetch());
-    LOG_INFO(Config, "GPU guestCopyHoldSegment: {}", EmulatorSettings.IsGuestCopyHoldSegment());
-    LOG_INFO(Config, "GPU findimgTrustGen: {}", EmulatorSettings.IsFindimgTrustGen());
-    LOG_INFO(Config, "GPU findimgRangeInvalidate: {}", EmulatorSettings.IsFindimgRangeInvalidate());
-    LOG_INFO(Config, "GPU specFpSlotInplace: {}", EmulatorSettings.IsSpecFpSlotInplace());
-    LOG_INFO(Config, "GPU specFpFront: {}", EmulatorSettings.IsSpecFpFront());
-    LOG_INFO(Config, "GPU findimgMemoWays: {}", EmulatorSettings.GetFindimgMemoWays());
-    LOG_INFO(Config, "GPU findimgMemoEntries: {}", EmulatorSettings.GetFindimgMemoEntries());
-    LOG_INFO(Config, "GPU bindNoopMemo: {}", EmulatorSettings.IsBindNoopMemo());
-    LOG_INFO(Config, "GPU specKeyFast: {}", EmulatorSettings.GetSpecKeyFast());
-    LOG_INFO(Config, "GPU backingWriteMemo: {}", EmulatorSettings.IsBackingWriteMemo());
-    LOG_INFO(Config, "GPU imageUpdateDirect: {}", EmulatorSettings.IsImageUpdateDirect());
-    LOG_INFO(Config, "GPU descLayoutShare: {}", EmulatorSettings.IsDescLayoutShare());
-    LOG_INFO(Config, "GPU runtimeInfoInputMemo: {}", EmulatorSettings.IsRuntimeInfoInputMemo());
-    LOG_INFO(Config, "GPU keyReuseHashDiff: {}", EmulatorSettings.IsKeyReuseHashDiff());
-    LOG_INFO(Config, "GPU descDeltaPartial: {}", EmulatorSettings.IsDescDeltaPartial());
-    LOG_INFO(Config, "GPU shaderParamsMemoEntries: {}",
-             EmulatorSettings.GetShaderParamsMemoEntries());
-    LOG_INFO(Config, "GPU dynStateStamp: {}", EmulatorSettings.IsDynStateStamp());
-    LOG_INFO(Config, "GPU staticColorWriteMask: {}", EmulatorSettings.IsStaticColorWriteMask());
-    LOG_INFO(Config, "GPU specKeyFused: {}", EmulatorSettings.IsSpecKeyFused());
-    LOG_INFO(Config, "GPU parserRegRun: {}", EmulatorSettings.IsParserRegRun());
-    LOG_INFO(Config, "GPU pushConstDedup: {}", EmulatorSettings.IsPushConstDedup());
-    LOG_INFO(Config, "GPU streamCopyIdleUs: {}", EmulatorSettings.GetStreamCopyIdleUs());
-    LOG_INFO(Config, "GPU streamCopyLaneThreads: {}", EmulatorSettings.GetStreamCopyLaneThreads());
-    LOG_INFO(Config, "GPU textureInvalidateFilter: {}",
-             EmulatorSettings.IsTextureInvalidateFilter());
-    LOG_INFO(Config, "GPU rtStateStamp: {}", EmulatorSettings.IsRtStateStamp());
-    LOG_INFO(Config, "GPU pushVpMemo: {}", EmulatorSettings.IsPushVpMemo());
-    LOG_INFO(Config, "GPU riMemoFusedCmp: {}", EmulatorSettings.IsRiMemoFusedCmp());
-    LOG_INFO(Config, "GPU brMemFastState: {}", EmulatorSettings.IsBrMemFastState());
-    LOG_INFO(Config, "GPU descHeapRecycle: {}", EmulatorSettings.IsDescHeapRecycle());
-    LOG_INFO(Config, "GPU pushDescFullLimit: {}", EmulatorSettings.IsPushDescFullLimit());
-    LOG_INFO(Config, "GPU bindWritePlan: {}", EmulatorSettings.GetBindWritePlan());
-    LOG_INFO(Config, "GPU findimgMemoFirst: {}", EmulatorSettings.IsFindimgMemoFirst());
-    LOG_INFO(Config, "GPU findimgSlotHint: {}", EmulatorSettings.IsFindimgSlotHint());
-    LOG_INFO(Config, "GPU bindImageLean: {}", EmulatorSettings.IsBindImageLean());
-    LOG_INFO(Config, "GPU descDeltaFlat: {}", EmulatorSettings.IsDescDeltaFlat());
-    LOG_INFO(Config, "GPU drawGlueMemo: {}", EmulatorSettings.GetDrawGlueMemo());
-    LOG_INFO(Config, "GPU specFpCache: {}", EmulatorSettings.IsSpecFpCache());
-    LOG_INFO(Config, "GPU dynStateMemo: {}", EmulatorSettings.IsDynStateMemo());
-    LOG_INFO(Config, "GPU imageFastState: {}", EmulatorSettings.IsImageFastState());
-    LOG_INFO(Config, "GPU guestCopyLockBatch: {}", EmulatorSettings.IsGuestCopyLockBatch());
-    LOG_INFO(Config, "GPU specMruPermProbe: {}", EmulatorSettings.IsSpecMruPermProbe());
-    LOG_INFO(Config, "GPU textureLruLazyTouch: {}", EmulatorSettings.IsTextureLruLazyTouch());
-    LOG_INFO(Config, "GPU gatherInputMemo: {}", EmulatorSettings.IsGatherInputMemo());
-    LOG_INFO(Config, "GPU trackerLockSpinRounds: {}", EmulatorSettings.GetTrackerLockSpinRounds());
-    LOG_INFO(Config, "GPU oneCoreGpuThreadPin: {}", EmulatorSettings.IsOneCoreGpuThreadPin());
-    LOG_INFO(Config, "GPU vkRecordThread: {}", EmulatorSettings.IsVkRecordThread());
-    LOG_INFO(Config, "GPU asyncShaderRecompiling: {}", EmulatorSettings.IsAsyncShaderRecompiling());
-    LOG_INFO(Config, "GPU pipelineSyncBudgetMs: {}", EmulatorSettings.GetPipelineSyncBudgetMs());
-    LOG_INFO(Config, "GPU vertexLayoutMemo: {}", EmulatorSettings.IsVertexLayoutMemo());
-    LOG_INFO(Config, "GPU coveredRangeSkip: {}", EmulatorSettings.IsCoveredRangeSkip());
-    LOG_INFO(Config, "GPU residencyBitmap: {}", EmulatorSettings.IsResidencyBitmap());
-    LOG_INFO(Config, "GPU streamBarrierSkip: {}", EmulatorSettings.IsStreamBarrierSkip());
-    LOG_INFO(Config, "GPU cleanSyncPeek: {}", EmulatorSettings.IsCleanSyncPeek());
-    LOG_INFO(Config, "GPU readbackOffload: {}", EmulatorSettings.IsReadbackOffload());
-    LOG_INFO(Config, "GPU ringDrainFlushDraws: {}", EmulatorSettings.GetRingDrainFlushDraws());
-    LOG_INFO(Config, "GPU readbackLinearImages: {}",
-             EmulatorSettings.IsReadbackLinearImagesEnabled());
-    LOG_INFO(Config, "GPU readbackLinearImagesAsync: {}",
-             EmulatorSettings.IsReadbackLinearImagesAsync());
-    LOG_INFO(Config, "GPU directMemoryAccess: {}", EmulatorSettings.IsDirectMemoryAccessEnabled());
-    LOG_INFO(Config, "GPU shouldDumpShaders: {}", EmulatorSettings.IsDumpShaders());
-    LOG_INFO(Config, "GPU vblankFrequency: {}", EmulatorSettings.GetVblankFrequency());
-    LOG_INFO(Config, "GPU shouldCopyGPUBuffers: {}", EmulatorSettings.IsCopyGpuBuffers());
-#ifdef __linux__
-    LOG_INFO(Config, "GPU userfaultfdTracking: {}", EmulatorSettings.IsUserfaultfdTracking());
-#endif
-    LOG_INFO(Config, "GPU inlineFetchShader: {}", EmulatorSettings.IsInlineFetchShader());
-    LOG_INFO(Config, "GPU fastShaderMath: {}", EmulatorSettings.IsFastShaderMath());
-    LOG_INFO(Config, "Vulkan gpuId: {}", EmulatorSettings.GetGpuId());
-    LOG_INFO(Config, "Vulkan vkValidation: {}", EmulatorSettings.IsVkValidationEnabled());
-    LOG_INFO(Config, "Vulkan vkValidationCore: {}", EmulatorSettings.IsVkValidationCoreEnabled());
-    LOG_INFO(Config, "Vulkan vkValidationSync: {}", EmulatorSettings.IsVkValidationSyncEnabled());
-    LOG_INFO(Config, "Vulkan vkValidationGpu: {}", EmulatorSettings.IsVkValidationGpuEnabled());
-    LOG_INFO(Config, "Vulkan crashDiagnostics: {}", EmulatorSettings.IsVkCrashDiagnosticEnabled());
-    LOG_INFO(Config, "Vulkan hostMarkers: {}", EmulatorSettings.IsVkHostMarkersEnabled());
-    LOG_INFO(Config, "Vulkan guestMarkers: {}", EmulatorSettings.IsVkGuestMarkersEnabled());
-    LOG_INFO(Config, "Vulkan rdocEnable: {}", EmulatorSettings.IsRenderdocEnabled());
-    LOG_INFO(Config, "Vulkan PipelineCacheEnabled: {}", EmulatorSettings.IsPipelineCacheEnabled());
-    LOG_INFO(Config, "Vulkan PipelineCacheArchived: {}",
-             EmulatorSettings.IsPipelineCacheArchived());
-
+    // The log starts with the system and the game.
     hwinfo::Memory ram;
     hwinfo::OS os;
     const auto cpus = hwinfo::getAllCPUs();
