@@ -20,6 +20,7 @@ enum State : u32 {
 struct Slot {
     std::atomic<u32> state{Free};
     std::atomic<u64> frame{0};
+    std::atomic<bool> keep{false};
 };
 
 std::array<Slot, Slots> g_slots;
@@ -37,9 +38,18 @@ void Attach(u8* cpu, u64 address) {
     g_cpu.store(cpu, std::memory_order_release);
 }
 
-u8* Begin() {
+u8* Begin(bool keep) {
     u8* const cpu = g_cpu.load(std::memory_order_acquire);
     if (cpu == nullptr) {
+        return nullptr;
+    }
+    // Other frames leave the last free slot to kept ones.
+    u32 free = 0;
+    for (const Slot& slot : g_slots) {
+        free += slot.state.load(std::memory_order_relaxed) == Free ? 1 : 0;
+    }
+    if (free < (keep ? 1u : 2u)) {
+        g_skipped.fetch_add(1, std::memory_order_relaxed);
         return nullptr;
     }
     for (u32 i = 0; i < Slots; i++) {
@@ -58,11 +68,12 @@ u64 Address(const u8* data) {
     return g_address + static_cast<u64>(data - g_cpu.load(std::memory_order_relaxed));
 }
 
-void Publish(u64 frame) {
+void Publish(u64 frame, bool keep) {
     // Empties the CPU's write-combining buffers: a plain store could pass the packet's last writes.
     std::atomic_thread_fence(std::memory_order_seq_cst);
     Slot& slot = g_slots[g_writing];
     slot.frame.store(frame, std::memory_order_relaxed);
+    slot.keep.store(keep, std::memory_order_relaxed);
     slot.state.store(Ready, std::memory_order_release);
     g_published.store(frame, std::memory_order_release);
     g_published.notify_one();
@@ -72,6 +83,8 @@ bool Take(u64 seen, Packet& packet) {
     g_published.wait(seen, std::memory_order_acquire);
     u32 newest = Slots;
     u64 newest_frame = 0;
+    u32 kept = Slots;
+    u64 kept_frame = 0;
     for (u32 i = 0; i < Slots; i++) {
         if (g_slots[i].state.load(std::memory_order_acquire) != Ready) {
             continue;
@@ -81,11 +94,23 @@ bool Take(u64 seen, Packet& packet) {
             newest = i;
             newest_frame = frame;
         }
+        if (g_slots[i].keep.load(std::memory_order_relaxed) &&
+            (kept == Slots || frame < kept_frame)) {
+            kept = i;
+            kept_frame = frame;
+        }
     }
     if (newest == Slots) {
         return false;
     }
+    if (kept != Slots) {
+        newest = kept;
+        newest_frame = kept_frame;
+    }
     for (u32 i = 0; i < Slots; i++) {
+        if (i != newest && g_slots[i].frame.load(std::memory_order_relaxed) > newest_frame) {
+            continue;
+        }
         u32 expected = Ready;
         g_slots[i].state.compare_exchange_strong(expected, i == newest ? InUse : Free,
                                                  std::memory_order_acq_rel);

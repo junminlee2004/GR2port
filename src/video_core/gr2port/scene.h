@@ -326,6 +326,9 @@ struct UiHeader {
     u32 unknown_textures;
     /// The target the game drew a photo into, plus one; 0 when the frame drew none.
     u32 photo;
+    /// A bit per target other than a back buffer that the frame writes after a while without
+    /// writes, which later frames read as it is.
+    u32 fresh_targets;
 };
 
 struct EffectHeader {

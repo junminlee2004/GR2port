@@ -3219,7 +3219,10 @@ bool g_skipped_frame = false;
 void PublishPending() {
     if (g_pending.packet != nullptr) {
         std::memcpy(g_pending.packet, &g_pending.header, sizeof(g_pending.header));
-        SceneRing::Publish(g_pending.frame);
+        // Later frames read a world drawn into a target of the view's own and fresh writes into
+        // the screen drawing's targets: these frames are always drawn.
+        SceneRing::Publish(g_pending.frame,
+                           g_pending.world_target != 0 || g_pending.header.ui.fresh_targets != 0);
         g_pending.packet = nullptr;
     }
 }
@@ -3264,7 +3267,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     if (!capturing) {
         return;
     }
-    u8* const packet = SceneRing::Begin();
+    u8* const packet = SceneRing::Begin(Load<VAddr>(view + ViewWorldTarget) != 0);
     if (packet == nullptr) {
         g_skipped_frame = true;
         return;
@@ -3493,7 +3496,8 @@ void OnFrameEnd() {
     }
     const auto start = std::chrono::steady_clock::now();
     if (g_pending.packet == nullptr) {
-        u8* const packet = SceneRing::Begin();
+        // The screen drawing alone may write targets later frames read: it may take the last slot.
+        u8* const packet = SceneRing::Begin(true);
         if (packet == nullptr) {
             UiCapture::Skip();
             return;
