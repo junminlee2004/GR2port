@@ -1451,6 +1451,16 @@ void Thread::Report() {
         static_cast<double>(textures.uploaded_data_bytes) / (1 << 20), textures.not_2d,
         textures.unsupported, textures.too_large, textures.failed, textures.missed_destroys,
         meshes.no_texcoord, meshes.no_normal);
+    LOG_INFO(Render_Vulkan,
+             "GR2port texture streaming: quality {}, budget {} MB, {:.1f} MB held, {} textures "
+             "read in the last 2 s ({:.1f} MB at full size), {:.1f} MB for all at full size, {} "
+             "with fewer levels; {} made smaller, {} larger ({:.1f} MB uploaded)",
+             textures.quality, textures.limit_bytes >> 20,
+             static_cast<double>(textures.allocated_bytes) / (1 << 20), textures.used_textures,
+             static_cast<double>(textures.used_bytes) / (1 << 20),
+             static_cast<double>(textures.full_bytes) / (1 << 20), textures.reduced,
+             textures.shrinks, textures.grows,
+             static_cast<double>(textures.grow_bytes) / (1 << 20));
     LOG_INFO(
         Render_Vulkan,
         "GR2port shadows: per frame {:.0f} casters ({:.0f} skinned, {:.0f} deformed) in {:.0f} "

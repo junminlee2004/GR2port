@@ -1,9 +1,16 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
+#include <cstdlib>
+#include <filesystem>
+#include <string_view>
+
+#include <fmt/format.h>
 
 #include "common/logging/log.h"
+#include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/memory.h"
 
 // After vk_common.h, which sets the Vulkan header options.
@@ -14,10 +21,22 @@ namespace Gr2Port {
 namespace {
 
 // Device-local memory the renderer leaves free for the emulated GPU's renderer, which allocates
-// more when the game opens its pause menu.
-constexpr u64 Headroom = 512_MB;
+// more when the game opens its pause menu while it runs, and less while it is off.
+constexpr u64 ForkHeadroom = 512_MB;
+constexpr u64 OffHeadroom = 64_MB;
 // Small blocks keep the memory the allocator holds close to what the renderer uses.
 constexpr u64 BlockSize = 32_MB;
+// Device-local allocations at least this large are logged with the code that made them.
+constexpr u64 LoggedBytes = 8_MB;
+
+void LogLarge(const std::source_location& where, u64 bytes, std::string_view what) {
+    if (bytes < LoggedBytes) {
+        return;
+    }
+    LOG_INFO(Render_Vulkan, "GR2port memory: {:.1f} MB for {} at {}:{}",
+             static_cast<double>(bytes) / (1 << 20), what,
+             std::filesystem::path{where.file_name()}.filename().string(), where.line());
+}
 
 } // namespace
 
@@ -40,10 +59,19 @@ bool Memory::Create() {
         LOG_ERROR(Render_Vulkan, "GR2port: no memory allocator");
         return false;
     }
+    if (const char* forced = std::getenv("GR2PORT_VRAM_MB"); forced != nullptr) {
+        const u64 megabytes = std::strtoull(forced, nullptr, 10);
+        if (megabytes != 0) {
+            forced_budget = megabytes << 20;
+            LOG_INFO(Render_Vulkan, "GR2port memory: device-local budget capped at {} MB",
+                     megabytes);
+        }
+    }
     return true;
 }
 
-Buffer Memory::CreateBuffer(u64 size, vk::BufferUsageFlags usage, Placement placement) {
+Buffer Memory::CreateBuffer(u64 size, vk::BufferUsageFlags usage, Placement placement,
+                            std::source_location where) {
     const VkBufferCreateInfo buffer_info{
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = size,
@@ -75,6 +103,9 @@ Buffer Memory::CreateBuffer(u64 size, vk::BufferUsageFlags usage, Placement plac
         return {};
     }
     buffer.buffer = handle;
+    if (placement == Placement::Device) {
+        LogLarge(where, result.size, "a buffer");
+    }
     buffer.mapped = static_cast<u8*>(result.pMappedData);
     buffer.address = d.device.getBufferAddress({.buffer = buffer.buffer}, d.dispatch);
     return buffer;
@@ -95,11 +126,16 @@ void Memory::Refresh(u64 frame) {
         device_budget.budget += budgets[i].budget;
         device_budget.own += budgets[i].statistics.blockBytes;
     }
+    device_budget.budget = std::min(device_budget.budget, forced_budget);
     reserved = 0;
 }
 
+u64 Memory::Headroom() const {
+    return EmulatedGpu::On() ? ForkHeadroom : OffHeadroom;
+}
+
 bool Memory::Reserve(u64 bytes) {
-    if (device_budget.usage + reserved + bytes + Headroom > device_budget.budget) {
+    if (device_budget.usage + reserved + bytes + Headroom() > device_budget.budget) {
         if (!logged_full) {
             logged_full = true;
             LOG_WARNING(Render_Vulkan,
@@ -121,7 +157,7 @@ void Memory::Destroy(Buffer& buffer) {
 
 Image Memory::CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsageFlags usage,
                           vk::ImageAspectFlags aspect, u32 layers, u32 levels,
-                          vk::ImageCreateFlags flags) {
+                          vk::ImageCreateFlags flags, std::source_location where) {
     const VkImageCreateInfo image_info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .flags = static_cast<VkImageCreateFlags>(flags),
@@ -150,6 +186,8 @@ Image Memory::CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsage
     }
     image.image = handle;
     image.size = result.size;
+    LogLarge(where, image.size,
+             fmt::format("a {}x{} {} image", extent.width, extent.height, vk::to_string(format)));
     const vk::ImageViewCreateInfo view_info{
         .image = image.image,
         .viewType = layers > 1 ? vk::ImageViewType::e2DArray : vk::ImageViewType::e2D,
@@ -160,7 +198,8 @@ Image Memory::CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsage
     return image;
 }
 
-Image Memory::CreateVolume(vk::Format format, vk::Extent3D extent, vk::ImageUsageFlags usage) {
+Image Memory::CreateVolume(vk::Format format, vk::Extent3D extent, vk::ImageUsageFlags usage,
+                           std::source_location where) {
     const VkImageCreateInfo image_info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_3D,
@@ -188,6 +227,9 @@ Image Memory::CreateVolume(vk::Format format, vk::Extent3D extent, vk::ImageUsag
     }
     image.image = handle;
     image.size = result.size;
+    LogLarge(where, image.size,
+             fmt::format("a {}x{}x{} {} volume", extent.width, extent.height, extent.depth,
+                         vk::to_string(format)));
     const vk::ImageViewCreateInfo view_info{
         .image = image.image,
         .viewType = vk::ImageViewType::e3D,
@@ -199,7 +241,7 @@ Image Memory::CreateVolume(vk::Format format, vk::Extent3D extent, vk::ImageUsag
 }
 
 Image Memory::CreateTexture(vk::Format format, vk::Extent2D extent, u32 levels,
-                            vk::ComponentMapping mapping, bool cube) {
+                            vk::ComponentMapping mapping, bool cube, bool dedicated) {
     const u32 layers = cube ? 6 : 1;
     const VkImageCreateInfo image_info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -211,11 +253,15 @@ Image Memory::CreateTexture(vk::Format format, vk::Extent2D extent, u32 levels,
         .arrayLayers = layers,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
-    // Thousands of textures share the allocator's blocks.
-    const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    // Thousands of small textures share the allocator's blocks.
+    const VmaAllocationCreateInfo allocation_info{
+        .flags = dedicated ? VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT : 0u,
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+    };
     Image image{.format = format, .extent = extent};
     VkImage handle = VK_NULL_HANDLE;
     VmaAllocationInfo result{};
