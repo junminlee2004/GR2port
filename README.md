@@ -102,7 +102,7 @@ R2 | O |
 L3 | X |
 R3 | M |
 
-Keyboard and mouse inputs can be customized in the settings menu by clicking the Controller button, and further details and help on controls are  also found there. Custom bindings are saved per-game. Inputs support up to three keys per binding, mouse buttons, mouse movement mapped to joystick input, and more.
+Keyboard and mouse inputs can be customized in the settings menu by clicking the key bindings button
 
 
 # Contributing
@@ -111,8 +111,6 @@ If you want to contribute, please feel free :)
 
 # Special Thanks
 
-A few noteworthy teams/projects who've helped us along the way are:
-
-- [**Panda3DS**](https://github.com/wheremyfoodat/Panda3DS): A multiplatform 3DS emulator from our co-author wheremyfoodat. They have been incredibly helpful in understanding and solving problems that came up from natively executing the x64 code of PS4 binaries
+- [**ShadPS4**](https://github.com/shadps4-emu/shadps4): An open source PS4 emulator written in C++. ShadPS4 along with my fork, GR2fork, provided the basic structure for this codebase, tooling necessary for research and development, and served as reference for this project's native execution of x64 code of PS4 binaries and graphical output.
 
 
