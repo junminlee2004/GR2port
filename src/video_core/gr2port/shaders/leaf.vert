@@ -15,11 +15,11 @@ layout(location = 0) out vec3 control_point;
 layout(location = 1) out uint leaf_index;
 
 // The game's leaf vertex program: a control point of a branch's curve, for the leaves of the leaf
-// at gl_InstanceIndex.
+// at gl_BaseInstance.
 void main() {
     Leaves leaves = scene_leaves;
-    leaf_index = gl_InstanceIndex;
-    control_point = LoadPosition(leaves.leaves[gl_InstanceIndex].vertices,
-                                 leaves.leaves[gl_InstanceIndex].stride,
-                                 leaves.leaves[gl_InstanceIndex].position);
+    leaf_index = gl_BaseInstance;
+    control_point = LoadPosition(leaves.leaves[gl_BaseInstance].vertices,
+                                 leaves.leaves[gl_BaseInstance].stride,
+                                 leaves.leaves[gl_BaseInstance].position);
 }

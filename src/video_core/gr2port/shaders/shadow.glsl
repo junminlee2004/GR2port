@@ -22,7 +22,7 @@ layout(location = 2) flat out float alpha_reference;
 // matrix, then the cascade's view-projection, with depth clamped to the near plane (pancaking).
 void main() {
     Casters casters = scene_casters;
-    const uint i = gl_InstanceIndex;
+    const uint i = gl_BaseInstance;
     vec3 model = LoadPosition(casters.casters[i].vertices, casters.casters[i].stride,
                               casters.casters[i].position);
     const uint bones = casters.casters[i].bones;

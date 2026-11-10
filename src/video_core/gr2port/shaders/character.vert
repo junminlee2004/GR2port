@@ -58,35 +58,35 @@ vec2 DecalTexcoord(vec3 model, uint index) {
 // reflection map.
 void main() {
     Draws draws = scene_draws;
-    draw_index = gl_InstanceIndex;
-    const uint64_t vertices = draws.draws[gl_InstanceIndex].vertices;
-    const uint stride = draws.draws[gl_InstanceIndex].stride;
-    const uint bones = draws.draws[gl_InstanceIndex].bones;
-    const uint64_t skin = draws.draws[gl_InstanceIndex].skin;
-    const uint64_t palette = draws.draws[gl_InstanceIndex].palette;
-    const vec3 unskinned = LoadPosition(vertices, stride, draws.draws[gl_InstanceIndex].position);
+    draw_index = gl_BaseInstance;
+    const uint64_t vertices = draws.draws[gl_BaseInstance].vertices;
+    const uint stride = draws.draws[gl_BaseInstance].stride;
+    const uint bones = draws.draws[gl_BaseInstance].bones;
+    const uint64_t skin = draws.draws[gl_BaseInstance].skin;
+    const uint64_t palette = draws.draws[gl_BaseInstance].palette;
+    const vec3 unskinned = LoadPosition(vertices, stride, draws.draws[gl_BaseInstance].position);
     const vec3 model = bones != 0u ? SkinPosition(unskinned, skin, palette, bones) : unskinned;
-    const mat4 world_view = draws.draws[gl_InstanceIndex].world_view;
+    const mat4 world_view = draws.draws[gl_BaseInstance].world_view;
     view_position = (world_view * vec4(model, 1.0)).xyz;
-    vec4 clip = draws.draws[gl_InstanceIndex].world_view_projection * vec4(model, 1.0);
+    vec4 clip = draws.draws[gl_BaseInstance].world_view_projection * vec4(model, 1.0);
     // OpenGL depth, -w near to w far, to reverse depth, 1 near to 0 far.
     clip.z = 0.5 * (clip.w - clip.z);
     gl_Position = clip;
 
-    const vec4 transform = draws.draws[gl_InstanceIndex].texcoord_transform;
+    const vec4 transform = draws.draws[gl_BaseInstance].texcoord_transform;
     texcoord = transform.xy + transform.zw * LoadTexcoord(vertices, stride,
-                                                          draws.draws[gl_InstanceIndex].texcoord);
-    const uint decal_index = draws.draws[gl_InstanceIndex].decal;
+                                                          draws.draws[gl_BaseInstance].texcoord);
+    const uint decal_index = draws.draws[gl_BaseInstance].decal;
     decal_texcoord = decal_index != 0u ? DecalTexcoord(unskinned, decal_index - 1u) : vec2(0.0);
     model_xy = unskinned.xy;
 
-    const uint normal_element = draws.draws[gl_InstanceIndex].normal;
+    const uint normal_element = draws.draws[gl_BaseInstance].normal;
     vec3 n = (normal_element >> 8) != 0u ? LoadNormal(vertices, stride, normal_element)
                                          : vec3(0.0, 0.0, 1.0);
     n = bones != 0u ? SkinDirection(n, skin, palette, bones) : n;
     n = mat3(world_view) * n;
     float rim = 1.0;
-    const uint index = draws.draws[gl_InstanceIndex].material - 1u;
+    const uint index = draws.draws[gl_BaseInstance].material - 1u;
     const float bias = scene_characters.characters[index].bend_bias;
     if (bias > 0.0) {
         const vec3 offset = view_position - scene_characters.characters[index].bend_position.xyz;
@@ -99,14 +99,14 @@ void main() {
     }
     normal = vec4(normalize(n), rim);
 
-    const uint tangent_element = draws.draws[gl_InstanceIndex].tangent;
+    const uint tangent_element = draws.draws[gl_BaseInstance].tangent;
     tangent = vec4(1.0, 0.0, 0.0, 1.0);
     if ((tangent_element >> 8) != 0u) {
         const vec4 t = LoadTangent(vertices, stride, tangent_element);
         const vec3 turned = bones != 0u ? SkinDirection(t.xyz, skin, palette, bones) : t.xyz;
         tangent = vec4(normalize(mat3(world_view) * turned), -t.w);
     }
-    const uint color_element = draws.draws[gl_InstanceIndex].vertex_color;
+    const uint color_element = draws.draws[gl_BaseInstance].vertex_color;
     vertex_color = (color_element >> 8) != 0u ? LoadVertexColor(vertices, stride, color_element)
                                               : vec4(1.0);
 }

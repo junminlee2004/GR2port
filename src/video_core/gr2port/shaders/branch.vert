@@ -28,7 +28,7 @@ vec3 Point(uint64_t vertices, uint point, uint stride) {
 // a quad's corner, of a segment, of a curve.
 void main() {
     Branches branches = scene_branches;
-    branch = gl_InstanceIndex;
+    branch = gl_BaseInstance;
     const uint corner = QuadCorners[gl_VertexIndex % 6u];
     const uint quad = gl_VertexIndex / 6u;
     const uint segments = branches.branches[branch].segments;
