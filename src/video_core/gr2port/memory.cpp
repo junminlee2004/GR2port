@@ -12,6 +12,7 @@
 #include "common/logging/log.h"
 #include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/memory.h"
+#include "video_core/gr2port/settings.h"
 
 // After vk_common.h, which sets the Vulkan header options.
 #include <vk_mem_alloc.h>
@@ -59,13 +60,14 @@ bool Memory::Create() {
         LOG_ERROR(Render_Vulkan, "GR2port: no memory allocator");
         return false;
     }
+    // The Video Memory setting, or GR2PORT_VRAM_MB in the environment, which tests set.
+    u64 megabytes = Settings::Get().graphics.video_memory_mb;
     if (const char* forced = std::getenv("GR2PORT_VRAM_MB"); forced != nullptr) {
-        const u64 megabytes = std::strtoull(forced, nullptr, 10);
-        if (megabytes != 0) {
-            forced_budget = megabytes << 20;
-            LOG_INFO(Render_Vulkan, "GR2port memory: device-local budget capped at {} MB",
-                     megabytes);
-        }
+        megabytes = std::strtoull(forced, nullptr, 10);
+    }
+    if (megabytes != 0) {
+        forced_budget = megabytes << 20;
+        LOG_INFO(Render_Vulkan, "GR2port memory: device-local budget capped at {} MB", megabytes);
     }
     return true;
 }

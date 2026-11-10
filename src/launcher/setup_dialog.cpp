@@ -22,6 +22,7 @@
 #include <SDL3/SDL_init.h>
 #include <commctrl.h>
 #include <commdlg.h>
+#include <dxgi.h>
 #include <shellapi.h>
 
 #include "common/types.h"
@@ -37,6 +38,8 @@
 #include "launcher/key_bindings.h"
 #include "launcher/setup_dialog.h"
 #include "video_core/gr2port/settings.h"
+
+#pragma comment(lib, "dxgi.lib")
 
 namespace Gr2Port::Launcher {
 
@@ -162,6 +165,8 @@ enum Control : int {
     IdAntialias,
     IdBloomLabel,
     IdBloom,
+    IdVideoMemoryLabel,
+    IdVideoMemory,
     IdGraphicsNote,
     IdDefaults,
 };
@@ -364,7 +369,13 @@ constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
 // The Graphics tab: the preset, then each pass's choice. Quality choices are in the order of
 // Settings::Quality; switches put On first.
 constexpr int PresetTop = 88;
-constexpr int GraphicsNoteTop = 316;
+constexpr int VideoMemoryTop = 302;
+constexpr int GraphicsNoteTop = 345;
+// The Video Memory choices below Auto, in MB; those smaller than the GPU's memory are offered.
+constexpr std::array<u32, 9> VideoMemorySizes{1024, 1536, 2048,  3072, 4096,
+                                              6144, 8192, 12288, 16384};
+// GPUs with at least this much memory of their own are taken for discrete ones.
+constexpr u64 DiscreteBytes = 1ull << 30;
 constexpr std::array<const wchar_t*, 4> QualityChoices{L"PS4 Original", L"Medium", L"Low", L"Off"};
 constexpr std::array<const wchar_t*, 3> FogChoices{L"PS4 Original", L"Medium", L"Low"};
 constexpr std::array<const wchar_t*, 2> SwitchChoices{L"On", L"Off"};
@@ -437,6 +448,8 @@ struct Dialog {
     bool touch_swipe = false;
     // The keys of the game's functions as the Key Bindings dialog left them, to save on Ok.
     std::optional<KeyBindings> key_bindings;
+    // The MB of each Video Memory choice; 0 for Auto.
+    std::vector<u32> video_memory;
 };
 
 int Scaled(const Dialog& dialog, int value) {
@@ -1119,6 +1132,10 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.motion_blur = Selected(Item(dialog, IdMotionBlur)) != 1;
     graphics.antialiasing = Selected(Item(dialog, IdAntialias)) != 1;
     graphics.bloom = Selected(Item(dialog, IdBloom)) != 1;
+    const int video_memory = Selected(Item(dialog, IdVideoMemory));
+    if (video_memory >= 0 && video_memory < static_cast<int>(dialog.video_memory.size())) {
+        graphics.video_memory_mb = dialog.video_memory[video_memory];
+    }
     graphics.preset = std::string(Settings::MatchPreset(ReadGame(dialog), graphics));
     return graphics;
 }
@@ -1149,6 +1166,81 @@ void ApplyPreset(const Dialog& dialog, int index) {
         Select(Item(dialog, IdRenderSize),
                static_cast<int>(size - GamePatches::RenderSizes.begin()));
     }
+}
+
+struct VideoCard {
+    std::wstring name;
+    u64 bytes = 0;
+};
+
+// The GPU GR2port draws with, as it picks one: the first with memory of its own, as discrete GPUs
+// have, else the first; none when DXGI lists no hardware adapter.
+VideoCard FindVideoCard() {
+    IDXGIFactory1* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) {
+        return {};
+    }
+    std::optional<VideoCard> first;
+    std::optional<VideoCard> discrete;
+    IDXGIAdapter1* adapter = nullptr;
+    for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; i++) {
+        DXGI_ADAPTER_DESC1 desc{};
+        const bool described = SUCCEEDED(adapter->GetDesc1(&desc));
+        adapter->Release();
+        if (!described || (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0) {
+            continue;
+        }
+        const VideoCard card{desc.Description, desc.DedicatedVideoMemory};
+        if (!first) {
+            first = card;
+        }
+        if (!discrete && card.bytes >= DiscreteBytes) {
+            discrete = card;
+        }
+    }
+    factory->Release();
+    return discrete.value_or(first.value_or(VideoCard{}));
+}
+
+// A size in MB as GB with at most one decimal.
+std::wstring Gigabytes(u64 megabytes) {
+    const u64 tenths = (megabytes * 10 + 512) / 1024;
+    std::wstring text = std::to_wstring(tenths / 10);
+    if (tenths % 10 != 0) {
+        text += L"." + std::to_wstring(tenths % 10);
+    }
+    return text + L" GB";
+}
+
+// Auto, naming the GPU and its memory, then the sizes below that memory, then saved when it is
+// none of them.
+void FillVideoMemory(Dialog& dialog, u32 saved) {
+    const HWND combo = Item(dialog, IdVideoMemory);
+    const VideoCard card = FindVideoCard();
+    const u64 card_megabytes = card.bytes >> 20;
+    std::wstring automatic = L"Auto";
+    if (card.bytes != 0) {
+        automatic += L" (" + Gigabytes(card_megabytes) + L", " + card.name + L")";
+    }
+    dialog.video_memory = {0};
+    AddText(combo, automatic);
+    for (const u32 size : VideoMemorySizes) {
+        if (card.bytes == 0 || size < card_megabytes) {
+            dialog.video_memory.push_back(size);
+            AddText(combo, Gigabytes(size));
+        }
+    }
+    if (std::ranges::find(dialog.video_memory, saved) == dialog.video_memory.end()) {
+        dialog.video_memory.push_back(saved);
+        AddText(combo, Gigabytes(saved));
+    }
+}
+
+void ShowVideoMemory(const Dialog& dialog, u32 megabytes) {
+    const auto found = std::ranges::find(dialog.video_memory, megabytes);
+    Select(Item(dialog, IdVideoMemory), found != dialog.video_memory.end()
+                                            ? static_cast<int>(found - dialog.video_memory.begin())
+                                            : 0);
 }
 
 void Show(Dialog& dialog, const Settings::Display& display) {
@@ -1331,11 +1423,20 @@ void Build(HWND window, Dialog& dialog) {
         }
     }
     graphics_order.push_back(MakeControl(
+        dialog, graphics_page, page_origin, WC_STATICW, L"Video Memory", SS_LEFT | SS_CENTERIMAGE,
+        IdVideoMemoryLabel, LabelLeft, VideoMemoryTop, LabelWidth, ComboHeight));
+    graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_COMBOBOXW, L"",
+                                         CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, IdVideoMemory,
+                                         ComboLeft, VideoMemoryTop, ComboWidth, ComboListHeight));
+    FillVideoMemory(dialog, dialog.values.graphics.video_memory_mb);
+    graphics_order.push_back(MakeControl(
         dialog, graphics_page, page_origin, WC_STATICW,
         L"Steam Deck also sets Aspect Ratio to 16:10 and Render Resolution to 720p on the Display "
-        L"tab: 1280 x 800. Changing a choice makes the preset Custom.",
+        L"tab: 1280 x 800. Changing a choice makes the preset Custom. With Video Memory below the "
+        L"GPU's own, textures keep fewer mip levels: first those not drawn for a while, then the "
+        L"largest.",
         SS_LEFT, IdGraphicsNote, LabelLeft, GraphicsNoteTop, ExtrasList.right - LabelLeft,
-        3 * InfoHeight));
+        4 * InfoHeight));
     KeepTabOrder(graphics_order);
     for (const Settings::Preset& preset : Settings::Presets) {
         AddText(Item(dialog, IdPreset), Wide(preset.name));
@@ -1563,6 +1664,7 @@ void Build(HWND window, Dialog& dialog) {
     Show(dialog, dialog.values.display);
     ShowGame(dialog, dialog.values.game);
     ShowGraphics(dialog, dialog.values.graphics);
+    ShowVideoMemory(dialog, dialog.values.graphics.video_memory_mb);
     ShowPreset(dialog);
     ShowController(dialog);
     ShowMouse(dialog, dialog.values.mouse);
@@ -1618,6 +1720,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             Show(dialog, Settings::Display{});
             ShowGame(dialog, Settings::Game{});
             ShowGraphics(dialog, Settings::Graphics{});
+            ShowVideoMemory(dialog, Settings::Graphics{}.video_memory_mb);
             ShowPreset(dialog);
             for (const Toggle& toggle : Toggles) {
                 Check(dialog, toggle.id, toggle.fallback);

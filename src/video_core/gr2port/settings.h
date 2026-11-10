@@ -90,6 +90,9 @@ struct Graphics {
     bool motion_blur{true};
     bool antialiasing{true};
     bool bloom{true};
+    /// The device memory GR2port keeps within, in MB; 0 takes the budget the driver gives the
+    /// process. With less, textures keep fewer mip levels. Presets leave it as it is.
+    u32 video_memory_mb{0};
 };
 
 struct Preset {

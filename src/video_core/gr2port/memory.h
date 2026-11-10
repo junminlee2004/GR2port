@@ -47,7 +47,8 @@ class Memory {
 public:
     explicit Memory(const Device& device) : d{device} {}
 
-    /// GR2PORT_VRAM_MB in the environment caps the budget at that many MB, as a smaller GPU's.
+    /// The Video Memory setting caps the budget at that many MB, as a smaller GPU's;
+    /// GR2PORT_VRAM_MB in the environment overrides it.
     bool Create();
 
     /// Device-local memory: the process's use and budget (both renderers share the process),
