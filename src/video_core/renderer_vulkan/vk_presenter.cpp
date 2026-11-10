@@ -639,8 +639,9 @@ Frame* Presenter::PrepareLastFrame() {
                                 .image = frame->image,
                                 .subresourceRange{frame_subresources}};
 
+    // GR2port: a frame without an image takes no barrier.
     cmdbuf.pipelineBarrier2(vk::DependencyInfo{
-        .imageMemoryBarrierCount = 1,
+        .imageMemoryBarrierCount = frame->image ? 1u : 0u,
         .pImageMemoryBarriers = &pre_barrier,
     });
 
@@ -784,6 +785,15 @@ Frame* Presenter::PrepareBlankFrame(bool present_thread) {
     auto& scheduler = present_thread ? present_scheduler : draw_scheduler;
     scheduler.EndRendering();
 
+    // GR2port: a frame without an image only needs its submit to pace the flip.
+    if (!frame->image) {
+        frame->ready_semaphore = scheduler.GetWorkSemaphore()->Handle();
+        frame->ready_tick = scheduler.CurrentTick();
+        SubmitInfo info{};
+        scheduler.Flush(info);
+        return frame;
+    }
+
     const auto cmdbuf = scheduler.CommandBuffer();
 
     constexpr vk::ImageSubresourceRange simple_subresource = {
@@ -861,8 +871,9 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
         }
     };
 
-    // GR2port: while an overlay hooks every device's present, only the renderer's window presents.
-    if (Gr2Port::OverlayHooksEveryDevice()) {
+    // GR2port: while GR2fork is off or an overlay hooks every device's present, only the
+    // renderer's window presents.
+    if (!Gr2Port::EmulatedGpu::On() || Gr2Port::OverlayHooksEveryDevice()) {
         const auto reset = instance.GetDevice().resetFences(frame->present_done);
         ASSERT_MSG(reset == vk::Result::eSuccess,
                    "Unexpected error resetting present done fence: {}", vk::to_string(reset));
@@ -1156,6 +1167,10 @@ Frame* Presenter::GetRenderFrame() {
         }
     }
 
+    // GR2port: without GR2fork's renderer frames have no image; they only pace the flips.
+    if (texture_cache == nullptr) {
+        return frame;
+    }
     if (frame->width != expected_frame_width || frame->height != expected_frame_height ||
         frame->is_hdr != swapchain.GetHDR()) {
         RecreateFrame(frame, expected_frame_width, expected_frame_height);

@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include "core/emulator_settings.h"
 #include "imgui/renderer/imgui_core.h"
 #include "sdl_window.h"
+#include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_swapchain.h"
 
@@ -23,7 +25,12 @@ Swapchain::Swapchain(const Instance& instance_, const Frontend::WindowSDL& windo
     FindPresentFormat();
     FindPresentMode();
 
-    Create(window.GetWidth(), window.GetHeight());
+    // GR2port: the window presents only while GR2fork's renderer runs.
+    if (Gr2Port::EmulatedGpu::Wanted()) {
+        Create(window.GetWidth(), window.GetHeight());
+    } else {
+        SetSurfaceProperties();
+    }
     ImGui::Core::Initialize(instance, window, image_count, surface_format.format);
 }
 
