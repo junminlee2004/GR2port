@@ -105,8 +105,7 @@ void main() {
         vcc_lo = s_old;
         vcc_hi = 0u;
     }
-    if (exec_lo == 0u) pc = 2;
-    if (pc <= 1) {
+    if (!(exec_lo == 0u)) {
         if (exec_lo != 0u) {
             v1 = u(float(int(v4)));
             v0 = u(float(int(v5)));

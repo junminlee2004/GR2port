@@ -83,110 +83,102 @@ void main() {
         v7 = u(attr0.y);
         v6 = u(attr0.z);
     }
-    if ((vcc_lo & 1u) == 0u) pc = 5;
-    if (pc <= 1) {
+    if (!((vcc_lo & 1u) == 0u)) {
         {
             uint c_out = exec_lo != 0u && (f(s13) != 1.0) ? 1u : 0u;
             vcc_lo = c_out;
             vcc_hi = 0u;
         }
-        if ((vcc_lo & 1u) == 0u) pc = 3;
-    }
-    if (pc <= 2) {
-        if (exec_lo != 0u) {
-            {
-                vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
-                    samplers[nonuniformEXT(sampler0)]), vec2(f(v2), f(v3)));
-                v0 = u(t_out.x);
-                v1 = u(t_out.y);
-                v2 = u(t_out.z);
+        if (!((vcc_lo & 1u) == 0u)) {
+            if (exec_lo != 0u) {
+                {
+                    vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
+                        samplers[nonuniformEXT(sampler0)]), vec2(f(v2), f(v3)));
+                    v0 = u(t_out.x);
+                    v1 = u(t_out.y);
+                    v2 = u(t_out.z);
+                }
+                v5 = u(f(v0) * f(v8));
+                v1 = u(f(v7) * f(v1));
+                v3 = u(f(v6) * f(v2));
             }
-            v5 = u(f(v0) * f(v8));
-            v1 = u(f(v7) * f(v1));
-            v3 = u(f(v6) * f(v2));
-        }
-        if (true) pc = 4;
-    }
-    if (pc <= 3) {
-        if (exec_lo != 0u) {
-            v0 = u(f(s14) * f(v2));
-            v0 = u(floor(f(v0)));
-            v1 = u(0.5 * f(v0));
-            v1 = u((fract(abs(f(v1)))) * 2.0);
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v0 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
-            v4 = u(1.0 / f(s14));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 == f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v0 = u(f(v2) - f(v4));
-            v1 = 0x3eaaaaaau;
-            v0 = (vcc_lo & 1u) != 0u ? v2 : v0;
-            v1 = u(f(v1) * f(v3) + f(0x3f2aaaaau));
-            v3 = u(f(0x3f2aaaaau) * f(v3));
-            v5 = u(f(v2) + f(v4));
-            {
-                vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
-                    samplers[nonuniformEXT(sampler0)]), vec2(f(v0), f(v1)));
-                v0 = u(t_out.x);
+        } else {
+            if (exec_lo != 0u) {
+                v0 = u(f(s14) * f(v2));
+                v0 = u(floor(f(v0)));
+                v1 = u(0.5 * f(v0));
+                v1 = u((fract(abs(f(v1)))) * 2.0);
             }
             {
-                vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
-                    samplers[nonuniformEXT(sampler0)]), vec2(f(v2), f(v3)));
-                v4 = u(t_out.x);
+                uint c_out = exec_lo != 0u && (0.0 > f(v0)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
             }
-            v2 = (vcc_lo & 1u) != 0u ? v5 : v2;
-            v3 = v1;
+            if (exec_lo != 0u) {
+                v0 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
+                v4 = u(1.0 / f(s14));
+            }
             {
-                vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
-                    samplers[nonuniformEXT(sampler0)]), vec2(f(v2), f(v3)));
-                v1 = u(t_out.x);
+                uint c_out = exec_lo != 0u && (0.0 == f(v0)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
             }
-            v3 = 0x3f9507c8u;
-            v7 = 0xbec890d6u;
+            if (exec_lo != 0u) {
+                v0 = u(f(v2) - f(v4));
+                v1 = 0x3eaaaaaau;
+                v0 = (vcc_lo & 1u) != 0u ? v2 : v0;
+                v1 = u(f(v1) * f(v3) + f(0x3f2aaaaau));
+                v3 = u(f(0x3f2aaaaau) * f(v3));
+                v5 = u(f(v2) + f(v4));
+                {
+                    vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
+                        samplers[nonuniformEXT(sampler0)]), vec2(f(v0), f(v1)));
+                    v0 = u(t_out.x);
+                }
+                {
+                    vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
+                        samplers[nonuniformEXT(sampler0)]), vec2(f(v2), f(v3)));
+                    v4 = u(t_out.x);
+                }
+                v2 = (vcc_lo & 1u) != 0u ? v5 : v2;
+                v3 = v1;
+                {
+                    vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
+                        samplers[nonuniformEXT(sampler0)]), vec2(f(v2), f(v3)));
+                    v1 = u(t_out.x);
+                }
+                v3 = 0x3f9507c8u;
+                v7 = 0xbec890d6u;
+            }
+            vcc_hi = 0x3e4890d6u;
+            if (exec_lo != 0u) {
+                v6 = 0x40011687u;
+            }
+            s0 = 0xbf811687u;
+            if (exec_lo != 0u) {
+                v5 = 0xbf501a37u;
+            }
+            s1 = 0x3ed01a37u;
+            if (exec_lo != 0u) {
+                v2 = 0x3fcc432du;
+            }
+            vcc_lo = 0xbf4c432du;
+            if (exec_lo != 0u) {
+                v7 = u(fma(f(v0), f(v7), f(vcc_hi)));
+                v3 = u(f(v3) * f(v4) + f(0xbd9507c8u));
+                v4 = u(f(v3) + f(v7));
+                v5 = u(fma(f(v1), f(v5), f(s1)));
+                v2 = u(fma(f(v1), f(v2), f(vcc_lo)));
+                v0 = u(fma(f(v0), f(v6), f(s0)));
+                v1 = u(f(v4) + f(v5));
+                v5 = u(f(v3) + f(v2));
+                v3 = u(f(v3) + f(v0));
+            }
         }
-        vcc_hi = 0x3e4890d6u;
-        if (exec_lo != 0u) {
-            v6 = 0x40011687u;
-        }
-        s0 = 0xbf811687u;
-        if (exec_lo != 0u) {
-            v5 = 0xbf501a37u;
-        }
-        s1 = 0x3ed01a37u;
-        if (exec_lo != 0u) {
-            v2 = 0x3fcc432du;
-        }
-        vcc_lo = 0xbf4c432du;
-        if (exec_lo != 0u) {
-            v7 = u(fma(f(v0), f(v7), f(vcc_hi)));
-            v3 = u(f(v3) * f(v4) + f(0xbd9507c8u));
-            v4 = u(f(v3) + f(v7));
-            v5 = u(fma(f(v1), f(v5), f(s1)));
-            v2 = u(fma(f(v1), f(v2), f(vcc_lo)));
-            v0 = u(fma(f(v0), f(v6), f(s0)));
-            v1 = u(f(v4) + f(v5));
-            v5 = u(f(v3) + f(v2));
-            v3 = u(f(v3) + f(v0));
-        }
-    }
-    if (pc <= 4) {
         if (exec_lo != 0u) {
             v0 = (s12 ^ 0x80000000u);
         }
-        if (true) pc = 6;
-    }
-    if (pc <= 5) {
+    } else {
         if (exec_lo != 0u) {
             {
                 vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],

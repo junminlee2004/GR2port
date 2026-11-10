@@ -128,8 +128,7 @@ void main() {
         s32 = m_out;
         s33 = 0u;
     }
-    if (scc == 0u) pc = 2;
-    if (pc <= 1) {
+    if (!(scc == 0u)) {
         exec_lo = s32;
         scc = 1u;
         if (exec_lo != 0u) {

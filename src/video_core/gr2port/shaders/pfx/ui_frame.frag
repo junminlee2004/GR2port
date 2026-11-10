@@ -92,8 +92,7 @@ void main() {
         v11 = u(attr0.y);
         v10 = u(attr0.z);
     }
-    if ((vcc_lo & 1u) == 0u) pc = 2;
-    if (pc <= 1) {
+    if (!((vcc_lo & 1u) == 0u)) {
         if (exec_lo != 0u) {
             {
                 vec4 t_out = textureLod(sampler2D(textures[nonuniformEXT(texture0)],
@@ -101,9 +100,7 @@ void main() {
                 v2 = u(t_out.x);
             }
         }
-        if (true) pc = 4;
-    }
-    if (pc <= 2) {
+    } else {
         if (exec_lo != 0u) {
             v4 = 0x3f333333u;
             v5 = u(f(v4) * -f(s19) + f(v3));
@@ -198,9 +195,12 @@ void main() {
             s20 = m_out;
             s21 = 0u;
         }
-        if (scc == 0u) pc = 5;
-    }
-    if (pc <= 3) {
+        if (scc == 0u) {
+            exec_lo = 0u;
+            if (exec_lo == 0u) discard;
+            color0 = vec4(unpackHalf2x16(0u), unpackHalf2x16(0u));
+            return;
+        }
         if (exec_lo != 0u) {
             v5 = u(1.0 / f(v7));
             v4 = u(-f(v13) * f(v5) + 1.0);
@@ -214,22 +214,20 @@ void main() {
             v2 = u(min(1.0, f(v7)));
         }
     }
-    if (pc <= 4) {
-        if (exec_lo != 0u) {
-            v0 = u(attr0.w);
-            v0 = u(f(v0) * f(v2));
-            v1 = u(clamp(f(v12) * f(v0), 0.0, 1.0));
-            v2 = u(clamp(f(v11) * f(v0), 0.0, 1.0));
-            v3 = u(clamp(f(v10) * f(v0), 0.0, 1.0));
-            v0 = u(clamp(max(0.0, f(v0)), 0.0, 1.0));
-            v1 = packHalf2x16(vec2(f(v1), f(v2)));
-            v0 = packHalf2x16(vec2(f(v3), f(v0)));
-        }
-        exec_lo = s20;
-        if (exec_lo == 0u) discard;
-        color0 = vec4(unpackHalf2x16(v1), unpackHalf2x16(v0));
-        return;
+    if (exec_lo != 0u) {
+        v0 = u(attr0.w);
+        v0 = u(f(v0) * f(v2));
+        v1 = u(clamp(f(v12) * f(v0), 0.0, 1.0));
+        v2 = u(clamp(f(v11) * f(v0), 0.0, 1.0));
+        v3 = u(clamp(f(v10) * f(v0), 0.0, 1.0));
+        v0 = u(clamp(max(0.0, f(v0)), 0.0, 1.0));
+        v1 = packHalf2x16(vec2(f(v1), f(v2)));
+        v0 = packHalf2x16(vec2(f(v3), f(v0)));
     }
+    exec_lo = s20;
+    if (exec_lo == 0u) discard;
+    color0 = vec4(unpackHalf2x16(v1), unpackHalf2x16(v0));
+    return;
     exec_lo = 0u;
     if (exec_lo == 0u) discard;
     color0 = vec4(unpackHalf2x16(0u), unpackHalf2x16(0u));

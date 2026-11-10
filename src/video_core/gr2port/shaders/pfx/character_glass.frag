@@ -102,8 +102,7 @@ void main() {
         s14 = s_old;
         s15 = 0u;
     }
-    if (exec_lo == 0u) pc = 2;
-    if (pc <= 1) {
+    if (!(exec_lo == 0u)) {
         m0 = s12;
         if (exec_lo != 0u) {
             v2 = u(attr1.w);
@@ -155,8 +154,7 @@ void main() {
         scc = m_out != 0u ? 1u : 0u;
         exec_lo = m_out;
     }
-    if (exec_lo == 0u) pc = 7;
-    if (pc <= 3) {
+    if (!(exec_lo == 0u)) {
         {
             uint c_out = exec_lo != 0u && (f(s26) > f(v2)) ? 1u : 0u;
             vcc_lo = c_out;
@@ -170,55 +168,51 @@ void main() {
             vcc_lo = s_old;
             vcc_hi = 0u;
         }
-        if (exec_lo == 0u) pc = 5;
-    }
-    if (pc <= 4) {
-        m0 = s12;
-        if (exec_lo != 0u) {
-            v2 = u(attr2.w);
-            v8 = u(1.0 / f(v2));
-            v5 = u(attr2.x);
-            v6 = u(attr2.y);
-            v3 = u(f(v5) * f(v8) + f(0x39087ffbu));
-            v4 = u(f(v6) * f(v8) + f(0x39bec07cu));
-            v2 = u(attr2.z);
-            v2 = u(f(v2) * f(v8));
-            v9 = u(texture(shadow_map, vec4(f(v3), f(v4), 1.0, f(v2))));
-            v3 = u(f(v5) * f(v8) + f(0x39ba9634u));
-            v4 = u(f(v6) * f(v8) + f(0x38d3d71du));
-            v10 = u(texture(shadow_map, vec4(f(v3), f(v4), 1.0, f(v2))));
-            v3 = u(f(v5) * f(v8) + f(0xb96af366u));
-            v4 = u(f(v6) * f(v8) + f(0x38a6fec7u));
-            v7 = u(texture(shadow_map, vec4(f(v3), f(v4), 1.0, f(v2))));
-            v3 = u(f(v5) * f(v8) + f(0x3953b3feu));
-            v4 = u(f(v6) * f(v8) + f(0xb9dd771bu));
-            v2 = u(texture(shadow_map, vec4(f(v3), f(v4), 1.0, f(v2))));
-            v3 = u(f(v10) + f(v9));
-            v3 = u(f(v3) + f(v7));
-            v2 = u(f(v3) + f(v2));
-            v6 = u(f(0x3e800000u) * f(v2));
+        if (!(exec_lo == 0u)) {
+            m0 = s12;
+            if (exec_lo != 0u) {
+                v2 = u(attr2.w);
+                v8 = u(1.0 / f(v2));
+                v5 = u(attr2.x);
+                v6 = u(attr2.y);
+                v3 = u(f(v5) * f(v8) + f(0x39087ffbu));
+                v4 = u(f(v6) * f(v8) + f(0x39bec07cu));
+                v2 = u(attr2.z);
+                v2 = u(f(v2) * f(v8));
+                v9 = u(texture(shadow_map, vec4(f(v3), f(v4), 1.0, f(v2))));
+                v3 = u(f(v5) * f(v8) + f(0x39ba9634u));
+                v4 = u(f(v6) * f(v8) + f(0x38d3d71du));
+                v10 = u(texture(shadow_map, vec4(f(v3), f(v4), 1.0, f(v2))));
+                v3 = u(f(v5) * f(v8) + f(0xb96af366u));
+                v4 = u(f(v6) * f(v8) + f(0x38a6fec7u));
+                v7 = u(texture(shadow_map, vec4(f(v3), f(v4), 1.0, f(v2))));
+                v3 = u(f(v5) * f(v8) + f(0x3953b3feu));
+                v4 = u(f(v6) * f(v8) + f(0xb9dd771bu));
+                v2 = u(texture(shadow_map, vec4(f(v3), f(v4), 1.0, f(v2))));
+                v3 = u(f(v10) + f(v9));
+                v3 = u(f(v3) + f(v7));
+                v2 = u(f(v3) + f(v2));
+                v6 = u(f(0x3e800000u) * f(v2));
+            }
         }
-    }
-    if (pc <= 5) {
         {
             uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
             scc = m_out != 0u ? 1u : 0u;
             exec_lo = m_out;
         }
-        if (exec_lo == 0u) pc = 7;
-    }
-    if (pc <= 6) {
-        m0 = s12;
-        if (exec_lo != 0u) {
-            v5 = u(attr3.w);
-            v5 = u(1.0 / f(v5));
-            v2 = u(attr3.z);
-            v3 = u(attr3.x);
-            v4 = u(attr3.y);
-            v2 = u(f(v2) * f(v5));
-            v3 = u(f(v3) * f(v5));
-            v4 = u(f(v4) * f(v5));
-            v6 = u(texture(last_shadow_map, vec3(f(v3), f(v4), f(v2))));
+        if (!(exec_lo == 0u)) {
+            m0 = s12;
+            if (exec_lo != 0u) {
+                v5 = u(attr3.w);
+                v5 = u(1.0 / f(v5));
+                v2 = u(attr3.z);
+                v3 = u(attr3.x);
+                v4 = u(attr3.y);
+                v2 = u(f(v2) * f(v5));
+                v3 = u(f(v3) * f(v5));
+                v4 = u(f(v4) * f(v5));
+                v6 = u(texture(last_shadow_map, vec3(f(v3), f(v4), f(v2))));
+            }
         }
     }
     exec_lo = s14;

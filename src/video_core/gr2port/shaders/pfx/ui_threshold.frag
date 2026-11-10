@@ -110,8 +110,7 @@ void main() {
         vcc_lo = s_old;
         vcc_hi = 0u;
     }
-    if (exec_lo == 0u) pc = 2;
-    if (pc <= 1) {
+    if (!(exec_lo == 0u)) {
         if (exec_lo != 0u) {
             v3 = v0;
             v0 = s12;

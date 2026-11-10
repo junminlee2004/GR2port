@@ -132,7 +132,7 @@ void main() {
     uint s52 = 0u, s53 = 0u, s54 = 0u, s55 = 0u;
     uint vcc_lo = 0u, vcc_hi = 0u, exec_lo = 1u, scc = 0u, m0 = 0u;
     int pc = 0;
-    draw_index = uint(gl_InstanceIndex);
+    draw_index = uint(gl_BaseInstance);
     Words vertex_constants = Words(draws_address + uint64_t(draw_index) * 896ul);
     EnemyMesh mesh = EnemyMesh(draws_address + uint64_t(draw_index) * 896ul + 768ul);
     Words palette = Words(mesh.palette);

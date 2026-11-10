@@ -105,74 +105,68 @@ void main() {
     bool again_1 = false;
     do {
         again_1 = false;
-        if (pc <= 1) {
-            if (exec_lo != 0u) {
-                v0 = u(float(int(s20)));
-                v0 = u(f(v0) * f(v10));
-                v6 = u(f(v0) * f(0x3a800000u) + f(v13));
-            }
-            s17 = s20 * s20;
-            s18 = 0xfffffff0u;
+        if (exec_lo != 0u) {
+            v0 = u(float(int(s20)));
+            v0 = u(f(v0) * f(v10));
+            v6 = u(f(v0) * f(0x3a800000u) + f(v13));
         }
+        s17 = s20 * s20;
+        s18 = 0xfffffff0u;
         bool again_2 = false;
         do {
             again_2 = false;
-            if (pc <= 2) {
-                if (exec_lo != 0u) {
-                    v0 = u(float(int(s18)));
-                    v0 = u(f(v0) * f(v10));
-                    v7 = u(f(v0) * f(0x3a800000u) + f(v14));
-                    {
-                        vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
-                            samplers[nonuniformEXT(sampler0)]), vec2(f(v6), f(v7)));
-                        v0 = u(t_out.x);
-                        v1 = u(t_out.y);
-                        v2 = u(t_out.z);
-                        v3 = u(t_out.w);
-                    }
-                }
-                vcc_lo = s18 * s18;
+            if (exec_lo != 0u) {
+                v0 = u(float(int(s18)));
+                v0 = u(f(v0) * f(v10));
+                v7 = u(f(v0) * f(0x3a800000u) + f(v14));
                 {
-                    uint r_out = s17 + vcc_lo;
-                    scc = ((int(s17) ^ int(r_out)) & (int(vcc_lo) ^ int(r_out))) < 0 ? 1u : 0u;
-                    vcc_lo = r_out;
+                    vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
+                        samplers[nonuniformEXT(sampler0)]), vec2(f(v6), f(v7)));
+                    v0 = u(t_out.x);
+                    v1 = u(t_out.y);
+                    v2 = u(t_out.z);
+                    v3 = u(t_out.w);
                 }
-                {
-                    uint c_out = exec_lo != 0u && (vcc_lo > 0x0u) ? 1u : 0u;
-                    if (exec_lo != 0u) v7 = 0x0u - vcc_lo;
-                    vcc_lo = c_out;
-                    vcc_hi = 0u;
-                }
-                if (exec_lo != 0u) {
-                    v7 = u(float(int(v7)));
-                    v7 = u(f(0x3bb8aa3bu) * f(v7));
-                    v7 = u(exp2(f(v7)));
-                    v17 = u(f(v7) + f(v17));
-                }
-                {
-                    uint r_out = s18 + 0x1u;
-                    scc = ((int(s18) ^ int(r_out)) & (int(0x1u) ^ int(r_out))) < 0 ? 1u : 0u;
-                    s18 = r_out;
-                }
-                scc = int(s18) <= int(0x10u) ? 1u : 0u;
-                if (exec_lo != 0u) {
-                    v16 = u(f(v7) * f(v0) + f(v16));
-                    v12 = u(f(v1) * f(v7) + f(v12));
-                    v11 = u(f(v2) * f(v7) + f(v11));
-                    v15 = u(f(v3) * f(v7) + f(v15));
-                }
-                if (scc != 0u) { pc = 2; again_2 = true; }
             }
-        } while (again_2);
-        if (pc <= 3) {
+            vcc_lo = s18 * s18;
             {
-                uint r_out = s20 + 0x1u;
-                scc = ((int(s20) ^ int(r_out)) & (int(0x1u) ^ int(r_out))) < 0 ? 1u : 0u;
-                s20 = r_out;
+                uint r_out = s17 + vcc_lo;
+                scc = ((int(s17) ^ int(r_out)) & (int(vcc_lo) ^ int(r_out))) < 0 ? 1u : 0u;
+                vcc_lo = r_out;
             }
-            scc = int(s20) <= int(0x10u) ? 1u : 0u;
-            if (scc != 0u) { pc = 1; again_1 = true; }
+            {
+                uint c_out = exec_lo != 0u && (vcc_lo > 0x0u) ? 1u : 0u;
+                if (exec_lo != 0u) v7 = 0x0u - vcc_lo;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            if (exec_lo != 0u) {
+                v7 = u(float(int(v7)));
+                v7 = u(f(0x3bb8aa3bu) * f(v7));
+                v7 = u(exp2(f(v7)));
+                v17 = u(f(v7) + f(v17));
+            }
+            {
+                uint r_out = s18 + 0x1u;
+                scc = ((int(s18) ^ int(r_out)) & (int(0x1u) ^ int(r_out))) < 0 ? 1u : 0u;
+                s18 = r_out;
+            }
+            scc = int(s18) <= int(0x10u) ? 1u : 0u;
+            if (exec_lo != 0u) {
+                v16 = u(f(v7) * f(v0) + f(v16));
+                v12 = u(f(v1) * f(v7) + f(v12));
+                v11 = u(f(v2) * f(v7) + f(v11));
+                v15 = u(f(v3) * f(v7) + f(v15));
+            }
+            if (scc != 0u) { pc = 2; again_2 = true; }
+        } while (again_2);
+        {
+            uint r_out = s20 + 0x1u;
+            scc = ((int(s20) ^ int(r_out)) & (int(0x1u) ^ int(r_out))) < 0 ? 1u : 0u;
+            s20 = r_out;
         }
+        scc = int(s20) <= int(0x10u) ? 1u : 0u;
+        if (scc != 0u) { pc = 1; again_1 = true; }
     } while (again_1);
     if (exec_lo != 0u) {
         v6 = u(1.0 / f(v17));

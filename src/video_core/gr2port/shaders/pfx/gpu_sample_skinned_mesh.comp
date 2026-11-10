@@ -130,8 +130,7 @@ void main() {
         v23 = v14;
         v0 = v15;
     }
-    if ((vcc_lo & 1u) != 0u) pc = 19;
-    if (pc <= 1) {
+    if (!((vcc_lo & 1u) != 0u)) {
         if (exec_lo != 0u) {
             v14 = s14;
             {
@@ -148,797 +147,785 @@ void main() {
         }
         s16 = description.w[(s16 >> 2) + 0u];
         scc = s16 != 0x1u ? 1u : 0u;
-        if (scc != 0u) pc = 19;
-    }
-    if (pc <= 2) {
-        vcc_lo = v20;
-        vcc_lo = vcc_lo * 0x100u;
-        {
-            uint r_out = vcc_lo + 0xc8u;
-            scc = ((int(vcc_lo) ^ int(r_out)) & (int(0xc8u) ^ int(r_out))) < 0 ? 1u : 0u;
-            s16 = r_out;
-        }
-        s16 = description.w[(s16 >> 2) + 0u];
-        scc = s16 != 0x0u ? 1u : 0u;
-        if (scc == 0u) pc = 19;
-    }
-    if (pc <= 3) {
-        if (exec_lo != 0u) {
-            v14 = s14;
+        if (!(scc != 0u)) {
+            vcc_lo = v20;
+            vcc_lo = vcc_lo * 0x100u;
             {
-                uint b_at = (v14 * 128u + 120u) >> 2;
-                v18 = emitter_out.w[b_at + 0u];
-            }
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x0u != v18) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if ((vcc_lo & 1u) == 0u) pc = 19;
-    }
-    if (pc <= 4) {
-        vcc_lo = v20;
-        vcc_lo = vcc_lo * 0x100u;
-        {
-            uint r_out = vcc_lo + 0x18u;
-            scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x18u) ^ int(r_out))) < 0 ? 1u : 0u;
-            s16 = r_out;
-        }
-        {
-            uint r_out = vcc_lo + 0x4cu;
-            scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x4cu) ^ int(r_out))) < 0 ? 1u : 0u;
-            s18 = r_out;
-        }
-        {
-            uint r_out = vcc_lo + 0x44u;
-            scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x44u) ^ int(r_out))) < 0 ? 1u : 0u;
-            s17 = r_out;
-        }
-        s17 = description.w[(s17 >> 2) + 0u];
-        s18 = description.w[(s18 >> 2) + 0u];
-        s80 = description.w[(s16 >> 2) + 0u];
-        scc = s17 != 0x2u ? 1u : 0u;
-        if (exec_lo != 0u) {
-            v15 = s18;
-        }
-        if (scc == 0u) pc = 6;
-    }
-    if (pc <= 5) {
-        if (exec_lo != 0u) {
-            v15 = u(float(s80));
-        }
-    }
-    if (pc <= 6) {
-        if (exec_lo != 0u) {
-            v14 = s14;
-        }
-        vcc_lo = v20;
-        if (exec_lo != 0u) {
-            v15 = u(max(1.0, f(v15)));
-            v50 = u(1.0 / f(v15));
-            v60 = v17;
-        }
-        vcc_lo = vcc_lo * 0x100u;
-        if (exec_lo != 0u) {
-            {
-                uint b_at = (v14 * 128u) >> 2;
-                v24 = emitter_out.w[b_at + 0u];
-                v25 = emitter_out.w[b_at + 1u];
-                v26 = emitter_out.w[b_at + 2u];
-                v27 = emitter_out.w[b_at + 3u];
-            }
-            {
-                uint b_at = (v14 * 128u + 64u) >> 2;
-                v28 = emitter_out.w[b_at + 0u];
-                v29 = emitter_out.w[b_at + 1u];
-                v30 = emitter_out.w[b_at + 2u];
-                v31 = emitter_out.w[b_at + 3u];
-            }
-            {
-                uint b_at = (v14 * 128u + 96u) >> 2;
-                v32 = emitter_out.w[b_at + 0u];
-                v33 = emitter_out.w[b_at + 1u];
-                v34 = emitter_out.w[b_at + 2u];
-                v35 = emitter_out.w[b_at + 3u];
-            }
-            {
-                uint b_at = (v14 * 128u + 124u) >> 2;
-                v19 = emitter_out.w[b_at + 0u];
-            }
-        }
-        {
-            uint r_out = vcc_lo + 0x48u;
-            scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x48u) ^ int(r_out))) < 0 ? 1u : 0u;
-            s20 = r_out;
-        }
-        {
-            uint r_out = vcc_lo + 0xd0u;
-            scc = ((int(vcc_lo) ^ int(r_out)) & (int(0xd0u) ^ int(r_out))) < 0 ? 1u : 0u;
-            s21 = r_out;
-        }
-        s32 = description.w[(s20 >> 2) + 0u];
-        s28 = description.w[(s21 >> 2) + 0u];
-        s29 = description.w[(s21 >> 2) + 1u];
-        s30 = description.w[(s21 >> 2) + 2u];
-        s31 = description.w[(s21 >> 2) + 3u];
-        s16 = constants.w[12];
-        s17 = constants.w[13];
-        s18 = constants.w[14];
-        s19 = constants.w[15];
-        s20 = constants.w[16];
-        s21 = constants.w[17];
-        s22 = constants.w[18];
-        s23 = constants.w[19];
-        {
-            uint r_out = vcc_lo + 0x50u;
-            scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x50u) ^ int(r_out))) < 0 ? 1u : 0u;
-            s33 = r_out;
-        }
-        {
-            uint r_out = vcc_lo + 0x80u;
-            scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x80u) ^ int(r_out))) < 0 ? 1u : 0u;
-            s34 = r_out;
-        }
-        s56 = description.w[(s33 >> 2) + 0u];
-        s57 = description.w[(s33 >> 2) + 1u];
-        s58 = description.w[(s33 >> 2) + 2u];
-        s59 = description.w[(s33 >> 2) + 3u];
-        s8 = description.w[(s34 >> 2) + 0u];
-        s9 = description.w[(s34 >> 2) + 1u];
-        s10 = description.w[(s34 >> 2) + 2u];
-        s11 = description.w[(s34 >> 2) + 3u];
-        s60 = constants.w[20];
-        s61 = constants.w[21];
-        s62 = constants.w[22];
-        s63 = constants.w[23];
-        s81 = 0x0u;
-        {
-            uint r_out = s16 + 0xffffffffu;
-            scc = ((int(s16) ^ int(r_out)) & (int(0xffffffffu) ^ int(r_out))) < 0 ? 1u : 0u;
-            vcc_lo = r_out;
-        }
-        scc = s30 > 0x0u ? 1u : 0u;
-        if (exec_lo != 0u) {
-            v51 = u(float(vcc_lo));
-        }
-        s22 = scc != 0u ? (exec_lo & 1u) : 0u;
-        s23 = 0u;
-        scc = s32 != 0x1u ? 1u : 0u;
-        s76 = scc != 0u ? (exec_lo & 1u) : 0u;
-        s77 = 0u;
-        if (exec_lo != 0u) {
-            v52 = u(f(v31) - f(v27));
-        }
-        {
-            uint c_out = exec_lo != 0u && (f(v34) != 0.0) ? 1u : 0u;
-            s78 = c_out;
-            s79 = 0u;
-        }
-        if (exec_lo != 0u) {
-            v53 = u(1.0 / f(v34));
-        }
-    }
-    bool again_7 = false;
-    do {
-        again_7 = false;
-        if (pc <= 7) {
-            {
-                uint c_out = exec_lo != 0u && (s81 < v18) ? 1u : 0u;
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            if ((vcc_lo & 1u) == 0u) pc = 18;
-        }
-        if (pc <= 8) {
-            if (exec_lo != 0u) {
-                v58 = 0x0u;
-            }
-            {
-                uint m_out = ((s76 & 1u) & (exec_lo & 1u));
-                scc = m_out != 0u ? 1u : 0u;
-                vcc_lo = m_out;
-                vcc_hi = 0u;
-            }
-            if (exec_lo != 0u) {
-                v57 = 0x0u;
-                v56 = 0x0u;
-                v59 = 0x3f800000u;
-                v55 = 0x3f800000u;
-            }
-            if ((vcc_lo & 1u) == 0u) pc = 12;
-        }
-        if (pc <= 9) {
-            if (exec_lo != 0u) {
-                v14 = 0x0u;
-            }
-            {
-                uint m_out = ((s78 & 1u) & (exec_lo & 1u));
-                scc = m_out != 0u ? 1u : 0u;
-                vcc_lo = m_out;
-                vcc_hi = 0u;
-            }
-            if ((vcc_lo & 1u) == 0u) pc = 11;
-        }
-        if (pc <= 10) {
-            if (exec_lo != 0u) {
-                v14 = u(float(s81));
-                v14 = u(-f(v14) * f(v53) + f(v19));
-            }
-        }
-        if (pc <= 11) {
-            if (exec_lo != 0u) {
-                v55 = u(f(v14) * f(v52) + f(v27));
-                v58 = v4;
-                v57 = v5;
-                v56 = v6;
-                v59 = v7;
-            }
-        }
-        if (pc <= 12) {
-            if (exec_lo != 0u) {
-                v54 = abs_diff(v0, 0x0u) + v60;
-            }
-            {
-                uint m_out = ((s22 & 1u) & (exec_lo & 1u));
-                scc = m_out != 0u ? 1u : 0u;
-                vcc_lo = m_out;
-                vcc_hi = 0u;
-            }
-            if (exec_lo != 0u) {
-                {
-                    uint b_at = (v54 * 64u + 16u) >> 2;
-                    v36 = particle_out.w[b_at + 0u];
-                    v37 = particle_out.w[b_at + 1u];
-                    v38 = particle_out.w[b_at + 2u];
-                    v39 = particle_out.w[b_at + 3u];
-                }
-                {
-                    uint b_at = (v54 * 64u + 48u) >> 2;
-                    v40 = particle_out.w[b_at + 0u];
-                    v41 = particle_out.w[b_at + 1u];
-                    v42 = particle_out.w[b_at + 2u];
-                    v43 = particle_out.w[b_at + 3u];
-                }
-            }
-            vcc_lo = vcc_lo;
-            vcc_hi = vcc_hi;
-            if ((vcc_lo & 1u) == 0u) pc = 14;
-        }
-        if (pc <= 13) {
-            if (exec_lo != 0u) {
-                v14 = u(float(v60));
-                v14 = u(f(v14) * f(v50));
-            }
-            if (true) pc = 15;
-        }
-        if (pc <= 14) {
-            if (exec_lo != 0u) {
-                v14 = 0xc6395u ^ v41;
-                v14 = u(float(v14));
-                v15 = u(f(0x3ac01c14u) * f(v14));
-                v15 = u(fract(abs(f(v15))));
-                v14 = u(f(0x3b800000u) * f(v14));
-                v15 = u(f(0x402a91b9u) * f(v15));
-            }
-            {
-                uint c_out = exec_lo != 0u && (0.0 > f(v14)) ? 1u : 0u;
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            if (exec_lo != 0u) {
-                v14 = (vcc_lo & 1u) != 0u ? (v15 ^ 0x80000000u) : v15;
-                v14 = u(f(0x3ec01c14u) * f(v14));
-            }
-        }
-        if (pc <= 15) {
-            if (exec_lo != 0u) {
-                v15 = u(float(s80));
-                v15 = u(1.0 / f(v15));
-                v15 = u(f(0x4f800000u) * f(v15));
-                v15 = cvt_u32(f(v15));
-                v21 = mul_hi_u(s80, v15);
-            }
-            {
-                uint c_out = exec_lo != 0u && (int(0x0u) != int(v21)) ? 1u : 0u;
-                s16 = c_out;
-                s17 = 0u;
-            }
-            if (exec_lo != 0u) {
-                v21 = s80 * v15;
-            }
-            {
-                uint c_out = exec_lo != 0u && (v21 > 0x0u) ? 1u : 0u;
-                if (exec_lo != 0u) v22 = 0x0u - v21;
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            if (exec_lo != 0u) {
-                v21 = (s16 & 1u) != 0u ? v21 : v22;
-                v22 = mul_hi_u(v21, v15);
-            }
-            {
-                uint c_out = exec_lo != 0u && (v22 > v15) ? 1u : 0u;
-                if (exec_lo != 0u) v21 = v15 - v22;
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            {
-                uint c_out = exec_lo != 0u && (v15 > 0xffffffffu - v22) ? 1u : 0u;
-                if (exec_lo != 0u) v15 = v15 + v22;
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            if (exec_lo != 0u) {
-                v14 = u(f(v51) * f(v14));
-                v15 = (s16 & 1u) != 0u ? v21 : v15;
-            }
-            {
-                uint c_out = exec_lo != 0u && (0x1u > 0xffffffffu - v60) ? 1u : 0u;
-                if (exec_lo != 0u) v21 = 0x1u + v60;
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            if (exec_lo != 0u) {
-                v44 = cvt_u32(f(v14));
-                v45 = mul_hi_u(v15, v21);
-                v22 = s21 * v44;
-                v14 = s80 * v45;
-                v15 = abs_diff(s63, 0x0u) + v22;
-            }
-            {
-                uint c_out = exec_lo != 0u && (v21 >= v14) ? 1u : 0u;
-                s16 = c_out;
-                s17 = 0u;
-            }
-            {
-                uint c_out = exec_lo != 0u && (v14 > v21) ? 1u : 0u;
-                if (exec_lo != 0u) v46 = v21 - v14;
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            {
-                uint c_out = exec_lo != 0u && (s80 <= v46) ? 1u : 0u;
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            if (exec_lo != 0u) {
-                v44 = s20 * v44;
-            }
-            {
-                uint m_out = ((s16 & 1u) & (vcc_lo & 1u));
-                scc = m_out != 0u ? 1u : 0u;
-                vcc_lo = m_out;
-                vcc_hi = 0u;
-            }
-            scc = int(0x0u) != int(s80) ? 1u : 0u;
-            {
-                uint c_out = exec_lo != 0u && (uint64_t(0x0u) + uint64_t(v45) +
-                    uint64_t((vcc_lo & 1u)) > 0xffffffffUL) ? 1u : 0u;
-                if (exec_lo != 0u) v45 = 0x0u + v45 + (vcc_lo & 1u);
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            {
-                uint c_out = exec_lo != 0u && (uint64_t(0xffffffffu) + uint64_t(v45) +
-                    uint64_t((s16 & 1u)) > 0xffffffffUL) ? 1u : 0u;
-                if (exec_lo != 0u) v45 = 0xffffffffu + v45 + (s16 & 1u);
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            vcc_lo = scc != 0u ? (exec_lo & 1u) : 0u;
-            vcc_hi = 0u;
-            if (exec_lo != 0u) {
-                v45 = (vcc_lo & 1u) != 0u ? v45 : 0xffffffffu;
-            }
-            {
-                uint c_out = exec_lo != 0u && (s62 > 0xffffffffu - v22) ? 1u : 0u;
-                if (exec_lo != 0u) v22 = s62 + v22;
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            if (exec_lo != 0u) {
-                v45 = s80 * v45;
-            }
-            {
-                uint c_out = exec_lo != 0u && (v45 > v21) ? 1u : 0u;
-                if (exec_lo != 0u) v60 = v21 - v45;
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            if (exec_lo != 0u) {
-                {
-                    uint b_at = (v15) >> 2;
-                    v14 = weights.w[b_at + 0u];
-                    v15 = weights.w[b_at + 1u];
-                }
-                {
-                    uint b_at = (v22) >> 2;
-                    v21 = weights.w[b_at + 0u];
-                    v22 = weights.w[b_at + 1u];
-                }
-            }
-            vcc_hi = v14;
-            s24 = v15;
-            if (exec_lo != 0u) {
-                v14 = 0xffffu & v21;
-                v15 = u(unpackHalf2x16(v14 & 0xffffu).x);
-                v14 = v21 >> (0x10u & 31u);
-                v21 = u(unpackHalf2x16(v14 & 0xffffu).x);
-            }
-            {
-                uint r_out = 0xffffu & vcc_hi;
-                scc = r_out != 0u ? 1u : 0u;
-                vcc_lo = r_out;
-            }
-            s25 = vcc_lo * 0x30u;
-            {
-                uint r_out = s25 + 0x20u;
-                scc = ((int(s25) ^ int(r_out)) & (int(0x20u) ^ int(r_out))) < 0 ? 1u : 0u;
+                uint r_out = vcc_lo + 0xc8u;
+                scc = ((int(vcc_lo) ^ int(r_out)) & (int(0xc8u) ^ int(r_out))) < 0 ? 1u : 0u;
                 s16 = r_out;
             }
-            {
-                uint r_out = vcc_hi >> (0x10u & 31u);
-                scc = r_out != 0u ? 1u : 0u;
-                vcc_lo = r_out;
-            }
-            s32 = vcc_lo * 0x30u;
-            {
-                uint r_out = s32 + 0x20u;
-                scc = ((int(s32) ^ int(r_out)) & (int(0x20u) ^ int(r_out))) < 0 ? 1u : 0u;
-                s26 = r_out;
-            }
-            {
-                uint r_out = 0xffffu & s24;
-                scc = r_out != 0u ? 1u : 0u;
-                vcc_lo = r_out;
-            }
-            s40 = vcc_lo * 0x30u;
-            {
-                uint o_at = s16 >> 2;
-                s16 = palette.w[o_at + 0u];
-                s17 = palette.w[o_at + 1u];
-                s18 = palette.w[o_at + 2u];
-                s19 = palette.w[o_at + 3u];
-            }
-            s64 = palette.w[(s26 >> 2) + 0u];
-            s65 = palette.w[(s26 >> 2) + 1u];
-            s66 = palette.w[(s26 >> 2) + 2u];
-            s67 = palette.w[(s26 >> 2) + 3u];
-            {
-                uint r_out = s40 + 0x20u;
-                scc = ((int(s40) ^ int(r_out)) & (int(0x20u) ^ int(r_out))) < 0 ? 1u : 0u;
-                s26 = r_out;
-            }
-            {
-                uint r_out = s24 >> (0x10u & 31u);
-                scc = r_out != 0u ? 1u : 0u;
-                vcc_lo = r_out;
-            }
-            s52 = vcc_lo * 0x30u;
-            {
-                uint o_at = s32 >> 2;
-                s32 = palette.w[o_at + 0u];
-                s33 = palette.w[o_at + 1u];
-                s34 = palette.w[o_at + 2u];
-                s35 = palette.w[o_at + 3u];
-                s36 = palette.w[o_at + 4u];
-                s37 = palette.w[o_at + 5u];
-                s38 = palette.w[o_at + 6u];
-                s39 = palette.w[o_at + 7u];
-            }
-            s68 = palette.w[(s26 >> 2) + 0u];
-            s69 = palette.w[(s26 >> 2) + 1u];
-            s70 = palette.w[(s26 >> 2) + 2u];
-            s71 = palette.w[(s26 >> 2) + 3u];
-            {
-                uint o_at = s25 >> 2;
-                s24 = palette.w[o_at + 0u];
-                s25 = palette.w[o_at + 1u];
-                s26 = palette.w[o_at + 2u];
-                s27 = palette.w[o_at + 3u];
-                s28 = palette.w[o_at + 4u];
-                s29 = palette.w[o_at + 5u];
-                s30 = palette.w[o_at + 6u];
-                s31 = palette.w[o_at + 7u];
-            }
-            {
-                uint r_out = s52 + 0x20u;
-                scc = ((int(s52) ^ int(r_out)) & (int(0x20u) ^ int(r_out))) < 0 ? 1u : 0u;
-                s53 = r_out;
-            }
-            {
-                uint o_at = s40 >> 2;
-                s40 = palette.w[o_at + 0u];
-                s41 = palette.w[o_at + 1u];
-                s42 = palette.w[o_at + 2u];
-                s43 = palette.w[o_at + 3u];
-                s44 = palette.w[o_at + 4u];
-                s45 = palette.w[o_at + 5u];
-                s46 = palette.w[o_at + 6u];
-                s47 = palette.w[o_at + 7u];
-            }
-            s72 = palette.w[(s53 >> 2) + 0u];
-            s73 = palette.w[(s53 >> 2) + 1u];
-            s74 = palette.w[(s53 >> 2) + 2u];
-            s75 = palette.w[(s53 >> 2) + 3u];
-            {
-                uint o_at = s52 >> 2;
-                s48 = palette.w[o_at + 0u];
-                s49 = palette.w[o_at + 1u];
-                s50 = palette.w[o_at + 2u];
-                s51 = palette.w[o_at + 3u];
-                s52 = palette.w[o_at + 4u];
-                s53 = palette.w[o_at + 5u];
-                s54 = palette.w[o_at + 6u];
-                s55 = palette.w[o_at + 7u];
-            }
-            if (exec_lo != 0u) {
-                v14 = 0xffffu & v22;
-                v45 = u(unpackHalf2x16(v14 & 0xffffu).x);
-                v14 = v22 >> (0x10u & 31u);
-                v14 = u(unpackHalf2x16(v14 & 0xffffu).x);
-            }
-            scc = s15 != 0x3u ? 1u : 0u;
-            if (exec_lo != 0u) {
-                v47 = u(f(s18) * f(v15));
-                v63 = u(f(s16) * f(v15));
-                v61 = u(f(s29) * f(v15));
-                v47 = u(f(s66) * f(v21) + f(v47));
-                v22 = u(f(s17) * f(v15));
-                v46 = u(f(s26) * f(v15));
-                v49 = u(f(s28) * f(v15));
-                v62 = u(f(s30) * f(v15));
-                v63 = u(f(s64) * f(v21) + f(v63));
-                v64 = u(f(v21) * f(s36) + f(v49));
-                v69 = u(f(v21) * f(s37) + f(v61));
-                v61 = u(f(s24) * f(v15));
-                v22 = u(f(s65) * f(v21) + f(v22));
-                v46 = u(f(s34) * f(v21) + f(v46));
-                v62 = u(f(s38) * f(v21) + f(v62));
-                v65 = u(f(v45) * f(s68) + f(v63));
-                v63 = u(f(v21) * f(s32) + f(v61));
-                v48 = u(f(v45) * f(s70) + f(v47));
-                v47 = u(f(s25) * f(v15));
-                v47 = u(f(s33) * f(v21) + f(v47));
-                v67 = u(f(v45) * f(s41) + f(v47));
-                v49 = u(f(v45) * f(s46) + f(v62));
-                v22 = u(f(s69) * f(v45) + f(v22));
-                v63 = u(f(s40) * f(v45) + f(v63));
-                v46 = u(f(s42) * f(v45) + f(v46));
-                v64 = u(f(s44) * f(v45) + f(v64));
-                v69 = u(f(s45) * f(v45) + f(v69));
-                v62 = u(f(v14) * f(s72) + f(v65));
-                v61 = u(f(v14) * f(s74) + f(v48));
-                v68 = u(f(v14) * f(s48) + f(v63));
-                v66 = u(f(v14) * f(s52) + f(v64));
-                v64 = u(f(v14) * f(s50) + f(v46));
-                v63 = u(f(v14) * f(s53) + f(v69));
-                v65 = u(f(v14) * f(s54) + f(v49));
-                v22 = u(f(s73) * f(v14) + f(v22));
-                v67 = u(f(s49) * f(v14) + f(v67));
-            }
-            if (scc != 0u) pc = 17;
-        }
-        if (pc <= 16) {
-            if (exec_lo != 0u) {
-                v46 = abs_diff(s61, 0x0u) + v44;
-                {
-                    uint b_at = (v46) >> 2;
-                    v46 = vertices.w[b_at + 0u];
-                }
-                v47 = v46 << (0x4u & 31u);
-                v47 = 0x7ff0u & v47;
-                v48 = v46 >> (0x7u & 31u);
-                v47 = u(unpackHalf2x16(v47 & 0xffffu).x);
-                v48 = 0x7ff0u & v48;
-                v46 = v46 >> (0x11u & 31u);
-                v47 = u(2.0 * f(v47) + -1.0);
-                v48 = u(unpackHalf2x16(v48 & 0xffffu).x);
-                v46 = 0x7fe0u & v46;
-                v47 = u(f(s8) * f(v47));
-                v48 = u(2.0 * f(v48) + -1.0);
-                v46 = u(unpackHalf2x16(v46 & 0xffffu).x);
-                v49 = u(f(v47) * f(v68));
-                v48 = u(f(s9) * f(v48));
-                v46 = u(2.0 * f(v46) + -1.0);
-                v69 = u(f(v47) * f(v66));
-                v47 = u(f(v47) * f(v62));
-                v71 = u(f(v48) * f(v67) + f(v49));
-                v46 = u(f(s10) * f(v46));
-                v49 = u(f(v48) * f(v22) + f(v47));
-                v69 = u(f(v63) * f(v48) + f(v69));
-                v48 = u(f(v46) * f(v65) + f(v69));
-                v71 = u(f(v64) * f(v46) + f(v71));
-                v49 = u(f(v61) * f(v46) + f(v49));
-                v69 = u(f(v56) * f(v71));
-                v46 = u(f(v58) * f(v48));
-                v47 = u(f(v57) * f(v49));
-                v69 = u(f(v49) * -f(v58) + f(v69));
-                v46 = u(f(v71) * -f(v57) + f(v46));
-                v47 = u(f(v48) * -f(v56) + f(v47));
-                v69 = u(f(v48) * f(v59) + f(v69));
-                v46 = u(f(v49) * f(v59) + f(v46));
-                v47 = u(f(v71) * f(v59) + f(v47));
-                v70 = u(f(v58) * f(v71));
-                v71 = u(-f(v58) * f(v46));
-                v48 = u(f(v57) * f(v48) + f(v70));
-                v71 = u(f(v47) * f(v56) + f(v71));
-                v48 = u(f(v49) * f(v56) + f(v48));
-                v49 = u(-f(v56) * f(v69));
-                v49 = u(f(v46) * f(v57) + f(v49));
-                v49 = u(f(v47) * f(v59) + f(v49));
-                v47 = u(-f(v57) * f(v47));
-                v71 = u(f(v69) * f(v59) + f(v71));
-                v69 = u(f(v58) * f(v69) + f(v47));
-                v69 = u(f(v46) * f(v59) + f(v69));
-                v49 = u(f(v58) * f(v48) + f(v49));
-                v71 = u(f(v57) * f(v48) + f(v71));
-                v69 = u(f(v56) * f(v48) + f(v69));
-                v36 = u(f(v49) * f(v55) + f(v36));
-                v37 = u(f(v71) * f(v55) + f(v37));
-                v38 = u(f(v69) * f(v55) + f(v38));
-            }
-        }
-        if (pc <= 17) {
-            if (exec_lo != 0u) {
-                v44 = abs_diff(s60, 0x0u) + v44;
-                {
-                    uint b_at = (v44) >> 2;
-                    v47 = vertices.w[b_at + 0u];
-                    v48 = vertices.w[b_at + 1u];
-                    v49 = vertices.w[b_at + 2u];
-                }
-                v44 = u(f(s19) * f(v15));
-                v44 = u(f(s67) * f(v21) + f(v44));
-                v46 = u(f(s27) * f(v15));
-                v44 = u(f(s71) * f(v45) + f(v44));
-                v69 = u(f(v21) * f(s35) + f(v46));
-                v15 = u(f(s31) * f(v15));
-                v69 = u(f(s43) * f(v45) + f(v69));
-                v15 = u(f(s39) * f(v21) + f(v15));
-                v70 = u(f(v45) * f(s47) + f(v15));
-                v69 = u(f(s51) * f(v14) + f(v69));
-                v71 = u(f(v14) * f(s75) + f(v44));
-                {
-                    uint b_at = (v54 * 64u) >> 2;
-                    v44 = particle_out.w[b_at + 0u];
-                    v45 = particle_out.w[b_at + 1u];
-                    v46 = particle_out.w[b_at + 2u];
-                }
-                v70 = u(f(s55) * f(v14) + f(v70));
-                {
-                    uint b_at = (v54 * 64u + 16u) >> 2;
-                    particle_out.w[b_at + 0u] = v36;
-                    particle_out.w[b_at + 1u] = v37;
-                    particle_out.w[b_at + 2u] = v38;
-                    particle_out.w[b_at + 3u] = v39;
+            s16 = description.w[(s16 >> 2) + 0u];
+            scc = s16 != 0x0u ? 1u : 0u;
+            if (!(scc == 0u)) {
+                if (exec_lo != 0u) {
+                    v14 = s14;
+                    {
+                        uint b_at = (v14 * 128u + 120u) >> 2;
+                        v18 = emitter_out.w[b_at + 0u];
+                    }
                 }
                 {
-                    uint b_at = (v54 * 64u + 48u) >> 2;
-                    particle_out.w[b_at + 0u] = v40;
-                    particle_out.w[b_at + 1u] = v41;
-                    particle_out.w[b_at + 2u] = v42;
-                    particle_out.w[b_at + 3u] = v43;
+                    uint c_out = exec_lo != 0u && (0x0u != v18) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
                 }
-            }
-            {
-                uint r_out = s81 + 0x1u;
-                scc = ((int(s81) ^ int(r_out)) & (int(0x1u) ^ int(r_out))) < 0 ? 1u : 0u;
-                s81 = r_out;
-            }
-            if (exec_lo != 0u) {
-                v37 = u(f(s56) * f(v47));
-                v36 = u(f(s57) * f(v48));
-                v69 = u(f(v68) * f(v37) + f(v69));
-                v15 = u(f(s58) * f(v49));
-                v69 = u(f(v67) * f(v36) + f(v69));
-                v71 = u(f(v62) * f(v37) + f(v71));
-                v70 = u(f(v66) * f(v37) + f(v70));
-                v69 = u(f(v64) * f(v15) + f(v69));
-                v71 = u(f(v22) * f(v36) + f(v71));
-                v70 = u(f(v63) * f(v36) + f(v70));
-                v71 = u(f(v61) * f(v15) + f(v71));
-                v70 = u(f(v65) * f(v15) + f(v70));
-                v15 = u(f(v56) * f(v69));
-                v21 = u(f(v58) * f(v70));
-                v15 = u(f(v71) * -f(v58) + f(v15));
-                v14 = u(f(v57) * f(v71));
-                v15 = u(f(v70) * f(v59) + f(v15));
-                v21 = u(f(v69) * -f(v57) + f(v21));
-                v37 = u(-f(v56) * f(v15));
-                v21 = u(f(v71) * f(v59) + f(v21));
-                v14 = u(f(v70) * -f(v56) + f(v14));
-                v37 = u(f(v21) * f(v57) + f(v37));
-                v14 = u(f(v69) * f(v59) + f(v14));
-                v36 = u(f(v58) * f(v69));
-                v38 = u(-f(v58) * f(v21));
-                v36 = u(f(v70) * f(v57) + f(v36));
-                v38 = u(f(v14) * f(v56) + f(v38));
-                v22 = u(f(v59) * f(v14) + f(v37));
-                v37 = u(-f(v57) * f(v14));
-                v14 = u(f(v58) * f(v15) + f(v37));
-                v36 = u(f(v71) * f(v56) + f(v36));
-                v38 = u(f(v15) * f(v59) + f(v38));
-                v14 = u(f(v21) * f(v59) + f(v14));
-                v22 = u(f(v58) * f(v36) + f(v22));
-                v38 = u(f(v57) * f(v36) + f(v38));
-                v14 = u(f(v56) * f(v36) + f(v14));
-                v36 = u(f(v55) * f(v22) + f(v44));
-                v37 = u(f(v55) * f(v38) + f(v45));
-                v38 = u(f(v55) * f(v14) + f(v46));
-                {
-                    uint b_at = (v54 * 64u) >> 2;
-                    particle_out.w[b_at + 0u] = v36;
-                    particle_out.w[b_at + 1u] = v37;
-                    particle_out.w[b_at + 2u] = v38;
+                if (!((vcc_lo & 1u) == 0u)) {
+                    vcc_lo = v20;
+                    vcc_lo = vcc_lo * 0x100u;
+                    {
+                        uint r_out = vcc_lo + 0x18u;
+                        scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x18u) ^ int(r_out))) < 0 ? 1u
+                            : 0u;
+                        s16 = r_out;
+                    }
+                    {
+                        uint r_out = vcc_lo + 0x4cu;
+                        scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x4cu) ^ int(r_out))) < 0 ? 1u
+                            : 0u;
+                        s18 = r_out;
+                    }
+                    {
+                        uint r_out = vcc_lo + 0x44u;
+                        scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x44u) ^ int(r_out))) < 0 ? 1u
+                            : 0u;
+                        s17 = r_out;
+                    }
+                    s17 = description.w[(s17 >> 2) + 0u];
+                    s18 = description.w[(s18 >> 2) + 0u];
+                    s80 = description.w[(s16 >> 2) + 0u];
+                    scc = s17 != 0x2u ? 1u : 0u;
+                    if (exec_lo != 0u) {
+                        v15 = s18;
+                    }
+                    if (!(scc == 0u)) {
+                        if (exec_lo != 0u) {
+                            v15 = u(float(s80));
+                        }
+                    }
+                    if (exec_lo != 0u) {
+                        v14 = s14;
+                    }
+                    vcc_lo = v20;
+                    if (exec_lo != 0u) {
+                        v15 = u(max(1.0, f(v15)));
+                        v50 = u(1.0 / f(v15));
+                        v60 = v17;
+                    }
+                    vcc_lo = vcc_lo * 0x100u;
+                    if (exec_lo != 0u) {
+                        {
+                            uint b_at = (v14 * 128u) >> 2;
+                            v24 = emitter_out.w[b_at + 0u];
+                            v25 = emitter_out.w[b_at + 1u];
+                            v26 = emitter_out.w[b_at + 2u];
+                            v27 = emitter_out.w[b_at + 3u];
+                        }
+                        {
+                            uint b_at = (v14 * 128u + 64u) >> 2;
+                            v28 = emitter_out.w[b_at + 0u];
+                            v29 = emitter_out.w[b_at + 1u];
+                            v30 = emitter_out.w[b_at + 2u];
+                            v31 = emitter_out.w[b_at + 3u];
+                        }
+                        {
+                            uint b_at = (v14 * 128u + 96u) >> 2;
+                            v32 = emitter_out.w[b_at + 0u];
+                            v33 = emitter_out.w[b_at + 1u];
+                            v34 = emitter_out.w[b_at + 2u];
+                            v35 = emitter_out.w[b_at + 3u];
+                        }
+                        {
+                            uint b_at = (v14 * 128u + 124u) >> 2;
+                            v19 = emitter_out.w[b_at + 0u];
+                        }
+                    }
+                    {
+                        uint r_out = vcc_lo + 0x48u;
+                        scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x48u) ^ int(r_out))) < 0 ? 1u
+                            : 0u;
+                        s20 = r_out;
+                    }
+                    {
+                        uint r_out = vcc_lo + 0xd0u;
+                        scc = ((int(vcc_lo) ^ int(r_out)) & (int(0xd0u) ^ int(r_out))) < 0 ? 1u
+                            : 0u;
+                        s21 = r_out;
+                    }
+                    s32 = description.w[(s20 >> 2) + 0u];
+                    s28 = description.w[(s21 >> 2) + 0u];
+                    s29 = description.w[(s21 >> 2) + 1u];
+                    s30 = description.w[(s21 >> 2) + 2u];
+                    s31 = description.w[(s21 >> 2) + 3u];
+                    s16 = constants.w[12];
+                    s17 = constants.w[13];
+                    s18 = constants.w[14];
+                    s19 = constants.w[15];
+                    s20 = constants.w[16];
+                    s21 = constants.w[17];
+                    s22 = constants.w[18];
+                    s23 = constants.w[19];
+                    {
+                        uint r_out = vcc_lo + 0x50u;
+                        scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x50u) ^ int(r_out))) < 0 ? 1u
+                            : 0u;
+                        s33 = r_out;
+                    }
+                    {
+                        uint r_out = vcc_lo + 0x80u;
+                        scc = ((int(vcc_lo) ^ int(r_out)) & (int(0x80u) ^ int(r_out))) < 0 ? 1u
+                            : 0u;
+                        s34 = r_out;
+                    }
+                    s56 = description.w[(s33 >> 2) + 0u];
+                    s57 = description.w[(s33 >> 2) + 1u];
+                    s58 = description.w[(s33 >> 2) + 2u];
+                    s59 = description.w[(s33 >> 2) + 3u];
+                    s8 = description.w[(s34 >> 2) + 0u];
+                    s9 = description.w[(s34 >> 2) + 1u];
+                    s10 = description.w[(s34 >> 2) + 2u];
+                    s11 = description.w[(s34 >> 2) + 3u];
+                    s60 = constants.w[20];
+                    s61 = constants.w[21];
+                    s62 = constants.w[22];
+                    s63 = constants.w[23];
+                    s81 = 0x0u;
+                    {
+                        uint r_out = s16 + 0xffffffffu;
+                        scc = ((int(s16) ^ int(r_out)) & (int(0xffffffffu) ^ int(r_out))) < 0 ?
+                            1u : 0u;
+                        vcc_lo = r_out;
+                    }
+                    scc = s30 > 0x0u ? 1u : 0u;
+                    if (exec_lo != 0u) {
+                        v51 = u(float(vcc_lo));
+                    }
+                    s22 = scc != 0u ? (exec_lo & 1u) : 0u;
+                    s23 = 0u;
+                    scc = s32 != 0x1u ? 1u : 0u;
+                    s76 = scc != 0u ? (exec_lo & 1u) : 0u;
+                    s77 = 0u;
+                    if (exec_lo != 0u) {
+                        v52 = u(f(v31) - f(v27));
+                    }
+                    {
+                        uint c_out = exec_lo != 0u && (f(v34) != 0.0) ? 1u : 0u;
+                        s78 = c_out;
+                        s79 = 0u;
+                    }
+                    if (exec_lo != 0u) {
+                        v53 = u(1.0 / f(v34));
+                    }
+                    bool again_7 = false;
+                    do {
+                        again_7 = false;
+                        {
+                            uint c_out = exec_lo != 0u && (s81 < v18) ? 1u : 0u;
+                            vcc_lo = c_out;
+                            vcc_hi = 0u;
+                        }
+                        if (!((vcc_lo & 1u) == 0u)) {
+                            if (exec_lo != 0u) {
+                                v58 = 0x0u;
+                            }
+                            {
+                                uint m_out = ((s76 & 1u) & (exec_lo & 1u));
+                                scc = m_out != 0u ? 1u : 0u;
+                                vcc_lo = m_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v57 = 0x0u;
+                                v56 = 0x0u;
+                                v59 = 0x3f800000u;
+                                v55 = 0x3f800000u;
+                            }
+                            if (!((vcc_lo & 1u) == 0u)) {
+                                if (exec_lo != 0u) {
+                                    v14 = 0x0u;
+                                }
+                                {
+                                    uint m_out = ((s78 & 1u) & (exec_lo & 1u));
+                                    scc = m_out != 0u ? 1u : 0u;
+                                    vcc_lo = m_out;
+                                    vcc_hi = 0u;
+                                }
+                                if (!((vcc_lo & 1u) == 0u)) {
+                                    if (exec_lo != 0u) {
+                                        v14 = u(float(s81));
+                                        v14 = u(-f(v14) * f(v53) + f(v19));
+                                    }
+                                }
+                                if (exec_lo != 0u) {
+                                    v55 = u(f(v14) * f(v52) + f(v27));
+                                    v58 = v4;
+                                    v57 = v5;
+                                    v56 = v6;
+                                    v59 = v7;
+                                }
+                            }
+                            if (exec_lo != 0u) {
+                                v54 = abs_diff(v0, 0x0u) + v60;
+                            }
+                            {
+                                uint m_out = ((s22 & 1u) & (exec_lo & 1u));
+                                scc = m_out != 0u ? 1u : 0u;
+                                vcc_lo = m_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                {
+                                    uint b_at = (v54 * 64u + 16u) >> 2;
+                                    v36 = particle_out.w[b_at + 0u];
+                                    v37 = particle_out.w[b_at + 1u];
+                                    v38 = particle_out.w[b_at + 2u];
+                                    v39 = particle_out.w[b_at + 3u];
+                                }
+                                {
+                                    uint b_at = (v54 * 64u + 48u) >> 2;
+                                    v40 = particle_out.w[b_at + 0u];
+                                    v41 = particle_out.w[b_at + 1u];
+                                    v42 = particle_out.w[b_at + 2u];
+                                    v43 = particle_out.w[b_at + 3u];
+                                }
+                            }
+                            vcc_lo = vcc_lo;
+                            vcc_hi = vcc_hi;
+                            if (!((vcc_lo & 1u) == 0u)) {
+                                if (exec_lo != 0u) {
+                                    v14 = u(float(v60));
+                                    v14 = u(f(v14) * f(v50));
+                                }
+                            } else {
+                                if (exec_lo != 0u) {
+                                    v14 = 0xc6395u ^ v41;
+                                    v14 = u(float(v14));
+                                    v15 = u(f(0x3ac01c14u) * f(v14));
+                                    v15 = u(fract(abs(f(v15))));
+                                    v14 = u(f(0x3b800000u) * f(v14));
+                                    v15 = u(f(0x402a91b9u) * f(v15));
+                                }
+                                {
+                                    uint c_out = exec_lo != 0u && (0.0 > f(v14)) ? 1u : 0u;
+                                    vcc_lo = c_out;
+                                    vcc_hi = 0u;
+                                }
+                                if (exec_lo != 0u) {
+                                    v14 = (vcc_lo & 1u) != 0u ? (v15 ^ 0x80000000u) : v15;
+                                    v14 = u(f(0x3ec01c14u) * f(v14));
+                                }
+                            }
+                            if (exec_lo != 0u) {
+                                v15 = u(float(s80));
+                                v15 = u(1.0 / f(v15));
+                                v15 = u(f(0x4f800000u) * f(v15));
+                                v15 = cvt_u32(f(v15));
+                                v21 = mul_hi_u(s80, v15);
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (int(0x0u) != int(v21)) ? 1u : 0u;
+                                s16 = c_out;
+                                s17 = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v21 = s80 * v15;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (v21 > 0x0u) ? 1u : 0u;
+                                if (exec_lo != 0u) v22 = 0x0u - v21;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v21 = (s16 & 1u) != 0u ? v21 : v22;
+                                v22 = mul_hi_u(v21, v15);
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (v22 > v15) ? 1u : 0u;
+                                if (exec_lo != 0u) v21 = v15 - v22;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (v15 > 0xffffffffu - v22) ? 1u : 0u;
+                                if (exec_lo != 0u) v15 = v15 + v22;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v14 = u(f(v51) * f(v14));
+                                v15 = (s16 & 1u) != 0u ? v21 : v15;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (0x1u > 0xffffffffu - v60) ? 1u : 0u;
+                                if (exec_lo != 0u) v21 = 0x1u + v60;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v44 = cvt_u32(f(v14));
+                                v45 = mul_hi_u(v15, v21);
+                                v22 = s21 * v44;
+                                v14 = s80 * v45;
+                                v15 = abs_diff(s63, 0x0u) + v22;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (v21 >= v14) ? 1u : 0u;
+                                s16 = c_out;
+                                s17 = 0u;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (v14 > v21) ? 1u : 0u;
+                                if (exec_lo != 0u) v46 = v21 - v14;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (s80 <= v46) ? 1u : 0u;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v44 = s20 * v44;
+                            }
+                            {
+                                uint m_out = ((s16 & 1u) & (vcc_lo & 1u));
+                                scc = m_out != 0u ? 1u : 0u;
+                                vcc_lo = m_out;
+                                vcc_hi = 0u;
+                            }
+                            scc = int(0x0u) != int(s80) ? 1u : 0u;
+                            {
+                                uint c_out = exec_lo != 0u && (uint64_t(0x0u) + uint64_t(v45) +
+                                    uint64_t((vcc_lo & 1u)) > 0xffffffffUL) ? 1u : 0u;
+                                if (exec_lo != 0u) v45 = 0x0u + v45 + (vcc_lo & 1u);
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (uint64_t(0xffffffffu) +
+                                    uint64_t(v45) + uint64_t((s16 & 1u)) > 0xffffffffUL) ? 1u : 0u;
+                                if (exec_lo != 0u) v45 = 0xffffffffu + v45 + (s16 & 1u);
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            vcc_lo = scc != 0u ? (exec_lo & 1u) : 0u;
+                            vcc_hi = 0u;
+                            if (exec_lo != 0u) {
+                                v45 = (vcc_lo & 1u) != 0u ? v45 : 0xffffffffu;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (s62 > 0xffffffffu - v22) ? 1u : 0u;
+                                if (exec_lo != 0u) v22 = s62 + v22;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v45 = s80 * v45;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (v45 > v21) ? 1u : 0u;
+                                if (exec_lo != 0u) v60 = v21 - v45;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                {
+                                    uint b_at = (v15) >> 2;
+                                    v14 = weights.w[b_at + 0u];
+                                    v15 = weights.w[b_at + 1u];
+                                }
+                                {
+                                    uint b_at = (v22) >> 2;
+                                    v21 = weights.w[b_at + 0u];
+                                    v22 = weights.w[b_at + 1u];
+                                }
+                            }
+                            vcc_hi = v14;
+                            s24 = v15;
+                            if (exec_lo != 0u) {
+                                v14 = 0xffffu & v21;
+                                v15 = u(unpackHalf2x16(v14 & 0xffffu).x);
+                                v14 = v21 >> (0x10u & 31u);
+                                v21 = u(unpackHalf2x16(v14 & 0xffffu).x);
+                            }
+                            {
+                                uint r_out = 0xffffu & vcc_hi;
+                                scc = r_out != 0u ? 1u : 0u;
+                                vcc_lo = r_out;
+                            }
+                            s25 = vcc_lo * 0x30u;
+                            {
+                                uint r_out = s25 + 0x20u;
+                                scc = ((int(s25) ^ int(r_out)) & (int(0x20u) ^ int(r_out))) < 0
+                                    ? 1u : 0u;
+                                s16 = r_out;
+                            }
+                            {
+                                uint r_out = vcc_hi >> (0x10u & 31u);
+                                scc = r_out != 0u ? 1u : 0u;
+                                vcc_lo = r_out;
+                            }
+                            s32 = vcc_lo * 0x30u;
+                            {
+                                uint r_out = s32 + 0x20u;
+                                scc = ((int(s32) ^ int(r_out)) & (int(0x20u) ^ int(r_out))) < 0
+                                    ? 1u : 0u;
+                                s26 = r_out;
+                            }
+                            {
+                                uint r_out = 0xffffu & s24;
+                                scc = r_out != 0u ? 1u : 0u;
+                                vcc_lo = r_out;
+                            }
+                            s40 = vcc_lo * 0x30u;
+                            {
+                                uint o_at = s16 >> 2;
+                                s16 = palette.w[o_at + 0u];
+                                s17 = palette.w[o_at + 1u];
+                                s18 = palette.w[o_at + 2u];
+                                s19 = palette.w[o_at + 3u];
+                            }
+                            s64 = palette.w[(s26 >> 2) + 0u];
+                            s65 = palette.w[(s26 >> 2) + 1u];
+                            s66 = palette.w[(s26 >> 2) + 2u];
+                            s67 = palette.w[(s26 >> 2) + 3u];
+                            {
+                                uint r_out = s40 + 0x20u;
+                                scc = ((int(s40) ^ int(r_out)) & (int(0x20u) ^ int(r_out))) < 0
+                                    ? 1u : 0u;
+                                s26 = r_out;
+                            }
+                            {
+                                uint r_out = s24 >> (0x10u & 31u);
+                                scc = r_out != 0u ? 1u : 0u;
+                                vcc_lo = r_out;
+                            }
+                            s52 = vcc_lo * 0x30u;
+                            {
+                                uint o_at = s32 >> 2;
+                                s32 = palette.w[o_at + 0u];
+                                s33 = palette.w[o_at + 1u];
+                                s34 = palette.w[o_at + 2u];
+                                s35 = palette.w[o_at + 3u];
+                                s36 = palette.w[o_at + 4u];
+                                s37 = palette.w[o_at + 5u];
+                                s38 = palette.w[o_at + 6u];
+                                s39 = palette.w[o_at + 7u];
+                            }
+                            s68 = palette.w[(s26 >> 2) + 0u];
+                            s69 = palette.w[(s26 >> 2) + 1u];
+                            s70 = palette.w[(s26 >> 2) + 2u];
+                            s71 = palette.w[(s26 >> 2) + 3u];
+                            {
+                                uint o_at = s25 >> 2;
+                                s24 = palette.w[o_at + 0u];
+                                s25 = palette.w[o_at + 1u];
+                                s26 = palette.w[o_at + 2u];
+                                s27 = palette.w[o_at + 3u];
+                                s28 = palette.w[o_at + 4u];
+                                s29 = palette.w[o_at + 5u];
+                                s30 = palette.w[o_at + 6u];
+                                s31 = palette.w[o_at + 7u];
+                            }
+                            {
+                                uint r_out = s52 + 0x20u;
+                                scc = ((int(s52) ^ int(r_out)) & (int(0x20u) ^ int(r_out))) < 0
+                                    ? 1u : 0u;
+                                s53 = r_out;
+                            }
+                            {
+                                uint o_at = s40 >> 2;
+                                s40 = palette.w[o_at + 0u];
+                                s41 = palette.w[o_at + 1u];
+                                s42 = palette.w[o_at + 2u];
+                                s43 = palette.w[o_at + 3u];
+                                s44 = palette.w[o_at + 4u];
+                                s45 = palette.w[o_at + 5u];
+                                s46 = palette.w[o_at + 6u];
+                                s47 = palette.w[o_at + 7u];
+                            }
+                            s72 = palette.w[(s53 >> 2) + 0u];
+                            s73 = palette.w[(s53 >> 2) + 1u];
+                            s74 = palette.w[(s53 >> 2) + 2u];
+                            s75 = palette.w[(s53 >> 2) + 3u];
+                            {
+                                uint o_at = s52 >> 2;
+                                s48 = palette.w[o_at + 0u];
+                                s49 = palette.w[o_at + 1u];
+                                s50 = palette.w[o_at + 2u];
+                                s51 = palette.w[o_at + 3u];
+                                s52 = palette.w[o_at + 4u];
+                                s53 = palette.w[o_at + 5u];
+                                s54 = palette.w[o_at + 6u];
+                                s55 = palette.w[o_at + 7u];
+                            }
+                            if (exec_lo != 0u) {
+                                v14 = 0xffffu & v22;
+                                v45 = u(unpackHalf2x16(v14 & 0xffffu).x);
+                                v14 = v22 >> (0x10u & 31u);
+                                v14 = u(unpackHalf2x16(v14 & 0xffffu).x);
+                            }
+                            scc = s15 != 0x3u ? 1u : 0u;
+                            if (exec_lo != 0u) {
+                                v47 = u(f(s18) * f(v15));
+                                v63 = u(f(s16) * f(v15));
+                                v61 = u(f(s29) * f(v15));
+                                v47 = u(f(s66) * f(v21) + f(v47));
+                                v22 = u(f(s17) * f(v15));
+                                v46 = u(f(s26) * f(v15));
+                                v49 = u(f(s28) * f(v15));
+                                v62 = u(f(s30) * f(v15));
+                                v63 = u(f(s64) * f(v21) + f(v63));
+                                v64 = u(f(v21) * f(s36) + f(v49));
+                                v69 = u(f(v21) * f(s37) + f(v61));
+                                v61 = u(f(s24) * f(v15));
+                                v22 = u(f(s65) * f(v21) + f(v22));
+                                v46 = u(f(s34) * f(v21) + f(v46));
+                                v62 = u(f(s38) * f(v21) + f(v62));
+                                v65 = u(f(v45) * f(s68) + f(v63));
+                                v63 = u(f(v21) * f(s32) + f(v61));
+                                v48 = u(f(v45) * f(s70) + f(v47));
+                                v47 = u(f(s25) * f(v15));
+                                v47 = u(f(s33) * f(v21) + f(v47));
+                                v67 = u(f(v45) * f(s41) + f(v47));
+                                v49 = u(f(v45) * f(s46) + f(v62));
+                                v22 = u(f(s69) * f(v45) + f(v22));
+                                v63 = u(f(s40) * f(v45) + f(v63));
+                                v46 = u(f(s42) * f(v45) + f(v46));
+                                v64 = u(f(s44) * f(v45) + f(v64));
+                                v69 = u(f(s45) * f(v45) + f(v69));
+                                v62 = u(f(v14) * f(s72) + f(v65));
+                                v61 = u(f(v14) * f(s74) + f(v48));
+                                v68 = u(f(v14) * f(s48) + f(v63));
+                                v66 = u(f(v14) * f(s52) + f(v64));
+                                v64 = u(f(v14) * f(s50) + f(v46));
+                                v63 = u(f(v14) * f(s53) + f(v69));
+                                v65 = u(f(v14) * f(s54) + f(v49));
+                                v22 = u(f(s73) * f(v14) + f(v22));
+                                v67 = u(f(s49) * f(v14) + f(v67));
+                            }
+                            if (!(scc != 0u)) {
+                                if (exec_lo != 0u) {
+                                    v46 = abs_diff(s61, 0x0u) + v44;
+                                    {
+                                        uint b_at = (v46) >> 2;
+                                        v46 = vertices.w[b_at + 0u];
+                                    }
+                                    v47 = v46 << (0x4u & 31u);
+                                    v47 = 0x7ff0u & v47;
+                                    v48 = v46 >> (0x7u & 31u);
+                                    v47 = u(unpackHalf2x16(v47 & 0xffffu).x);
+                                    v48 = 0x7ff0u & v48;
+                                    v46 = v46 >> (0x11u & 31u);
+                                    v47 = u(2.0 * f(v47) + -1.0);
+                                    v48 = u(unpackHalf2x16(v48 & 0xffffu).x);
+                                    v46 = 0x7fe0u & v46;
+                                    v47 = u(f(s8) * f(v47));
+                                    v48 = u(2.0 * f(v48) + -1.0);
+                                    v46 = u(unpackHalf2x16(v46 & 0xffffu).x);
+                                    v49 = u(f(v47) * f(v68));
+                                    v48 = u(f(s9) * f(v48));
+                                    v46 = u(2.0 * f(v46) + -1.0);
+                                    v69 = u(f(v47) * f(v66));
+                                    v47 = u(f(v47) * f(v62));
+                                    v71 = u(f(v48) * f(v67) + f(v49));
+                                    v46 = u(f(s10) * f(v46));
+                                    v49 = u(f(v48) * f(v22) + f(v47));
+                                    v69 = u(f(v63) * f(v48) + f(v69));
+                                    v48 = u(f(v46) * f(v65) + f(v69));
+                                    v71 = u(f(v64) * f(v46) + f(v71));
+                                    v49 = u(f(v61) * f(v46) + f(v49));
+                                    v69 = u(f(v56) * f(v71));
+                                    v46 = u(f(v58) * f(v48));
+                                    v47 = u(f(v57) * f(v49));
+                                    v69 = u(f(v49) * -f(v58) + f(v69));
+                                    v46 = u(f(v71) * -f(v57) + f(v46));
+                                    v47 = u(f(v48) * -f(v56) + f(v47));
+                                    v69 = u(f(v48) * f(v59) + f(v69));
+                                    v46 = u(f(v49) * f(v59) + f(v46));
+                                    v47 = u(f(v71) * f(v59) + f(v47));
+                                    v70 = u(f(v58) * f(v71));
+                                    v71 = u(-f(v58) * f(v46));
+                                    v48 = u(f(v57) * f(v48) + f(v70));
+                                    v71 = u(f(v47) * f(v56) + f(v71));
+                                    v48 = u(f(v49) * f(v56) + f(v48));
+                                    v49 = u(-f(v56) * f(v69));
+                                    v49 = u(f(v46) * f(v57) + f(v49));
+                                    v49 = u(f(v47) * f(v59) + f(v49));
+                                    v47 = u(-f(v57) * f(v47));
+                                    v71 = u(f(v69) * f(v59) + f(v71));
+                                    v69 = u(f(v58) * f(v69) + f(v47));
+                                    v69 = u(f(v46) * f(v59) + f(v69));
+                                    v49 = u(f(v58) * f(v48) + f(v49));
+                                    v71 = u(f(v57) * f(v48) + f(v71));
+                                    v69 = u(f(v56) * f(v48) + f(v69));
+                                    v36 = u(f(v49) * f(v55) + f(v36));
+                                    v37 = u(f(v71) * f(v55) + f(v37));
+                                    v38 = u(f(v69) * f(v55) + f(v38));
+                                }
+                            }
+                            if (exec_lo != 0u) {
+                                v44 = abs_diff(s60, 0x0u) + v44;
+                                {
+                                    uint b_at = (v44) >> 2;
+                                    v47 = vertices.w[b_at + 0u];
+                                    v48 = vertices.w[b_at + 1u];
+                                    v49 = vertices.w[b_at + 2u];
+                                }
+                                v44 = u(f(s19) * f(v15));
+                                v44 = u(f(s67) * f(v21) + f(v44));
+                                v46 = u(f(s27) * f(v15));
+                                v44 = u(f(s71) * f(v45) + f(v44));
+                                v69 = u(f(v21) * f(s35) + f(v46));
+                                v15 = u(f(s31) * f(v15));
+                                v69 = u(f(s43) * f(v45) + f(v69));
+                                v15 = u(f(s39) * f(v21) + f(v15));
+                                v70 = u(f(v45) * f(s47) + f(v15));
+                                v69 = u(f(s51) * f(v14) + f(v69));
+                                v71 = u(f(v14) * f(s75) + f(v44));
+                                {
+                                    uint b_at = (v54 * 64u) >> 2;
+                                    v44 = particle_out.w[b_at + 0u];
+                                    v45 = particle_out.w[b_at + 1u];
+                                    v46 = particle_out.w[b_at + 2u];
+                                }
+                                v70 = u(f(s55) * f(v14) + f(v70));
+                                {
+                                    uint b_at = (v54 * 64u + 16u) >> 2;
+                                    particle_out.w[b_at + 0u] = v36;
+                                    particle_out.w[b_at + 1u] = v37;
+                                    particle_out.w[b_at + 2u] = v38;
+                                    particle_out.w[b_at + 3u] = v39;
+                                }
+                                {
+                                    uint b_at = (v54 * 64u + 48u) >> 2;
+                                    particle_out.w[b_at + 0u] = v40;
+                                    particle_out.w[b_at + 1u] = v41;
+                                    particle_out.w[b_at + 2u] = v42;
+                                    particle_out.w[b_at + 3u] = v43;
+                                }
+                            }
+                            {
+                                uint r_out = s81 + 0x1u;
+                                scc = ((int(s81) ^ int(r_out)) & (int(0x1u) ^ int(r_out))) < 0
+                                    ? 1u : 0u;
+                                s81 = r_out;
+                            }
+                            if (exec_lo != 0u) {
+                                v37 = u(f(s56) * f(v47));
+                                v36 = u(f(s57) * f(v48));
+                                v69 = u(f(v68) * f(v37) + f(v69));
+                                v15 = u(f(s58) * f(v49));
+                                v69 = u(f(v67) * f(v36) + f(v69));
+                                v71 = u(f(v62) * f(v37) + f(v71));
+                                v70 = u(f(v66) * f(v37) + f(v70));
+                                v69 = u(f(v64) * f(v15) + f(v69));
+                                v71 = u(f(v22) * f(v36) + f(v71));
+                                v70 = u(f(v63) * f(v36) + f(v70));
+                                v71 = u(f(v61) * f(v15) + f(v71));
+                                v70 = u(f(v65) * f(v15) + f(v70));
+                                v15 = u(f(v56) * f(v69));
+                                v21 = u(f(v58) * f(v70));
+                                v15 = u(f(v71) * -f(v58) + f(v15));
+                                v14 = u(f(v57) * f(v71));
+                                v15 = u(f(v70) * f(v59) + f(v15));
+                                v21 = u(f(v69) * -f(v57) + f(v21));
+                                v37 = u(-f(v56) * f(v15));
+                                v21 = u(f(v71) * f(v59) + f(v21));
+                                v14 = u(f(v70) * -f(v56) + f(v14));
+                                v37 = u(f(v21) * f(v57) + f(v37));
+                                v14 = u(f(v69) * f(v59) + f(v14));
+                                v36 = u(f(v58) * f(v69));
+                                v38 = u(-f(v58) * f(v21));
+                                v36 = u(f(v70) * f(v57) + f(v36));
+                                v38 = u(f(v14) * f(v56) + f(v38));
+                                v22 = u(f(v59) * f(v14) + f(v37));
+                                v37 = u(-f(v57) * f(v14));
+                                v14 = u(f(v58) * f(v15) + f(v37));
+                                v36 = u(f(v71) * f(v56) + f(v36));
+                                v38 = u(f(v15) * f(v59) + f(v38));
+                                v14 = u(f(v21) * f(v59) + f(v14));
+                                v22 = u(f(v58) * f(v36) + f(v22));
+                                v38 = u(f(v57) * f(v36) + f(v38));
+                                v14 = u(f(v56) * f(v36) + f(v14));
+                                v36 = u(f(v55) * f(v22) + f(v44));
+                                v37 = u(f(v55) * f(v38) + f(v45));
+                                v38 = u(f(v55) * f(v14) + f(v46));
+                                {
+                                    uint b_at = (v54 * 64u) >> 2;
+                                    particle_out.w[b_at + 0u] = v36;
+                                    particle_out.w[b_at + 1u] = v37;
+                                    particle_out.w[b_at + 2u] = v38;
+                                }
+                            }
+                            if (true) { pc = 7; again_7 = true; }
+                        }
+                    } while (again_7);
+                    if (exec_lo != 0u) {
+                        v14 = s14;
+                        v21 = v12;
+                        v22 = v13;
+                        v18 = 0x0u;
+                        v12 = s14;
+                        {
+                            uint b_at = (v14 * 128u + 32u) >> 2;
+                            emitter_out.w[b_at + 0u] = v20;
+                            emitter_out.w[b_at + 1u] = v21;
+                            emitter_out.w[b_at + 2u] = v22;
+                            emitter_out.w[b_at + 3u] = v23;
+                        }
+                        {
+                            uint b_at = (v12 * 128u + 48u) >> 2;
+                            emitter_out.w[b_at + 0u] = v0;
+                            emitter_out.w[b_at + 1u] = v1;
+                            emitter_out.w[b_at + 2u] = v2;
+                            emitter_out.w[b_at + 3u] = v3;
+                        }
+                        {
+                            uint b_at = (v12 * 128u + 112u) >> 2;
+                            emitter_out.w[b_at + 0u] = v16;
+                            emitter_out.w[b_at + 1u] = v17;
+                            emitter_out.w[b_at + 2u] = v18;
+                            emitter_out.w[b_at + 3u] = v19;
+                        }
+                        {
+                            uint b_at = (v12 * 128u) >> 2;
+                            emitter_out.w[b_at + 0u] = v24;
+                            emitter_out.w[b_at + 1u] = v25;
+                            emitter_out.w[b_at + 2u] = v26;
+                            emitter_out.w[b_at + 3u] = v27;
+                        }
+                        {
+                            uint b_at = (v12 * 128u + 16u) >> 2;
+                            emitter_out.w[b_at + 0u] = v4;
+                            emitter_out.w[b_at + 1u] = v5;
+                            emitter_out.w[b_at + 2u] = v6;
+                            emitter_out.w[b_at + 3u] = v7;
+                        }
+                        {
+                            uint b_at = (v12 * 128u + 80u) >> 2;
+                            emitter_out.w[b_at + 0u] = v8;
+                            emitter_out.w[b_at + 1u] = v9;
+                            emitter_out.w[b_at + 2u] = v10;
+                            emitter_out.w[b_at + 3u] = v11;
+                        }
+                        {
+                            uint b_at = (v12 * 128u + 96u) >> 2;
+                            emitter_out.w[b_at + 0u] = v32;
+                            emitter_out.w[b_at + 1u] = v33;
+                            emitter_out.w[b_at + 2u] = v34;
+                            emitter_out.w[b_at + 3u] = v35;
+                        }
+                        {
+                            uint b_at = (v12 * 128u + 64u) >> 2;
+                            emitter_out.w[b_at + 0u] = v28;
+                            emitter_out.w[b_at + 1u] = v29;
+                            emitter_out.w[b_at + 2u] = v30;
+                            emitter_out.w[b_at + 3u] = v31;
+                        }
+                    }
                 }
-            }
-            if (true) { pc = 7; again_7 = true; }
-        }
-    } while (again_7);
-    if (pc <= 18) {
-        if (exec_lo != 0u) {
-            v14 = s14;
-            v21 = v12;
-            v22 = v13;
-            v18 = 0x0u;
-            v12 = s14;
-            {
-                uint b_at = (v14 * 128u + 32u) >> 2;
-                emitter_out.w[b_at + 0u] = v20;
-                emitter_out.w[b_at + 1u] = v21;
-                emitter_out.w[b_at + 2u] = v22;
-                emitter_out.w[b_at + 3u] = v23;
-            }
-            {
-                uint b_at = (v12 * 128u + 48u) >> 2;
-                emitter_out.w[b_at + 0u] = v0;
-                emitter_out.w[b_at + 1u] = v1;
-                emitter_out.w[b_at + 2u] = v2;
-                emitter_out.w[b_at + 3u] = v3;
-            }
-            {
-                uint b_at = (v12 * 128u + 112u) >> 2;
-                emitter_out.w[b_at + 0u] = v16;
-                emitter_out.w[b_at + 1u] = v17;
-                emitter_out.w[b_at + 2u] = v18;
-                emitter_out.w[b_at + 3u] = v19;
-            }
-            {
-                uint b_at = (v12 * 128u) >> 2;
-                emitter_out.w[b_at + 0u] = v24;
-                emitter_out.w[b_at + 1u] = v25;
-                emitter_out.w[b_at + 2u] = v26;
-                emitter_out.w[b_at + 3u] = v27;
-            }
-            {
-                uint b_at = (v12 * 128u + 16u) >> 2;
-                emitter_out.w[b_at + 0u] = v4;
-                emitter_out.w[b_at + 1u] = v5;
-                emitter_out.w[b_at + 2u] = v6;
-                emitter_out.w[b_at + 3u] = v7;
-            }
-            {
-                uint b_at = (v12 * 128u + 80u) >> 2;
-                emitter_out.w[b_at + 0u] = v8;
-                emitter_out.w[b_at + 1u] = v9;
-                emitter_out.w[b_at + 2u] = v10;
-                emitter_out.w[b_at + 3u] = v11;
-            }
-            {
-                uint b_at = (v12 * 128u + 96u) >> 2;
-                emitter_out.w[b_at + 0u] = v32;
-                emitter_out.w[b_at + 1u] = v33;
-                emitter_out.w[b_at + 2u] = v34;
-                emitter_out.w[b_at + 3u] = v35;
-            }
-            {
-                uint b_at = (v12 * 128u + 64u) >> 2;
-                emitter_out.w[b_at + 0u] = v28;
-                emitter_out.w[b_at + 1u] = v29;
-                emitter_out.w[b_at + 2u] = v30;
-                emitter_out.w[b_at + 3u] = v31;
             }
         }
     }

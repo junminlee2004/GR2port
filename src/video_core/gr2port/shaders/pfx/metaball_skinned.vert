@@ -130,7 +130,7 @@ void main() {
     uint s40 = 0u, s41 = 0u, s42 = 0u, s43 = 0u, s44 = 0u, s45 = 0u, s46 = 0u, s47 = 0u;
     uint vcc_lo = 0u, vcc_hi = 0u, exec_lo = 1u, scc = 0u, m0 = 0u;
     int pc = 0;
-    draw_index = uint(gl_InstanceIndex);
+    draw_index = uint(gl_BaseInstance);
     Words vertex_constants = Words(draws_address + uint64_t(draw_index) * 512ul);
     EffectMesh mesh = EffectMesh(draws_address + uint64_t(draw_index) * 512ul + 432ul);
     uint displacement = mesh.displacement;
@@ -453,11 +453,8 @@ void main() {
     bool again_1 = false;
     do {
         again_1 = false;
-        if (pc <= 1) {
-            scc = vcc_hi < s28 ? 1u : 0u;
-            if (scc == 0u) pc = 3;
-        }
-        if (pc <= 2) {
+        scc = vcc_hi < s28 ? 1u : 0u;
+        if (!(scc == 0u)) {
             vcc_lo = vcc_hi * 0x10u;
             {
                 uint r_out = vcc_lo + 0x110u;

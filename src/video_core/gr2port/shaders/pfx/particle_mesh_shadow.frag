@@ -111,8 +111,7 @@ void main() {
         vcc_lo = m_out;
         vcc_hi = 0u;
     }
-    if (scc == 0u) pc = 2;
-    if (pc <= 1) {
+    if (!(scc == 0u)) {
         exec_lo = vcc_lo;
         if (exec_lo != 0u) {
             v0 = 0x3c003c00u;

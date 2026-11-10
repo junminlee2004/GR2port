@@ -92,8 +92,7 @@ void main() {
         v2 = u(attr1.x);
         v3 = u(attr1.y);
     }
-    if ((vcc_lo & 1u) == 0u) pc = 3;
-    if (pc <= 1) {
+    if (!((vcc_lo & 1u) == 0u)) {
         if (exec_lo != 0u) {
             v6 = s19;
             v6 = u(clamp(f(s18) * f(v4) + f(v6), 0.0, 1.0));
@@ -117,13 +116,14 @@ void main() {
             s32 = m_out;
             s33 = 0u;
         }
-        if (scc == 0u) pc = 12;
-    }
-    if (pc <= 2) {
+        if (scc == 0u) {
+            exec_lo = 0u;
+            if (exec_lo == 0u) discard;
+            color0 = vec4(unpackHalf2x16(0u), unpackHalf2x16(0u));
+            return;
+        }
         exec_lo = vcc_lo;
-        if (true) pc = 5;
-    }
-    if (pc <= 3) {
+    } else {
         {
             uint c_out = exec_lo != 0u && (f(s19) > f(v4)) ? 1u : 0u;
             vcc_lo = c_out;
@@ -146,135 +146,128 @@ void main() {
             s32 = m_out;
             s33 = 0u;
         }
-        if (scc == 0u) pc = 12;
-    }
-    if (pc <= 4) {
+        if (scc == 0u) {
+            exec_lo = 0u;
+            if (exec_lo == 0u) discard;
+            color0 = vec4(unpackHalf2x16(0u), unpackHalf2x16(0u));
+            return;
+        }
         exec_lo = vcc_lo;
     }
-    if (pc <= 5) {
-        s12 = ps_constants.w[0];
-        s13 = ps_constants.w[1];
-        s14 = ps_constants.w[2];
-        s15 = ps_constants.w[3];
-        {
-            uint c_out = exec_lo != 0u && (f(s12) < 0.0) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v8 = u(attr0.z);
-            v9 = u(attr0.y);
-            v10 = u(attr0.x);
-        }
-        if ((vcc_lo & 1u) == 0u) pc = 10;
+    s12 = ps_constants.w[0];
+    s13 = ps_constants.w[1];
+    s14 = ps_constants.w[2];
+    s15 = ps_constants.w[3];
+    {
+        uint c_out = exec_lo != 0u && (f(s12) < 0.0) ? 1u : 0u;
+        vcc_lo = c_out;
+        vcc_hi = 0u;
     }
-    if (pc <= 6) {
+    if (exec_lo != 0u) {
+        v8 = u(attr0.z);
+        v9 = u(attr0.y);
+        v10 = u(attr0.x);
+    }
+    if (!((vcc_lo & 1u) == 0u)) {
         {
             uint c_out = exec_lo != 0u && (f(s13) != 1.0) ? 1u : 0u;
             vcc_lo = c_out;
             vcc_hi = 0u;
         }
-        if ((vcc_lo & 1u) == 0u) pc = 8;
-    }
-    if (pc <= 7) {
-        if (exec_lo != 0u) {
-            v2 = (0x1u & v7) | (~0x1u & v2);
-            {
-                vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
-                    samplers[nonuniformEXT(sampler0)]), vec2(f(v2), f(v3)));
-                v0 = u(t_out.x);
-                v1 = u(t_out.y);
-                v2 = u(t_out.z);
+        if (!((vcc_lo & 1u) == 0u)) {
+            if (exec_lo != 0u) {
+                v2 = (0x1u & v7) | (~0x1u & v2);
+                {
+                    vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
+                        samplers[nonuniformEXT(sampler0)]), vec2(f(v2), f(v3)));
+                    v0 = u(t_out.x);
+                    v1 = u(t_out.y);
+                    v2 = u(t_out.z);
+                }
+                v0 = u(f(v0) * f(v10));
+                v1 = u(f(v9) * f(v1));
+                v2 = u(f(v8) * f(v2));
             }
-            v0 = u(f(v0) * f(v10));
-            v1 = u(f(v9) * f(v1));
-            v2 = u(f(v8) * f(v2));
-        }
-        if (true) pc = 9;
-    }
-    if (pc <= 8) {
-        if (exec_lo != 0u) {
-            v0 = u(f(s14) * f(v2));
-            v0 = u(floor(f(v0)));
-            v1 = u(0.5 * f(v0));
-            v1 = u((fract(abs(f(v1)))) * 2.0);
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v1 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
-            v0 = u(1.0 / f(s14));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 == f(v1)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v1 = u(f(v2) - f(v0));
-            v1 = (vcc_lo & 1u) != 0u ? v2 : v1;
-            v8 = u(f(v2) + f(v0));
-            v4 = 0x3eaaaaaau;
-            v0 = (0x1u & v7) | (~0x1u & v1);
-            v1 = u(f(v4) * f(v3) + f(0x3f2aaaaau));
-            v4 = (0x1u & v7) | (~0x1u & v2);
-            v5 = u(f(0x3f2aaaaau) * f(v3));
-            v2 = (vcc_lo & 1u) != 0u ? v8 : v2;
-            {
-                vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
-                    samplers[nonuniformEXT(sampler0)]), vec2(f(v0), f(v1)));
-                v0 = u(t_out.x);
+        } else {
+            if (exec_lo != 0u) {
+                v0 = u(f(s14) * f(v2));
+                v0 = u(floor(f(v0)));
+                v1 = u(0.5 * f(v0));
+                v1 = u((fract(abs(f(v1)))) * 2.0);
             }
             {
-                vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
-                    samplers[nonuniformEXT(sampler0)]), vec2(f(v4), f(v5)));
-                v4 = u(t_out.x);
+                uint c_out = exec_lo != 0u && (0.0 > f(v0)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
             }
-            v2 = (0x1u & v7) | (~0x1u & v2);
-            v3 = v1;
+            if (exec_lo != 0u) {
+                v1 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
+                v0 = u(1.0 / f(s14));
+            }
             {
-                vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
-                    samplers[nonuniformEXT(sampler0)]), vec2(f(v2), f(v3)));
-                v1 = u(t_out.x);
+                uint c_out = exec_lo != 0u && (0.0 == f(v1)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
             }
-            v3 = 0x3f9507c8u;
-            v8 = 0xbec890d6u;
+            if (exec_lo != 0u) {
+                v1 = u(f(v2) - f(v0));
+                v1 = (vcc_lo & 1u) != 0u ? v2 : v1;
+                v8 = u(f(v2) + f(v0));
+                v4 = 0x3eaaaaaau;
+                v0 = (0x1u & v7) | (~0x1u & v1);
+                v1 = u(f(v4) * f(v3) + f(0x3f2aaaaau));
+                v4 = (0x1u & v7) | (~0x1u & v2);
+                v5 = u(f(0x3f2aaaaau) * f(v3));
+                v2 = (vcc_lo & 1u) != 0u ? v8 : v2;
+                {
+                    vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
+                        samplers[nonuniformEXT(sampler0)]), vec2(f(v0), f(v1)));
+                    v0 = u(t_out.x);
+                }
+                {
+                    vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
+                        samplers[nonuniformEXT(sampler0)]), vec2(f(v4), f(v5)));
+                    v4 = u(t_out.x);
+                }
+                v2 = (0x1u & v7) | (~0x1u & v2);
+                v3 = v1;
+                {
+                    vec4 t_out = texture(sampler2D(textures[nonuniformEXT(texture0)],
+                        samplers[nonuniformEXT(sampler0)]), vec2(f(v2), f(v3)));
+                    v1 = u(t_out.x);
+                }
+                v3 = 0x3f9507c8u;
+                v8 = 0xbec890d6u;
+            }
+            vcc_hi = 0x3e4890d6u;
+            if (exec_lo != 0u) {
+                v5 = 0xbf501a37u;
+            }
+            s0 = 0x3ed01a37u;
+            if (exec_lo != 0u) {
+                v2 = 0x3fcc432du;
+            }
+            s1 = 0xbf4c432du;
+            if (exec_lo != 0u) {
+                v7 = 0x40011687u;
+            }
+            vcc_lo = 0xbf811687u;
+            if (exec_lo != 0u) {
+                v8 = u(fma(f(v0), f(v8), f(vcc_hi)));
+                v3 = u(f(v3) * f(v4) + f(0xbd9507c8u));
+                v4 = u(f(v3) + f(v8));
+                v2 = u(fma(f(v1), f(v2), f(s1)));
+                v7 = u(fma(f(v0), f(v7), f(vcc_lo)));
+                v0 = u(fma(f(v1), f(v5), f(s0)));
+                v1 = u(f(v4) + f(v0));
+                v0 = u(f(v3) + f(v2));
+                v2 = u(f(v3) + f(v7));
+            }
         }
-        vcc_hi = 0x3e4890d6u;
-        if (exec_lo != 0u) {
-            v5 = 0xbf501a37u;
-        }
-        s0 = 0x3ed01a37u;
-        if (exec_lo != 0u) {
-            v2 = 0x3fcc432du;
-        }
-        s1 = 0xbf4c432du;
-        if (exec_lo != 0u) {
-            v7 = 0x40011687u;
-        }
-        vcc_lo = 0xbf811687u;
-        if (exec_lo != 0u) {
-            v8 = u(fma(f(v0), f(v8), f(vcc_hi)));
-            v3 = u(f(v3) * f(v4) + f(0xbd9507c8u));
-            v4 = u(f(v3) + f(v8));
-            v2 = u(fma(f(v1), f(v2), f(s1)));
-            v7 = u(fma(f(v0), f(v7), f(vcc_lo)));
-            v0 = u(fma(f(v1), f(v5), f(s0)));
-            v1 = u(f(v4) + f(v0));
-            v0 = u(f(v3) + f(v2));
-            v2 = u(f(v3) + f(v7));
-        }
-    }
-    if (pc <= 9) {
         if (exec_lo != 0u) {
             v3 = (s12 ^ 0x80000000u);
         }
-        if (true) pc = 11;
-    }
-    if (pc <= 10) {
+    } else {
         if (exec_lo != 0u) {
             v4 = (0x1u & v7) | (~0x1u & v2);
             v5 = v3;
@@ -294,21 +287,19 @@ void main() {
             v3 = u(f(v7) * f(v5));
         }
     }
-    if (pc <= 11) {
-        if (exec_lo != 0u) {
-            v3 = u(f(v6) * f(v3));
-            v0 = u(clamp(f(v0) * f(v3), 0.0, 1.0));
-            v1 = u(clamp(f(v1) * f(v3), 0.0, 1.0));
-            v2 = u(clamp(f(v2) * f(v3), 0.0, 1.0));
-            v3 = u(clamp(max(0.0, f(v3)), 0.0, 1.0));
-            v0 = packHalf2x16(vec2(f(v0), f(v1)));
-            v1 = packHalf2x16(vec2(f(v2), f(v3)));
-        }
-        exec_lo = s32;
-        if (exec_lo == 0u) discard;
-        color0 = vec4(unpackHalf2x16(v0), unpackHalf2x16(v1));
-        return;
+    if (exec_lo != 0u) {
+        v3 = u(f(v6) * f(v3));
+        v0 = u(clamp(f(v0) * f(v3), 0.0, 1.0));
+        v1 = u(clamp(f(v1) * f(v3), 0.0, 1.0));
+        v2 = u(clamp(f(v2) * f(v3), 0.0, 1.0));
+        v3 = u(clamp(max(0.0, f(v3)), 0.0, 1.0));
+        v0 = packHalf2x16(vec2(f(v0), f(v1)));
+        v1 = packHalf2x16(vec2(f(v2), f(v3)));
     }
+    exec_lo = s32;
+    if (exec_lo == 0u) discard;
+    color0 = vec4(unpackHalf2x16(v0), unpackHalf2x16(v1));
+    return;
     exec_lo = 0u;
     if (exec_lo == 0u) discard;
     color0 = vec4(unpackHalf2x16(0u), unpackHalf2x16(0u));

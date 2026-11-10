@@ -179,24 +179,21 @@ void main() {
     bool again_1 = false;
     do {
         again_1 = false;
-        if (pc <= 1) {
-            scc = s48 < s40 ? 1u : 0u;
-            vcc_lo = scc != 0u ? (exec_lo & 1u) : 0u;
+        scc = s48 < s40 ? 1u : 0u;
+        vcc_lo = scc != 0u ? (exec_lo & 1u) : 0u;
+        vcc_hi = 0u;
+        {
+            uint m_out = ((vcc_lo & 1u) | (~(exec_lo & 1u) & 1u));
+            scc = m_out != 0u ? 1u : 0u;
+            vcc_lo = m_out;
             vcc_hi = 0u;
-            {
-                uint m_out = ((vcc_lo & 1u) | (~(exec_lo & 1u) & 1u));
-                scc = m_out != 0u ? 1u : 0u;
-                vcc_lo = m_out;
-                vcc_hi = 0u;
-            }
-            {
-                uint m_out = ((exec_lo & 1u) & (vcc_lo & 1u));
-                scc = m_out != 0u ? 1u : 0u;
-                exec_lo = m_out;
-            }
-            if (exec_lo == 0u) pc = 6;
         }
-        if (pc <= 2) {
+        {
+            uint m_out = ((exec_lo & 1u) & (vcc_lo & 1u));
+            scc = m_out != 0u ? 1u : 0u;
+            exec_lo = m_out;
+        }
+        if (!(exec_lo == 0u)) {
             if (exec_lo != 0u) {
                 v0 = abs_diff(s48, 0x0u) + v23;
                 v0 = v0 << (0x2u & 31u);
@@ -221,462 +218,458 @@ void main() {
                 scc = m_out != 0u ? 1u : 0u;
                 exec_lo = m_out;
             }
-            if (exec_lo == 0u) pc = 6;
-        }
-        if (pc <= 3) {
-            if (exec_lo != 0u) {
-                v0 = 0x30u * v26;
-                v3 = uint(int(v0) >> (0x4u & 31u));
-                v4 = 0xfu & v0;
-                v5 = abs_diff(0x2u, 0x0u) + v3;
-                {
-                    uint b_at = (v3 * 16u + v4) >> 2;
-                    v0 = point_lights.w[b_at + 0u];
-                    v1 = point_lights.w[b_at + 1u];
-                    v2 = point_lights.w[b_at + 2u];
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v0 = 0x30u * v26;
+                    v3 = uint(int(v0) >> (0x4u & 31u));
+                    v4 = 0xfu & v0;
+                    v5 = abs_diff(0x2u, 0x0u) + v3;
+                    {
+                        uint b_at = (v3 * 16u + v4) >> 2;
+                        v0 = point_lights.w[b_at + 0u];
+                        v1 = point_lights.w[b_at + 1u];
+                        v2 = point_lights.w[b_at + 2u];
+                    }
+                    v6 = v4;
+                    {
+                        uint b_at = (v5 * 16u + v6 + 4u) >> 2;
+                        v3 = point_lights.w[b_at + 0u];
+                    }
+                    v4 = 0x0u;
+                    v0 = u(f(v0) - f(v25));
+                    v5 = u(f(v0) * f(v0));
+                    v1 = u(f(v1) - f(v24));
                 }
-                v6 = v4;
                 {
-                    uint b_at = (v5 * 16u + v6 + 4u) >> 2;
-                    v3 = point_lights.w[b_at + 0u];
+                    uint c_out = exec_lo != 0u && (0.0 < f(v3)) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
                 }
-                v4 = 0x0u;
-                v0 = u(f(v0) - f(v25));
-                v5 = u(f(v0) * f(v0));
-                v1 = u(f(v1) - f(v24));
+                if (exec_lo != 0u) {
+                    v2 = u(f(v2) + f(v21));
+                    v5 = u(f(v1) * f(v1) + f(v5));
+                    v27 = u(f(v2) * f(v2) + f(v5));
+                }
+                {
+                    uint s_in = (vcc_lo & 1u);
+                    uint s_old = exec_lo;
+                    exec_lo = (s_in & exec_lo);
+                    scc = exec_lo != 0u ? 1u : 0u;
+                    vcc_lo = s_old;
+                    vcc_hi = 0u;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v3 = u(max(f(0x358637bdu), f(v27)));
+                        v4 = u(sqrt(f(v3)));
+                        v4 = u(min(f(s41), f(v4)));
+                        v3 = u(1.0 / sqrt(f(v3)));
+                        v3 = u(f(v3) * f(v4));
+                        v37 = u(f(v2) * f(v3));
+                    }
+                    s22 = 0x3dcccccdu;
+                    if (exec_lo != 0u) {
+                        v5 = u(f(s22) * f(v37) + -f(v21));
+                        v34 = u(f(v1) * f(v3));
+                        v1 = u(f(s43) * f(v11));
+                        v6 = u(f(v34) * f(0x3dcccccdu) + f(v24));
+                        v32 = u(f(v0) * f(v3));
+                        v3 = u(f(0x3dcccccdu) * f(v37));
+                        v0 = u(f(0x3dcccccdu) * f(v34));
+                        v36 = s31;
+                        v5 = u(f(v3) * f(v1) + f(v5));
+                        v4 = u(f(v32) * f(0x3dcccccdu) + f(v25));
+                        v2 = u(f(0x3dcccccdu) * f(v32));
+                        v33 = s29;
+                        v35 = s28;
+                        v6 = u(f(v0) * f(v1) + f(v6));
+                        v0 = u(f(s27) * f(v5) + f(v36));
+                        v4 = u(f(v2) * f(v1) + f(v4));
+                        v1 = u(f(s24) * f(v5) + f(v35));
+                        v2 = u(f(s25) * f(v5) + f(v33));
+                        v0 = u(f(s23) * f(v6) + f(v0));
+                        v0 = u(f(s19) * f(v4) + f(v0));
+                        v1 = u(f(s20) * f(v6) + f(v1));
+                        v2 = u(f(s21) * f(v6) + f(v2));
+                        v0 = u(1.0 / f(v0));
+                        v2 = u((-f(s17) * f(v4) + -f(v2)) * 0.5);
+                        v1 = u((f(s16) * f(v4) + f(v1)) * 0.5);
+                        v1 = u(f(v1) * f(v0) + 0.5);
+                        v0 = u(f(v2) * f(v0) + 0.5);
+                        v1 = u(f(s36) * f(v1));
+                        v2 = u(f(s37) * f(v0));
+                        v7 = u(f(v37) * f(0x3dcccccdu) + f(v5));
+                        v3 = u(f(v34) * f(0x3dcccccdu) + f(v6));
+                        v4 = u(f(v32) * f(0x3dcccccdu) + f(v4));
+                        v6 = u(f(s25) * f(v7) + f(v33));
+                        v0 = cvt_u32(f(v1));
+                        v1 = cvt_u32(f(v2));
+                        v2 = 0x0u;
+                        v6 = u(f(s21) * f(v3) + f(v6));
+                        v6 = u((-f(s17) * f(v4) + -f(v6)) * 0.5);
+                        {
+                            vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0),
+                                int(v1)), int(v2));
+                            v8 = u(t_out.x);
+                        }
+                        v1 = u(f(s27) * f(v7) + f(v36));
+                        v2 = u(f(s24) * f(v7) + f(v35));
+                        v1 = u(f(s23) * f(v3) + f(v1));
+                        v9 = u(f(s20) * f(v3) + f(v2));
+                        v1 = u(f(s19) * f(v4) + f(v1));
+                        v0 = u(1.0 / f(v1));
+                        v9 = u((f(s16) * f(v4) + f(v9)) * 0.5);
+                        v1 = u(f(v9) * f(v0) + 0.5);
+                        v0 = u(f(v6) * f(v0) + 0.5);
+                        v1 = u(f(s36) * f(v1));
+                        v2 = u(f(s37) * f(v0));
+                        v0 = cvt_u32(f(v1));
+                        v1 = cvt_u32(f(v2));
+                        v2 = 0x0u;
+                        {
+                            vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0),
+                                int(v1)), int(v2));
+                            v2 = u(t_out.x);
+                        }
+                        v30 = u(f(v37) * f(0x3dcccccdu) + f(v7));
+                        v29 = u(f(v37) * f(0x3dcccccdu) + f(v30));
+                        v38 = u(f(v34) * f(0x3dcccccdu) + f(v3));
+                        v31 = u(f(v37) * f(0x3dcccccdu) + f(v29));
+                        v6 = u(f(v34) * f(0x3dcccccdu) + f(v38));
+                        v4 = u(f(v32) * f(0x3dcccccdu) + f(v4));
+                        v9 = u(f(v34) * f(0x3dcccccdu) + f(v6));
+                        v3 = u(f(v32) * f(0x3dcccccdu) + f(v4));
+                        v10 = u(f(s27) * f(v31) + f(v36));
+                        v0 = u(f(v32) * f(0x3dcccccdu) + f(v3));
+                        v1 = u(f(s25) * f(v31) + f(v33));
+                        v10 = u(f(s23) * f(v9) + f(v10));
+                        v10 = u(f(s19) * f(v0) + f(v10));
+                        v1 = u(f(s21) * f(v9) + f(v1));
+                        v10 = u(1.0 / f(v10));
+                        v1 = u((-f(s17) * f(v0) + -f(v1)) * 0.5);
+                        v40 = u(f(v1) * f(v10) + 0.5);
+                        v28 = s35;
+                    }
+                    s22 = 0x40a00000u;
+                    if (exec_lo != 0u) {
+                        v39 = u(f(s27) * f(v29) + f(v36));
+                        v39 = u(f(s23) * f(v6) + f(v39));
+                        v39 = u(f(s19) * f(v3) + f(v39));
+                        v39 = u(1.0 / f(v39));
+                        v45 = u(f(s24) * f(v31) + f(v35));
+                        v46 = u(f(s37) * f(v40));
+                        v40 = u(f(s42) + f(v12));
+                        v40 = u(f(v40) + f(v13));
+                        v40 = u(f(v40) + f(v14));
+                        v40 = u(f(v40) + f(v15));
+                        v40 = u(f(v40) + f(v16));
+                        v40 = u(f(v40) + f(v17));
+                        v40 = u(f(v40) + f(v18));
+                        v40 = u(f(v40) + f(v19));
+                        v40 = u(f(v40) + f(v20));
+                        v1 = u(f(s27) * f(v30) + f(v36));
+                        v45 = u(f(s20) * f(v9) + f(v45));
+                        v9 = u(f(v34) * f(0x3dcccccdu) + f(v9));
+                        v41 = u(f(v34) * f(0x3dcccccdu) + f(v9));
+                        v42 = u(f(s24) * f(v30) + f(v35));
+                        v45 = u((f(s16) * f(v0) + f(v45)) * 0.5);
+                        v1 = u(f(s23) * f(v38) + f(v1));
+                        v45 = u(f(v45) * f(v10) + 0.5);
+                        v10 = u(f(v32) * f(0x3dcccccdu) + f(v0));
+                        v43 = u(f(v32) * f(0x3dcccccdu) + f(v10));
+                        v1 = u(f(s19) * f(v4) + f(v1));
+                        v42 = u(f(s20) * f(v38) + f(v42));
+                        v42 = u((f(s16) * f(v4) + f(v42)) * 0.5);
+                        v44 = u(f(s25) * f(v30) + f(v33));
+                        v44 = u(f(s21) * f(v38) + f(v44));
+                        v0 = u(f(s36) * f(v45));
+                        v45 = u(1.0 / f(v1));
+                        v1 = u(f(v42) * f(v45) + 0.5);
+                        v44 = u((-f(s17) * f(v4) + -f(v44)) * 0.5);
+                        v0 = cvt_u32(f(v0));
+                        v42 = u(f(s36) * f(v1));
+                        v1 = cvt_u32(f(v46));
+                        v46 = u(f(s25) * f(v29) + f(v33));
+                        v46 = u(f(s21) * f(v6) + f(v46));
+                        v46 = u((-f(s17) * f(v3) + -f(v46)) * 0.5);
+                        v4 = u(f(v44) * f(v45) + 0.5);
+                        v47 = u(f(s24) * f(v29) + f(v35));
+                        v47 = u(f(s20) * f(v6) + f(v47));
+                        v6 = u(f(s37) * f(v4));
+                        v6 = cvt_u32(f(v6));
+                        v47 = u((f(s16) * f(v3) + f(v47)) * 0.5);
+                        v3 = u(f(v46) * f(v39) + 0.5);
+                        v4 = u(f(s37) * f(v3));
+                        v4 = cvt_u32(f(v4));
+                        v38 = u(f(v47) * f(v39) + 0.5);
+                        v38 = u(f(s36) * f(v38));
+                        v3 = cvt_u32(f(v38));
+                        v8 = u(2.0 * f(v8) + -1.0);
+                        v8 = u(f(s34) * f(v8) + f(v28));
+                        v8 = u(1.0 / -f(v8));
+                        v5 = u(f(v8) - f(v5));
+                        v5 = u(max(0.0, f(v5)));
+                        v5 = u(f(s22) * f(v5) + -1.0);
+                        v5 = u(min(1.0, abs(f(v5))));
+                        v40 = u(-f(s42) * f(v5) + f(v40));
+                        v5 = cvt_u32(f(v42));
+                        v2 = u(2.0 * f(v2) + -1.0);
+                        v2 = u(f(s34) * f(v2) + f(v28));
+                        v2 = u(1.0 / -f(v2));
+                        v2 = u(f(v2) - f(v7));
+                        v2 = u(max(0.0, f(v2)));
+                        v2 = u(f(s22) * f(v2) + -1.0);
+                        v2 = u(min(1.0, abs(f(v2))));
+                        v38 = u(-f(v12) * f(v2) + f(v40));
+                        v40 = u(f(v37) * f(0x3dcccccdu) + f(v31));
+                        v39 = u(f(v37) * f(0x3dcccccdu) + f(v40));
+                        v7 = u(f(s27) * f(v39) + f(v36));
+                        v2 = u(f(s24) * f(v39) + f(v35));
+                        v7 = u(f(s23) * f(v41) + f(v7));
+                        v7 = u(f(s19) * f(v43) + f(v7));
+                        v2 = u(f(s20) * f(v41) + f(v2));
+                        v46 = u(1.0 / f(v7));
+                        v2 = u((f(s16) * f(v43) + f(v2)) * 0.5);
+                        v2 = u(f(v2) * f(v46) + 0.5);
+                        v2 = u(f(s36) * f(v2));
+                        v7 = u(f(s25) * f(v40) + f(v33));
+                        v7 = u(f(s21) * f(v9) + f(v7));
+                        v7 = u((-f(s17) * f(v10) + -f(v7)) * 0.5);
+                        v8 = cvt_u32(f(v2));
+                        v2 = 0x0u;
+                        {
+                            vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0),
+                                int(v1)), int(v2));
+                            v42 = u(t_out.x);
+                        }
+                        v1 = u(f(s27) * f(v40) + f(v36));
+                        v2 = u(f(s24) * f(v40) + f(v35));
+                        v1 = u(f(s23) * f(v9) + f(v1));
+                        v44 = u(f(s20) * f(v9) + f(v2));
+                        v1 = u(f(s19) * f(v10) + f(v1));
+                        v0 = u(1.0 / f(v1));
+                        v44 = u((f(s16) * f(v10) + f(v44)) * 0.5);
+                        v2 = u(f(v7) * f(v0) + 0.5);
+                        v0 = u(f(v44) * f(v0) + 0.5);
+                        v0 = u(f(s36) * f(v0));
+                        v0 = cvt_u32(f(v0));
+                        v7 = 0x0u;
+                        v10 = 0x0u;
+                        v1 = u(f(s37) * f(v2));
+                        v1 = cvt_u32(f(v1));
+                        v2 = 0x0u;
+                        {
+                            vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v5),
+                                int(v6)), int(v7));
+                            v44 = u(t_out.x);
+                        }
+                        {
+                            vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0),
+                                int(v1)), int(v2));
+                            v45 = u(t_out.x);
+                        }
+                        v0 = u(f(s25) * f(v39) + f(v33));
+                        v0 = u(f(s21) * f(v41) + f(v0));
+                        v0 = u((-f(s17) * f(v43) + -f(v0)) * 0.5);
+                        v7 = u(f(v37) * f(0x3dcccccdu) + f(v39));
+                        v0 = u(f(v0) * f(v46) + 0.5);
+                        v5 = 0x0u;
+                        v0 = u(f(s37) * f(v0));
+                        v1 = u(f(v32) * f(0x3dcccccdu) + f(v43));
+                        v9 = cvt_u32(f(v0));
+                        {
+                            vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v3),
+                                int(v4)), int(v5));
+                            v3 = u(t_out.x);
+                        }
+                        {
+                            vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v8),
+                                int(v9)), int(v10));
+                            v8 = u(t_out.x);
+                        }
+                        v5 = u(f(v37) * f(0x3dcccccdu) + f(v7));
+                        v10 = u(f(v34) * f(0x3dcccccdu) + f(v41));
+                        v6 = u(f(v37) * f(0x3dcccccdu) + f(v5));
+                        v2 = u(f(v34) * f(0x3dcccccdu) + f(v10));
+                        v41 = u(f(s27) * f(v6) + f(v36));
+                        v9 = u(f(v34) * f(0x3dcccccdu) + f(v2));
+                        v0 = u(f(v32) * f(0x3dcccccdu) + f(v1));
+                        v46 = u(f(s27) * f(v5) + f(v36));
+                        v36 = u(f(s27) * f(v7) + f(v36));
+                        v37 = u(f(s24) * f(v7) + f(v35));
+                        v47 = u(f(s25) * f(v7) + f(v33));
+                        v36 = u(f(s23) * f(v10) + f(v36));
+                        v4 = u(f(v32) * f(0x3dcccccdu) + f(v0));
+                        v43 = u(f(s24) * f(v6) + f(v35));
+                        v34 = u(f(s24) * f(v5) + f(v35));
+                        v41 = u(f(s23) * f(v9) + f(v41));
+                        v46 = u(f(s23) * f(v2) + f(v46));
+                        v36 = u(f(s19) * f(v1) + f(v36));
+                        v47 = u(f(s21) * f(v10) + f(v47));
+                        v32 = u(f(s25) * f(v6) + f(v33));
+                        v47 = u((-f(s17) * f(v1) + -f(v47)) * 0.5);
+                        v46 = u(f(s19) * f(v0) + f(v46));
+                        v34 = u(f(s20) * f(v2) + f(v34));
+                        v34 = u((f(s16) * f(v0) + f(v34)) * 0.5);
+                        v35 = u(f(s25) * f(v5) + f(v33));
+                        v33 = u(f(s20) * f(v10) + f(v37));
+                        v10 = u(f(s19) * f(v4) + f(v41));
+                        v37 = u(f(s20) * f(v9) + f(v43));
+                        v33 = u((f(s16) * f(v1) + f(v33)) * 0.5);
+                        v37 = u((f(s16) * f(v4) + f(v37)) * 0.5);
+                        v35 = u(f(s21) * f(v2) + f(v35));
+                        v2 = u(1.0 / f(v36));
+                        v33 = u(f(v33) * f(v2) + 0.5);
+                        v41 = u(f(s21) * f(v9) + f(v32));
+                        v32 = u(f(v47) * f(v2) + 0.5);
+                        v32 = u(f(s37) * f(v32));
+                        v1 = cvt_u32(f(v32));
+                        v35 = u((-f(s17) * f(v0) + -f(v35)) * 0.5);
+                        v0 = u(1.0 / f(v10));
+                        v10 = u(1.0 / f(v46));
+                        v2 = u(f(v34) * f(v10) + 0.5);
+                        v41 = u((-f(s17) * f(v4) + -f(v41)) * 0.5);
+                        v9 = u(f(v35) * f(v10) + 0.5);
+                        v10 = u(f(s36) * f(v33));
+                        v4 = u(f(v41) * f(v0) + 0.5);
+                        v0 = u(f(v37) * f(v0) + 0.5);
+                        v33 = u(f(s36) * f(v0));
+                        v0 = cvt_u32(f(v10));
+                        v34 = u(f(s36) * f(v2));
+                        v2 = 0x0u;
+                        {
+                            vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0),
+                                int(v1)), int(v2));
+                            v10 = u(t_out.x);
+                        }
+                        v9 = u(f(s37) * f(v9));
+                        v1 = u(f(s37) * f(v4));
+                        v35 = 0x0u;
+                        v0 = cvt_u32(f(v33));
+                        v33 = cvt_u32(f(v34));
+                        v34 = cvt_u32(f(v9));
+                        v1 = cvt_u32(f(v1));
+                        v2 = 0x0u;
+                        {
+                            vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v33),
+                                int(v34)), int(v35));
+                            v9 = u(t_out.x);
+                        }
+                        {
+                            vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0),
+                                int(v1)), int(v2));
+                            v0 = u(t_out.x);
+                        }
+                        v4 = u(2.0 * f(v42) + -1.0);
+                        v4 = u(f(s34) * f(v4) + f(v28));
+                        v4 = u(1.0 / -f(v4));
+                        v4 = u(f(v4) - f(v31));
+                        v4 = u(max(0.0, f(v4)));
+                        v4 = u(f(s22) * f(v4) + -1.0);
+                        v31 = u(min(1.0, abs(f(v4))));
+                        v4 = u(2.0 * f(v44) + -1.0);
+                        v4 = u(f(s34) * f(v4) + f(v28));
+                        v4 = u(1.0 / -f(v4));
+                        v32 = u(2.0 * f(v45) + -1.0);
+                        v4 = u(f(v4) - f(v30));
+                        v32 = u(f(s34) * f(v32) + f(v28));
+                        v4 = u(max(0.0, f(v4)));
+                        v32 = u(1.0 / -f(v32));
+                        v4 = u(f(s22) * f(v4) + -1.0);
+                        v32 = u(f(v32) - f(v40));
+                        v3 = u(2.0 * f(v3) + -1.0);
+                        v3 = u(f(s34) * f(v3) + f(v28));
+                        v3 = u(1.0 / -f(v3));
+                        v8 = u(2.0 * f(v8) + -1.0);
+                        v3 = u(f(v3) - f(v29));
+                        v8 = u(f(s34) * f(v8) + f(v28));
+                        v29 = u(max(0.0, f(v3)));
+                        v8 = u(1.0 / -f(v8));
+                        v29 = u(f(s22) * f(v29) + -1.0);
+                        v4 = u(min(1.0, abs(f(v4))));
+                        v8 = u(f(v8) - f(v39));
+                        v30 = u(max(0.0, f(v32)));
+                        v29 = u(min(1.0, abs(f(v29))));
+                        v38 = u(f(v4) * -f(v13) + f(v38));
+                        v8 = u(max(0.0, f(v8)));
+                        v30 = u(f(s22) * f(v30) + -1.0);
+                        v38 = u(f(v29) * -f(v14) + f(v38));
+                        v8 = u(f(s22) * f(v8) + -1.0);
+                        v3 = u(min(1.0, abs(f(v30))));
+                        v38 = u(f(v31) * -f(v15) + f(v38));
+                        v8 = u(min(1.0, abs(f(v8))));
+                        v38 = u(f(v3) * -f(v16) + f(v38));
+                        v38 = u(f(v8) * -f(v17) + f(v38));
+                        v2 = u(2.0 * f(v10) + -1.0);
+                        v2 = u(f(s34) * f(v2) + f(v28));
+                        v2 = u(1.0 / -f(v2));
+                        v2 = u(f(v2) - f(v7));
+                        v2 = u(max(0.0, f(v2)));
+                        v2 = u(f(s22) * f(v2) + -1.0);
+                        v2 = u(min(1.0, abs(f(v2))));
+                        v38 = u(f(v2) * -f(v18) + f(v38));
+                        v2 = u(2.0 * f(v9) + -1.0);
+                        v0 = u(2.0 * f(v0) + -1.0);
+                        v2 = u(f(s34) * f(v2) + f(v28));
+                        v0 = u(f(s34) * f(v0) + f(v28));
+                        v2 = u(1.0 / -f(v2));
+                        v0 = u(1.0 / -f(v0));
+                        v2 = u(f(v2) - f(v5));
+                        v0 = u(f(v0) - f(v6));
+                        v2 = u(max(0.0, f(v2)));
+                        v0 = u(max(0.0, f(v0)));
+                        v2 = u(f(s22) * f(v2) + -1.0);
+                        v0 = u(f(s22) * f(v0) + -1.0);
+                        v2 = u(min(1.0, abs(f(v2))));
+                        v0 = u(min(1.0, abs(f(v0))));
+                        v38 = u(f(v2) * -f(v19) + f(v38));
+                        v38 = u(f(v0) * -f(v20) + f(v38));
+                        v0 = u(f(0x3dcccccdu) * f(v38));
+                        v4 = u(min(1.0, f(v0)));
+                    }
+                }
+                exec_lo = vcc_lo;
+                if (exec_lo != 0u) {
+                    v1 = 0x30u * v26;
+                    v0 = uint(int(v1) >> (0x4u & 31u));
+                    v3 = 0xfu & v1;
+                    v2 = abs_diff(0x1u, 0x0u) + v0;
+                    v1 = v3;
+                    {
+                        uint b_at = (v2 * 16u + v3 + 12u) >> 2;
+                        v2 = point_lights.w[b_at + 0u];
+                    }
+                    {
+                        uint b_at = (v0 * 16u + v1 + 12u) >> 2;
+                        v5 = point_lights.w[b_at + 0u];
+                    }
+                    v0 = abs_diff(0x2u, 0x0u) + v0;
+                    {
+                        uint b_at = (v0 * 16u + v1) >> 2;
+                        v0 = point_lights.w[b_at + 0u];
+                    }
+                    v3 = u(sqrt(f(v27)));
+                    v22 = u(f(v22) + f(v4));
+                }
+                {
+                    uint r_out = s48 + 0x1u;
+                    scc = ((int(s48) ^ int(r_out)) & (int(0x1u) ^ int(r_out))) < 0 ? 1u : 0u;
+                    s48 = r_out;
+                }
+                if (exec_lo != 0u) {
+                    v3 = u(f(v3) - f(v2));
+                    v2 = u(f(v5) - f(v2));
+                    v2 = u(1.0 / f(v2));
+                    v3 = u(max(0.0, f(v3)));
+                    v2 = u(f(v2) * f(v3));
+                    v2 = u(min(1.0, f(v2)));
+                    v2 = u(log2(abs(f(v2))));
+                    v0 = u(f(v0) * f(v2));
+                    v0 = u(exp2(f(v0)));
+                    v22 = u(f(v0) * -f(v4) + f(v22));
+                }
+                if (true) { pc = 1; again_1 = true; }
             }
-            {
-                uint c_out = exec_lo != 0u && (0.0 < f(v3)) ? 1u : 0u;
-                vcc_lo = c_out;
-                vcc_hi = 0u;
-            }
-            if (exec_lo != 0u) {
-                v2 = u(f(v2) + f(v21));
-                v5 = u(f(v1) * f(v1) + f(v5));
-                v27 = u(f(v2) * f(v2) + f(v5));
-            }
-            {
-                uint s_in = (vcc_lo & 1u);
-                uint s_old = exec_lo;
-                exec_lo = (s_in & exec_lo);
-                scc = exec_lo != 0u ? 1u : 0u;
-                vcc_lo = s_old;
-                vcc_hi = 0u;
-            }
-            if (exec_lo == 0u) pc = 5;
-        }
-        if (pc <= 4) {
-            if (exec_lo != 0u) {
-                v3 = u(max(f(0x358637bdu), f(v27)));
-                v4 = u(sqrt(f(v3)));
-                v4 = u(min(f(s41), f(v4)));
-                v3 = u(1.0 / sqrt(f(v3)));
-                v3 = u(f(v3) * f(v4));
-                v37 = u(f(v2) * f(v3));
-            }
-            s22 = 0x3dcccccdu;
-            if (exec_lo != 0u) {
-                v5 = u(f(s22) * f(v37) + -f(v21));
-                v34 = u(f(v1) * f(v3));
-                v1 = u(f(s43) * f(v11));
-                v6 = u(f(v34) * f(0x3dcccccdu) + f(v24));
-                v32 = u(f(v0) * f(v3));
-                v3 = u(f(0x3dcccccdu) * f(v37));
-                v0 = u(f(0x3dcccccdu) * f(v34));
-                v36 = s31;
-                v5 = u(f(v3) * f(v1) + f(v5));
-                v4 = u(f(v32) * f(0x3dcccccdu) + f(v25));
-                v2 = u(f(0x3dcccccdu) * f(v32));
-                v33 = s29;
-                v35 = s28;
-                v6 = u(f(v0) * f(v1) + f(v6));
-                v0 = u(f(s27) * f(v5) + f(v36));
-                v4 = u(f(v2) * f(v1) + f(v4));
-                v1 = u(f(s24) * f(v5) + f(v35));
-                v2 = u(f(s25) * f(v5) + f(v33));
-                v0 = u(f(s23) * f(v6) + f(v0));
-                v0 = u(f(s19) * f(v4) + f(v0));
-                v1 = u(f(s20) * f(v6) + f(v1));
-                v2 = u(f(s21) * f(v6) + f(v2));
-                v0 = u(1.0 / f(v0));
-                v2 = u((-f(s17) * f(v4) + -f(v2)) * 0.5);
-                v1 = u((f(s16) * f(v4) + f(v1)) * 0.5);
-                v1 = u(f(v1) * f(v0) + 0.5);
-                v0 = u(f(v2) * f(v0) + 0.5);
-                v1 = u(f(s36) * f(v1));
-                v2 = u(f(s37) * f(v0));
-                v7 = u(f(v37) * f(0x3dcccccdu) + f(v5));
-                v3 = u(f(v34) * f(0x3dcccccdu) + f(v6));
-                v4 = u(f(v32) * f(0x3dcccccdu) + f(v4));
-                v6 = u(f(s25) * f(v7) + f(v33));
-                v0 = cvt_u32(f(v1));
-                v1 = cvt_u32(f(v2));
-                v2 = 0x0u;
-                v6 = u(f(s21) * f(v3) + f(v6));
-                v6 = u((-f(s17) * f(v4) + -f(v6)) * 0.5);
-                {
-                    vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0), int(v1)),
-                        int(v2));
-                    v8 = u(t_out.x);
-                }
-                v1 = u(f(s27) * f(v7) + f(v36));
-                v2 = u(f(s24) * f(v7) + f(v35));
-                v1 = u(f(s23) * f(v3) + f(v1));
-                v9 = u(f(s20) * f(v3) + f(v2));
-                v1 = u(f(s19) * f(v4) + f(v1));
-                v0 = u(1.0 / f(v1));
-                v9 = u((f(s16) * f(v4) + f(v9)) * 0.5);
-                v1 = u(f(v9) * f(v0) + 0.5);
-                v0 = u(f(v6) * f(v0) + 0.5);
-                v1 = u(f(s36) * f(v1));
-                v2 = u(f(s37) * f(v0));
-                v0 = cvt_u32(f(v1));
-                v1 = cvt_u32(f(v2));
-                v2 = 0x0u;
-                {
-                    vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0), int(v1)),
-                        int(v2));
-                    v2 = u(t_out.x);
-                }
-                v30 = u(f(v37) * f(0x3dcccccdu) + f(v7));
-                v29 = u(f(v37) * f(0x3dcccccdu) + f(v30));
-                v38 = u(f(v34) * f(0x3dcccccdu) + f(v3));
-                v31 = u(f(v37) * f(0x3dcccccdu) + f(v29));
-                v6 = u(f(v34) * f(0x3dcccccdu) + f(v38));
-                v4 = u(f(v32) * f(0x3dcccccdu) + f(v4));
-                v9 = u(f(v34) * f(0x3dcccccdu) + f(v6));
-                v3 = u(f(v32) * f(0x3dcccccdu) + f(v4));
-                v10 = u(f(s27) * f(v31) + f(v36));
-                v0 = u(f(v32) * f(0x3dcccccdu) + f(v3));
-                v1 = u(f(s25) * f(v31) + f(v33));
-                v10 = u(f(s23) * f(v9) + f(v10));
-                v10 = u(f(s19) * f(v0) + f(v10));
-                v1 = u(f(s21) * f(v9) + f(v1));
-                v10 = u(1.0 / f(v10));
-                v1 = u((-f(s17) * f(v0) + -f(v1)) * 0.5);
-                v40 = u(f(v1) * f(v10) + 0.5);
-                v28 = s35;
-            }
-            s22 = 0x40a00000u;
-            if (exec_lo != 0u) {
-                v39 = u(f(s27) * f(v29) + f(v36));
-                v39 = u(f(s23) * f(v6) + f(v39));
-                v39 = u(f(s19) * f(v3) + f(v39));
-                v39 = u(1.0 / f(v39));
-                v45 = u(f(s24) * f(v31) + f(v35));
-                v46 = u(f(s37) * f(v40));
-                v40 = u(f(s42) + f(v12));
-                v40 = u(f(v40) + f(v13));
-                v40 = u(f(v40) + f(v14));
-                v40 = u(f(v40) + f(v15));
-                v40 = u(f(v40) + f(v16));
-                v40 = u(f(v40) + f(v17));
-                v40 = u(f(v40) + f(v18));
-                v40 = u(f(v40) + f(v19));
-                v40 = u(f(v40) + f(v20));
-                v1 = u(f(s27) * f(v30) + f(v36));
-                v45 = u(f(s20) * f(v9) + f(v45));
-                v9 = u(f(v34) * f(0x3dcccccdu) + f(v9));
-                v41 = u(f(v34) * f(0x3dcccccdu) + f(v9));
-                v42 = u(f(s24) * f(v30) + f(v35));
-                v45 = u((f(s16) * f(v0) + f(v45)) * 0.5);
-                v1 = u(f(s23) * f(v38) + f(v1));
-                v45 = u(f(v45) * f(v10) + 0.5);
-                v10 = u(f(v32) * f(0x3dcccccdu) + f(v0));
-                v43 = u(f(v32) * f(0x3dcccccdu) + f(v10));
-                v1 = u(f(s19) * f(v4) + f(v1));
-                v42 = u(f(s20) * f(v38) + f(v42));
-                v42 = u((f(s16) * f(v4) + f(v42)) * 0.5);
-                v44 = u(f(s25) * f(v30) + f(v33));
-                v44 = u(f(s21) * f(v38) + f(v44));
-                v0 = u(f(s36) * f(v45));
-                v45 = u(1.0 / f(v1));
-                v1 = u(f(v42) * f(v45) + 0.5);
-                v44 = u((-f(s17) * f(v4) + -f(v44)) * 0.5);
-                v0 = cvt_u32(f(v0));
-                v42 = u(f(s36) * f(v1));
-                v1 = cvt_u32(f(v46));
-                v46 = u(f(s25) * f(v29) + f(v33));
-                v46 = u(f(s21) * f(v6) + f(v46));
-                v46 = u((-f(s17) * f(v3) + -f(v46)) * 0.5);
-                v4 = u(f(v44) * f(v45) + 0.5);
-                v47 = u(f(s24) * f(v29) + f(v35));
-                v47 = u(f(s20) * f(v6) + f(v47));
-                v6 = u(f(s37) * f(v4));
-                v6 = cvt_u32(f(v6));
-                v47 = u((f(s16) * f(v3) + f(v47)) * 0.5);
-                v3 = u(f(v46) * f(v39) + 0.5);
-                v4 = u(f(s37) * f(v3));
-                v4 = cvt_u32(f(v4));
-                v38 = u(f(v47) * f(v39) + 0.5);
-                v38 = u(f(s36) * f(v38));
-                v3 = cvt_u32(f(v38));
-                v8 = u(2.0 * f(v8) + -1.0);
-                v8 = u(f(s34) * f(v8) + f(v28));
-                v8 = u(1.0 / -f(v8));
-                v5 = u(f(v8) - f(v5));
-                v5 = u(max(0.0, f(v5)));
-                v5 = u(f(s22) * f(v5) + -1.0);
-                v5 = u(min(1.0, abs(f(v5))));
-                v40 = u(-f(s42) * f(v5) + f(v40));
-                v5 = cvt_u32(f(v42));
-                v2 = u(2.0 * f(v2) + -1.0);
-                v2 = u(f(s34) * f(v2) + f(v28));
-                v2 = u(1.0 / -f(v2));
-                v2 = u(f(v2) - f(v7));
-                v2 = u(max(0.0, f(v2)));
-                v2 = u(f(s22) * f(v2) + -1.0);
-                v2 = u(min(1.0, abs(f(v2))));
-                v38 = u(-f(v12) * f(v2) + f(v40));
-                v40 = u(f(v37) * f(0x3dcccccdu) + f(v31));
-                v39 = u(f(v37) * f(0x3dcccccdu) + f(v40));
-                v7 = u(f(s27) * f(v39) + f(v36));
-                v2 = u(f(s24) * f(v39) + f(v35));
-                v7 = u(f(s23) * f(v41) + f(v7));
-                v7 = u(f(s19) * f(v43) + f(v7));
-                v2 = u(f(s20) * f(v41) + f(v2));
-                v46 = u(1.0 / f(v7));
-                v2 = u((f(s16) * f(v43) + f(v2)) * 0.5);
-                v2 = u(f(v2) * f(v46) + 0.5);
-                v2 = u(f(s36) * f(v2));
-                v7 = u(f(s25) * f(v40) + f(v33));
-                v7 = u(f(s21) * f(v9) + f(v7));
-                v7 = u((-f(s17) * f(v10) + -f(v7)) * 0.5);
-                v8 = cvt_u32(f(v2));
-                v2 = 0x0u;
-                {
-                    vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0), int(v1)),
-                        int(v2));
-                    v42 = u(t_out.x);
-                }
-                v1 = u(f(s27) * f(v40) + f(v36));
-                v2 = u(f(s24) * f(v40) + f(v35));
-                v1 = u(f(s23) * f(v9) + f(v1));
-                v44 = u(f(s20) * f(v9) + f(v2));
-                v1 = u(f(s19) * f(v10) + f(v1));
-                v0 = u(1.0 / f(v1));
-                v44 = u((f(s16) * f(v10) + f(v44)) * 0.5);
-                v2 = u(f(v7) * f(v0) + 0.5);
-                v0 = u(f(v44) * f(v0) + 0.5);
-                v0 = u(f(s36) * f(v0));
-                v0 = cvt_u32(f(v0));
-                v7 = 0x0u;
-                v10 = 0x0u;
-                v1 = u(f(s37) * f(v2));
-                v1 = cvt_u32(f(v1));
-                v2 = 0x0u;
-                {
-                    vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v5), int(v6)),
-                        int(v7));
-                    v44 = u(t_out.x);
-                }
-                {
-                    vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0), int(v1)),
-                        int(v2));
-                    v45 = u(t_out.x);
-                }
-                v0 = u(f(s25) * f(v39) + f(v33));
-                v0 = u(f(s21) * f(v41) + f(v0));
-                v0 = u((-f(s17) * f(v43) + -f(v0)) * 0.5);
-                v7 = u(f(v37) * f(0x3dcccccdu) + f(v39));
-                v0 = u(f(v0) * f(v46) + 0.5);
-                v5 = 0x0u;
-                v0 = u(f(s37) * f(v0));
-                v1 = u(f(v32) * f(0x3dcccccdu) + f(v43));
-                v9 = cvt_u32(f(v0));
-                {
-                    vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v3), int(v4)),
-                        int(v5));
-                    v3 = u(t_out.x);
-                }
-                {
-                    vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v8), int(v9)),
-                        int(v10));
-                    v8 = u(t_out.x);
-                }
-                v5 = u(f(v37) * f(0x3dcccccdu) + f(v7));
-                v10 = u(f(v34) * f(0x3dcccccdu) + f(v41));
-                v6 = u(f(v37) * f(0x3dcccccdu) + f(v5));
-                v2 = u(f(v34) * f(0x3dcccccdu) + f(v10));
-                v41 = u(f(s27) * f(v6) + f(v36));
-                v9 = u(f(v34) * f(0x3dcccccdu) + f(v2));
-                v0 = u(f(v32) * f(0x3dcccccdu) + f(v1));
-                v46 = u(f(s27) * f(v5) + f(v36));
-                v36 = u(f(s27) * f(v7) + f(v36));
-                v37 = u(f(s24) * f(v7) + f(v35));
-                v47 = u(f(s25) * f(v7) + f(v33));
-                v36 = u(f(s23) * f(v10) + f(v36));
-                v4 = u(f(v32) * f(0x3dcccccdu) + f(v0));
-                v43 = u(f(s24) * f(v6) + f(v35));
-                v34 = u(f(s24) * f(v5) + f(v35));
-                v41 = u(f(s23) * f(v9) + f(v41));
-                v46 = u(f(s23) * f(v2) + f(v46));
-                v36 = u(f(s19) * f(v1) + f(v36));
-                v47 = u(f(s21) * f(v10) + f(v47));
-                v32 = u(f(s25) * f(v6) + f(v33));
-                v47 = u((-f(s17) * f(v1) + -f(v47)) * 0.5);
-                v46 = u(f(s19) * f(v0) + f(v46));
-                v34 = u(f(s20) * f(v2) + f(v34));
-                v34 = u((f(s16) * f(v0) + f(v34)) * 0.5);
-                v35 = u(f(s25) * f(v5) + f(v33));
-                v33 = u(f(s20) * f(v10) + f(v37));
-                v10 = u(f(s19) * f(v4) + f(v41));
-                v37 = u(f(s20) * f(v9) + f(v43));
-                v33 = u((f(s16) * f(v1) + f(v33)) * 0.5);
-                v37 = u((f(s16) * f(v4) + f(v37)) * 0.5);
-                v35 = u(f(s21) * f(v2) + f(v35));
-                v2 = u(1.0 / f(v36));
-                v33 = u(f(v33) * f(v2) + 0.5);
-                v41 = u(f(s21) * f(v9) + f(v32));
-                v32 = u(f(v47) * f(v2) + 0.5);
-                v32 = u(f(s37) * f(v32));
-                v1 = cvt_u32(f(v32));
-                v35 = u((-f(s17) * f(v0) + -f(v35)) * 0.5);
-                v0 = u(1.0 / f(v10));
-                v10 = u(1.0 / f(v46));
-                v2 = u(f(v34) * f(v10) + 0.5);
-                v41 = u((-f(s17) * f(v4) + -f(v41)) * 0.5);
-                v9 = u(f(v35) * f(v10) + 0.5);
-                v10 = u(f(s36) * f(v33));
-                v4 = u(f(v41) * f(v0) + 0.5);
-                v0 = u(f(v37) * f(v0) + 0.5);
-                v33 = u(f(s36) * f(v0));
-                v0 = cvt_u32(f(v10));
-                v34 = u(f(s36) * f(v2));
-                v2 = 0x0u;
-                {
-                    vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0), int(v1)),
-                        int(v2));
-                    v10 = u(t_out.x);
-                }
-                v9 = u(f(s37) * f(v9));
-                v1 = u(f(s37) * f(v4));
-                v35 = 0x0u;
-                v0 = cvt_u32(f(v33));
-                v33 = cvt_u32(f(v34));
-                v34 = cvt_u32(f(v9));
-                v1 = cvt_u32(f(v1));
-                v2 = 0x0u;
-                {
-                    vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v33), int(v34)),
-                        int(v35));
-                    v9 = u(t_out.x);
-                }
-                {
-                    vec4 t_out = vec4(1.0) - texelFetch(scene_depth, ivec2(int(v0), int(v1)),
-                        int(v2));
-                    v0 = u(t_out.x);
-                }
-                v4 = u(2.0 * f(v42) + -1.0);
-                v4 = u(f(s34) * f(v4) + f(v28));
-                v4 = u(1.0 / -f(v4));
-                v4 = u(f(v4) - f(v31));
-                v4 = u(max(0.0, f(v4)));
-                v4 = u(f(s22) * f(v4) + -1.0);
-                v31 = u(min(1.0, abs(f(v4))));
-                v4 = u(2.0 * f(v44) + -1.0);
-                v4 = u(f(s34) * f(v4) + f(v28));
-                v4 = u(1.0 / -f(v4));
-                v32 = u(2.0 * f(v45) + -1.0);
-                v4 = u(f(v4) - f(v30));
-                v32 = u(f(s34) * f(v32) + f(v28));
-                v4 = u(max(0.0, f(v4)));
-                v32 = u(1.0 / -f(v32));
-                v4 = u(f(s22) * f(v4) + -1.0);
-                v32 = u(f(v32) - f(v40));
-                v3 = u(2.0 * f(v3) + -1.0);
-                v3 = u(f(s34) * f(v3) + f(v28));
-                v3 = u(1.0 / -f(v3));
-                v8 = u(2.0 * f(v8) + -1.0);
-                v3 = u(f(v3) - f(v29));
-                v8 = u(f(s34) * f(v8) + f(v28));
-                v29 = u(max(0.0, f(v3)));
-                v8 = u(1.0 / -f(v8));
-                v29 = u(f(s22) * f(v29) + -1.0);
-                v4 = u(min(1.0, abs(f(v4))));
-                v8 = u(f(v8) - f(v39));
-                v30 = u(max(0.0, f(v32)));
-                v29 = u(min(1.0, abs(f(v29))));
-                v38 = u(f(v4) * -f(v13) + f(v38));
-                v8 = u(max(0.0, f(v8)));
-                v30 = u(f(s22) * f(v30) + -1.0);
-                v38 = u(f(v29) * -f(v14) + f(v38));
-                v8 = u(f(s22) * f(v8) + -1.0);
-                v3 = u(min(1.0, abs(f(v30))));
-                v38 = u(f(v31) * -f(v15) + f(v38));
-                v8 = u(min(1.0, abs(f(v8))));
-                v38 = u(f(v3) * -f(v16) + f(v38));
-                v38 = u(f(v8) * -f(v17) + f(v38));
-                v2 = u(2.0 * f(v10) + -1.0);
-                v2 = u(f(s34) * f(v2) + f(v28));
-                v2 = u(1.0 / -f(v2));
-                v2 = u(f(v2) - f(v7));
-                v2 = u(max(0.0, f(v2)));
-                v2 = u(f(s22) * f(v2) + -1.0);
-                v2 = u(min(1.0, abs(f(v2))));
-                v38 = u(f(v2) * -f(v18) + f(v38));
-                v2 = u(2.0 * f(v9) + -1.0);
-                v0 = u(2.0 * f(v0) + -1.0);
-                v2 = u(f(s34) * f(v2) + f(v28));
-                v0 = u(f(s34) * f(v0) + f(v28));
-                v2 = u(1.0 / -f(v2));
-                v0 = u(1.0 / -f(v0));
-                v2 = u(f(v2) - f(v5));
-                v0 = u(f(v0) - f(v6));
-                v2 = u(max(0.0, f(v2)));
-                v0 = u(max(0.0, f(v0)));
-                v2 = u(f(s22) * f(v2) + -1.0);
-                v0 = u(f(s22) * f(v0) + -1.0);
-                v2 = u(min(1.0, abs(f(v2))));
-                v0 = u(min(1.0, abs(f(v0))));
-                v38 = u(f(v2) * -f(v19) + f(v38));
-                v38 = u(f(v0) * -f(v20) + f(v38));
-                v0 = u(f(0x3dcccccdu) * f(v38));
-                v4 = u(min(1.0, f(v0)));
-            }
-        }
-        if (pc <= 5) {
-            exec_lo = vcc_lo;
-            if (exec_lo != 0u) {
-                v1 = 0x30u * v26;
-                v0 = uint(int(v1) >> (0x4u & 31u));
-                v3 = 0xfu & v1;
-                v2 = abs_diff(0x1u, 0x0u) + v0;
-                v1 = v3;
-                {
-                    uint b_at = (v2 * 16u + v3 + 12u) >> 2;
-                    v2 = point_lights.w[b_at + 0u];
-                }
-                {
-                    uint b_at = (v0 * 16u + v1 + 12u) >> 2;
-                    v5 = point_lights.w[b_at + 0u];
-                }
-                v0 = abs_diff(0x2u, 0x0u) + v0;
-                {
-                    uint b_at = (v0 * 16u + v1) >> 2;
-                    v0 = point_lights.w[b_at + 0u];
-                }
-                v3 = u(sqrt(f(v27)));
-                v22 = u(f(v22) + f(v4));
-            }
-            {
-                uint r_out = s48 + 0x1u;
-                scc = ((int(s48) ^ int(r_out)) & (int(0x1u) ^ int(r_out))) < 0 ? 1u : 0u;
-                s48 = r_out;
-            }
-            if (exec_lo != 0u) {
-                v3 = u(f(v3) - f(v2));
-                v2 = u(f(v5) - f(v2));
-                v2 = u(1.0 / f(v2));
-                v3 = u(max(0.0, f(v3)));
-                v2 = u(f(v2) * f(v3));
-                v2 = u(min(1.0, f(v2)));
-                v2 = u(log2(abs(f(v2))));
-                v0 = u(f(v0) * f(v2));
-                v0 = u(exp2(f(v0)));
-                v22 = u(f(v0) * -f(v4) + f(v22));
-            }
-            if (true) { pc = 1; again_1 = true; }
         }
     } while (again_1);
     exec_lo = s50;

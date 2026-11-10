@@ -139,7 +139,7 @@ void main() {
     uint s40 = 0u, s41 = 0u, s42 = 0u, s43 = 0u;
     uint vcc_lo = 0u, vcc_hi = 0u, exec_lo = 1u, scc = 0u, m0 = 0u;
     int pc = 0;
-    draw_index = uint(gl_InstanceIndex);
+    draw_index = uint(gl_BaseInstance);
     Words vertex_constants = Words(draws_address + uint64_t(draw_index) * 896ul);
     EnemyMesh mesh = EnemyMesh(draws_address + uint64_t(draw_index) * 896ul + 768ul);
     Words palette = Words(mesh.palette);
@@ -398,8 +398,7 @@ void main() {
         v2 = u(f(v18) * f(v31) + f(v26));
         v43 = u(f(v0) * f(v18) + f(v43));
     }
-    if (scc == 0u) pc = 2;
-    if (pc <= 1) {
+    if (!(scc == 0u)) {
         s14 = vertex_constants.w[60];
         s15 = vertex_constants.w[61];
         s16 = vertex_constants.w[48];

@@ -110,8 +110,7 @@ void game_main() {
         vcc_lo = m_out;
         vcc_hi = 0u;
     }
-    if (scc == 0u) pc = 2;
-    if (pc <= 1) {
+    if (!(scc == 0u)) {
         exec_lo = vcc_lo;
         m0 = s4;
         if (exec_lo != 0u) {

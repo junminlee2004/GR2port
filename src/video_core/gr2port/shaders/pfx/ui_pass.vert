@@ -109,7 +109,7 @@ void main() {
     uint v13 = 0u, v14 = 0u, v15 = 0u;
     uint vcc_lo = 0u, vcc_hi = 0u, exec_lo = 1u, scc = 0u, m0 = 0u;
     int pc = 0;
-    draw_index = uint(gl_InstanceIndex);
+    draw_index = uint(gl_BaseInstance);
     Words draw_block = Words(draws_address + uint64_t(draw_index) * 160ul);
     uint vertex = UiVertex(draw_block);
     Words vs_constants = Words(uint64_t(draw_block.w[2]) | uint64_t(draw_block.w[3]) << 32);

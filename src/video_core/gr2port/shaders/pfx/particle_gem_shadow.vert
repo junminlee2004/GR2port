@@ -146,7 +146,7 @@ void main() {
     Words effect = Words(effect_address);
     Words description = Words(description_address);
     Words material = Words(material_address);
-    draw_index = uint(gl_InstanceIndex) >> 20;
+    draw_index = uint(gl_BaseInstance) >> 20;
     Words draw_block = Words(draws_address + uint64_t(draw_index) * 1192ul);
     v0 = uint(gl_VertexIndex);
     v3 = uint(gl_InstanceIndex) & 0xfffffu;
@@ -189,8 +189,7 @@ void main() {
         s36 = s_old;
         s37 = 0u;
     }
-    if (exec_lo == 0u) pc = 45;
-    if (pc <= 1) {
+    if (!(exec_lo == 0u)) {
         if (exec_lo != 0u) {
             v2 = 0x0u;
         }
@@ -237,51 +236,48 @@ void main() {
             vcc_hi = 0u;
             exec_lo = c_out;
         }
-        if ((vcc_lo & 1u) == 0u) pc = 3;
-    }
-    if (pc <= 2) {
-        if (exec_lo != 0u) {
-            v3 = 0xffffu & v3;
+        if (!((vcc_lo & 1u) == 0u)) {
+            if (exec_lo != 0u) {
+                v3 = 0xffffu & v3;
+            }
+            vcc_lo = 0x100u;
+            if (exec_lo != 0u) {
+                v3 = uint(sext24(v3) * sext24(vcc_lo));
+                v3 = u(float(v3));
+                v7 = u(float(v27));
+                v3 = u(f(v7) + f(v3));
+                v3 = cvt_u32(f(v3));
+                v3 = 0xc6395u ^ v3;
+                v3 = u(float(v3));
+                v7 = u(f(0x3ac01c14u) * f(v3));
+                v7 = u(fract(abs(f(v7))));
+                v3 = u(f(0x3b800000u) * f(v3));
+                v7 = u(f(0x402a91b9u) * f(v7));
+            }
+            {
+                uint c_out = exec_lo != 0u && (0.0 > f(v3)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            if (exec_lo != 0u) {
+                v3 = (vcc_lo & 1u) != 0u ? (v7 ^ 0x80000000u) : v7;
+                v7 = u(-1.0 + f(s16));
+                v3 = u(f(v3) * f(v7));
+                v7 = 0x3ec01c14u;
+                v3 = u(f(v7) * -f(v3) + f(s17));
+            }
+            {
+                uint c_out = exec_lo != 0u && (abs(f(v3)) >= 0.5) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint m_out = ((s14 & 1u) & (~(vcc_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                s14 = m_out;
+                s15 = 0u;
+            }
         }
-        vcc_lo = 0x100u;
-        if (exec_lo != 0u) {
-            v3 = uint(sext24(v3) * sext24(vcc_lo));
-            v3 = u(float(v3));
-            v7 = u(float(v27));
-            v3 = u(f(v7) + f(v3));
-            v3 = cvt_u32(f(v3));
-            v3 = 0xc6395u ^ v3;
-            v3 = u(float(v3));
-            v7 = u(f(0x3ac01c14u) * f(v3));
-            v7 = u(fract(abs(f(v7))));
-            v3 = u(f(0x3b800000u) * f(v3));
-            v7 = u(f(0x402a91b9u) * f(v7));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v3)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v3 = (vcc_lo & 1u) != 0u ? (v7 ^ 0x80000000u) : v7;
-            v7 = u(-1.0 + f(s16));
-            v3 = u(f(v3) * f(v7));
-            v7 = 0x3ec01c14u;
-            v3 = u(f(v7) * -f(v3) + f(s17));
-        }
-        {
-            uint c_out = exec_lo != 0u && (abs(f(v3)) >= 0.5) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint m_out = ((s14 & 1u) & (~(vcc_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            s14 = m_out;
-            s15 = 0u;
-        }
-    }
-    if (pc <= 3) {
         exec_lo = s14;
         {
             uint c_out = exec_lo != 0u && (0x2u >= v2) ? 1u : 0u;
@@ -289,1215 +285,1167 @@ void main() {
             vcc_hi = 0u;
             exec_lo = c_out;
         }
-        if ((vcc_lo & 1u) == 0u) pc = 45;
-    }
-    if (pc <= 4) {
-        if (exec_lo != 0u) {
-            v21 = 0xffffffu & v0;
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x0u != v21) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s38 = s_old;
-            s39 = 0u;
-        }
-        if (exec_lo == 0u) pc = 44;
-    }
-    if (pc <= 5) {
-        if (exec_lo != 0u) {
-            {
-                uint b_at = (v21 * 128u + 40u) >> 2;
-                v0 = emitter.w[b_at + 0u];
-            }
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x0u == v0) ? 1u : 0u;
-            s0 = c_out;
-            s1 = 0u;
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x1u == v0) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint m_out = ((vcc_lo & 1u) | (s0 & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            vcc_lo = m_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 44;
-    }
-    if (pc <= 6) {
-        if (exec_lo != 0u) {
-            v0 = 0xc6395u ^ v1;
-            v0 = u(float(v0));
-            v1 = u(f(0x3ac01c14u) * f(v0));
-            v1 = u(fract(abs(f(v1))));
-            v1 = u(f(0x402a91b9u) * f(v1));
-            v0 = u(f(0x3b800000u) * f(v0));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v7 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
-            {
-                uint b_at = (v21 * 128u + 32u) >> 2;
-                v22 = emitter.w[b_at + 0u];
+        if (!((vcc_lo & 1u) == 0u)) {
+            if (exec_lo != 0u) {
+                v21 = 0xffffffu & v0;
             }
             {
-                uint b_at = (v22 * 256u + 160u) >> 2;
-                v0 = description.w[b_at + 0u];
-                v1 = description.w[b_at + 1u];
-                v2 = description.w[b_at + 2u];
-                v3 = description.w[b_at + 3u];
+                uint c_out = exec_lo != 0u && (0x0u != v21) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
             }
             {
-                uint b_at = (v22 * 256u + 144u) >> 2;
-                v11 = description.w[b_at + 0u];
-                v12 = description.w[b_at + 1u];
-                v13 = description.w[b_at + 2u];
-                v14 = description.w[b_at + 3u];
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                s38 = s_old;
+                s39 = 0u;
             }
-            v0 = u(f(v3) - f(v14));
-            v0 = u(f(v7) * f(v0));
-            v0 = u(f(v0) * f(0x3ec01c14u) + f(v14));
-            v28 = u(f(v0) - f(v10));
-            v0 = u(1.0 / f(v0));
-            v18 = u(f(v0) * f(v28));
-        }
-        {
-            uint c_out = exec_lo != 0u && (!(f(v18) < 0.0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-            exec_lo = c_out;
-        }
-        if (exec_lo == 0u) pc = 44;
-    }
-    if (pc <= 7) {
-        {
-            uint c_out = exec_lo != 0u && (!(f(v18) > 1.0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-            exec_lo = c_out;
-        }
-        if (exec_lo == 0u) pc = 44;
-    }
-    if (pc <= 8) {
-        {
-            uint c_out = exec_lo != 0u && (0x4d2u > 0xffffffffu - v27) ? 1u : 0u;
-            if (exec_lo != 0u) v0 = 0x4d2u + v27;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v0 = 0xc6395u ^ v0;
-            v1 = u(float(v0));
-            v0 = u(f(0x3b800000u) * f(v1));
-            v1 = u(f(0x3ac01c14u) * f(v1));
-            v1 = u(fract(abs(f(v1))));
-            v1 = u(f(0x402a91b9u) * f(v1));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v0 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
-            v11 = u(f(0x3ec01c14u) * f(v0));
-            {
-                uint b_at = (v21 * 128u + 36u) >> 2;
-                v0 = emitter.w[b_at + 0u];
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    {
+                        uint b_at = (v21 * 128u + 40u) >> 2;
+                        v0 = emitter.w[b_at + 0u];
+                    }
+                }
+                {
+                    uint c_out = exec_lo != 0u && (0x0u == v0) ? 1u : 0u;
+                    s0 = c_out;
+                    s1 = 0u;
+                }
+                {
+                    uint c_out = exec_lo != 0u && (0x1u == v0) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
+                }
+                {
+                    uint m_out = ((vcc_lo & 1u) | (s0 & 1u));
+                    scc = m_out != 0u ? 1u : 0u;
+                    vcc_lo = m_out;
+                    vcc_hi = 0u;
+                }
+                {
+                    uint s_in = (vcc_lo & 1u);
+                    uint s_old = exec_lo;
+                    exec_lo = (s_in & exec_lo);
+                    scc = exec_lo != 0u ? 1u : 0u;
+                    vcc_lo = s_old;
+                    vcc_hi = 0u;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v0 = 0xc6395u ^ v1;
+                        v0 = u(float(v0));
+                        v1 = u(f(0x3ac01c14u) * f(v0));
+                        v1 = u(fract(abs(f(v1))));
+                        v1 = u(f(0x402a91b9u) * f(v1));
+                        v0 = u(f(0x3b800000u) * f(v0));
+                    }
+                    {
+                        uint c_out = exec_lo != 0u && (0.0 > f(v0)) ? 1u : 0u;
+                        vcc_lo = c_out;
+                        vcc_hi = 0u;
+                    }
+                    if (exec_lo != 0u) {
+                        v7 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
+                        {
+                            uint b_at = (v21 * 128u + 32u) >> 2;
+                            v22 = emitter.w[b_at + 0u];
+                        }
+                        {
+                            uint b_at = (v22 * 256u + 160u) >> 2;
+                            v0 = description.w[b_at + 0u];
+                            v1 = description.w[b_at + 1u];
+                            v2 = description.w[b_at + 2u];
+                            v3 = description.w[b_at + 3u];
+                        }
+                        {
+                            uint b_at = (v22 * 256u + 144u) >> 2;
+                            v11 = description.w[b_at + 0u];
+                            v12 = description.w[b_at + 1u];
+                            v13 = description.w[b_at + 2u];
+                            v14 = description.w[b_at + 3u];
+                        }
+                        v0 = u(f(v3) - f(v14));
+                        v0 = u(f(v7) * f(v0));
+                        v0 = u(f(v0) * f(0x3ec01c14u) + f(v14));
+                        v28 = u(f(v0) - f(v10));
+                        v0 = u(1.0 / f(v0));
+                        v18 = u(f(v0) * f(v28));
+                    }
+                    {
+                        uint c_out = exec_lo != 0u && (!(f(v18) < 0.0)) ? 1u : 0u;
+                        vcc_lo = c_out;
+                        vcc_hi = 0u;
+                        exec_lo = c_out;
+                    }
+                    if (!(exec_lo == 0u)) {
+                        {
+                            uint c_out = exec_lo != 0u && (!(f(v18) > 1.0)) ? 1u : 0u;
+                            vcc_lo = c_out;
+                            vcc_hi = 0u;
+                            exec_lo = c_out;
+                        }
+                        if (!(exec_lo == 0u)) {
+                            {
+                                uint c_out = exec_lo != 0u && (0x4d2u > 0xffffffffu - v27) ? 1u
+                                    : 0u;
+                                if (exec_lo != 0u) v0 = 0x4d2u + v27;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v0 = 0xc6395u ^ v0;
+                                v1 = u(float(v0));
+                                v0 = u(f(0x3b800000u) * f(v1));
+                                v1 = u(f(0x3ac01c14u) * f(v1));
+                                v1 = u(fract(abs(f(v1))));
+                                v1 = u(f(0x402a91b9u) * f(v1));
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (0.0 > f(v0)) ? 1u : 0u;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v0 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
+                                v11 = u(f(0x3ec01c14u) * f(v0));
+                                {
+                                    uint b_at = (v21 * 128u + 36u) >> 2;
+                                    v0 = emitter.w[b_at + 0u];
+                                }
+                                {
+                                    uint b_at = (v0 * 192u + 180u) >> 2;
+                                    v0 = effect.w[b_at + 0u];
+                                }
+                                v20 = v0 << (0x6u & 31u);
+                                v29 = abs_diff(s3, 0x0u) + v20;
+                                {
+                                    uint b_at = (v29 * 560u + 500u) >> 2;
+                                    v0 = material.w[b_at + 0u];
+                                }
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (0x0u != v0) ? 1u : 0u;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            {
+                                uint s_in = (vcc_lo & 1u);
+                                uint s_old = exec_lo;
+                                exec_lo = (s_in & exec_lo);
+                                scc = exec_lo != 0u ? 1u : 0u;
+                                s14 = s_old;
+                                s15 = 0u;
+                            }
+                            if (!(exec_lo == 0u)) {
+                                if (exec_lo != 0u) {
+                                    v0 = abs_diff(v0, 0x0u) + v20;
+                                    v3 = 0x7ffu & v0;
+                                    v7 = v0 >> (0xbu & 31u);
+                                    v1 = abs_diff(0x1u, 0x0u) + v3;
+                                    v3 = u(float(v3));
+                                    v1 = u(float(v1));
+                                    v2 = 0x3a000000u;
+                                }
+                                vcc_lo = 0x39800000u;
+                                if (exec_lo != 0u) {
+                                    v1 = u(clamp(f(v2) * f(v1) + f(vcc_lo), 0.0, 1.0));
+                                    v0 = u(clamp(f(v2) * f(v3) + f(vcc_lo), 0.0, 1.0));
+                                    v3 = v7 << (0x6u & 31u);
+                                    v3 = u(float(v3));
+                                    v2 = u(f(v1) - f(v0));
+                                    v1 = u(clamp(max(0.0, f(v18)), 0.0, 1.0));
+                                    v1 = u(f(v1) * f(0x427c0000u) + f(v3));
+                                    v3 = 0x3a800000u;
+                                }
+                                vcc_lo = 0x3a000000u;
+                                if (exec_lo != 0u) {
+                                    v1 = u(clamp(f(v3) * f(v1) + f(vcc_lo), 0.0, 1.0));
+                                    {
+                                        uint b_at = (v29 * 560u + 516u) >> 2;
+                                        v3 = material.w[b_at + 0u];
+                                    }
+                                    v2 = u(f(v3) * f(v2));
+                                    v0 = u(f(v11) * f(v2) + f(v0));
+                                    {
+                                        vec4 t_out = textureLod(sampler2D(curve_texture,
+                                            curve_sampler), vec2(f(v0), f(v1)), 0.0);
+                                        v26 = u(t_out.w);
+                                    }
+                                }
+                            }
+                            {
+                                uint m_out = ((s14 & 1u) & (~(exec_lo & 1u) & 1u));
+                                scc = m_out != 0u ? 1u : 0u;
+                                exec_lo = m_out;
+                            }
+                            if (!(exec_lo == 0u)) {
+                                if (exec_lo != 0u) {
+                                    {
+                                        uint b_at = (v29 * 560u + 80u) >> 2;
+                                        v0 = material.w[b_at + 0u];
+                                        v1 = material.w[b_at + 1u];
+                                        v2 = material.w[b_at + 2u];
+                                        v3 = material.w[b_at + 3u];
+                                    }
+                                    {
+                                        uint b_at = (v29 * 560u + 64u) >> 2;
+                                        v7 = material.w[b_at + 0u];
+                                        v8 = material.w[b_at + 1u];
+                                        v9 = material.w[b_at + 2u];
+                                        v10 = material.w[b_at + 3u];
+                                    }
+                                    v0 = u(f(v3) - f(v10));
+                                    v26 = u(f(v0) * f(v11) + f(v10));
+                                }
+                            }
+                            exec_lo = s14;
+                            {
+                                uint c_out = exec_lo != 0u && (0xd80u > 0xffffffffu - v27) ? 1u
+                                    : 0u;
+                                if (exec_lo != 0u) v0 = 0xd80u + v27;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v0 = 0xc6395u ^ v0;
+                                v0 = u(float(v0));
+                                v1 = u(f(0x3ac01c14u) * f(v0));
+                                v1 = u(fract(abs(f(v1))));
+                                v0 = u(f(0x3b800000u) * f(v0));
+                                v1 = u(f(0x402a91b9u) * f(v1));
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (0.0 > f(v0)) ? 1u : 0u;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v0 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
+                                v3 = u(f(0x3ec01c14u) * f(v0));
+                                {
+                                    uint b_at = (v29 * 560u + 496u) >> 2;
+                                    v0 = material.w[b_at + 0u];
+                                }
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (0x0u != v0) ? 1u : 0u;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                                exec_lo = c_out;
+                            }
+                            if (!(exec_lo == 0u)) {
+                                if (exec_lo != 0u) {
+                                    v0 = abs_diff(v0, 0x0u) + v20;
+                                    v7 = 0x7ffu & v0;
+                                    v8 = v0 >> (0xbu & 31u);
+                                    v1 = abs_diff(0x1u, 0x0u) + v7;
+                                    v7 = u(float(v7));
+                                    v1 = u(float(v1));
+                                    v2 = 0x3a000000u;
+                                }
+                                vcc_lo = 0x39800000u;
+                                if (exec_lo != 0u) {
+                                    v1 = u(clamp(f(v2) * f(v1) + f(vcc_lo), 0.0, 1.0));
+                                    v0 = u(clamp(f(v2) * f(v7) + f(vcc_lo), 0.0, 1.0));
+                                    v7 = v8 << (0x6u & 31u);
+                                    v7 = u(float(v7));
+                                    v2 = u(f(v1) - f(v0));
+                                    v1 = u(clamp(max(0.0, f(v18)), 0.0, 1.0));
+                                    v1 = u(f(v1) * f(0x427c0000u) + f(v7));
+                                    v7 = 0x3a800000u;
+                                }
+                                vcc_lo = 0x3a000000u;
+                                if (exec_lo != 0u) {
+                                    v1 = u(clamp(f(v7) * f(v1) + f(vcc_lo), 0.0, 1.0));
+                                    {
+                                        uint b_at = (v29 * 560u + 512u) >> 2;
+                                        v7 = material.w[b_at + 0u];
+                                    }
+                                    v2 = u(f(v7) * f(v2));
+                                    v0 = u(f(v3) * f(v2) + f(v0));
+                                    {
+                                        vec4 t_out = textureLod(sampler2D(curve_texture,
+                                            curve_sampler), vec2(f(v0), f(v1)), 0.0);
+                                        v15 = u(t_out.x);
+                                        v16 = u(t_out.y);
+                                        v17 = u(t_out.z);
+                                    }
+                                }
+                            }
+                            {
+                                uint m_out = ((s14 & 1u) & (~(exec_lo & 1u) & 1u));
+                                scc = m_out != 0u ? 1u : 0u;
+                                exec_lo = m_out;
+                            }
+                            if (!(exec_lo == 0u)) {
+                                if (exec_lo != 0u) {
+                                    {
+                                        uint b_at = (v29 * 560u + 112u) >> 2;
+                                        v7 = material.w[b_at + 0u];
+                                        v8 = material.w[b_at + 1u];
+                                        v9 = material.w[b_at + 2u];
+                                    }
+                                    {
+                                        uint b_at = (v29 * 560u + 96u) >> 2;
+                                        v0 = material.w[b_at + 0u];
+                                        v1 = material.w[b_at + 1u];
+                                        v2 = material.w[b_at + 2u];
+                                    }
+                                    v7 = u(f(v7) - f(v0));
+                                    v8 = u(f(v8) - f(v1));
+                                    v9 = u(f(v9) - f(v2));
+                                    v15 = u(f(v7) * f(v3) + f(v0));
+                                    v16 = u(f(v8) * f(v3) + f(v1));
+                                    v17 = u(f(v9) * f(v3) + f(v2));
+                                }
+                            }
+                            exec_lo = s14;
+                            if (exec_lo != 0u) {
+                                {
+                                    uint b_at = (v22 * 256u + 12u) >> 2;
+                                    v7 = description.w[b_at + 0u];
+                                }
+                                {
+                                    uint b_at = (v21 * 128u) >> 2;
+                                    v0 = emitter.w[b_at + 0u];
+                                    v1 = emitter.w[b_at + 1u];
+                                    v2 = emitter.w[b_at + 2u];
+                                    v3 = emitter.w[b_at + 3u];
+                                }
+                                v7 = 0x100u & v7;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (0x0u != v7) ? 1u : 0u;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            {
+                                uint s_in = (vcc_lo & 1u);
+                                uint s_old = exec_lo;
+                                exec_lo = (s_in & exec_lo);
+                                scc = exec_lo != 0u ? 1u : 0u;
+                                vcc_lo = s_old;
+                                vcc_hi = 0u;
+                            }
+                            if (!(exec_lo == 0u)) {
+                                if (exec_lo != 0u) {
+                                    v16 = u(f(v3) * f(v16));
+                                    v3 = 0x3f800000u;
+                                    {
+                                        uint b_at = (v21 * 128u + 96u) >> 2;
+                                        v7 = emitter.w[b_at + 0u];
+                                        v8 = emitter.w[b_at + 1u];
+                                    }
+                                    v17 = u(f(v17) * f(v8));
+                                    v15 = u(f(v15) * f(v8));
+                                }
+                            }
+                            exec_lo = vcc_lo;
+                            if (exec_lo != 0u) {
+                                {
+                                    uint b_at = (v22 * 256u + 196u) >> 2;
+                                    v11 = description.w[b_at + 0u];
+                                }
+                                {
+                                    uint b_at = (v19 * 64u + 32u) >> 2;
+                                    v7 = particle.w[b_at + 0u];
+                                    v8 = particle.w[b_at + 1u];
+                                    v9 = particle.w[b_at + 2u];
+                                    v10 = particle.w[b_at + 3u];
+                                }
+                                v11 = 0xffu & v11;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (0x5u != v11) ? 1u : 0u;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            {
+                                uint s_in = (vcc_lo & 1u);
+                                uint s_old = exec_lo;
+                                exec_lo = (s_in & exec_lo);
+                                scc = exec_lo != 0u ? 1u : 0u;
+                                s14 = s_old;
+                                s15 = 0u;
+                            }
+                            if (!(exec_lo == 0u)) {
+                                {
+                                    uint c_out = exec_lo != 0u && (0x2u != v11) ? 1u : 0u;
+                                    vcc_lo = c_out;
+                                    vcc_hi = 0u;
+                                }
+                                {
+                                    uint s_in = (vcc_lo & 1u);
+                                    uint s_old = exec_lo;
+                                    exec_lo = (s_in & exec_lo);
+                                    scc = exec_lo != 0u ? 1u : 0u;
+                                    s0 = s_old;
+                                    s1 = 0u;
+                                }
+                                if (!(exec_lo == 0u)) {
+                                    {
+                                        uint c_out = exec_lo != 0u && (0x3u != v11) ? 1u : 0u;
+                                        vcc_lo = c_out;
+                                        vcc_hi = 0u;
+                                    }
+                                    if (exec_lo != 0u) {
+                                        v24 = 0x0u;
+                                        v23 = 0x0u;
+                                        v32 = 0x0u;
+                                        v25 = 0x3f800000u;
+                                    }
+                                    {
+                                        uint s_in = (vcc_lo & 1u);
+                                        uint s_old = exec_lo;
+                                        exec_lo = (s_in & exec_lo);
+                                        scc = exec_lo != 0u ? 1u : 0u;
+                                        s2 = s_old;
+                                        s3 = 0u;
+                                    }
+                                    if (!(exec_lo == 0u)) {
+                                        if (exec_lo != 0u) {
+                                            v10 = u(f(v7) * f(v7));
+                                            v10 = u(f(v8) * f(v8) + f(v10));
+                                            v10 = u(f(v9) * f(v9) + f(v10));
+                                            v10 = u(1.0 / sqrt(f(v10)));
+                                            v11 = u(f(v10) * f(v8));
+                                        }
+                                        vcc_lo = 0x3f7fff58u;
+                                        {
+                                            uint c_out = exec_lo != 0u && (!(f(v11) >=
+                                                f(vcc_lo))) ? 1u : 0u;
+                                            vcc_lo = c_out;
+                                            vcc_hi = 0u;
+                                            exec_lo = c_out;
+                                        }
+                                        if (!(exec_lo == 0u)) {
+                                            if (exec_lo != 0u) {
+                                                v24 = 0x3f800000u;
+                                            }
+                                            vcc_lo = 0xbf7fff58u;
+                                            if (exec_lo != 0u) {
+                                                v25 = 0x0u;
+                                            }
+                                            {
+                                                uint c_out = exec_lo != 0u && (!(f(v11) <=
+                                                    f(vcc_lo))) ? 1u : 0u;
+                                                vcc_lo = c_out;
+                                                vcc_hi = 0u;
+                                                exec_lo = c_out;
+                                            }
+                                            if (!(exec_lo == 0u)) {
+                                                if (exec_lo != 0u) {
+                                                    v8 = u(f(v10) * f(v9));
+                                                    v9 = u(0.5 * f(v11) + 0.5);
+                                                    v7 = u(-f(v7) * f(v10) + 0.0);
+                                                    v10 = u(f(v8) * f(v8));
+                                                    v25 = u(sqrt(f(v9)));
+                                                    v11 = u(2.0 * f(v25));
+                                                    v10 = u(f(v7) * f(v7) + f(v10));
+                                                    v9 = u(1.0 / sqrt(f(v10)));
+                                                    v10 = u(sqrt(f(v10)));
+                                                    v11 = u(1.0 / f(v11));
+                                                    v8 = u(f(v9) * f(v8));
+                                                    v10 = u(f(v10) * f(v11));
+                                                    v7 = u(f(v7) * f(v9));
+                                                    v24 = u(f(v8) * f(v10));
+                                                    v32 = u(f(v7) * f(v10));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    exec_lo = s2;
+                                }
+                                {
+                                    uint m_out = ((s0 & 1u) & (~(exec_lo & 1u) & 1u));
+                                    scc = m_out != 0u ? 1u : 0u;
+                                    exec_lo = m_out;
+                                }
+                                if (!(exec_lo == 0u)) {
+                                    if (exec_lo != 0u) {
+                                        v9 = u(0.5 * f(v10));
+                                        v10 = u(f(0x3e22f983u) * f(v9));
+                                        v11 = u(-f(v7) * f(v7) + 1.0);
+                                        v9 = u(fract(f(v10)));
+                                        v11 = u(f(v8) * -f(v8) + f(v11));
+                                        v9 = u(sin(6.283185307 * f(v9)));
+                                        v11 = u(sqrt(f(v11)));
+                                        v10 = u(fract(abs(f(v10))));
+                                        v24 = u(f(v7) * f(v9));
+                                        v23 = u(f(v8) * f(v9));
+                                        v32 = u(f(v9) * f(v11));
+                                        v25 = u(cos(6.283185307 * f(v10)));
+                                    }
+                                }
+                                exec_lo = s0;
+                            }
+                            {
+                                uint m_out = ((s14 & 1u) & (~(exec_lo & 1u) & 1u));
+                                scc = m_out != 0u ? 1u : 0u;
+                                exec_lo = m_out;
+                            }
+                            if (!(exec_lo == 0u)) {
+                                if (exec_lo != 0u) {
+                                    v10 = 0x3c0efa35u;
+                                    v14 = u(f(v10) * f(v8) + f(0x3fc90fdbu));
+                                    v13 = u(f(v10) * f(v7) + f(0x3fc90fdbu));
+                                    v11 = u(f(0x3c0efa35u) * f(v8));
+                                    v12 = u(f(0x3c0efa35u) * f(v7));
+                                    v7 = u(f(0x3e22f983u) * f(v14));
+                                    v8 = u(f(0x3e22f983u) * f(v13));
+                                    v10 = u(f(v10) * f(v9) + f(0x3fc90fdbu));
+                                    v11 = u(f(0x3e22f983u) * f(v11));
+                                    v12 = u(f(0x3e22f983u) * f(v12));
+                                    v9 = u(f(0x3c0efa35u) * f(v9));
+                                    v7 = u(fract(f(v7)));
+                                    v8 = u(fract(f(v8)));
+                                    v13 = u(f(0x3e22f983u) * f(v10));
+                                    v14 = u(fract(f(v11)));
+                                    v23 = u(fract(f(v12)));
+                                    v9 = u(f(0x3e22f983u) * f(v9));
+                                    v10 = u(sin(6.283185307 * f(v7)));
+                                    v11 = u(sin(6.283185307 * f(v8)));
+                                    v7 = u(fract(f(v13)));
+                                    v12 = u(sin(6.283185307 * f(v14)));
+                                    v13 = u(sin(6.283185307 * f(v23)));
+                                    v8 = u(fract(f(v9)));
+                                    v9 = u(f(v10) * f(v11));
+                                    v7 = u(sin(6.283185307 * f(v7)));
+                                    v8 = u(sin(6.283185307 * f(v8)));
+                                    v10 = u(f(v10) * f(v13));
+                                    v11 = u(f(v12) * f(v11));
+                                    v24 = u(f(v7) * f(v9));
+                                    v12 = u(f(v12) * f(v13));
+                                    v23 = u(f(v7) * f(v10));
+                                    v32 = u(f(v7) * f(v11));
+                                    v25 = u(f(v8) * f(v9));
+                                    v24 = u(f(v12) * f(v8) + f(v24));
+                                    v23 = u(f(v11) * f(v8) + f(v23));
+                                    v32 = u(f(v10) * f(v8) + f(v32));
+                                    v25 = u(f(v12) * f(v7) + f(v25));
+                                }
+                            }
+                            exec_lo = s14;
+                            if (exec_lo != 0u) {
+                                {
+                                    uint b_at = (v19 * 64u) >> 2;
+                                    v11 = particle.w[b_at + 0u];
+                                    v12 = particle.w[b_at + 1u];
+                                    v13 = particle.w[b_at + 2u];
+                                    v14 = particle.w[b_at + 3u];
+                                }
+                                {
+                                    uint b_at = (v29 * 560u + 544u) >> 2;
+                                    v19 = material.w[b_at + 0u];
+                                }
+                                {
+                                    uint b_at = (v22 * 256u + 72u) >> 2;
+                                    v30 = description.w[b_at + 0u];
+                                }
+                                {
+                                    uint b_at = (v21 * 128u + 16u) >> 2;
+                                    v7 = emitter.w[b_at + 0u];
+                                    v8 = emitter.w[b_at + 1u];
+                                    v9 = emitter.w[b_at + 2u];
+                                    v10 = emitter.w[b_at + 3u];
+                                }
+                                v4 = u(f(v4) * f(v14));
+                                v17 = u(f(v14) * f(v17));
+                                v14 = u(f(v14) * f(v16));
+                                v15 = u(f(v4) * f(v15));
+                                v4 = u(f(v17) * f(v6));
+                                v14 = u(f(v14) * f(v5));
+                                v6 = u(f(v32) * f(v15));
+                                v16 = u(f(v24) * f(v14));
+                                v17 = u(f(v23) * f(v4));
+                                v5 = u(-f(v24) * f(v4) + f(v6));
+                                v6 = u(-f(v23) * f(v15) + f(v16));
+                                v17 = u(f(v14) * -f(v32) + f(v17));
+                                v16 = u(f(v25) * f(v15) + f(v17));
+                                v5 = u(f(v14) * f(v25) + f(v5));
+                                v6 = u(f(v4) * f(v25) + f(v6));
+                                v22 = u(-f(v32) * f(v5));
+                                v31 = u(f(v24) * f(v15));
+                                v21 = u(-f(v24) * f(v6));
+                                v15 = u(-f(v23) * f(v16));
+                                v17 = 0x8u & v19;
+                            }
+                            {
+                                uint c_out = exec_lo != 0u && (0x0u != v17) ? 1u : 0u;
+                                vcc_lo = c_out;
+                                vcc_hi = 0u;
+                            }
+                            if (exec_lo != 0u) {
+                                v22 = u(f(v6) * f(v23) + f(v22));
+                                v31 = u(f(v14) * f(v23) + f(v31));
+                                v14 = u(f(v32) * f(v16) + f(v21));
+                                v15 = u(f(v5) * f(v24) + f(v15));
+                                v4 = u(f(v32) * f(v4) + f(v31));
+                                v22 = u(f(v16) * f(v25) + f(v22));
+                                v14 = u(f(v5) * f(v25) + f(v14));
+                                v15 = u(f(v6) * f(v25) + f(v15));
+                                v31 = u(f(v4) * f(v24) + f(v22));
+                                v33 = u(f(v4) * f(v23) + f(v14));
+                                v32 = u(f(v4) * f(v32) + f(v15));
+                            }
+                            {
+                                uint s_in = (vcc_lo & 1u);
+                                uint s_old = exec_lo;
+                                exec_lo = (s_in & exec_lo);
+                                scc = exec_lo != 0u ? 1u : 0u;
+                                s14 = s_old;
+                                s15 = 0u;
+                            }
+                            if (!(exec_lo == 0u)) {
+                                {
+                                    uint c_out = exec_lo != 0u && (0x1u == v30) ? 1u : 0u;
+                                    vcc_lo = c_out;
+                                    vcc_hi = 0u;
+                                }
+                                {
+                                    uint s_in = (vcc_lo & 1u);
+                                    uint s_old = exec_lo;
+                                    exec_lo = (s_in & exec_lo);
+                                    scc = exec_lo != 0u ? 1u : 0u;
+                                    vcc_lo = s_old;
+                                    vcc_hi = 0u;
+                                }
+                                if (!(exec_lo == 0u)) {
+                                    if (exec_lo != 0u) {
+                                        v5 = u(f(v11) * f(v9));
+                                        v6 = u(f(v7) * f(v12));
+                                        v14 = u(f(v13) * f(v8));
+                                        v4 = u(-f(v7) * f(v13) + f(v5));
+                                        v5 = u(-f(v11) * f(v8) + f(v6));
+                                        v14 = u(f(v9) * -f(v12) + f(v14));
+                                        v6 = u(f(v11) * f(v10) + f(v14));
+                                        v4 = u(f(v10) * f(v12) + f(v4));
+                                        v5 = u(f(v10) * f(v13) + f(v5));
+                                        v14 = u(-f(v9) * f(v4));
+                                        v16 = u(f(v7) * f(v11));
+                                        v15 = u(-f(v7) * f(v5));
+                                        v11 = u(-f(v8) * f(v6));
+                                        v14 = u(f(v5) * f(v8) + f(v14));
+                                        v16 = u(f(v8) * f(v12) + f(v16));
+                                        v12 = u(f(v9) * f(v6) + f(v15));
+                                        v11 = u(f(v4) * f(v7) + f(v11));
+                                        v14 = u(f(v6) * f(v10) + f(v14));
+                                        v16 = u(f(v9) * f(v13) + f(v16));
+                                        v12 = u(f(v4) * f(v10) + f(v12));
+                                        v11 = u(f(v5) * f(v10) + f(v11));
+                                        v5 = u(f(v16) * f(v9) + f(v11));
+                                        v14 = u(f(v16) * f(v7) + f(v14));
+                                        v12 = u(f(v8) * f(v16) + f(v12));
+                                        v11 = u(f(v3) * f(v14) + f(v0));
+                                        v12 = u(f(v3) * f(v12) + f(v1));
+                                        v13 = u(f(v3) * f(v5) + f(v2));
+                                    }
+                                }
+                                exec_lo = vcc_lo;
+                                s16 = draw_block.w[0];
+                                s17 = draw_block.w[1];
+                                s18 = draw_block.w[2];
+                                s19 = draw_block.w[3];
+                                s20 = draw_block.w[4];
+                                s21 = draw_block.w[5];
+                                s22 = draw_block.w[6];
+                                s23 = draw_block.w[7];
+                                s0 = draw_block.w[8];
+                                s1 = draw_block.w[9];
+                                s2 = draw_block.w[10];
+                                s3 = draw_block.w[11];
+                                if (exec_lo != 0u) {
+                                    v0 = u(f(s19) + f(v31));
+                                    v1 = u(f(s23) + f(v33));
+                                    v2 = u(f(s3) + f(v32));
+                                    v3 = u(f(s0) * f(v11) + f(v2));
+                                    v0 = u(f(s16) * f(v11) + f(v0));
+                                    v1 = u(f(s20) * f(v11) + f(v1));
+                                    v2 = u(f(s17) * f(v12) + f(v0));
+                                    v1 = u(f(s21) * f(v12) + f(v1));
+                                    v3 = u(f(s1) * f(v12) + f(v3));
+                                    v0 = u(f(s2) * f(v13) + f(v3));
+                                    v2 = u(f(s18) * f(v13) + f(v2));
+                                    v1 = u(f(s22) * f(v13) + f(v1));
+                                }
+                            }
+                            {
+                                uint m_out = ((s14 & 1u) & (~(exec_lo & 1u) & 1u));
+                                scc = m_out != 0u ? 1u : 0u;
+                                exec_lo = m_out;
+                            }
+                            if (!(exec_lo == 0u)) {
+                                {
+                                    uint c_out = exec_lo != 0u && (0x1a57u > 0xffffffffu - v27)
+                                        ? 1u : 0u;
+                                    if (exec_lo != 0u) v4 = 0x1a57u + v27;
+                                    vcc_lo = c_out;
+                                    vcc_hi = 0u;
+                                }
+                                if (exec_lo != 0u) {
+                                    v4 = 0xc6395u ^ v4;
+                                    v5 = u(float(v4));
+                                    v4 = u(f(0x3ac01c14u) * f(v5));
+                                    v5 = u(f(0x3b800000u) * f(v5));
+                                    v4 = u(fract(abs(f(v4))));
+                                }
+                                {
+                                    uint c_out = exec_lo != 0u && (0.0 > f(v5)) ? 1u : 0u;
+                                    vcc_lo = c_out;
+                                    vcc_hi = 0u;
+                                }
+                                if (exec_lo != 0u) {
+                                    v4 = u(f(0x402a91b9u) * f(v4));
+                                    v4 = (vcc_lo & 1u) != 0u ? (v4 ^ 0x80000000u) : v4;
+                                    v4 = u(f(0x3ec01c14u) * f(v4));
+                                    {
+                                        uint b_at = (v29 * 560u + 504u) >> 2;
+                                        v5 = material.w[b_at + 0u];
+                                    }
+                                }
+                                {
+                                    uint c_out = exec_lo != 0u && (0x0u != v5) ? 1u : 0u;
+                                    vcc_lo = c_out;
+                                    vcc_hi = 0u;
+                                }
+                                {
+                                    uint s_in = (vcc_lo & 1u);
+                                    uint s_old = exec_lo;
+                                    exec_lo = (s_in & exec_lo);
+                                    scc = exec_lo != 0u ? 1u : 0u;
+                                    s20 = s_old;
+                                    s21 = 0u;
+                                }
+                                if (!(exec_lo == 0u)) {
+                                    if (exec_lo != 0u) {
+                                        v14 = abs_diff(v5, 0x0u) + v20;
+                                        v6 = 0x7ffu & v14;
+                                        v15 = abs_diff(0x1u, 0x0u) + v6;
+                                        v15 = u(float(v15));
+                                        v5 = 0x3a000000u;
+                                    }
+                                    vcc_lo = 0x39800000u;
+                                    if (exec_lo != 0u) {
+                                        v15 = u(clamp(f(v5) * f(v15) + f(vcc_lo), 0.0, 1.0));
+                                        v6 = u(float(v6));
+                                        v14 = v14 >> (0xbu & 31u);
+                                        v6 = u(clamp(f(v5) * f(v6) + f(vcc_lo), 0.0, 1.0));
+                                        v5 = v14 << (0x6u & 31u);
+                                        v14 = u(f(v15) - f(v6));
+                                        v15 = u(clamp(max(0.0, f(v18)), 0.0, 1.0));
+                                        v5 = u(float(v5));
+                                        v5 = u(f(v15) * f(0x427c0000u) + f(v5));
+                                        v15 = 0x3a800000u;
+                                    }
+                                    vcc_lo = 0x3a000000u;
+                                    if (exec_lo != 0u) {
+                                        v5 = u(clamp(f(v15) * f(v5) + f(vcc_lo), 0.0, 1.0));
+                                        {
+                                            uint b_at = (v29 * 560u + 520u) >> 2;
+                                            v15 = material.w[b_at + 0u];
+                                        }
+                                        v14 = u(f(v15) * f(v14));
+                                        v4 = u(f(v14) * f(v4) + f(v6));
+                                        {
+                                            vec4 t_out = textureLod(sampler2D(curve_texture,
+                                                curve_sampler), vec2(f(v4), f(v5)), 0.0);
+                                            v4 = u(t_out.x);
+                                            v5 = u(t_out.y);
+                                            v6 = u(t_out.z);
+                                        }
+                                    }
+                                }
+                                {
+                                    uint m_out = ((s20 & 1u) & (~(exec_lo & 1u) & 1u));
+                                    scc = m_out != 0u ? 1u : 0u;
+                                    exec_lo = m_out;
+                                }
+                                if (!(exec_lo == 0u)) {
+                                    {
+                                        uint c_out = exec_lo != 0u && (0x1a9eu > 0xffffffffu -
+                                            v27) ? 1u : 0u;
+                                        if (exec_lo != 0u) v5 = 0x1a9eu + v27;
+                                        vcc_lo = c_out;
+                                        vcc_hi = 0u;
+                                    }
+                                    if (exec_lo != 0u) {
+                                        v5 = 0xc6395u ^ v5;
+                                        v5 = u(float(v5));
+                                        v6 = u(f(0x3b800000u) * f(v5));
+                                    }
+                                    {
+                                        uint c_out = exec_lo != 0u && (0.0 > f(v6)) ? 1u : 0u;
+                                        vcc_lo = c_out;
+                                        vcc_hi = 0u;
+                                    }
+                                    if (exec_lo != 0u) {
+                                        v5 = u(f(0x3ac01c14u) * f(v5));
+                                        v5 = u(fract(abs(f(v5))));
+                                        v5 = u(f(0x402a91b9u) * f(v5));
+                                        v5 = (vcc_lo & 1u) != 0u ? (v5 ^ 0x80000000u) : v5;
+                                    }
+                                    {
+                                        uint c_out = exec_lo != 0u && (0x166fu > 0xffffffffu -
+                                            v27) ? 1u : 0u;
+                                        if (exec_lo != 0u) v6 = 0x166fu + v27;
+                                        vcc_lo = c_out;
+                                        vcc_hi = 0u;
+                                    }
+                                    if (exec_lo != 0u) {
+                                        v6 = 0xc6395u ^ v6;
+                                        v6 = u(float(v6));
+                                        v14 = u(f(0x3b800000u) * f(v6));
+                                    }
+                                    {
+                                        uint c_out = exec_lo != 0u && (0.0 > f(v14)) ? 1u : 0u;
+                                        vcc_lo = c_out;
+                                        vcc_hi = 0u;
+                                    }
+                                    if (exec_lo != 0u) {
+                                        v6 = u(f(0x3ac01c14u) * f(v6));
+                                        v6 = u(fract(abs(f(v6))));
+                                        v6 = u(f(0x402a91b9u) * f(v6));
+                                        v6 = (vcc_lo & 1u) != 0u ? (v6 ^ 0x80000000u) : v6;
+                                    }
+                                    {
+                                        uint c_out = exec_lo != 0u && (0x12ceu > 0xffffffffu -
+                                            v27) ? 1u : 0u;
+                                        if (exec_lo != 0u) v34 = 0x12ceu + v27;
+                                        vcc_lo = c_out;
+                                        vcc_hi = 0u;
+                                    }
+                                    if (exec_lo != 0u) {
+                                        v5 = u(f(0x3ec01c14u) * f(v5));
+                                        {
+                                            uint b_at = (v29 * 560u + 160u) >> 2;
+                                            v22 = material.w[b_at + 0u];
+                                            v23 = material.w[b_at + 1u];
+                                            v24 = material.w[b_at + 2u];
+                                            v25 = material.w[b_at + 3u];
+                                        }
+                                        {
+                                            uint b_at = (v29 * 560u + 144u) >> 2;
+                                            v18 = material.w[b_at + 0u];
+                                            v19 = material.w[b_at + 1u];
+                                            v20 = material.w[b_at + 2u];
+                                            v21 = material.w[b_at + 3u];
+                                        }
+                                        {
+                                            uint b_at = (v29 * 560u + 128u) >> 2;
+                                            v14 = material.w[b_at + 0u];
+                                            v15 = material.w[b_at + 1u];
+                                            v16 = material.w[b_at + 2u];
+                                            v17 = material.w[b_at + 3u];
+                                        }
+                                        v29 = 0xc6395u ^ v34;
+                                        v29 = u(float(v29));
+                                        v34 = u(f(0x3b800000u) * f(v29));
+                                    }
+                                    {
+                                        uint c_out = exec_lo != 0u && (0.0 > f(v34)) ? 1u : 0u;
+                                        vcc_lo = c_out;
+                                        vcc_hi = 0u;
+                                    }
+                                    if (exec_lo != 0u) {
+                                        v29 = u(f(0x3ac01c14u) * f(v29));
+                                        v29 = u(fract(abs(f(v29))));
+                                        v29 = u(f(0x402a91b9u) * f(v29));
+                                        v29 = (vcc_lo & 1u) != 0u ? (v29 ^ 0x80000000u) : v29;
+                                    }
+                                    {
+                                        uint c_out = exec_lo != 0u && (0xe9fu > 0xffffffffu -
+                                            v27) ? 1u : 0u;
+                                        if (exec_lo != 0u) v34 = 0xe9fu + v27;
+                                        vcc_lo = c_out;
+                                        vcc_hi = 0u;
+                                    }
+                                    {
+                                        uint c_out = exec_lo != 0u && (0x2656u > 0xffffffffu -
+                                            v27) ? 1u : 0u;
+                                        if (exec_lo != 0u) v27 = 0x2656u + v27;
+                                        vcc_lo = c_out;
+                                        vcc_hi = 0u;
+                                    }
+                                    if (exec_lo != 0u) {
+                                        v34 = 0xc6395u ^ v34;
+                                        v27 = 0xc6395u ^ v27;
+                                        v35 = u(float(v34));
+                                        v27 = u(float(v27));
+                                        v34 = u(f(0x3ac01c14u) * f(v35));
+                                        v35 = u(f(0x3b800000u) * f(v35));
+                                        v36 = u(f(0x3ac01c14u) * f(v27));
+                                        v34 = u(fract(abs(f(v34))));
+                                    }
+                                    {
+                                        uint c_out = exec_lo != 0u && (0.0 > f(v35)) ? 1u : 0u;
+                                        vcc_lo = c_out;
+                                        vcc_hi = 0u;
+                                    }
+                                    if (exec_lo != 0u) {
+                                        v35 = u(fract(abs(f(v36))));
+                                        v27 = u(f(0x3b800000u) * f(v27));
+                                        v34 = u(f(0x402a91b9u) * f(v34));
+                                        v35 = u(f(0x402a91b9u) * f(v35));
+                                        v34 = (vcc_lo & 1u) != 0u ? (v34 ^ 0x80000000u) : v34;
+                                    }
+                                    {
+                                        uint c_out = exec_lo != 0u && (0.0 > f(v27)) ? 1u : 0u;
+                                        vcc_lo = c_out;
+                                        vcc_hi = 0u;
+                                    }
+                                    if (exec_lo != 0u) {
+                                        v35 = (vcc_lo & 1u) != 0u ? (v35 ^ 0x80000000u) : v35;
+                                        v6 = u(f(0x3ec01c14u) * f(v6));
+                                        v27 = u(f(0x3ec01c14u) * f(v29));
+                                        v29 = u(f(0x3ec01c14u) * f(v34));
+                                        v34 = u(f(0x3ec01c14u) * f(v35));
+                                        v25 = u(f(v25) - f(v24));
+                                        v23 = u(f(v23) - f(v22));
+                                        v21 = u(f(v21) - f(v20));
+                                        v19 = u(f(v19) - f(v18));
+                                        v17 = u(f(v17) - f(v16));
+                                        v15 = u(f(v15) - f(v14));
+                                        v24 = u(f(v5) * f(v25) + f(v24));
+                                        v5 = u(f(v19) * f(v29) + f(v18));
+                                        v22 = u(f(v6) * f(v23) + f(v22));
+                                        v20 = u(f(v27) * f(v21) + f(v20));
+                                        v16 = u(f(v34) * f(v17) + f(v16));
+                                        v14 = u(f(v4) * f(v15) + f(v14));
+                                        v6 = u(f(v28) * f(v24) + f(v22));
+                                        v4 = u(f(v28) * f(v16) + f(v14));
+                                        v5 = u(f(v20) * f(v28) + f(v5));
+                                    }
+                                }
+                                exec_lo = s20;
+                                if (exec_lo != 0u) {
+                                    v14 = 0x3c8ef921u;
+                                    v15 = u(f(v14) * f(v4) + f(0x3fc90fdbu));
+                                    v15 = u(f(0x3e22f983u) * f(v15));
+                                    v17 = u(f(0x3c8ef921u) * f(v4));
+                                    v16 = u(f(v14) * f(v5) + f(0x3fc90fdbu));
+                                    v4 = u(fract(f(v15)));
+                                    v15 = u(f(0x3e22f983u) * f(v17));
+                                    v16 = u(f(0x3e22f983u) * f(v16));
+                                    v17 = u(f(0x3c8ef921u) * f(v5));
+                                    v5 = u(sin(6.283185307 * f(v4)));
+                                    v4 = u(fract(f(v15)));
+                                    v16 = u(fract(f(v16)));
+                                    v17 = u(f(0x3e22f983u) * f(v17));
+                                    v19 = u(f(v14) * f(v6) + f(0x3fc90fdbu));
+                                    v15 = u(f(v5) * f(v32));
+                                    v14 = u(sin(6.283185307 * f(v4)));
+                                    v4 = u(sin(6.283185307 * f(v16)));
+                                    v18 = u(fract(f(v17)));
+                                    v19 = u(f(0x3e22f983u) * f(v19));
+                                    v16 = u(f(0x3c8ef921u) * f(v6));
+                                    v21 = u(f(v4) * f(v31));
+                                    v6 = u(sin(6.283185307 * f(v18)));
+                                    v18 = u(fract(f(v19)));
+                                    v5 = u(f(v5) * f(v33));
+                                    v20 = u(f(0x3e22f983u) * f(v16));
+                                    v15 = u(f(v33) * -f(v14) + f(v15));
+                                    v16 = u(sin(6.283185307 * f(v18)));
+                                    v17 = u(fract(f(v20)));
+                                }
+                                {
+                                    uint c_out = exec_lo != 0u && (0x1u == v30) ? 1u : 0u;
+                                    vcc_lo = c_out;
+                                    vcc_hi = 0u;
+                                }
+                                if (exec_lo != 0u) {
+                                    v21 = u(f(v6) * -f(v15) + f(v21));
+                                    v5 = u(f(v32) * f(v14) + f(v5));
+                                    v17 = u(sin(6.283185307 * f(v17)));
+                                    v11 = u(f(v16) * f(v21) + f(v11));
+                                    v12 = u(f(v5) * f(v16) + f(v12));
+                                    v13 = u(f(v4) * f(v15) + f(v13));
+                                    v4 = u(f(v6) * f(v31) + f(v13));
+                                    v11 = u(f(v5) * f(v17) + f(v11));
+                                    v5 = u(-f(v21) * f(v17) + f(v12));
+                                }
+                                {
+                                    uint s_in = (vcc_lo & 1u);
+                                    uint s_old = exec_lo;
+                                    exec_lo = (s_in & exec_lo);
+                                    scc = exec_lo != 0u ? 1u : 0u;
+                                    vcc_lo = s_old;
+                                    vcc_hi = 0u;
+                                }
+                                if (!(exec_lo == 0u)) {
+                                    if (exec_lo != 0u) {
+                                        v12 = u(f(v9) * f(v11));
+                                        v13 = u(f(v7) * f(v5));
+                                        v14 = u(f(v8) * f(v4));
+                                        v6 = u(-f(v7) * f(v4) + f(v12));
+                                        v12 = u(-f(v8) * f(v11) + f(v13));
+                                        v14 = u(f(v5) * -f(v9) + f(v14));
+                                        v13 = u(f(v10) * f(v11) + f(v14));
+                                        v6 = u(f(v5) * f(v10) + f(v6));
+                                        v12 = u(f(v4) * f(v10) + f(v12));
+                                        v14 = u(-f(v9) * f(v6));
+                                        v16 = u(f(v7) * f(v11));
+                                        v15 = u(-f(v7) * f(v12));
+                                        v11 = u(-f(v8) * f(v13));
+                                        v14 = u(f(v12) * f(v8) + f(v14));
+                                        v16 = u(f(v5) * f(v8) + f(v16));
+                                        v5 = u(f(v9) * f(v13) + f(v15));
+                                        v11 = u(f(v6) * f(v7) + f(v11));
+                                        v14 = u(f(v13) * f(v10) + f(v14));
+                                        v16 = u(f(v4) * f(v9) + f(v16));
+                                        v5 = u(f(v6) * f(v10) + f(v5));
+                                        v11 = u(f(v12) * f(v10) + f(v11));
+                                        v4 = u(f(v16) * f(v9) + f(v11));
+                                        v14 = u(f(v16) * f(v7) + f(v14));
+                                        v5 = u(f(v8) * f(v16) + f(v5));
+                                        v11 = u(f(v3) * f(v14) + f(v0));
+                                        v5 = u(f(v3) * f(v5) + f(v1));
+                                        v4 = u(f(v3) * f(v4) + f(v2));
+                                    }
+                                }
+                                exec_lo = vcc_lo;
+                                s0 = draw_block.w[0];
+                                s1 = draw_block.w[1];
+                                s2 = draw_block.w[2];
+                                s3 = draw_block.w[3];
+                                s4 = draw_block.w[4];
+                                s5 = draw_block.w[5];
+                                s6 = draw_block.w[6];
+                                s7 = draw_block.w[7];
+                                s16 = draw_block.w[8];
+                                s17 = draw_block.w[9];
+                                s18 = draw_block.w[10];
+                                s19 = draw_block.w[11];
+                                s8 = draw_block.w[72];
+                                s9 = draw_block.w[73];
+                                s10 = draw_block.w[74];
+                                s11 = draw_block.w[75];
+                                if (exec_lo != 0u) {
+                                    v1 = s3;
+                                    v2 = s7;
+                                    v0 = s19;
+                                    v3 = u(f(s4) * f(v11) + f(v2));
+                                    v1 = u(f(s0) * f(v11) + f(v1));
+                                    v0 = u(f(s16) * f(v11) + f(v0));
+                                    v2 = u(f(s1) * f(v5) + f(v1));
+                                }
+                                {
+                                    uint c_out = exec_lo != 0u && (f(s10) != 0.0) ? 1u : 0u;
+                                    vcc_lo = c_out;
+                                    vcc_hi = 0u;
+                                }
+                                if (exec_lo != 0u) {
+                                    v3 = u(f(s5) * f(v5) + f(v3));
+                                    v0 = u(f(s17) * f(v5) + f(v0));
+                                    v1 = u(f(s6) * f(v4) + f(v3));
+                                    v2 = u(f(s2) * f(v4) + f(v2));
+                                    v0 = u(f(s18) * f(v4) + f(v0));
+                                }
+                                if (!((vcc_lo & 1u) == 0u)) {
+                                    s0 = draw_block.w[16];
+                                    s1 = draw_block.w[17];
+                                    s2 = draw_block.w[18];
+                                    s3 = draw_block.w[19];
+                                    s4 = draw_block.w[20];
+                                    s5 = draw_block.w[21];
+                                    s6 = draw_block.w[22];
+                                    s7 = draw_block.w[23];
+                                    s24 = draw_block.w[24];
+                                    s25 = draw_block.w[25];
+                                    s26 = draw_block.w[26];
+                                    s27 = draw_block.w[27];
+                                    s16 = draw_block.w[48];
+                                    s17 = draw_block.w[49];
+                                    s18 = draw_block.w[50];
+                                    s19 = draw_block.w[51];
+                                    s20 = draw_block.w[52];
+                                    s21 = draw_block.w[53];
+                                    s22 = draw_block.w[54];
+                                    s23 = draw_block.w[55];
+                                    s28 = draw_block.w[68];
+                                    s29 = draw_block.w[69];
+                                    s30 = draw_block.w[70];
+                                    s31 = draw_block.w[71];
+                                    s32 = draw_block.w[56];
+                                    s33 = draw_block.w[57];
+                                    s34 = draw_block.w[58];
+                                    s35 = draw_block.w[59];
+                                    if (exec_lo != 0u) {
+                                        v4 = s3;
+                                        v5 = s7;
+                                        v3 = s27;
+                                        v4 = u(f(s0) * f(v2) + f(v4));
+                                        v9 = u(f(s1) * f(v1) + f(v4));
+                                        v6 = u(f(s4) * f(v2) + f(v5));
+                                        v2 = u(f(s24) * f(v2) + f(v3));
+                                        v7 = u(1.0 / f(s30));
+                                        v4 = s19;
+                                        v5 = s23;
+                                        v8 = s35;
+                                        v9 = u(f(s2) * f(v0) + f(v9));
+                                        v6 = u(f(s5) * f(v1) + f(v6));
+                                        v2 = u(f(s25) * f(v1) + f(v2));
+                                        v1 = u(f(s6) * f(v0) + f(v6));
+                                        v0 = u(f(s26) * f(v0) + f(v2));
+                                        v6 = u(-f(s10) * f(v7));
+                                        v7 = u(f(s20) * f(v9) + f(v5));
+                                        v4 = u(f(s16) * f(v9) + f(v4));
+                                        v8 = u(f(s32) * f(v9) + f(v8));
+                                        v2 = u(f(s17) * f(v1) + f(v4));
+                                        v0 = u(2.0 * f(v6) + f(v0));
+                                        v7 = u(f(s21) * f(v1) + f(v7));
+                                        v8 = u(f(s33) * f(v1) + f(v8));
+                                        v1 = u(f(s22) * f(v0) + f(v7));
+                                        v2 = u(f(s18) * f(v0) + f(v2));
+                                        v0 = u(f(s34) * f(v0) + f(v8));
+                                    }
+                                }
+                            }
+                            exec_lo = s14;
+                            s0 = draw_block.w[16];
+                            s1 = draw_block.w[17];
+                            s2 = draw_block.w[18];
+                            s3 = draw_block.w[19];
+                            s4 = draw_block.w[20];
+                            s5 = draw_block.w[21];
+                            s6 = draw_block.w[22];
+                            s7 = draw_block.w[23];
+                            s8 = draw_block.w[24];
+                            s9 = draw_block.w[25];
+                            s10 = draw_block.w[26];
+                            s11 = draw_block.w[27];
+                            s12 = draw_block.w[28];
+                            s13 = draw_block.w[29];
+                            s14 = draw_block.w[30];
+                            s15 = draw_block.w[31];
+                            if (exec_lo != 0u) {
+                                v4 = s3;
+                                v5 = s7;
+                                v6 = s11;
+                                v7 = s15;
+                                v3 = u(f(s0) * f(v2) + f(v4));
+                                v4 = u(f(s4) * f(v2) + f(v5));
+                                v5 = u(f(s8) * f(v2) + f(v6));
+                                v7 = u(f(s12) * f(v2) + f(v7));
+                                v3 = u(f(s1) * f(v1) + f(v3));
+                                v4 = u(f(s5) * f(v1) + f(v4));
+                                v5 = u(f(s9) * f(v1) + f(v5));
+                                v7 = u(f(s13) * f(v1) + f(v7));
+                                v15 = u(f(s2) * f(v0) + f(v3));
+                                v16 = u(f(s6) * f(v0) + f(v4));
+                                v17 = u(f(s10) * f(v0) + f(v5));
+                                v20 = u(f(s14) * f(v0) + f(v7));
+                            }
+                        }
+                    }
+                }
             }
-            {
-                uint b_at = (v0 * 192u + 180u) >> 2;
-                v0 = effect.w[b_at + 0u];
+            exec_lo = s38;
+            if (exec_lo != 0u) {
+                v2 = 0x3u;
             }
-            v20 = v0 << (0x6u & 31u);
-            v29 = abs_diff(s3, 0x0u) + v20;
-            {
-                uint b_at = (v29 * 560u + 500u) >> 2;
-                v0 = material.w[b_at + 0u];
-            }
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x0u != v0) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s14 = s_old;
-            s15 = 0u;
-        }
-        if (exec_lo == 0u) pc = 10;
-    }
-    if (pc <= 9) {
-        if (exec_lo != 0u) {
-            v0 = abs_diff(v0, 0x0u) + v20;
-            v3 = 0x7ffu & v0;
-            v7 = v0 >> (0xbu & 31u);
-            v1 = abs_diff(0x1u, 0x0u) + v3;
-            v3 = u(float(v3));
-            v1 = u(float(v1));
-            v2 = 0x3a000000u;
-        }
-        vcc_lo = 0x39800000u;
-        if (exec_lo != 0u) {
-            v1 = u(clamp(f(v2) * f(v1) + f(vcc_lo), 0.0, 1.0));
-            v0 = u(clamp(f(v2) * f(v3) + f(vcc_lo), 0.0, 1.0));
-            v3 = v7 << (0x6u & 31u);
-            v3 = u(float(v3));
-            v2 = u(f(v1) - f(v0));
-            v1 = u(clamp(max(0.0, f(v18)), 0.0, 1.0));
-            v1 = u(f(v1) * f(0x427c0000u) + f(v3));
-            v3 = 0x3a800000u;
-        }
-        vcc_lo = 0x3a000000u;
-        if (exec_lo != 0u) {
-            v1 = u(clamp(f(v3) * f(v1) + f(vcc_lo), 0.0, 1.0));
-            {
-                uint b_at = (v29 * 560u + 516u) >> 2;
-                v3 = material.w[b_at + 0u];
-            }
-            v2 = u(f(v3) * f(v2));
-            v0 = u(f(v11) * f(v2) + f(v0));
-            {
-                vec4 t_out = textureLod(sampler2D(curve_texture, curve_sampler), vec2(f(v0),
-                    f(v1)), 0.0);
-                v26 = u(t_out.w);
-            }
-        }
-    }
-    if (pc <= 10) {
-        {
-            uint m_out = ((s14 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 12;
-    }
-    if (pc <= 11) {
-        if (exec_lo != 0u) {
-            {
-                uint b_at = (v29 * 560u + 80u) >> 2;
-                v0 = material.w[b_at + 0u];
-                v1 = material.w[b_at + 1u];
-                v2 = material.w[b_at + 2u];
-                v3 = material.w[b_at + 3u];
-            }
-            {
-                uint b_at = (v29 * 560u + 64u) >> 2;
-                v7 = material.w[b_at + 0u];
-                v8 = material.w[b_at + 1u];
-                v9 = material.w[b_at + 2u];
-                v10 = material.w[b_at + 3u];
-            }
-            v0 = u(f(v3) - f(v10));
-            v26 = u(f(v0) * f(v11) + f(v10));
-        }
-    }
-    if (pc <= 12) {
-        exec_lo = s14;
-        {
-            uint c_out = exec_lo != 0u && (0xd80u > 0xffffffffu - v27) ? 1u : 0u;
-            if (exec_lo != 0u) v0 = 0xd80u + v27;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v0 = 0xc6395u ^ v0;
-            v0 = u(float(v0));
-            v1 = u(f(0x3ac01c14u) * f(v0));
-            v1 = u(fract(abs(f(v1))));
-            v0 = u(f(0x3b800000u) * f(v0));
-            v1 = u(f(0x402a91b9u) * f(v1));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v0 = (vcc_lo & 1u) != 0u ? (v1 ^ 0x80000000u) : v1;
-            v3 = u(f(0x3ec01c14u) * f(v0));
-            {
-                uint b_at = (v29 * 560u + 496u) >> 2;
-                v0 = material.w[b_at + 0u];
-            }
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x0u != v0) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-            exec_lo = c_out;
-        }
-        if (exec_lo == 0u) pc = 14;
-    }
-    if (pc <= 13) {
-        if (exec_lo != 0u) {
-            v0 = abs_diff(v0, 0x0u) + v20;
-            v7 = 0x7ffu & v0;
-            v8 = v0 >> (0xbu & 31u);
-            v1 = abs_diff(0x1u, 0x0u) + v7;
-            v7 = u(float(v7));
-            v1 = u(float(v1));
-            v2 = 0x3a000000u;
-        }
-        vcc_lo = 0x39800000u;
-        if (exec_lo != 0u) {
-            v1 = u(clamp(f(v2) * f(v1) + f(vcc_lo), 0.0, 1.0));
-            v0 = u(clamp(f(v2) * f(v7) + f(vcc_lo), 0.0, 1.0));
-            v7 = v8 << (0x6u & 31u);
-            v7 = u(float(v7));
-            v2 = u(f(v1) - f(v0));
-            v1 = u(clamp(max(0.0, f(v18)), 0.0, 1.0));
-            v1 = u(f(v1) * f(0x427c0000u) + f(v7));
-            v7 = 0x3a800000u;
-        }
-        vcc_lo = 0x3a000000u;
-        if (exec_lo != 0u) {
-            v1 = u(clamp(f(v7) * f(v1) + f(vcc_lo), 0.0, 1.0));
-            {
-                uint b_at = (v29 * 560u + 512u) >> 2;
-                v7 = material.w[b_at + 0u];
-            }
-            v2 = u(f(v7) * f(v2));
-            v0 = u(f(v3) * f(v2) + f(v0));
-            {
-                vec4 t_out = textureLod(sampler2D(curve_texture, curve_sampler), vec2(f(v0),
-                    f(v1)), 0.0);
-                v15 = u(t_out.x);
-                v16 = u(t_out.y);
-                v17 = u(t_out.z);
-            }
-        }
-    }
-    if (pc <= 14) {
-        {
-            uint m_out = ((s14 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 16;
-    }
-    if (pc <= 15) {
-        if (exec_lo != 0u) {
-            {
-                uint b_at = (v29 * 560u + 112u) >> 2;
-                v7 = material.w[b_at + 0u];
-                v8 = material.w[b_at + 1u];
-                v9 = material.w[b_at + 2u];
-            }
-            {
-                uint b_at = (v29 * 560u + 96u) >> 2;
-                v0 = material.w[b_at + 0u];
-                v1 = material.w[b_at + 1u];
-                v2 = material.w[b_at + 2u];
-            }
-            v7 = u(f(v7) - f(v0));
-            v8 = u(f(v8) - f(v1));
-            v9 = u(f(v9) - f(v2));
-            v15 = u(f(v7) * f(v3) + f(v0));
-            v16 = u(f(v8) * f(v3) + f(v1));
-            v17 = u(f(v9) * f(v3) + f(v2));
-        }
-    }
-    if (pc <= 16) {
-        exec_lo = s14;
-        if (exec_lo != 0u) {
-            {
-                uint b_at = (v22 * 256u + 12u) >> 2;
-                v7 = description.w[b_at + 0u];
-            }
-            {
-                uint b_at = (v21 * 128u) >> 2;
-                v0 = emitter.w[b_at + 0u];
-                v1 = emitter.w[b_at + 1u];
-                v2 = emitter.w[b_at + 2u];
-                v3 = emitter.w[b_at + 3u];
-            }
-            v7 = 0x100u & v7;
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x0u != v7) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 18;
-    }
-    if (pc <= 17) {
-        if (exec_lo != 0u) {
-            v16 = u(f(v3) * f(v16));
-            v3 = 0x3f800000u;
-            {
-                uint b_at = (v21 * 128u + 96u) >> 2;
-                v7 = emitter.w[b_at + 0u];
-                v8 = emitter.w[b_at + 1u];
-            }
-            v17 = u(f(v17) * f(v8));
-            v15 = u(f(v15) * f(v8));
-        }
-    }
-    if (pc <= 18) {
-        exec_lo = vcc_lo;
-        if (exec_lo != 0u) {
-            {
-                uint b_at = (v22 * 256u + 196u) >> 2;
-                v11 = description.w[b_at + 0u];
-            }
-            {
-                uint b_at = (v19 * 64u + 32u) >> 2;
-                v7 = particle.w[b_at + 0u];
-                v8 = particle.w[b_at + 1u];
-                v9 = particle.w[b_at + 2u];
-                v10 = particle.w[b_at + 3u];
-            }
-            v11 = 0xffu & v11;
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x5u != v11) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s14 = s_old;
-            s15 = 0u;
-        }
-        if (exec_lo == 0u) pc = 28;
-    }
-    if (pc <= 19) {
-        {
-            uint c_out = exec_lo != 0u && (0x2u != v11) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s0 = s_old;
-            s1 = 0u;
-        }
-        if (exec_lo == 0u) pc = 25;
-    }
-    if (pc <= 20) {
-        {
-            uint c_out = exec_lo != 0u && (0x3u != v11) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v24 = 0x0u;
-            v23 = 0x0u;
-            v32 = 0x0u;
-            v25 = 0x3f800000u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s2 = s_old;
-            s3 = 0u;
-        }
-        if (exec_lo == 0u) pc = 24;
-    }
-    if (pc <= 21) {
-        if (exec_lo != 0u) {
-            v10 = u(f(v7) * f(v7));
-            v10 = u(f(v8) * f(v8) + f(v10));
-            v10 = u(f(v9) * f(v9) + f(v10));
-            v10 = u(1.0 / sqrt(f(v10)));
-            v11 = u(f(v10) * f(v8));
-        }
-        vcc_lo = 0x3f7fff58u;
-        {
-            uint c_out = exec_lo != 0u && (!(f(v11) >= f(vcc_lo))) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-            exec_lo = c_out;
-        }
-        if (exec_lo == 0u) pc = 24;
-    }
-    if (pc <= 22) {
-        if (exec_lo != 0u) {
-            v24 = 0x3f800000u;
-        }
-        vcc_lo = 0xbf7fff58u;
-        if (exec_lo != 0u) {
-            v25 = 0x0u;
-        }
-        {
-            uint c_out = exec_lo != 0u && (!(f(v11) <= f(vcc_lo))) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-            exec_lo = c_out;
-        }
-        if (exec_lo == 0u) pc = 24;
-    }
-    if (pc <= 23) {
-        if (exec_lo != 0u) {
-            v8 = u(f(v10) * f(v9));
-            v9 = u(0.5 * f(v11) + 0.5);
-            v7 = u(-f(v7) * f(v10) + 0.0);
-            v10 = u(f(v8) * f(v8));
-            v25 = u(sqrt(f(v9)));
-            v11 = u(2.0 * f(v25));
-            v10 = u(f(v7) * f(v7) + f(v10));
-            v9 = u(1.0 / sqrt(f(v10)));
-            v10 = u(sqrt(f(v10)));
-            v11 = u(1.0 / f(v11));
-            v8 = u(f(v9) * f(v8));
-            v10 = u(f(v10) * f(v11));
-            v7 = u(f(v7) * f(v9));
-            v24 = u(f(v8) * f(v10));
-            v32 = u(f(v7) * f(v10));
-        }
-    }
-    if (pc <= 24) {
-        exec_lo = s2;
-    }
-    if (pc <= 25) {
-        {
-            uint m_out = ((s0 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 27;
-    }
-    if (pc <= 26) {
-        if (exec_lo != 0u) {
-            v9 = u(0.5 * f(v10));
-            v10 = u(f(0x3e22f983u) * f(v9));
-            v11 = u(-f(v7) * f(v7) + 1.0);
-            v9 = u(fract(f(v10)));
-            v11 = u(f(v8) * -f(v8) + f(v11));
-            v9 = u(sin(6.283185307 * f(v9)));
-            v11 = u(sqrt(f(v11)));
-            v10 = u(fract(abs(f(v10))));
-            v24 = u(f(v7) * f(v9));
-            v23 = u(f(v8) * f(v9));
-            v32 = u(f(v9) * f(v11));
-            v25 = u(cos(6.283185307 * f(v10)));
-        }
-    }
-    if (pc <= 27) {
-        exec_lo = s0;
-    }
-    if (pc <= 28) {
-        {
-            uint m_out = ((s14 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 30;
-    }
-    if (pc <= 29) {
-        if (exec_lo != 0u) {
-            v10 = 0x3c0efa35u;
-            v14 = u(f(v10) * f(v8) + f(0x3fc90fdbu));
-            v13 = u(f(v10) * f(v7) + f(0x3fc90fdbu));
-            v11 = u(f(0x3c0efa35u) * f(v8));
-            v12 = u(f(0x3c0efa35u) * f(v7));
-            v7 = u(f(0x3e22f983u) * f(v14));
-            v8 = u(f(0x3e22f983u) * f(v13));
-            v10 = u(f(v10) * f(v9) + f(0x3fc90fdbu));
-            v11 = u(f(0x3e22f983u) * f(v11));
-            v12 = u(f(0x3e22f983u) * f(v12));
-            v9 = u(f(0x3c0efa35u) * f(v9));
-            v7 = u(fract(f(v7)));
-            v8 = u(fract(f(v8)));
-            v13 = u(f(0x3e22f983u) * f(v10));
-            v14 = u(fract(f(v11)));
-            v23 = u(fract(f(v12)));
-            v9 = u(f(0x3e22f983u) * f(v9));
-            v10 = u(sin(6.283185307 * f(v7)));
-            v11 = u(sin(6.283185307 * f(v8)));
-            v7 = u(fract(f(v13)));
-            v12 = u(sin(6.283185307 * f(v14)));
-            v13 = u(sin(6.283185307 * f(v23)));
-            v8 = u(fract(f(v9)));
-            v9 = u(f(v10) * f(v11));
-            v7 = u(sin(6.283185307 * f(v7)));
-            v8 = u(sin(6.283185307 * f(v8)));
-            v10 = u(f(v10) * f(v13));
-            v11 = u(f(v12) * f(v11));
-            v24 = u(f(v7) * f(v9));
-            v12 = u(f(v12) * f(v13));
-            v23 = u(f(v7) * f(v10));
-            v32 = u(f(v7) * f(v11));
-            v25 = u(f(v8) * f(v9));
-            v24 = u(f(v12) * f(v8) + f(v24));
-            v23 = u(f(v11) * f(v8) + f(v23));
-            v32 = u(f(v10) * f(v8) + f(v32));
-            v25 = u(f(v12) * f(v7) + f(v25));
-        }
-    }
-    if (pc <= 30) {
-        exec_lo = s14;
-        if (exec_lo != 0u) {
-            {
-                uint b_at = (v19 * 64u) >> 2;
-                v11 = particle.w[b_at + 0u];
-                v12 = particle.w[b_at + 1u];
-                v13 = particle.w[b_at + 2u];
-                v14 = particle.w[b_at + 3u];
-            }
-            {
-                uint b_at = (v29 * 560u + 544u) >> 2;
-                v19 = material.w[b_at + 0u];
-            }
-            {
-                uint b_at = (v22 * 256u + 72u) >> 2;
-                v30 = description.w[b_at + 0u];
-            }
-            {
-                uint b_at = (v21 * 128u + 16u) >> 2;
-                v7 = emitter.w[b_at + 0u];
-                v8 = emitter.w[b_at + 1u];
-                v9 = emitter.w[b_at + 2u];
-                v10 = emitter.w[b_at + 3u];
-            }
-            v4 = u(f(v4) * f(v14));
-            v17 = u(f(v14) * f(v17));
-            v14 = u(f(v14) * f(v16));
-            v15 = u(f(v4) * f(v15));
-            v4 = u(f(v17) * f(v6));
-            v14 = u(f(v14) * f(v5));
-            v6 = u(f(v32) * f(v15));
-            v16 = u(f(v24) * f(v14));
-            v17 = u(f(v23) * f(v4));
-            v5 = u(-f(v24) * f(v4) + f(v6));
-            v6 = u(-f(v23) * f(v15) + f(v16));
-            v17 = u(f(v14) * -f(v32) + f(v17));
-            v16 = u(f(v25) * f(v15) + f(v17));
-            v5 = u(f(v14) * f(v25) + f(v5));
-            v6 = u(f(v4) * f(v25) + f(v6));
-            v22 = u(-f(v32) * f(v5));
-            v31 = u(f(v24) * f(v15));
-            v21 = u(-f(v24) * f(v6));
-            v15 = u(-f(v23) * f(v16));
-            v17 = 0x8u & v19;
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x0u != v17) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v22 = u(f(v6) * f(v23) + f(v22));
-            v31 = u(f(v14) * f(v23) + f(v31));
-            v14 = u(f(v32) * f(v16) + f(v21));
-            v15 = u(f(v5) * f(v24) + f(v15));
-            v4 = u(f(v32) * f(v4) + f(v31));
-            v22 = u(f(v16) * f(v25) + f(v22));
-            v14 = u(f(v5) * f(v25) + f(v14));
-            v15 = u(f(v6) * f(v25) + f(v15));
-            v31 = u(f(v4) * f(v24) + f(v22));
-            v33 = u(f(v4) * f(v23) + f(v14));
-            v32 = u(f(v4) * f(v32) + f(v15));
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s14 = s_old;
-            s15 = 0u;
-        }
-        if (exec_lo == 0u) pc = 34;
-    }
-    if (pc <= 31) {
-        {
-            uint c_out = exec_lo != 0u && (0x1u == v30) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 33;
-    }
-    if (pc <= 32) {
-        if (exec_lo != 0u) {
-            v5 = u(f(v11) * f(v9));
-            v6 = u(f(v7) * f(v12));
-            v14 = u(f(v13) * f(v8));
-            v4 = u(-f(v7) * f(v13) + f(v5));
-            v5 = u(-f(v11) * f(v8) + f(v6));
-            v14 = u(f(v9) * -f(v12) + f(v14));
-            v6 = u(f(v11) * f(v10) + f(v14));
-            v4 = u(f(v10) * f(v12) + f(v4));
-            v5 = u(f(v10) * f(v13) + f(v5));
-            v14 = u(-f(v9) * f(v4));
-            v16 = u(f(v7) * f(v11));
-            v15 = u(-f(v7) * f(v5));
-            v11 = u(-f(v8) * f(v6));
-            v14 = u(f(v5) * f(v8) + f(v14));
-            v16 = u(f(v8) * f(v12) + f(v16));
-            v12 = u(f(v9) * f(v6) + f(v15));
-            v11 = u(f(v4) * f(v7) + f(v11));
-            v14 = u(f(v6) * f(v10) + f(v14));
-            v16 = u(f(v9) * f(v13) + f(v16));
-            v12 = u(f(v4) * f(v10) + f(v12));
-            v11 = u(f(v5) * f(v10) + f(v11));
-            v5 = u(f(v16) * f(v9) + f(v11));
-            v14 = u(f(v16) * f(v7) + f(v14));
-            v12 = u(f(v8) * f(v16) + f(v12));
-            v11 = u(f(v3) * f(v14) + f(v0));
-            v12 = u(f(v3) * f(v12) + f(v1));
-            v13 = u(f(v3) * f(v5) + f(v2));
-        }
-    }
-    if (pc <= 33) {
-        exec_lo = vcc_lo;
-        s16 = draw_block.w[0];
-        s17 = draw_block.w[1];
-        s18 = draw_block.w[2];
-        s19 = draw_block.w[3];
-        s20 = draw_block.w[4];
-        s21 = draw_block.w[5];
-        s22 = draw_block.w[6];
-        s23 = draw_block.w[7];
-        s0 = draw_block.w[8];
-        s1 = draw_block.w[9];
-        s2 = draw_block.w[10];
-        s3 = draw_block.w[11];
-        if (exec_lo != 0u) {
-            v0 = u(f(s19) + f(v31));
-            v1 = u(f(s23) + f(v33));
-            v2 = u(f(s3) + f(v32));
-            v3 = u(f(s0) * f(v11) + f(v2));
-            v0 = u(f(s16) * f(v11) + f(v0));
-            v1 = u(f(s20) * f(v11) + f(v1));
-            v2 = u(f(s17) * f(v12) + f(v0));
-            v1 = u(f(s21) * f(v12) + f(v1));
-            v3 = u(f(s1) * f(v12) + f(v3));
-            v0 = u(f(s2) * f(v13) + f(v3));
-            v2 = u(f(s18) * f(v13) + f(v2));
-            v1 = u(f(s22) * f(v13) + f(v1));
-        }
-    }
-    if (pc <= 34) {
-        {
-            uint m_out = ((s14 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 43;
-    }
-    if (pc <= 35) {
-        {
-            uint c_out = exec_lo != 0u && (0x1a57u > 0xffffffffu - v27) ? 1u : 0u;
-            if (exec_lo != 0u) v4 = 0x1a57u + v27;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v4 = 0xc6395u ^ v4;
-            v5 = u(float(v4));
-            v4 = u(f(0x3ac01c14u) * f(v5));
-            v5 = u(f(0x3b800000u) * f(v5));
-            v4 = u(fract(abs(f(v4))));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v5)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v4 = u(f(0x402a91b9u) * f(v4));
-            v4 = (vcc_lo & 1u) != 0u ? (v4 ^ 0x80000000u) : v4;
-            v4 = u(f(0x3ec01c14u) * f(v4));
-            {
-                uint b_at = (v29 * 560u + 504u) >> 2;
-                v5 = material.w[b_at + 0u];
-            }
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x0u != v5) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s20 = s_old;
-            s21 = 0u;
-        }
-        if (exec_lo == 0u) pc = 37;
-    }
-    if (pc <= 36) {
-        if (exec_lo != 0u) {
-            v14 = abs_diff(v5, 0x0u) + v20;
-            v6 = 0x7ffu & v14;
-            v15 = abs_diff(0x1u, 0x0u) + v6;
-            v15 = u(float(v15));
-            v5 = 0x3a000000u;
-        }
-        vcc_lo = 0x39800000u;
-        if (exec_lo != 0u) {
-            v15 = u(clamp(f(v5) * f(v15) + f(vcc_lo), 0.0, 1.0));
-            v6 = u(float(v6));
-            v14 = v14 >> (0xbu & 31u);
-            v6 = u(clamp(f(v5) * f(v6) + f(vcc_lo), 0.0, 1.0));
-            v5 = v14 << (0x6u & 31u);
-            v14 = u(f(v15) - f(v6));
-            v15 = u(clamp(max(0.0, f(v18)), 0.0, 1.0));
-            v5 = u(float(v5));
-            v5 = u(f(v15) * f(0x427c0000u) + f(v5));
-            v15 = 0x3a800000u;
-        }
-        vcc_lo = 0x3a000000u;
-        if (exec_lo != 0u) {
-            v5 = u(clamp(f(v15) * f(v5) + f(vcc_lo), 0.0, 1.0));
-            {
-                uint b_at = (v29 * 560u + 520u) >> 2;
-                v15 = material.w[b_at + 0u];
-            }
-            v14 = u(f(v15) * f(v14));
-            v4 = u(f(v14) * f(v4) + f(v6));
-            {
-                vec4 t_out = textureLod(sampler2D(curve_texture, curve_sampler), vec2(f(v4),
-                    f(v5)), 0.0);
-                v4 = u(t_out.x);
-                v5 = u(t_out.y);
-                v6 = u(t_out.z);
-            }
-        }
-    }
-    if (pc <= 37) {
-        {
-            uint m_out = ((s20 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 39;
-    }
-    if (pc <= 38) {
-        {
-            uint c_out = exec_lo != 0u && (0x1a9eu > 0xffffffffu - v27) ? 1u : 0u;
-            if (exec_lo != 0u) v5 = 0x1a9eu + v27;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v5 = 0xc6395u ^ v5;
-            v5 = u(float(v5));
-            v6 = u(f(0x3b800000u) * f(v5));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v6)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v5 = u(f(0x3ac01c14u) * f(v5));
-            v5 = u(fract(abs(f(v5))));
-            v5 = u(f(0x402a91b9u) * f(v5));
-            v5 = (vcc_lo & 1u) != 0u ? (v5 ^ 0x80000000u) : v5;
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x166fu > 0xffffffffu - v27) ? 1u : 0u;
-            if (exec_lo != 0u) v6 = 0x166fu + v27;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v6 = 0xc6395u ^ v6;
-            v6 = u(float(v6));
-            v14 = u(f(0x3b800000u) * f(v6));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v14)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v6 = u(f(0x3ac01c14u) * f(v6));
-            v6 = u(fract(abs(f(v6))));
-            v6 = u(f(0x402a91b9u) * f(v6));
-            v6 = (vcc_lo & 1u) != 0u ? (v6 ^ 0x80000000u) : v6;
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x12ceu > 0xffffffffu - v27) ? 1u : 0u;
-            if (exec_lo != 0u) v34 = 0x12ceu + v27;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v5 = u(f(0x3ec01c14u) * f(v5));
-            {
-                uint b_at = (v29 * 560u + 160u) >> 2;
-                v22 = material.w[b_at + 0u];
-                v23 = material.w[b_at + 1u];
-                v24 = material.w[b_at + 2u];
-                v25 = material.w[b_at + 3u];
-            }
-            {
-                uint b_at = (v29 * 560u + 144u) >> 2;
-                v18 = material.w[b_at + 0u];
-                v19 = material.w[b_at + 1u];
-                v20 = material.w[b_at + 2u];
-                v21 = material.w[b_at + 3u];
-            }
-            {
-                uint b_at = (v29 * 560u + 128u) >> 2;
-                v14 = material.w[b_at + 0u];
-                v15 = material.w[b_at + 1u];
-                v16 = material.w[b_at + 2u];
-                v17 = material.w[b_at + 3u];
-            }
-            v29 = 0xc6395u ^ v34;
-            v29 = u(float(v29));
-            v34 = u(f(0x3b800000u) * f(v29));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v34)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v29 = u(f(0x3ac01c14u) * f(v29));
-            v29 = u(fract(abs(f(v29))));
-            v29 = u(f(0x402a91b9u) * f(v29));
-            v29 = (vcc_lo & 1u) != 0u ? (v29 ^ 0x80000000u) : v29;
-        }
-        {
-            uint c_out = exec_lo != 0u && (0xe9fu > 0xffffffffu - v27) ? 1u : 0u;
-            if (exec_lo != 0u) v34 = 0xe9fu + v27;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x2656u > 0xffffffffu - v27) ? 1u : 0u;
-            if (exec_lo != 0u) v27 = 0x2656u + v27;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v34 = 0xc6395u ^ v34;
-            v27 = 0xc6395u ^ v27;
-            v35 = u(float(v34));
-            v27 = u(float(v27));
-            v34 = u(f(0x3ac01c14u) * f(v35));
-            v35 = u(f(0x3b800000u) * f(v35));
-            v36 = u(f(0x3ac01c14u) * f(v27));
-            v34 = u(fract(abs(f(v34))));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v35)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v35 = u(fract(abs(f(v36))));
-            v27 = u(f(0x3b800000u) * f(v27));
-            v34 = u(f(0x402a91b9u) * f(v34));
-            v35 = u(f(0x402a91b9u) * f(v35));
-            v34 = (vcc_lo & 1u) != 0u ? (v34 ^ 0x80000000u) : v34;
-        }
-        {
-            uint c_out = exec_lo != 0u && (0.0 > f(v27)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v35 = (vcc_lo & 1u) != 0u ? (v35 ^ 0x80000000u) : v35;
-            v6 = u(f(0x3ec01c14u) * f(v6));
-            v27 = u(f(0x3ec01c14u) * f(v29));
-            v29 = u(f(0x3ec01c14u) * f(v34));
-            v34 = u(f(0x3ec01c14u) * f(v35));
-            v25 = u(f(v25) - f(v24));
-            v23 = u(f(v23) - f(v22));
-            v21 = u(f(v21) - f(v20));
-            v19 = u(f(v19) - f(v18));
-            v17 = u(f(v17) - f(v16));
-            v15 = u(f(v15) - f(v14));
-            v24 = u(f(v5) * f(v25) + f(v24));
-            v5 = u(f(v19) * f(v29) + f(v18));
-            v22 = u(f(v6) * f(v23) + f(v22));
-            v20 = u(f(v27) * f(v21) + f(v20));
-            v16 = u(f(v34) * f(v17) + f(v16));
-            v14 = u(f(v4) * f(v15) + f(v14));
-            v6 = u(f(v28) * f(v24) + f(v22));
-            v4 = u(f(v28) * f(v16) + f(v14));
-            v5 = u(f(v20) * f(v28) + f(v5));
-        }
-    }
-    if (pc <= 39) {
-        exec_lo = s20;
-        if (exec_lo != 0u) {
-            v14 = 0x3c8ef921u;
-            v15 = u(f(v14) * f(v4) + f(0x3fc90fdbu));
-            v15 = u(f(0x3e22f983u) * f(v15));
-            v17 = u(f(0x3c8ef921u) * f(v4));
-            v16 = u(f(v14) * f(v5) + f(0x3fc90fdbu));
-            v4 = u(fract(f(v15)));
-            v15 = u(f(0x3e22f983u) * f(v17));
-            v16 = u(f(0x3e22f983u) * f(v16));
-            v17 = u(f(0x3c8ef921u) * f(v5));
-            v5 = u(sin(6.283185307 * f(v4)));
-            v4 = u(fract(f(v15)));
-            v16 = u(fract(f(v16)));
-            v17 = u(f(0x3e22f983u) * f(v17));
-            v19 = u(f(v14) * f(v6) + f(0x3fc90fdbu));
-            v15 = u(f(v5) * f(v32));
-            v14 = u(sin(6.283185307 * f(v4)));
-            v4 = u(sin(6.283185307 * f(v16)));
-            v18 = u(fract(f(v17)));
-            v19 = u(f(0x3e22f983u) * f(v19));
-            v16 = u(f(0x3c8ef921u) * f(v6));
-            v21 = u(f(v4) * f(v31));
-            v6 = u(sin(6.283185307 * f(v18)));
-            v18 = u(fract(f(v19)));
-            v5 = u(f(v5) * f(v33));
-            v20 = u(f(0x3e22f983u) * f(v16));
-            v15 = u(f(v33) * -f(v14) + f(v15));
-            v16 = u(sin(6.283185307 * f(v18)));
-            v17 = u(fract(f(v20)));
-        }
-        {
-            uint c_out = exec_lo != 0u && (0x1u == v30) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v21 = u(f(v6) * -f(v15) + f(v21));
-            v5 = u(f(v32) * f(v14) + f(v5));
-            v17 = u(sin(6.283185307 * f(v17)));
-            v11 = u(f(v16) * f(v21) + f(v11));
-            v12 = u(f(v5) * f(v16) + f(v12));
-            v13 = u(f(v4) * f(v15) + f(v13));
-            v4 = u(f(v6) * f(v31) + f(v13));
-            v11 = u(f(v5) * f(v17) + f(v11));
-            v5 = u(-f(v21) * f(v17) + f(v12));
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 41;
-    }
-    if (pc <= 40) {
-        if (exec_lo != 0u) {
-            v12 = u(f(v9) * f(v11));
-            v13 = u(f(v7) * f(v5));
-            v14 = u(f(v8) * f(v4));
-            v6 = u(-f(v7) * f(v4) + f(v12));
-            v12 = u(-f(v8) * f(v11) + f(v13));
-            v14 = u(f(v5) * -f(v9) + f(v14));
-            v13 = u(f(v10) * f(v11) + f(v14));
-            v6 = u(f(v5) * f(v10) + f(v6));
-            v12 = u(f(v4) * f(v10) + f(v12));
-            v14 = u(-f(v9) * f(v6));
-            v16 = u(f(v7) * f(v11));
-            v15 = u(-f(v7) * f(v12));
-            v11 = u(-f(v8) * f(v13));
-            v14 = u(f(v12) * f(v8) + f(v14));
-            v16 = u(f(v5) * f(v8) + f(v16));
-            v5 = u(f(v9) * f(v13) + f(v15));
-            v11 = u(f(v6) * f(v7) + f(v11));
-            v14 = u(f(v13) * f(v10) + f(v14));
-            v16 = u(f(v4) * f(v9) + f(v16));
-            v5 = u(f(v6) * f(v10) + f(v5));
-            v11 = u(f(v12) * f(v10) + f(v11));
-            v4 = u(f(v16) * f(v9) + f(v11));
-            v14 = u(f(v16) * f(v7) + f(v14));
-            v5 = u(f(v8) * f(v16) + f(v5));
-            v11 = u(f(v3) * f(v14) + f(v0));
-            v5 = u(f(v3) * f(v5) + f(v1));
-            v4 = u(f(v3) * f(v4) + f(v2));
-        }
-    }
-    if (pc <= 41) {
-        exec_lo = vcc_lo;
-        s0 = draw_block.w[0];
-        s1 = draw_block.w[1];
-        s2 = draw_block.w[2];
-        s3 = draw_block.w[3];
-        s4 = draw_block.w[4];
-        s5 = draw_block.w[5];
-        s6 = draw_block.w[6];
-        s7 = draw_block.w[7];
-        s16 = draw_block.w[8];
-        s17 = draw_block.w[9];
-        s18 = draw_block.w[10];
-        s19 = draw_block.w[11];
-        s8 = draw_block.w[72];
-        s9 = draw_block.w[73];
-        s10 = draw_block.w[74];
-        s11 = draw_block.w[75];
-        if (exec_lo != 0u) {
-            v1 = s3;
-            v2 = s7;
-            v0 = s19;
-            v3 = u(f(s4) * f(v11) + f(v2));
-            v1 = u(f(s0) * f(v11) + f(v1));
-            v0 = u(f(s16) * f(v11) + f(v0));
-            v2 = u(f(s1) * f(v5) + f(v1));
-        }
-        {
-            uint c_out = exec_lo != 0u && (f(s10) != 0.0) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        if (exec_lo != 0u) {
-            v3 = u(f(s5) * f(v5) + f(v3));
-            v0 = u(f(s17) * f(v5) + f(v0));
-            v1 = u(f(s6) * f(v4) + f(v3));
-            v2 = u(f(s2) * f(v4) + f(v2));
-            v0 = u(f(s18) * f(v4) + f(v0));
-        }
-        if ((vcc_lo & 1u) == 0u) pc = 43;
-    }
-    if (pc <= 42) {
-        s0 = draw_block.w[16];
-        s1 = draw_block.w[17];
-        s2 = draw_block.w[18];
-        s3 = draw_block.w[19];
-        s4 = draw_block.w[20];
-        s5 = draw_block.w[21];
-        s6 = draw_block.w[22];
-        s7 = draw_block.w[23];
-        s24 = draw_block.w[24];
-        s25 = draw_block.w[25];
-        s26 = draw_block.w[26];
-        s27 = draw_block.w[27];
-        s16 = draw_block.w[48];
-        s17 = draw_block.w[49];
-        s18 = draw_block.w[50];
-        s19 = draw_block.w[51];
-        s20 = draw_block.w[52];
-        s21 = draw_block.w[53];
-        s22 = draw_block.w[54];
-        s23 = draw_block.w[55];
-        s28 = draw_block.w[68];
-        s29 = draw_block.w[69];
-        s30 = draw_block.w[70];
-        s31 = draw_block.w[71];
-        s32 = draw_block.w[56];
-        s33 = draw_block.w[57];
-        s34 = draw_block.w[58];
-        s35 = draw_block.w[59];
-        if (exec_lo != 0u) {
-            v4 = s3;
-            v5 = s7;
-            v3 = s27;
-            v4 = u(f(s0) * f(v2) + f(v4));
-            v9 = u(f(s1) * f(v1) + f(v4));
-            v6 = u(f(s4) * f(v2) + f(v5));
-            v2 = u(f(s24) * f(v2) + f(v3));
-            v7 = u(1.0 / f(s30));
-            v4 = s19;
-            v5 = s23;
-            v8 = s35;
-            v9 = u(f(s2) * f(v0) + f(v9));
-            v6 = u(f(s5) * f(v1) + f(v6));
-            v2 = u(f(s25) * f(v1) + f(v2));
-            v1 = u(f(s6) * f(v0) + f(v6));
-            v0 = u(f(s26) * f(v0) + f(v2));
-            v6 = u(-f(s10) * f(v7));
-            v7 = u(f(s20) * f(v9) + f(v5));
-            v4 = u(f(s16) * f(v9) + f(v4));
-            v8 = u(f(s32) * f(v9) + f(v8));
-            v2 = u(f(s17) * f(v1) + f(v4));
-            v0 = u(2.0 * f(v6) + f(v0));
-            v7 = u(f(s21) * f(v1) + f(v7));
-            v8 = u(f(s33) * f(v1) + f(v8));
-            v1 = u(f(s22) * f(v0) + f(v7));
-            v2 = u(f(s18) * f(v0) + f(v2));
-            v0 = u(f(s34) * f(v0) + f(v8));
-        }
-    }
-    if (pc <= 43) {
-        exec_lo = s14;
-        s0 = draw_block.w[16];
-        s1 = draw_block.w[17];
-        s2 = draw_block.w[18];
-        s3 = draw_block.w[19];
-        s4 = draw_block.w[20];
-        s5 = draw_block.w[21];
-        s6 = draw_block.w[22];
-        s7 = draw_block.w[23];
-        s8 = draw_block.w[24];
-        s9 = draw_block.w[25];
-        s10 = draw_block.w[26];
-        s11 = draw_block.w[27];
-        s12 = draw_block.w[28];
-        s13 = draw_block.w[29];
-        s14 = draw_block.w[30];
-        s15 = draw_block.w[31];
-        if (exec_lo != 0u) {
-            v4 = s3;
-            v5 = s7;
-            v6 = s11;
-            v7 = s15;
-            v3 = u(f(s0) * f(v2) + f(v4));
-            v4 = u(f(s4) * f(v2) + f(v5));
-            v5 = u(f(s8) * f(v2) + f(v6));
-            v7 = u(f(s12) * f(v2) + f(v7));
-            v3 = u(f(s1) * f(v1) + f(v3));
-            v4 = u(f(s5) * f(v1) + f(v4));
-            v5 = u(f(s9) * f(v1) + f(v5));
-            v7 = u(f(s13) * f(v1) + f(v7));
-            v15 = u(f(s2) * f(v0) + f(v3));
-            v16 = u(f(s6) * f(v0) + f(v4));
-            v17 = u(f(s10) * f(v0) + f(v5));
-            v20 = u(f(s14) * f(v0) + f(v7));
-        }
-    }
-    if (pc <= 44) {
-        exec_lo = s38;
-        if (exec_lo != 0u) {
-            v2 = 0x3u;
         }
     }
     exec_lo = s36;

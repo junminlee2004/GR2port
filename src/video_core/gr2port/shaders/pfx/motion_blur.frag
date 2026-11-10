@@ -119,8 +119,7 @@ void main() {
         vcc_lo = s_old;
         vcc_hi = 0u;
     }
-    if (exec_lo == 0u) pc = 2;
-    if (pc <= 1) {
+    if (!(exec_lo == 0u)) {
         if (exec_lo != 0u) {
             v6 = u(min(f(0x40a00000u), f(v6)));
             v11 = u(1.0 / sqrt(f(v11)));

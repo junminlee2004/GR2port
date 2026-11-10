@@ -92,8 +92,7 @@ void main() {
         s10 = s_old;
         s11 = 0u;
     }
-    if (exec_lo == 0u) pc = 21;
-    if (pc <= 1) {
+    if (!(exec_lo == 0u)) {
         vcc_lo = 0x3e8ba2e9u;
         {
             uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
@@ -108,210 +107,182 @@ void main() {
             s16 = s_old;
             s17 = 0u;
         }
-        if (exec_lo == 0u) pc = 11;
-    }
-    if (pc <= 2) {
-        vcc_lo = 0x3e3a2e8cu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3e3a2e8cu;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                s4 = s_old;
+                s5 = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                vcc_lo = 0x3dba2e8cu;
+                {
+                    uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
+                }
+                {
+                    uint s_in = (vcc_lo & 1u);
+                    uint s_old = exec_lo;
+                    exec_lo = (s_in & exec_lo);
+                    scc = exec_lo != 0u ? 1u : 0u;
+                    vcc_lo = s_old;
+                    vcc_hi = 0u;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v3 = 0x41300000u;
+                    }
+                    s0 = ps_constants.w[0];
+                    s1 = ps_constants.w[1];
+                    if (exec_lo != 0u) {
+                        v4 = s0;
+                        v4 = u(f(s1) - f(v4));
+                        v0 = u(f(v4) * f(v0));
+                        v0 = u(f(v3) * f(v0) + f(s0));
+                    }
+                }
+                {
+                    uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                    scc = m_out != 0u ? 1u : 0u;
+                    exec_lo = m_out;
+                }
+                if (!(exec_lo == 0u)) {
+                    s0 = ps_constants.w[0];
+                    s1 = ps_constants.w[1];
+                    s2 = ps_constants.w[2];
+                    s3 = ps_constants.w[3];
+                    s6 = 0x41300000u;
+                    if (exec_lo != 0u) {
+                        v3 = s1;
+                        v0 = u(f(s6) * f(v0) + -1.0);
+                        v3 = u(f(s2) - f(v3));
+                        v0 = u(f(v3) * f(v0) + f(s1));
+                    }
+                }
+                exec_lo = vcc_lo;
+            }
+            {
+                uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                s0 = ps_constants.w[0];
+                s1 = ps_constants.w[1];
+                s2 = ps_constants.w[2];
+                s3 = ps_constants.w[3];
+                vcc_lo = 0x41300000u;
+                if (exec_lo != 0u) {
+                    v3 = s2;
+                    v0 = u(f(vcc_lo) * f(v0) + -2.0);
+                    v3 = u(f(s3) - f(v3));
+                    v0 = u(f(v3) * f(v0) + f(s2));
+                }
+            }
+            exec_lo = s4;
         }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s4 = s_old;
-            s5 = 0u;
-        }
-        if (exec_lo == 0u) pc = 8;
-    }
-    if (pc <= 3) {
-        vcc_lo = 0x3dba2e8cu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 5;
-    }
-    if (pc <= 4) {
-        if (exec_lo != 0u) {
-            v3 = 0x41300000u;
-        }
-        s0 = ps_constants.w[0];
-        s1 = ps_constants.w[1];
-        if (exec_lo != 0u) {
-            v4 = s0;
-            v4 = u(f(s1) - f(v4));
-            v0 = u(f(v4) * f(v0));
-            v0 = u(f(v3) * f(v0) + f(s0));
-        }
-    }
-    if (pc <= 5) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 7;
-    }
-    if (pc <= 6) {
-        s0 = ps_constants.w[0];
-        s1 = ps_constants.w[1];
-        s2 = ps_constants.w[2];
-        s3 = ps_constants.w[3];
-        s6 = 0x41300000u;
-        if (exec_lo != 0u) {
-            v3 = s1;
-            v0 = u(f(s6) * f(v0) + -1.0);
-            v3 = u(f(s2) - f(v3));
-            v0 = u(f(v3) * f(v0) + f(s1));
-        }
-    }
-    if (pc <= 7) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 8) {
-        {
-            uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 10;
-    }
-    if (pc <= 9) {
-        s0 = ps_constants.w[0];
-        s1 = ps_constants.w[1];
-        s2 = ps_constants.w[2];
-        s3 = ps_constants.w[3];
-        vcc_lo = 0x41300000u;
-        if (exec_lo != 0u) {
-            v3 = s2;
-            v0 = u(f(vcc_lo) * f(v0) + -2.0);
-            v3 = u(f(s3) - f(v3));
-            v0 = u(f(v3) * f(v0) + f(s2));
-        }
-    }
-    if (pc <= 10) {
-        exec_lo = s4;
-    }
-    if (pc <= 11) {
         {
             uint m_out = ((s16 & 1u) & (~(exec_lo & 1u) & 1u));
             scc = m_out != 0u ? 1u : 0u;
             exec_lo = m_out;
         }
-        if (exec_lo == 0u) pc = 20;
-    }
-    if (pc <= 12) {
-        vcc_lo = 0x3ee8ba2fu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3ee8ba2fu;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                s18 = s_old;
+                s19 = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                vcc_lo = 0x3eba2e8cu;
+                {
+                    uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
+                }
+                {
+                    uint s_in = (vcc_lo & 1u);
+                    uint s_old = exec_lo;
+                    exec_lo = (s_in & exec_lo);
+                    scc = exec_lo != 0u ? 1u : 0u;
+                    vcc_lo = s_old;
+                    vcc_hi = 0u;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v4 = 0x41300000u;
+                    }
+                    s0 = ps_constants.w[0];
+                    s1 = ps_constants.w[1];
+                    s2 = ps_constants.w[2];
+                    s3 = ps_constants.w[3];
+                    s4 = ps_constants.w[4];
+                    s5 = ps_constants.w[5];
+                    s6 = ps_constants.w[6];
+                    s7 = ps_constants.w[7];
+                    if (exec_lo != 0u) {
+                        v0 = u(f(v4) * f(v0) + f(0xc0400000u));
+                        v3 = s3;
+                        v3 = u(f(s4) - f(v3));
+                        v0 = u(f(v3) * f(v0) + f(s3));
+                    }
+                }
+                {
+                    uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                    scc = m_out != 0u ? 1u : 0u;
+                    exec_lo = m_out;
+                }
+                if (!(exec_lo == 0u)) {
+                    s0 = ps_constants.w[4];
+                    s1 = ps_constants.w[5];
+                    s2 = 0x41300000u;
+                    if (exec_lo != 0u) {
+                        v3 = s0;
+                        v0 = u(f(s2) * f(v0) + -4.0);
+                        v3 = u(f(s1) - f(v3));
+                        v0 = u(f(v3) * f(v0) + f(s0));
+                    }
+                }
+                exec_lo = vcc_lo;
+            }
+            {
+                uint m_out = ((s18 & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x41300000u;
+                }
+                s0 = ps_constants.w[4];
+                s1 = ps_constants.w[5];
+                s2 = ps_constants.w[6];
+                s3 = ps_constants.w[7];
+                if (exec_lo != 0u) {
+                    v0 = u(f(v4) * f(v0) + f(0xc0a00000u));
+                    v3 = s1;
+                    v3 = u(f(s2) - f(v3));
+                    v0 = u(f(v3) * f(v0) + f(s1));
+                }
+            }
         }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s18 = s_old;
-            s19 = 0u;
-        }
-        if (exec_lo == 0u) pc = 18;
-    }
-    if (pc <= 13) {
-        vcc_lo = 0x3eba2e8cu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 15;
-    }
-    if (pc <= 14) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300000u;
-        }
-        s0 = ps_constants.w[0];
-        s1 = ps_constants.w[1];
-        s2 = ps_constants.w[2];
-        s3 = ps_constants.w[3];
-        s4 = ps_constants.w[4];
-        s5 = ps_constants.w[5];
-        s6 = ps_constants.w[6];
-        s7 = ps_constants.w[7];
-        if (exec_lo != 0u) {
-            v0 = u(f(v4) * f(v0) + f(0xc0400000u));
-            v3 = s3;
-            v3 = u(f(s4) - f(v3));
-            v0 = u(f(v3) * f(v0) + f(s3));
-        }
-    }
-    if (pc <= 15) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 17;
-    }
-    if (pc <= 16) {
-        s0 = ps_constants.w[4];
-        s1 = ps_constants.w[5];
-        s2 = 0x41300000u;
-        if (exec_lo != 0u) {
-            v3 = s0;
-            v0 = u(f(s2) * f(v0) + -4.0);
-            v3 = u(f(s1) - f(v3));
-            v0 = u(f(v3) * f(v0) + f(s0));
-        }
-    }
-    if (pc <= 17) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 18) {
-        {
-            uint m_out = ((s18 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 20;
-    }
-    if (pc <= 19) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300000u;
-        }
-        s0 = ps_constants.w[4];
-        s1 = ps_constants.w[5];
-        s2 = ps_constants.w[6];
-        s3 = ps_constants.w[7];
-        if (exec_lo != 0u) {
-            v0 = u(f(v4) * f(v0) + f(0xc0a00000u));
-            v3 = s1;
-            v3 = u(f(s2) - f(v3));
-            v0 = u(f(v3) * f(v0) + f(s1));
-        }
-    }
-    if (pc <= 20) {
         exec_lo = s16;
     }
     {
@@ -319,8 +290,7 @@ void main() {
         scc = m_out != 0u ? 1u : 0u;
         exec_lo = m_out;
     }
-    if (exec_lo == 0u) pc = 37;
-    if (pc <= 22) {
+    if (!(exec_lo == 0u)) {
         vcc_lo = 0x3f3a2e8cu;
         {
             uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
@@ -335,172 +305,152 @@ void main() {
             s16 = s_old;
             s17 = 0u;
         }
-        if (exec_lo == 0u) pc = 28;
-    }
-    if (pc <= 23) {
-        vcc_lo = 0x3f22e8bau;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3f22e8bau;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                vcc_lo = s_old;
+                vcc_hi = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x41300003u;
+                }
+                s0 = ps_constants.w[4];
+                s1 = ps_constants.w[5];
+                s2 = ps_constants.w[6];
+                s3 = ps_constants.w[7];
+                if (exec_lo != 0u) {
+                    v0 = u(f(v4) * f(v0) + f(0xc0c00004u));
+                    v3 = s2;
+                    v3 = u(f(s3) - f(v3));
+                    v0 = u(f(v3) * f(v0) + f(s2));
+                }
+            }
+            {
+                uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x412ffffcu;
+                }
+                s0 = ps_constants.w[4];
+                s1 = ps_constants.w[5];
+                s2 = ps_constants.w[6];
+                s3 = ps_constants.w[7];
+                s4 = ps_constants.w[8];
+                s5 = ps_constants.w[9];
+                s6 = ps_constants.w[10];
+                s7 = ps_constants.w[11];
+                if (exec_lo != 0u) {
+                    v0 = u(f(v4) * f(v0) + f(0xc0dffffbu));
+                    v3 = s3;
+                    v3 = u(f(s4) - f(v3));
+                    v0 = u(f(v3) * f(v0) + f(s3));
+                }
+            }
+            exec_lo = vcc_lo;
         }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 25;
-    }
-    if (pc <= 24) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300003u;
-        }
-        s0 = ps_constants.w[4];
-        s1 = ps_constants.w[5];
-        s2 = ps_constants.w[6];
-        s3 = ps_constants.w[7];
-        if (exec_lo != 0u) {
-            v0 = u(f(v4) * f(v0) + f(0xc0c00004u));
-            v3 = s2;
-            v3 = u(f(s3) - f(v3));
-            v0 = u(f(v3) * f(v0) + f(s2));
-        }
-    }
-    if (pc <= 25) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 27;
-    }
-    if (pc <= 26) {
-        if (exec_lo != 0u) {
-            v4 = 0x412ffffcu;
-        }
-        s0 = ps_constants.w[4];
-        s1 = ps_constants.w[5];
-        s2 = ps_constants.w[6];
-        s3 = ps_constants.w[7];
-        s4 = ps_constants.w[8];
-        s5 = ps_constants.w[9];
-        s6 = ps_constants.w[10];
-        s7 = ps_constants.w[11];
-        if (exec_lo != 0u) {
-            v0 = u(f(v4) * f(v0) + f(0xc0dffffbu));
-            v3 = s3;
-            v3 = u(f(s4) - f(v3));
-            v0 = u(f(v3) * f(v0) + f(s3));
-        }
-    }
-    if (pc <= 27) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 28) {
         {
             uint m_out = ((s16 & 1u) & (~(exec_lo & 1u) & 1u));
             scc = m_out != 0u ? 1u : 0u;
             exec_lo = m_out;
         }
-        if (exec_lo == 0u) pc = 37;
-    }
-    if (pc <= 29) {
-        vcc_lo = 0x3f68ba2fu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s4 = s_old;
-            s5 = 0u;
-        }
-        if (exec_lo == 0u) pc = 35;
-    }
-    if (pc <= 30) {
-        vcc_lo = 0x3f51745eu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 32;
-    }
-    if (pc <= 31) {
-        if (exec_lo != 0u) {
-            v4 = 0x412ffffcu;
-        }
-        s0 = ps_constants.w[8];
-        s1 = ps_constants.w[9];
-        if (exec_lo != 0u) {
-            v0 = u(f(v4) * f(v0) + f(0xc0fffffbu));
-            v3 = s0;
-            v3 = u(f(s1) - f(v3));
-            v0 = u(f(v3) * f(v0) + f(s0));
-        }
-    }
-    if (pc <= 32) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 34;
-    }
-    if (pc <= 33) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300003u;
-        }
-        s0 = ps_constants.w[8];
-        s1 = ps_constants.w[9];
-        s2 = ps_constants.w[10];
-        s3 = ps_constants.w[11];
-        if (exec_lo != 0u) {
-            v0 = u(f(v4) * f(v0) + f(0xc1100003u));
-            v3 = s1;
-            v3 = u(f(s2) - f(v3));
-            v0 = u(f(v3) * f(v0) + f(s1));
-        }
-    }
-    if (pc <= 34) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 35) {
-        {
-            uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 37;
-    }
-    if (pc <= 36) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300003u;
-        }
-        s0 = ps_constants.w[8];
-        s1 = ps_constants.w[9];
-        s2 = ps_constants.w[10];
-        s3 = ps_constants.w[11];
-        if (exec_lo != 0u) {
-            v0 = u(f(v4) * f(v0) + f(0xc1200003u));
-            v3 = s2;
-            v3 = u(f(s3) - f(v3));
-            v0 = u(f(v3) * f(v0) + f(s2));
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3f68ba2fu;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                s4 = s_old;
+                s5 = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                vcc_lo = 0x3f51745eu;
+                {
+                    uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v0)) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
+                }
+                {
+                    uint s_in = (vcc_lo & 1u);
+                    uint s_old = exec_lo;
+                    exec_lo = (s_in & exec_lo);
+                    scc = exec_lo != 0u ? 1u : 0u;
+                    vcc_lo = s_old;
+                    vcc_hi = 0u;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v4 = 0x412ffffcu;
+                    }
+                    s0 = ps_constants.w[8];
+                    s1 = ps_constants.w[9];
+                    if (exec_lo != 0u) {
+                        v0 = u(f(v4) * f(v0) + f(0xc0fffffbu));
+                        v3 = s0;
+                        v3 = u(f(s1) - f(v3));
+                        v0 = u(f(v3) * f(v0) + f(s0));
+                    }
+                }
+                {
+                    uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                    scc = m_out != 0u ? 1u : 0u;
+                    exec_lo = m_out;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v4 = 0x41300003u;
+                    }
+                    s0 = ps_constants.w[8];
+                    s1 = ps_constants.w[9];
+                    s2 = ps_constants.w[10];
+                    s3 = ps_constants.w[11];
+                    if (exec_lo != 0u) {
+                        v0 = u(f(v4) * f(v0) + f(0xc1100003u));
+                        v3 = s1;
+                        v3 = u(f(s2) - f(v3));
+                        v0 = u(f(v3) * f(v0) + f(s1));
+                    }
+                }
+                exec_lo = vcc_lo;
+            }
+            {
+                uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x41300003u;
+                }
+                s0 = ps_constants.w[8];
+                s1 = ps_constants.w[9];
+                s2 = ps_constants.w[10];
+                s3 = ps_constants.w[11];
+                if (exec_lo != 0u) {
+                    v0 = u(f(v4) * f(v0) + f(0xc1200003u));
+                    v3 = s2;
+                    v3 = u(f(s3) - f(v3));
+                    v0 = u(f(v3) * f(v0) + f(s2));
+                }
+            }
         }
     }
     exec_lo = s10;
@@ -514,8 +464,7 @@ void main() {
         vcc_hi = 0u;
         exec_lo = c_out;
     }
-    if (exec_lo == 0u) pc = 58;
-    if (pc <= 38) {
+    if (!(exec_lo == 0u)) {
         vcc_lo = 0x3e8ba2e9u;
         {
             uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
@@ -530,210 +479,182 @@ void main() {
             s16 = s_old;
             s17 = 0u;
         }
-        if (exec_lo == 0u) pc = 48;
-    }
-    if (pc <= 39) {
-        vcc_lo = 0x3e3a2e8cu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3e3a2e8cu;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                s4 = s_old;
+                s5 = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                vcc_lo = 0x3dba2e8cu;
+                {
+                    uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
+                }
+                {
+                    uint s_in = (vcc_lo & 1u);
+                    uint s_old = exec_lo;
+                    exec_lo = (s_in & exec_lo);
+                    scc = exec_lo != 0u ? 1u : 0u;
+                    vcc_lo = s_old;
+                    vcc_hi = 0u;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v3 = 0x41300000u;
+                    }
+                    s0 = ps_constants.w[12];
+                    s1 = ps_constants.w[13];
+                    if (exec_lo != 0u) {
+                        v4 = s0;
+                        v4 = u(f(s1) - f(v4));
+                        v1 = u(f(v4) * f(v1));
+                        v1 = u(f(v3) * f(v1) + f(s0));
+                    }
+                }
+                {
+                    uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                    scc = m_out != 0u ? 1u : 0u;
+                    exec_lo = m_out;
+                }
+                if (!(exec_lo == 0u)) {
+                    s0 = ps_constants.w[12];
+                    s1 = ps_constants.w[13];
+                    s2 = ps_constants.w[14];
+                    s3 = ps_constants.w[15];
+                    s6 = 0x41300000u;
+                    if (exec_lo != 0u) {
+                        v3 = s1;
+                        v1 = u(f(s6) * f(v1) + -1.0);
+                        v3 = u(f(s2) - f(v3));
+                        v1 = u(f(v3) * f(v1) + f(s1));
+                    }
+                }
+                exec_lo = vcc_lo;
+            }
+            {
+                uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                s0 = ps_constants.w[12];
+                s1 = ps_constants.w[13];
+                s2 = ps_constants.w[14];
+                s3 = ps_constants.w[15];
+                vcc_lo = 0x41300000u;
+                if (exec_lo != 0u) {
+                    v3 = s2;
+                    v1 = u(f(vcc_lo) * f(v1) + -2.0);
+                    v3 = u(f(s3) - f(v3));
+                    v1 = u(f(v3) * f(v1) + f(s2));
+                }
+            }
+            exec_lo = s4;
         }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s4 = s_old;
-            s5 = 0u;
-        }
-        if (exec_lo == 0u) pc = 45;
-    }
-    if (pc <= 40) {
-        vcc_lo = 0x3dba2e8cu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 42;
-    }
-    if (pc <= 41) {
-        if (exec_lo != 0u) {
-            v3 = 0x41300000u;
-        }
-        s0 = ps_constants.w[12];
-        s1 = ps_constants.w[13];
-        if (exec_lo != 0u) {
-            v4 = s0;
-            v4 = u(f(s1) - f(v4));
-            v1 = u(f(v4) * f(v1));
-            v1 = u(f(v3) * f(v1) + f(s0));
-        }
-    }
-    if (pc <= 42) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 44;
-    }
-    if (pc <= 43) {
-        s0 = ps_constants.w[12];
-        s1 = ps_constants.w[13];
-        s2 = ps_constants.w[14];
-        s3 = ps_constants.w[15];
-        s6 = 0x41300000u;
-        if (exec_lo != 0u) {
-            v3 = s1;
-            v1 = u(f(s6) * f(v1) + -1.0);
-            v3 = u(f(s2) - f(v3));
-            v1 = u(f(v3) * f(v1) + f(s1));
-        }
-    }
-    if (pc <= 44) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 45) {
-        {
-            uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 47;
-    }
-    if (pc <= 46) {
-        s0 = ps_constants.w[12];
-        s1 = ps_constants.w[13];
-        s2 = ps_constants.w[14];
-        s3 = ps_constants.w[15];
-        vcc_lo = 0x41300000u;
-        if (exec_lo != 0u) {
-            v3 = s2;
-            v1 = u(f(vcc_lo) * f(v1) + -2.0);
-            v3 = u(f(s3) - f(v3));
-            v1 = u(f(v3) * f(v1) + f(s2));
-        }
-    }
-    if (pc <= 47) {
-        exec_lo = s4;
-    }
-    if (pc <= 48) {
         {
             uint m_out = ((s16 & 1u) & (~(exec_lo & 1u) & 1u));
             scc = m_out != 0u ? 1u : 0u;
             exec_lo = m_out;
         }
-        if (exec_lo == 0u) pc = 57;
-    }
-    if (pc <= 49) {
-        vcc_lo = 0x3ee8ba2fu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3ee8ba2fu;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                s18 = s_old;
+                s19 = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                vcc_lo = 0x3eba2e8cu;
+                {
+                    uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
+                }
+                {
+                    uint s_in = (vcc_lo & 1u);
+                    uint s_old = exec_lo;
+                    exec_lo = (s_in & exec_lo);
+                    scc = exec_lo != 0u ? 1u : 0u;
+                    vcc_lo = s_old;
+                    vcc_hi = 0u;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v4 = 0x41300000u;
+                    }
+                    s0 = ps_constants.w[12];
+                    s1 = ps_constants.w[13];
+                    s2 = ps_constants.w[14];
+                    s3 = ps_constants.w[15];
+                    s4 = ps_constants.w[16];
+                    s5 = ps_constants.w[17];
+                    s6 = ps_constants.w[18];
+                    s7 = ps_constants.w[19];
+                    if (exec_lo != 0u) {
+                        v1 = u(f(v4) * f(v1) + f(0xc0400000u));
+                        v3 = s3;
+                        v3 = u(f(s4) - f(v3));
+                        v1 = u(f(v3) * f(v1) + f(s3));
+                    }
+                }
+                {
+                    uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                    scc = m_out != 0u ? 1u : 0u;
+                    exec_lo = m_out;
+                }
+                if (!(exec_lo == 0u)) {
+                    s0 = ps_constants.w[16];
+                    s1 = ps_constants.w[17];
+                    s2 = 0x41300000u;
+                    if (exec_lo != 0u) {
+                        v3 = s0;
+                        v1 = u(f(s2) * f(v1) + -4.0);
+                        v3 = u(f(s1) - f(v3));
+                        v1 = u(f(v3) * f(v1) + f(s0));
+                    }
+                }
+                exec_lo = vcc_lo;
+            }
+            {
+                uint m_out = ((s18 & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x41300000u;
+                }
+                s0 = ps_constants.w[16];
+                s1 = ps_constants.w[17];
+                s2 = ps_constants.w[18];
+                s3 = ps_constants.w[19];
+                if (exec_lo != 0u) {
+                    v1 = u(f(v4) * f(v1) + f(0xc0a00000u));
+                    v3 = s1;
+                    v3 = u(f(s2) - f(v3));
+                    v1 = u(f(v3) * f(v1) + f(s1));
+                }
+            }
         }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s18 = s_old;
-            s19 = 0u;
-        }
-        if (exec_lo == 0u) pc = 55;
-    }
-    if (pc <= 50) {
-        vcc_lo = 0x3eba2e8cu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 52;
-    }
-    if (pc <= 51) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300000u;
-        }
-        s0 = ps_constants.w[12];
-        s1 = ps_constants.w[13];
-        s2 = ps_constants.w[14];
-        s3 = ps_constants.w[15];
-        s4 = ps_constants.w[16];
-        s5 = ps_constants.w[17];
-        s6 = ps_constants.w[18];
-        s7 = ps_constants.w[19];
-        if (exec_lo != 0u) {
-            v1 = u(f(v4) * f(v1) + f(0xc0400000u));
-            v3 = s3;
-            v3 = u(f(s4) - f(v3));
-            v1 = u(f(v3) * f(v1) + f(s3));
-        }
-    }
-    if (pc <= 52) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 54;
-    }
-    if (pc <= 53) {
-        s0 = ps_constants.w[16];
-        s1 = ps_constants.w[17];
-        s2 = 0x41300000u;
-        if (exec_lo != 0u) {
-            v3 = s0;
-            v1 = u(f(s2) * f(v1) + -4.0);
-            v3 = u(f(s1) - f(v3));
-            v1 = u(f(v3) * f(v1) + f(s0));
-        }
-    }
-    if (pc <= 54) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 55) {
-        {
-            uint m_out = ((s18 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 57;
-    }
-    if (pc <= 56) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300000u;
-        }
-        s0 = ps_constants.w[16];
-        s1 = ps_constants.w[17];
-        s2 = ps_constants.w[18];
-        s3 = ps_constants.w[19];
-        if (exec_lo != 0u) {
-            v1 = u(f(v4) * f(v1) + f(0xc0a00000u));
-            v3 = s1;
-            v3 = u(f(s2) - f(v3));
-            v1 = u(f(v3) * f(v1) + f(s1));
-        }
-    }
-    if (pc <= 57) {
         exec_lo = s16;
     }
     {
@@ -741,8 +662,7 @@ void main() {
         scc = m_out != 0u ? 1u : 0u;
         exec_lo = m_out;
     }
-    if (exec_lo == 0u) pc = 74;
-    if (pc <= 59) {
+    if (!(exec_lo == 0u)) {
         vcc_lo = 0x3f3a2e8cu;
         {
             uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
@@ -757,172 +677,152 @@ void main() {
             s16 = s_old;
             s17 = 0u;
         }
-        if (exec_lo == 0u) pc = 65;
-    }
-    if (pc <= 60) {
-        vcc_lo = 0x3f22e8bau;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3f22e8bau;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                vcc_lo = s_old;
+                vcc_hi = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x41300003u;
+                }
+                s0 = ps_constants.w[16];
+                s1 = ps_constants.w[17];
+                s2 = ps_constants.w[18];
+                s3 = ps_constants.w[19];
+                if (exec_lo != 0u) {
+                    v1 = u(f(v4) * f(v1) + f(0xc0c00004u));
+                    v3 = s2;
+                    v3 = u(f(s3) - f(v3));
+                    v1 = u(f(v3) * f(v1) + f(s2));
+                }
+            }
+            {
+                uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x412ffffcu;
+                }
+                s0 = ps_constants.w[16];
+                s1 = ps_constants.w[17];
+                s2 = ps_constants.w[18];
+                s3 = ps_constants.w[19];
+                s4 = ps_constants.w[20];
+                s5 = ps_constants.w[21];
+                s6 = ps_constants.w[22];
+                s7 = ps_constants.w[23];
+                if (exec_lo != 0u) {
+                    v1 = u(f(v4) * f(v1) + f(0xc0dffffbu));
+                    v3 = s3;
+                    v3 = u(f(s4) - f(v3));
+                    v1 = u(f(v3) * f(v1) + f(s3));
+                }
+            }
+            exec_lo = vcc_lo;
         }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 62;
-    }
-    if (pc <= 61) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300003u;
-        }
-        s0 = ps_constants.w[16];
-        s1 = ps_constants.w[17];
-        s2 = ps_constants.w[18];
-        s3 = ps_constants.w[19];
-        if (exec_lo != 0u) {
-            v1 = u(f(v4) * f(v1) + f(0xc0c00004u));
-            v3 = s2;
-            v3 = u(f(s3) - f(v3));
-            v1 = u(f(v3) * f(v1) + f(s2));
-        }
-    }
-    if (pc <= 62) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 64;
-    }
-    if (pc <= 63) {
-        if (exec_lo != 0u) {
-            v4 = 0x412ffffcu;
-        }
-        s0 = ps_constants.w[16];
-        s1 = ps_constants.w[17];
-        s2 = ps_constants.w[18];
-        s3 = ps_constants.w[19];
-        s4 = ps_constants.w[20];
-        s5 = ps_constants.w[21];
-        s6 = ps_constants.w[22];
-        s7 = ps_constants.w[23];
-        if (exec_lo != 0u) {
-            v1 = u(f(v4) * f(v1) + f(0xc0dffffbu));
-            v3 = s3;
-            v3 = u(f(s4) - f(v3));
-            v1 = u(f(v3) * f(v1) + f(s3));
-        }
-    }
-    if (pc <= 64) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 65) {
         {
             uint m_out = ((s16 & 1u) & (~(exec_lo & 1u) & 1u));
             scc = m_out != 0u ? 1u : 0u;
             exec_lo = m_out;
         }
-        if (exec_lo == 0u) pc = 74;
-    }
-    if (pc <= 66) {
-        vcc_lo = 0x3f68ba2fu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s4 = s_old;
-            s5 = 0u;
-        }
-        if (exec_lo == 0u) pc = 72;
-    }
-    if (pc <= 67) {
-        vcc_lo = 0x3f51745eu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 69;
-    }
-    if (pc <= 68) {
-        if (exec_lo != 0u) {
-            v4 = 0x412ffffcu;
-        }
-        s0 = ps_constants.w[20];
-        s1 = ps_constants.w[21];
-        if (exec_lo != 0u) {
-            v1 = u(f(v4) * f(v1) + f(0xc0fffffbu));
-            v3 = s0;
-            v3 = u(f(s1) - f(v3));
-            v1 = u(f(v3) * f(v1) + f(s0));
-        }
-    }
-    if (pc <= 69) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 71;
-    }
-    if (pc <= 70) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300003u;
-        }
-        s0 = ps_constants.w[20];
-        s1 = ps_constants.w[21];
-        s2 = ps_constants.w[22];
-        s3 = ps_constants.w[23];
-        if (exec_lo != 0u) {
-            v1 = u(f(v4) * f(v1) + f(0xc1100003u));
-            v3 = s1;
-            v3 = u(f(s2) - f(v3));
-            v1 = u(f(v3) * f(v1) + f(s1));
-        }
-    }
-    if (pc <= 71) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 72) {
-        {
-            uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 74;
-    }
-    if (pc <= 73) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300003u;
-        }
-        s0 = ps_constants.w[20];
-        s1 = ps_constants.w[21];
-        s2 = ps_constants.w[22];
-        s3 = ps_constants.w[23];
-        if (exec_lo != 0u) {
-            v1 = u(f(v4) * f(v1) + f(0xc1200003u));
-            v3 = s2;
-            v3 = u(f(s3) - f(v3));
-            v1 = u(f(v3) * f(v1) + f(s2));
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3f68ba2fu;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                s4 = s_old;
+                s5 = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                vcc_lo = 0x3f51745eu;
+                {
+                    uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v1)) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
+                }
+                {
+                    uint s_in = (vcc_lo & 1u);
+                    uint s_old = exec_lo;
+                    exec_lo = (s_in & exec_lo);
+                    scc = exec_lo != 0u ? 1u : 0u;
+                    vcc_lo = s_old;
+                    vcc_hi = 0u;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v4 = 0x412ffffcu;
+                    }
+                    s0 = ps_constants.w[20];
+                    s1 = ps_constants.w[21];
+                    if (exec_lo != 0u) {
+                        v1 = u(f(v4) * f(v1) + f(0xc0fffffbu));
+                        v3 = s0;
+                        v3 = u(f(s1) - f(v3));
+                        v1 = u(f(v3) * f(v1) + f(s0));
+                    }
+                }
+                {
+                    uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                    scc = m_out != 0u ? 1u : 0u;
+                    exec_lo = m_out;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v4 = 0x41300003u;
+                    }
+                    s0 = ps_constants.w[20];
+                    s1 = ps_constants.w[21];
+                    s2 = ps_constants.w[22];
+                    s3 = ps_constants.w[23];
+                    if (exec_lo != 0u) {
+                        v1 = u(f(v4) * f(v1) + f(0xc1100003u));
+                        v3 = s1;
+                        v3 = u(f(s2) - f(v3));
+                        v1 = u(f(v3) * f(v1) + f(s1));
+                    }
+                }
+                exec_lo = vcc_lo;
+            }
+            {
+                uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x41300003u;
+                }
+                s0 = ps_constants.w[20];
+                s1 = ps_constants.w[21];
+                s2 = ps_constants.w[22];
+                s3 = ps_constants.w[23];
+                if (exec_lo != 0u) {
+                    v1 = u(f(v4) * f(v1) + f(0xc1200003u));
+                    v3 = s2;
+                    v3 = u(f(s3) - f(v3));
+                    v1 = u(f(v3) * f(v1) + f(s2));
+                }
+            }
         }
     }
     exec_lo = s10;
@@ -936,8 +836,7 @@ void main() {
         vcc_hi = 0u;
         exec_lo = c_out;
     }
-    if (exec_lo == 0u) pc = 95;
-    if (pc <= 75) {
+    if (!(exec_lo == 0u)) {
         vcc_lo = 0x3e8ba2e9u;
         {
             uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
@@ -952,210 +851,182 @@ void main() {
             s16 = s_old;
             s17 = 0u;
         }
-        if (exec_lo == 0u) pc = 85;
-    }
-    if (pc <= 76) {
-        vcc_lo = 0x3e3a2e8cu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3e3a2e8cu;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                s4 = s_old;
+                s5 = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                vcc_lo = 0x3dba2e8cu;
+                {
+                    uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
+                }
+                {
+                    uint s_in = (vcc_lo & 1u);
+                    uint s_old = exec_lo;
+                    exec_lo = (s_in & exec_lo);
+                    scc = exec_lo != 0u ? 1u : 0u;
+                    vcc_lo = s_old;
+                    vcc_hi = 0u;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v3 = 0x41300000u;
+                    }
+                    s0 = ps_constants.w[24];
+                    s1 = ps_constants.w[25];
+                    if (exec_lo != 0u) {
+                        v4 = s0;
+                        v4 = u(f(s1) - f(v4));
+                        v2 = u(f(v4) * f(v2));
+                        v2 = u(f(v3) * f(v2) + f(s0));
+                    }
+                }
+                {
+                    uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                    scc = m_out != 0u ? 1u : 0u;
+                    exec_lo = m_out;
+                }
+                if (!(exec_lo == 0u)) {
+                    s0 = ps_constants.w[24];
+                    s1 = ps_constants.w[25];
+                    s2 = ps_constants.w[26];
+                    s3 = ps_constants.w[27];
+                    s6 = 0x41300000u;
+                    if (exec_lo != 0u) {
+                        v3 = s1;
+                        v2 = u(f(s6) * f(v2) + -1.0);
+                        v3 = u(f(s2) - f(v3));
+                        v2 = u(f(v3) * f(v2) + f(s1));
+                    }
+                }
+                exec_lo = vcc_lo;
+            }
+            {
+                uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                s0 = ps_constants.w[24];
+                s1 = ps_constants.w[25];
+                s2 = ps_constants.w[26];
+                s3 = ps_constants.w[27];
+                vcc_lo = 0x41300000u;
+                if (exec_lo != 0u) {
+                    v3 = s2;
+                    v2 = u(f(vcc_lo) * f(v2) + -2.0);
+                    v3 = u(f(s3) - f(v3));
+                    v2 = u(f(v3) * f(v2) + f(s2));
+                }
+            }
+            exec_lo = s4;
         }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s4 = s_old;
-            s5 = 0u;
-        }
-        if (exec_lo == 0u) pc = 82;
-    }
-    if (pc <= 77) {
-        vcc_lo = 0x3dba2e8cu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 79;
-    }
-    if (pc <= 78) {
-        if (exec_lo != 0u) {
-            v3 = 0x41300000u;
-        }
-        s0 = ps_constants.w[24];
-        s1 = ps_constants.w[25];
-        if (exec_lo != 0u) {
-            v4 = s0;
-            v4 = u(f(s1) - f(v4));
-            v2 = u(f(v4) * f(v2));
-            v2 = u(f(v3) * f(v2) + f(s0));
-        }
-    }
-    if (pc <= 79) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 81;
-    }
-    if (pc <= 80) {
-        s0 = ps_constants.w[24];
-        s1 = ps_constants.w[25];
-        s2 = ps_constants.w[26];
-        s3 = ps_constants.w[27];
-        s6 = 0x41300000u;
-        if (exec_lo != 0u) {
-            v3 = s1;
-            v2 = u(f(s6) * f(v2) + -1.0);
-            v3 = u(f(s2) - f(v3));
-            v2 = u(f(v3) * f(v2) + f(s1));
-        }
-    }
-    if (pc <= 81) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 82) {
-        {
-            uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 84;
-    }
-    if (pc <= 83) {
-        s0 = ps_constants.w[24];
-        s1 = ps_constants.w[25];
-        s2 = ps_constants.w[26];
-        s3 = ps_constants.w[27];
-        vcc_lo = 0x41300000u;
-        if (exec_lo != 0u) {
-            v3 = s2;
-            v2 = u(f(vcc_lo) * f(v2) + -2.0);
-            v3 = u(f(s3) - f(v3));
-            v2 = u(f(v3) * f(v2) + f(s2));
-        }
-    }
-    if (pc <= 84) {
-        exec_lo = s4;
-    }
-    if (pc <= 85) {
         {
             uint m_out = ((s16 & 1u) & (~(exec_lo & 1u) & 1u));
             scc = m_out != 0u ? 1u : 0u;
             exec_lo = m_out;
         }
-        if (exec_lo == 0u) pc = 94;
-    }
-    if (pc <= 86) {
-        vcc_lo = 0x3ee8ba2fu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3ee8ba2fu;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                s18 = s_old;
+                s19 = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                vcc_lo = 0x3eba2e8cu;
+                {
+                    uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
+                }
+                {
+                    uint s_in = (vcc_lo & 1u);
+                    uint s_old = exec_lo;
+                    exec_lo = (s_in & exec_lo);
+                    scc = exec_lo != 0u ? 1u : 0u;
+                    vcc_lo = s_old;
+                    vcc_hi = 0u;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v4 = 0x41300000u;
+                    }
+                    s0 = ps_constants.w[24];
+                    s1 = ps_constants.w[25];
+                    s2 = ps_constants.w[26];
+                    s3 = ps_constants.w[27];
+                    s4 = ps_constants.w[28];
+                    s5 = ps_constants.w[29];
+                    s6 = ps_constants.w[30];
+                    s7 = ps_constants.w[31];
+                    if (exec_lo != 0u) {
+                        v2 = u(f(v4) * f(v2) + f(0xc0400000u));
+                        v3 = s3;
+                        v3 = u(f(s4) - f(v3));
+                        v2 = u(f(v3) * f(v2) + f(s3));
+                    }
+                }
+                {
+                    uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                    scc = m_out != 0u ? 1u : 0u;
+                    exec_lo = m_out;
+                }
+                if (!(exec_lo == 0u)) {
+                    s0 = ps_constants.w[28];
+                    s1 = ps_constants.w[29];
+                    s2 = 0x41300000u;
+                    if (exec_lo != 0u) {
+                        v3 = s0;
+                        v2 = u(f(s2) * f(v2) + -4.0);
+                        v3 = u(f(s1) - f(v3));
+                        v2 = u(f(v3) * f(v2) + f(s0));
+                    }
+                }
+                exec_lo = vcc_lo;
+            }
+            {
+                uint m_out = ((s18 & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x41300000u;
+                }
+                s0 = ps_constants.w[28];
+                s1 = ps_constants.w[29];
+                s2 = ps_constants.w[30];
+                s3 = ps_constants.w[31];
+                if (exec_lo != 0u) {
+                    v2 = u(f(v4) * f(v2) + f(0xc0a00000u));
+                    v3 = s1;
+                    v3 = u(f(s2) - f(v3));
+                    v2 = u(f(v3) * f(v2) + f(s1));
+                }
+            }
         }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s18 = s_old;
-            s19 = 0u;
-        }
-        if (exec_lo == 0u) pc = 92;
-    }
-    if (pc <= 87) {
-        vcc_lo = 0x3eba2e8cu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 89;
-    }
-    if (pc <= 88) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300000u;
-        }
-        s0 = ps_constants.w[24];
-        s1 = ps_constants.w[25];
-        s2 = ps_constants.w[26];
-        s3 = ps_constants.w[27];
-        s4 = ps_constants.w[28];
-        s5 = ps_constants.w[29];
-        s6 = ps_constants.w[30];
-        s7 = ps_constants.w[31];
-        if (exec_lo != 0u) {
-            v2 = u(f(v4) * f(v2) + f(0xc0400000u));
-            v3 = s3;
-            v3 = u(f(s4) - f(v3));
-            v2 = u(f(v3) * f(v2) + f(s3));
-        }
-    }
-    if (pc <= 89) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 91;
-    }
-    if (pc <= 90) {
-        s0 = ps_constants.w[28];
-        s1 = ps_constants.w[29];
-        s2 = 0x41300000u;
-        if (exec_lo != 0u) {
-            v3 = s0;
-            v2 = u(f(s2) * f(v2) + -4.0);
-            v3 = u(f(s1) - f(v3));
-            v2 = u(f(v3) * f(v2) + f(s0));
-        }
-    }
-    if (pc <= 91) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 92) {
-        {
-            uint m_out = ((s18 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 94;
-    }
-    if (pc <= 93) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300000u;
-        }
-        s0 = ps_constants.w[28];
-        s1 = ps_constants.w[29];
-        s2 = ps_constants.w[30];
-        s3 = ps_constants.w[31];
-        if (exec_lo != 0u) {
-            v2 = u(f(v4) * f(v2) + f(0xc0a00000u));
-            v3 = s1;
-            v3 = u(f(s2) - f(v3));
-            v2 = u(f(v3) * f(v2) + f(s1));
-        }
-    }
-    if (pc <= 94) {
         exec_lo = s16;
     }
     {
@@ -1163,8 +1034,7 @@ void main() {
         scc = m_out != 0u ? 1u : 0u;
         exec_lo = m_out;
     }
-    if (exec_lo == 0u) pc = 111;
-    if (pc <= 96) {
+    if (!(exec_lo == 0u)) {
         vcc_lo = 0x3f3a2e8cu;
         {
             uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
@@ -1179,172 +1049,152 @@ void main() {
             s16 = s_old;
             s17 = 0u;
         }
-        if (exec_lo == 0u) pc = 102;
-    }
-    if (pc <= 97) {
-        vcc_lo = 0x3f22e8bau;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3f22e8bau;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                vcc_lo = s_old;
+                vcc_hi = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x41300003u;
+                }
+                s0 = ps_constants.w[28];
+                s1 = ps_constants.w[29];
+                s2 = ps_constants.w[30];
+                s3 = ps_constants.w[31];
+                if (exec_lo != 0u) {
+                    v2 = u(f(v4) * f(v2) + f(0xc0c00004u));
+                    v3 = s2;
+                    v3 = u(f(s3) - f(v3));
+                    v2 = u(f(v3) * f(v2) + f(s2));
+                }
+            }
+            {
+                uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x412ffffcu;
+                }
+                s0 = ps_constants.w[28];
+                s1 = ps_constants.w[29];
+                s2 = ps_constants.w[30];
+                s3 = ps_constants.w[31];
+                s4 = ps_constants.w[32];
+                s5 = ps_constants.w[33];
+                s6 = ps_constants.w[34];
+                s7 = ps_constants.w[35];
+                if (exec_lo != 0u) {
+                    v2 = u(f(v4) * f(v2) + f(0xc0dffffbu));
+                    v3 = s3;
+                    v3 = u(f(s4) - f(v3));
+                    v2 = u(f(v3) * f(v2) + f(s3));
+                }
+            }
+            exec_lo = vcc_lo;
         }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 99;
-    }
-    if (pc <= 98) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300003u;
-        }
-        s0 = ps_constants.w[28];
-        s1 = ps_constants.w[29];
-        s2 = ps_constants.w[30];
-        s3 = ps_constants.w[31];
-        if (exec_lo != 0u) {
-            v2 = u(f(v4) * f(v2) + f(0xc0c00004u));
-            v3 = s2;
-            v3 = u(f(s3) - f(v3));
-            v2 = u(f(v3) * f(v2) + f(s2));
-        }
-    }
-    if (pc <= 99) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 101;
-    }
-    if (pc <= 100) {
-        if (exec_lo != 0u) {
-            v4 = 0x412ffffcu;
-        }
-        s0 = ps_constants.w[28];
-        s1 = ps_constants.w[29];
-        s2 = ps_constants.w[30];
-        s3 = ps_constants.w[31];
-        s4 = ps_constants.w[32];
-        s5 = ps_constants.w[33];
-        s6 = ps_constants.w[34];
-        s7 = ps_constants.w[35];
-        if (exec_lo != 0u) {
-            v2 = u(f(v4) * f(v2) + f(0xc0dffffbu));
-            v3 = s3;
-            v3 = u(f(s4) - f(v3));
-            v2 = u(f(v3) * f(v2) + f(s3));
-        }
-    }
-    if (pc <= 101) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 102) {
         {
             uint m_out = ((s16 & 1u) & (~(exec_lo & 1u) & 1u));
             scc = m_out != 0u ? 1u : 0u;
             exec_lo = m_out;
         }
-        if (exec_lo == 0u) pc = 111;
-    }
-    if (pc <= 103) {
-        vcc_lo = 0x3f68ba2fu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            s4 = s_old;
-            s5 = 0u;
-        }
-        if (exec_lo == 0u) pc = 109;
-    }
-    if (pc <= 104) {
-        vcc_lo = 0x3f51745eu;
-        {
-            uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
-            vcc_lo = c_out;
-            vcc_hi = 0u;
-        }
-        {
-            uint s_in = (vcc_lo & 1u);
-            uint s_old = exec_lo;
-            exec_lo = (s_in & exec_lo);
-            scc = exec_lo != 0u ? 1u : 0u;
-            vcc_lo = s_old;
-            vcc_hi = 0u;
-        }
-        if (exec_lo == 0u) pc = 106;
-    }
-    if (pc <= 105) {
-        if (exec_lo != 0u) {
-            v4 = 0x412ffffcu;
-        }
-        s0 = ps_constants.w[32];
-        s1 = ps_constants.w[33];
-        if (exec_lo != 0u) {
-            v2 = u(f(v4) * f(v2) + f(0xc0fffffbu));
-            v3 = s0;
-            v3 = u(f(s1) - f(v3));
-            v2 = u(f(v3) * f(v2) + f(s0));
-        }
-    }
-    if (pc <= 106) {
-        {
-            uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 108;
-    }
-    if (pc <= 107) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300003u;
-        }
-        s0 = ps_constants.w[32];
-        s1 = ps_constants.w[33];
-        s2 = ps_constants.w[34];
-        s3 = ps_constants.w[35];
-        if (exec_lo != 0u) {
-            v2 = u(f(v4) * f(v2) + f(0xc1100003u));
-            v3 = s1;
-            v3 = u(f(s2) - f(v3));
-            v2 = u(f(v3) * f(v2) + f(s1));
-        }
-    }
-    if (pc <= 108) {
-        exec_lo = vcc_lo;
-    }
-    if (pc <= 109) {
-        {
-            uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
-            scc = m_out != 0u ? 1u : 0u;
-            exec_lo = m_out;
-        }
-        if (exec_lo == 0u) pc = 111;
-    }
-    if (pc <= 110) {
-        if (exec_lo != 0u) {
-            v4 = 0x41300003u;
-        }
-        s0 = ps_constants.w[32];
-        s1 = ps_constants.w[33];
-        s2 = ps_constants.w[34];
-        s3 = ps_constants.w[35];
-        if (exec_lo != 0u) {
-            v2 = u(f(v4) * f(v2) + f(0xc1200003u));
-            v3 = s2;
-            v3 = u(f(s3) - f(v3));
-            v2 = u(f(v3) * f(v2) + f(s2));
+        if (!(exec_lo == 0u)) {
+            vcc_lo = 0x3f68ba2fu;
+            {
+                uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
+                vcc_lo = c_out;
+                vcc_hi = 0u;
+            }
+            {
+                uint s_in = (vcc_lo & 1u);
+                uint s_old = exec_lo;
+                exec_lo = (s_in & exec_lo);
+                scc = exec_lo != 0u ? 1u : 0u;
+                s4 = s_old;
+                s5 = 0u;
+            }
+            if (!(exec_lo == 0u)) {
+                vcc_lo = 0x3f51745eu;
+                {
+                    uint c_out = exec_lo != 0u && (f(vcc_lo) > f(v2)) ? 1u : 0u;
+                    vcc_lo = c_out;
+                    vcc_hi = 0u;
+                }
+                {
+                    uint s_in = (vcc_lo & 1u);
+                    uint s_old = exec_lo;
+                    exec_lo = (s_in & exec_lo);
+                    scc = exec_lo != 0u ? 1u : 0u;
+                    vcc_lo = s_old;
+                    vcc_hi = 0u;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v4 = 0x412ffffcu;
+                    }
+                    s0 = ps_constants.w[32];
+                    s1 = ps_constants.w[33];
+                    if (exec_lo != 0u) {
+                        v2 = u(f(v4) * f(v2) + f(0xc0fffffbu));
+                        v3 = s0;
+                        v3 = u(f(s1) - f(v3));
+                        v2 = u(f(v3) * f(v2) + f(s0));
+                    }
+                }
+                {
+                    uint m_out = ((vcc_lo & 1u) & (~(exec_lo & 1u) & 1u));
+                    scc = m_out != 0u ? 1u : 0u;
+                    exec_lo = m_out;
+                }
+                if (!(exec_lo == 0u)) {
+                    if (exec_lo != 0u) {
+                        v4 = 0x41300003u;
+                    }
+                    s0 = ps_constants.w[32];
+                    s1 = ps_constants.w[33];
+                    s2 = ps_constants.w[34];
+                    s3 = ps_constants.w[35];
+                    if (exec_lo != 0u) {
+                        v2 = u(f(v4) * f(v2) + f(0xc1100003u));
+                        v3 = s1;
+                        v3 = u(f(s2) - f(v3));
+                        v2 = u(f(v3) * f(v2) + f(s1));
+                    }
+                }
+                exec_lo = vcc_lo;
+            }
+            {
+                uint m_out = ((s4 & 1u) & (~(exec_lo & 1u) & 1u));
+                scc = m_out != 0u ? 1u : 0u;
+                exec_lo = m_out;
+            }
+            if (!(exec_lo == 0u)) {
+                if (exec_lo != 0u) {
+                    v4 = 0x41300003u;
+                }
+                s0 = ps_constants.w[32];
+                s1 = ps_constants.w[33];
+                s2 = ps_constants.w[34];
+                s3 = ps_constants.w[35];
+                if (exec_lo != 0u) {
+                    v2 = u(f(v4) * f(v2) + f(0xc1200003u));
+                    v3 = s2;
+                    v3 = u(f(s3) - f(v3));
+                    v2 = u(f(v3) * f(v2) + f(s2));
+                }
+            }
         }
     }
     exec_lo = s10;
