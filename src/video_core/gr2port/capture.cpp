@@ -491,6 +491,11 @@ constexpr u64 VisionPixelBytes = 0x30;
 // set, with the texture object of its last frame at +0x90.
 constexpr u64 PlayerReady = 0x78;
 constexpr u64 PlayerTexture = 0x90;
+// A screen's item with a negative int at +0x30 shows a movie: the item's draw callback
+// FUN_014092a0 calls the player's update, its virtual function at +0xa8, FUN_01519400.
+constexpr u64 VisionUpdates = 0x30;
+constexpr u64 PlayerUpdate = 0xa8;
+using PlayerUpdateFunction = u8 PS4_SYSV_ABI (*)(VAddr player);
 // The overlay's scroll per unit of time, x then y, DAT_01f0c700.
 constexpr u64 VisionScroll = 0x1f0c700 - 0x400000;
 // The vertex program flips the texture's v.
@@ -3257,6 +3262,27 @@ void LogFrameRate(std::chrono::steady_clock::time_point now, bool capturing) {
     g_rate_longest = {};
 }
 
+// The game's draw loop calls each movie screen's update. While GR2fork is off the loop does not
+// run, so the capture calls the updates in its place, once per frame for each screen drawn.
+void UpdateScreens(VAddr view) {
+    const VAddr items = Load<VAddr>(view + ViewItems);
+    const VAddr keys = Load<VAddr>(view + ViewKeys);
+    const s32 first = Load<s32>(view + ViewCategoryFirst + VisionCategory.index * 4);
+    const s32 count = Load<s32>(view + ViewCategoryCount + VisionCategory.index * 4);
+    const VAddr key = keys + static_cast<s64>(first - Load<s32>(view + ViewKeyCount)) * 4;
+    for (s32 i = 0; i < count; i++) {
+        const VAddr item = items + (static_cast<u64>(Load<u32>(key + i * 4) & 0x3fffff) << 6);
+        const VAddr source = Load<VAddr>(item + VisionSource);
+        const VAddr player = source != 0 ? Load<VAddr>(source) : 0;
+        if (Load<s32>(item + VisionUpdates) >= 0 || player == 0) {
+            continue;
+        }
+        const auto update =
+            reinterpret_cast<PlayerUpdateFunction>(Load<VAddr>(Load<VAddr>(player) + PlayerUpdate));
+        update(player);
+    }
+}
+
 void OnFrame(VAddr frame_graph, VAddr view) {
     PublishPending();
     const auto start = std::chrono::steady_clock::now();
@@ -3264,6 +3290,9 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     g_frames.store(frame, std::memory_order_relaxed);
     const bool capturing = g_capturing.load(std::memory_order_relaxed);
     LogFrameRate(start, capturing);
+    if (!EmulatedGpu::On()) {
+        UpdateScreens(view);
+    }
     if (!capturing) {
         return;
     }
