@@ -10,11 +10,9 @@
 #include "core/libraries/videoout/driver.h"
 #include "core/libraries/videoout/videoout_error.h"
 #include "imgui/renderer/imgui_core.h"
-#include "video_core/amdgpu/liverpool.h"
 #include "video_core/renderer_vulkan/vk_presenter.h"
 
 extern std::unique_ptr<Vulkan::Presenter> presenter;
-extern std::unique_ptr<AmdGpu::Liverpool> liverpool;
 
 namespace Libraries::VideoOut {
 
@@ -55,7 +53,6 @@ int VideoOutDriver::Open(const ServiceThreadParams* params) {
         return ORBIS_VIDEO_OUT_ERROR_RESOURCE_BUSY;
     }
     main_port.is_open = true;
-    liverpool->SetVoPort(&main_port);
     return 1;
 }
 
@@ -305,17 +302,14 @@ bool VideoOutDriver::SubmitFlip(VideoOutPort* port, s32 index, s64 flip_arg,
         port->flip_status.submit_tsc = Libraries::Kernel::sceKernelReadTsc();
     }
 
-    if (!is_eop) {
-        // Non EOP flips can arrive from any thread so ask GPU thread to perform them
-        liverpool->SendCommand([=, this]() { SubmitFlipInternal(port, index, flip_arg, is_eop); });
-    } else {
-        SubmitFlipInternal(port, index, flip_arg, is_eop);
-    }
+    SubmitFlipInternal(port, index, flip_arg, is_eop);
 
     return true;
 }
 
 void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_arg, bool is_eop) {
+    // GR2port: flips arrive from any thread, and one scheduler prepares their frames.
+    std::scoped_lock flip_lock{flip_mutex};
     Vulkan::Frame* frame;
     if (index == -1) {
         frame = presenter->PrepareBlankFrame(false);

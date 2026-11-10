@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <atomic>
-#include <cstdlib>
 
 #include "common/logging/log.h"
 #include "video_core/amdgpu/liverpool.h"
@@ -39,14 +38,7 @@ void Install(VAddr module_base) {
 }
 
 bool Wanted() {
-    static const bool wanted = [] {
-        if (std::getenv("GR2PORT_FORK") != nullptr) {
-            return true;
-        }
-        LOG_INFO(Render_Vulkan, "GR2port: GR2fork's renderer is not created");
-        return false;
-    }();
-    return wanted;
+    return false;
 }
 
 void Start(AmdGpu::Liverpool* liverpool) {

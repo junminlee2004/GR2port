@@ -9,17 +9,16 @@ namespace AmdGpu {
 struct Liverpool;
 } // namespace AmdGpu
 
-// GR2fork's GPU emulation runs for the whole run when GR2PORT_FORK is in the environment at start;
-// otherwise its renderer is not created. Without it the command processor parses the game's
-// commands, signals its fences and flips, and draws nothing, and the game's per-item draw loop
-// does not run. GR2port's own frames do not depend on it.
+// GR2fork's GPU emulation does not run: its renderer is not created and there is no command
+// processor. Gr2Port::Submits walks the game's submits for their fences and flips, and the game's
+// per-item draw loop does not run. GR2port's own frames do not depend on any of it.
 namespace Gr2Port::EmulatedGpu {
 
 /// When the executable loads, with its base address.
 void Install(VAddr module_base);
 
-/// Any thread: whether GR2fork's renderer is created, read from the environment once. Without it
-/// the emulator's window has no swapchain and does not present.
+/// Any thread: whether GR2fork's renderer is created. It never is, so the emulator's window has
+/// no swapchain and does not present.
 bool Wanted();
 
 /// From the rasterizer's constructor, after it is bound unless the settings ask for no GPU.
