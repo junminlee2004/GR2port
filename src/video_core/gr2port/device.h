@@ -40,7 +40,8 @@ struct Device {
 };
 
 /// Creates the instance, a surface for window, and a device on the first discrete GPU (else the
-/// first GPU) with a queue family that draws and presents to the surface.
+/// first GPU) that has the features the renderer needs and a queue family that draws and presents
+/// to the surface.
 bool CreateDevice(SDL_Window* window, Device& device);
 
 } // namespace Gr2Port

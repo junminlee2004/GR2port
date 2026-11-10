@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -21,6 +22,96 @@ namespace {
 
 constexpr u32 ApiVersion = VK_API_VERSION_1_3;
 constexpr const char* ValidationLayer = "VK_LAYER_KHRONOS_validation";
+
+template <typename Features>
+struct Need {
+    const char* name;
+    vk::Bool32 Features::* member;
+};
+
+using Features10 = vk::PhysicalDeviceFeatures;
+using Features11 = vk::PhysicalDeviceVulkan11Features;
+using Features12 = vk::PhysicalDeviceVulkan12Features;
+using Features13 = vk::PhysicalDeviceVulkan13Features;
+
+// The features the renderer cannot run without, each used by a SPIR-V capability of its shaders
+// or by its commands. The device enables these, and a GPU without one of them is not picked.
+constexpr std::array Needs10{
+    Need<Features10>{"multiDrawIndirect", &Features10::multiDrawIndirect},
+    Need<Features10>{"drawIndirectFirstInstance", &Features10::drawIndirectFirstInstance},
+    Need<Features10>{"samplerAnisotropy", &Features10::samplerAnisotropy},
+    Need<Features10>{"textureCompressionBC", &Features10::textureCompressionBC},
+    Need<Features10>{"shaderInt64", &Features10::shaderInt64},
+};
+constexpr std::array Needs11{
+    Need<Features11>{"shaderDrawParameters", &Features11::shaderDrawParameters},
+};
+constexpr std::array Needs12{
+    Need<Features12>{"shaderSampledImageArrayNonUniformIndexing",
+                     &Features12::shaderSampledImageArrayNonUniformIndexing},
+    Need<Features12>{"descriptorBindingSampledImageUpdateAfterBind",
+                     &Features12::descriptorBindingSampledImageUpdateAfterBind},
+    Need<Features12>{"descriptorBindingUpdateUnusedWhilePending",
+                     &Features12::descriptorBindingUpdateUnusedWhilePending},
+    Need<Features12>{"descriptorBindingPartiallyBound",
+                     &Features12::descriptorBindingPartiallyBound},
+    Need<Features12>{"runtimeDescriptorArray", &Features12::runtimeDescriptorArray},
+    Need<Features12>{"bufferDeviceAddress", &Features12::bufferDeviceAddress},
+};
+constexpr std::array Needs13{
+    Need<Features13>{"synchronization2", &Features13::synchronization2},
+    Need<Features13>{"dynamicRendering", &Features13::dynamicRendering},
+};
+// Push descriptors bind the buffers of the texture detile shaders.
+constexpr std::array NeededExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                                      VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME};
+
+template <typename Features, std::size_t Count>
+void Enable(Features& features, const std::array<Need<Features>, Count>& needs) {
+    for (const Need<Features>& need : needs) {
+        features.*need.member = VK_TRUE;
+    }
+}
+
+void Append(std::string& list, std::string_view name) {
+    if (!list.empty()) {
+        list += ", ";
+    }
+    list += name;
+}
+
+template <typename Features, std::size_t Count>
+void AppendMissing(std::string& list, const Features& supported,
+                   const std::array<Need<Features>, Count>& needs) {
+    for (const Need<Features>& need : needs) {
+        if (supported.*need.member == VK_FALSE) {
+            Append(list, need.name);
+        }
+    }
+}
+
+// The needed features and extensions the GPU lacks, or empty when it has them all.
+std::string Missing(const Device& d, vk::PhysicalDevice gpu) {
+    const auto chain =
+        gpu.getFeatures2<vk::PhysicalDeviceFeatures2, Features11, Features12, Features13>(
+            d.dispatch);
+    std::string missing;
+    AppendMissing(missing, chain.get<vk::PhysicalDeviceFeatures2>().features, Needs10);
+    AppendMissing(missing, chain.get<Features11>(), Needs11);
+    AppendMissing(missing, chain.get<Features12>(), Needs12);
+    AppendMissing(missing, chain.get<Features13>(), Needs13);
+    const auto [result, available] = gpu.enumerateDeviceExtensionProperties(nullptr, d.dispatch);
+    for (const char* extension : NeededExtensions) {
+        const bool found =
+            std::ranges::any_of(available, [extension](const vk::ExtensionProperties& property) {
+                return std::string_view{property.extensionName.data()} == extension;
+            });
+        if (!found) {
+            Append(missing, extension);
+        }
+    }
+    return missing;
+}
 
 // The validation layer checks the renderer's own instance only in runs that set
 // GR2PORT_VALIDATION, and only when the loader finds it.
@@ -98,8 +189,20 @@ bool PickGpu(Device& d) {
     bool found = false;
     for (const vk::PhysicalDevice gpu : gpus) {
         const auto properties = gpu.getProperties(d.dispatch);
+        const std::string_view name{properties.deviceName.data()};
+        if (properties.apiVersion < ApiVersion) {
+            LOG_INFO(Render_Vulkan, "GR2port: {} has Vulkan {}.{}; the renderer needs 1.3", name,
+                     VK_API_VERSION_MAJOR(properties.apiVersion),
+                     VK_API_VERSION_MINOR(properties.apiVersion));
+            continue;
+        }
         const std::optional<u32> family = PresentFamily(d, gpu);
-        if (properties.apiVersion < ApiVersion || !family) {
+        if (!family) {
+            LOG_INFO(Render_Vulkan, "GR2port: {} cannot present to the window", name);
+            continue;
+        }
+        if (const std::string missing = Missing(d, gpu); !missing.empty()) {
+            LOG_INFO(Render_Vulkan, "GR2port: {} lacks {}", name, missing);
             continue;
         }
         const bool discrete = properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu;
@@ -128,55 +231,32 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     }
     d.surface = surface;
     if (!PickGpu(d)) {
-        LOG_ERROR(Render_Vulkan, "GR2port: no Vulkan 1.3 GPU presents to the window");
+        LOG_ERROR(Render_Vulkan, "GR2port: no GPU has what the renderer needs");
         return false;
     }
 
-    vk::PhysicalDeviceVulkan13Features features13{
-        .synchronization2 = true,
-        .dynamicRendering = true,
-    };
-    vk::PhysicalDeviceVulkan12Features features12{
-        .pNext = &features13,
-        .storageBuffer8BitAccess = true,
-        .shaderSampledImageArrayNonUniformIndexing = true,
-        .descriptorBindingSampledImageUpdateAfterBind = true,
-        .descriptorBindingUpdateUnusedWhilePending = true,
-        .descriptorBindingPartiallyBound = true,
-        .runtimeDescriptorArray = true,
-        .scalarBlockLayout = true,
-        .timelineSemaphore = true,
-        .bufferDeviceAddress = true,
-    };
-    vk::PhysicalDeviceVulkan11Features features11{
-        .pNext = &features12,
-        .storageBuffer16BitAccess = true,
-        .shaderDrawParameters = true,
-    };
+    vk::PhysicalDeviceVulkan13Features features13;
+    vk::PhysicalDeviceVulkan12Features features12{.pNext = &features13};
+    vk::PhysicalDeviceVulkan11Features features11{.pNext = &features12};
+    vk::PhysicalDeviceFeatures2 features{.pNext = &features11};
+    Enable(features.features, Needs10);
+    Enable(features11, Needs11);
+    Enable(features12, Needs12);
+    Enable(features13, Needs13);
     const vk::PhysicalDeviceFeatures supported = d.gpu.getFeatures(d.dispatch);
     d.geometry_shaders = supported.geometryShader != VK_FALSE;
     d.tessellation_shaders = supported.tessellationShader != VK_FALSE;
     d.storage_extended_formats = supported.shaderStorageImageExtendedFormats != VK_FALSE;
-    vk::PhysicalDeviceFeatures2 features{
-        .pNext = &features11,
-        .features = {.geometryShader = d.geometry_shaders,
-                     .tessellationShader = d.tessellation_shaders,
-                     .multiDrawIndirect = true,
-                     .drawIndirectFirstInstance = true,
-                     .samplerAnisotropy = true,
-                     .textureCompressionBC = true,
-                     .shaderStorageImageExtendedFormats = d.storage_extended_formats,
-                     .shaderInt64 = true},
-    };
+    features.features.geometryShader = d.geometry_shaders;
+    features.features.tessellationShader = d.tessellation_shaders;
+    features.features.shaderStorageImageExtendedFormats = d.storage_extended_formats;
     const float priority = 1.0f;
     const vk::DeviceQueueCreateInfo queue_info{
         .queueFamilyIndex = d.queue_family,
         .queueCount = 1,
         .pQueuePriorities = &priority,
     };
-    // Push descriptors bind the buffers of the texture detile shaders.
-    std::vector<const char*> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-                                        VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME};
+    std::vector<const char*> extensions{NeededExtensions.begin(), NeededExtensions.end()};
     const auto [extensions_result, available] =
         d.gpu.enumerateDeviceExtensionProperties(nullptr, d.dispatch);
     vk::PhysicalDeviceFaultFeaturesEXT fault_features;
