@@ -13,6 +13,7 @@
 // windows.h first
 #include <commctrl.h>
 
+#include "core/language/language.h"
 #include "input/game_functions.h"
 #include "input/input_handler.h"
 #include "launcher/key_bindings.h"
@@ -63,6 +64,11 @@ struct Editor {
     HWND tab = nullptr;
     HWND list = nullptr;
 };
+
+// English text in the language in use, with each {N} replaced by values[N].
+std::wstring Tr(std::wstring_view english, const std::vector<std::wstring>& values = {}) {
+    return Gr2Port::Language::Text(english, values);
+}
 
 std::wstring Wide(std::string_view text) {
     return std::wstring(text.begin(), text.end());
@@ -136,15 +142,15 @@ constexpr std::pair<std::string_view, std::wstring_view> KeyTexts[]{
 
 std::wstring KeyText(std::string_view name) {
     if (name.empty()) {
-        return L"None";
+        return Tr(L"None");
     }
     for (const auto& [key, text] : KeyTexts) {
         if (key == name) {
-            return std::wstring(text);
+            return Tr(text);
         }
     }
     if (name.size() == 3 && name.starts_with("kp") && std::isdigit(name[2])) {
-        return L"Num " + Wide(name.substr(2));
+        return Tr(L"Num {0}", {Wide(name.substr(2))});
     }
     std::wstring text = Wide(name);
     if (name.size() == 1 || (name[0] == 'f' && name.size() <= 3)) {
@@ -328,9 +334,9 @@ LRESULT CALLBACK CaptureProc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         FillRect(dc, &area, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
         const HGDIOBJ old_font = SelectObject(dc, capture->font);
         SetBkMode(dc, TRANSPARENT);
-        const std::wstring text = L"Press a key or mouse button for\n" + capture->function +
-                                  L"\n\nNothing changes in " +
-                                  std::to_wstring(capture->seconds_left) + L" s.";
+        const std::wstring text =
+            Tr(L"Press a key or mouse button for\n{0}\n\nNothing changes in {1} s.",
+               {capture->function, std::to_wstring(capture->seconds_left)});
         InflateRect(&area, 0, -MulDiv(area.bottom, 1, 10));
         DrawTextW(dc, text.c_str(), -1, &area, DT_CENTER | DT_WORDBREAK);
         SelectObject(dc, old_font);
@@ -417,12 +423,12 @@ void SetCell(HWND list, int row, int column, const std::wstring& text) {
 void ShowRows(const Editor& editor) {
     const auto functions = Game::Functions();
     for (size_t i = 0; i < functions.size(); ++i) {
-        SetCell(editor.list, static_cast<int>(i), 1, Wide(functions[i].pad[editor.type]));
+        SetCell(editor.list, static_cast<int>(i), 1, Tr(Wide(functions[i].pad[editor.type])));
         SetCell(editor.list, static_cast<int>(i), 2, KeyText(editor.keys[i]));
     }
     LVCOLUMNW column{};
     column.mask = LVCF_TEXT;
-    std::wstring header = std::wstring(L"Controller (") + TypeNames[editor.type] + L")";
+    std::wstring header = Tr(L"Controller ({0})", {Tr(TypeNames[editor.type])});
     column.pszText = header.data();
     SendMessageW(editor.list, LVM_SETCOLUMNW, 1, reinterpret_cast<LPARAM>(&column));
 }
@@ -441,20 +447,20 @@ void ChangeKey(HWND window, Editor& editor) {
     const int row = SelectedRow(editor);
     const auto functions = Game::Functions();
     if (row < 0 || row >= static_cast<int>(functions.size())) {
-        ShowStatus(window, L"Pick a game function first.");
+        ShowStatus(window, Tr(L"Pick a game function first."));
         return;
     }
-    const std::wstring label = Wide(functions[row].label);
+    const std::wstring label = Tr(Wide(functions[row].label));
     const std::string key = CaptureKey(window, editor, label);
     if (key.empty()) {
-        ShowStatus(window, L"No key was pressed; " + label + L" keeps its key.");
+        ShowStatus(window, Tr(L"No key was pressed; {0} keeps its key.", {label}));
         return;
     }
-    std::wstring status = KeyText(key) + L" now does " + label + L".";
+    std::wstring status = Tr(L"{0} now does {1}.", {KeyText(key), label});
     for (size_t i = 0; i < editor.keys.size(); ++i) {
         if (static_cast<int>(i) != row && editor.keys[i] == key) {
             editor.keys[i].clear();
-            status += L" " + Wide(functions[i].label) + L" has no key now.";
+            status += L" " + Tr(L"{0} has no key now.", {Tr(Wide(functions[i].label))});
         }
     }
     editor.keys[row] = key;
@@ -463,6 +469,7 @@ void ChangeKey(HWND window, Editor& editor) {
 }
 
 void Build(HWND window, Editor& editor) {
+    SetWindowTextW(window, Tr(L"Key Bindings").c_str());
     editor.dpi = GetDpiForWindow(window);
     editor.font =
         CreateFontW(-MulDiv(8, static_cast<int>(editor.dpi), 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE,
@@ -482,9 +489,9 @@ void Build(HWND window, Editor& editor) {
     editor.tab = MakeControl(editor, window, WC_TABCONTROLW, L"", WS_TABSTOP | WS_CLIPSIBLINGS,
                              IdTypes, TabArea);
     for (size_t i = 0; i < TypeNames.size(); ++i) {
-        std::wstring name = TypeNames[i];
+        std::wstring name = Tr(TypeNames[i]);
         if (i == editor.game_type) {
-            name += L" (in use)";
+            name = Tr(L"{0} (in use)", {name});
         }
         TCITEMW item{};
         item.mask = TCIF_TEXT;
@@ -512,12 +519,13 @@ void Build(HWND window, Editor& editor) {
         LVCOLUMNW column{};
         column.mask = LVCF_TEXT | LVCF_WIDTH;
         column.cx = Scaled(editor, ColumnWidths[i]);
-        column.pszText = const_cast<wchar_t*>(Headers[i]);
+        std::wstring header = Tr(Headers[i]);
+        column.pszText = header.data();
         SendMessageW(editor.list, LVM_INSERTCOLUMNW, i, reinterpret_cast<LPARAM>(&column));
     }
     const auto functions = Game::Functions();
     for (size_t i = 0; i < functions.size(); ++i) {
-        const std::wstring label = Wide(functions[i].label);
+        const std::wstring label = Tr(Wide(functions[i].label));
         LVITEMW item{};
         item.mask = LVIF_TEXT;
         item.iItem = static_cast<int>(i);
@@ -526,22 +534,25 @@ void Build(HWND window, Editor& editor) {
     }
     ShowRows(editor);
 
-    const std::wstring in_use = std::wstring(L"The game used ") + TypeNames[editor.game_type] +
-                                L" last (Options > Controls). Each key does its function in every "
-                                L"type.";
+    const std::wstring in_use = Tr(L"The game used {0} last (Options > Controls). Each key does "
+                                   L"its function in every type.",
+                                   {Tr(TypeNames[editor.game_type])});
     MakeControl(editor, window, WC_STATICW, in_use.c_str(), SS_LEFT, IdType, TypeLine);
     MakeControl(editor, window, WC_STATICW,
-                L"Double-click a function, then press its key. Mouse buttons and the wheel count.",
+                Tr(L"Double-click a function, then press its key. Mouse buttons and the wheel "
+                   L"count.")
+                    .c_str(),
                 SS_LEFT, IdStatus, StatusLine);
-    MakeControl(editor, window, WC_BUTTONW, L"Change Key...", BS_PUSHBUTTON | WS_TABSTOP, IdChange,
-                ChangeButton);
-    MakeControl(editor, window, WC_BUTTONW, L"Clear Key", BS_PUSHBUTTON | WS_TABSTOP, IdClear,
-                ClearButton);
-    MakeControl(editor, window, WC_BUTTONW, L"Defaults", BS_PUSHBUTTON | WS_TABSTOP, IdDefaults,
-                DefaultsButton);
-    MakeControl(editor, window, WC_BUTTONW, L"OK", BS_DEFPUSHBUTTON | WS_TABSTOP, IDOK, OkButton);
-    MakeControl(editor, window, WC_BUTTONW, L"Cancel", BS_PUSHBUTTON | WS_TABSTOP, IDCANCEL,
-                CancelButton);
+    MakeControl(editor, window, WC_BUTTONW, Tr(L"Change Key...").c_str(),
+                BS_PUSHBUTTON | WS_TABSTOP, IdChange, ChangeButton);
+    MakeControl(editor, window, WC_BUTTONW, Tr(L"Clear Key").c_str(), BS_PUSHBUTTON | WS_TABSTOP,
+                IdClear, ClearButton);
+    MakeControl(editor, window, WC_BUTTONW, Tr(L"Defaults").c_str(), BS_PUSHBUTTON | WS_TABSTOP,
+                IdDefaults, DefaultsButton);
+    MakeControl(editor, window, WC_BUTTONW, Tr(L"OK").c_str(), BS_DEFPUSHBUTTON | WS_TABSTOP, IDOK,
+                OkButton);
+    MakeControl(editor, window, WC_BUTTONW, Tr(L"Cancel").c_str(), BS_PUSHBUTTON | WS_TABSTOP,
+                IDCANCEL, CancelButton);
     SetFocus(editor.list);
 }
 
@@ -574,7 +585,7 @@ INT_PTR CALLBACK EditorProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
         case IdDefaults:
             editor->keys = DefaultKeyBindings();
             ShowRows(*editor);
-            ShowStatus(window, L"Every function has its default key again.");
+            ShowStatus(window, Tr(L"Every function has its default key again."));
             return TRUE;
         case IDOK:
         case IDCANCEL:

@@ -19,6 +19,7 @@
 #include "core/file_format/psf.h"
 #include "core/file_sys/ifile.h"
 #include "core/game_check/game_check.h"
+#include "core/language/language.h"
 #include "core/loader/elf.h"
 
 CMRC_DECLARE(gr2port_patches);
@@ -89,6 +90,17 @@ enum class Form {
 std::atomic<bool> g_loose_files{false};
 // Set by Find before anything reads it.
 std::string g_title_id;
+
+// English text with fmt's {} markers in the player's language, filled in. A translation that does
+// not take the values falls back to the English.
+template <typename... Args>
+std::string Say(std::string_view english, const Args&... args) {
+    try {
+        return fmt::format(fmt::runtime(Language::Text(english)), args...);
+    } catch (const fmt::format_error&) {
+        return fmt::format(fmt::runtime(english), args...);
+    }
+}
 
 void Tell(const std::string& text) {
     LOG_ERROR(Loader, "GR2port: {}", text);
@@ -187,47 +199,45 @@ Form FormOf(std::string_view name, std::initializer_list<IBackend*> roots) {
 }
 
 std::string NoGame(const std::filesystem::path& folder) {
-    return fmt::format(
+    return Say(
         "No CUSAXXXXX and/or CUSAXXXXX-patch folder found in\n{}\n\nPut Gravity Rush 2 and its "
         "1.11 update beside Gravity Rush 2\xE2\x84\xA2"
         ".exe: either two folders, the game and the update (for example CUSA04934 and "
         "CUSA04934-patch), or one folder with the update copied over the game. Folders and .zar "
         "archives both work.\n\n{}",
-        Common::FS::PathToUTF8String(folder), PkgNote);
+        Common::FS::PathToUTF8String(folder), Language::Text(PkgNote));
 }
 
 std::optional<Game> Check(const std::string& id, const std::optional<std::filesystem::path>& root,
                           const std::optional<std::filesystem::path>& update_root) {
     const std::string update_name = id + "-patch";
     if (!root) {
-        Tell(fmt::format("No {} folder found beside {}. GR2port needs the game as well as its "
-                         "update: put the game beside it as {}, or copy the update over the game "
-                         "folder.\n\n{}",
-                         id, update_name, id, PkgNote));
+        Tell(Say("No {} folder found beside {}. GR2port needs the game as well as its update: "
+                 "put the game beside it as {}, or copy the update over the game folder.\n\n{}",
+                 id, update_name, id, Language::Text(PkgNote)));
         return std::nullopt;
     }
     const std::unique_ptr<IBackend> game = Core::FileSys::OpenGameBackend(*root);
     const std::unique_ptr<IBackend> update =
         update_root ? Core::FileSys::OpenGameBackend(*update_root) : nullptr;
     if (game == nullptr || (update_root && update == nullptr)) {
-        Tell(fmt::format("{} cannot be opened. Your game files may be corrupted.",
-                         update_root && update == nullptr ? update_name : id));
+        Tell(Say("{} cannot be opened. Your game files may be corrupted.",
+                 update_root && update == nullptr ? update_name : id));
         return std::nullopt;
     }
 
     // Without an update beside the game, the update is copied over it and its version shows it.
     if (update == nullptr) {
         if (const auto version = AppVersion(*game); version && *version != Version) {
-            Tell(fmt::format("No {} folder found. {} holds version {} of the game, and GR2port "
-                             "needs the 1.11 update: put it beside the game as {}, or copy it "
-                             "over the game folder.\n\n{}",
-                             update_name, id, *version, update_name, PkgNote));
+            Tell(Say("No {} folder found. {} holds version {} of the game, and GR2port needs "
+                     "the 1.11 update: put it beside the game as {}, or copy it over the game "
+                     "folder.\n\n{}",
+                     update_name, id, *version, update_name, Language::Text(PkgNote)));
             return std::nullopt;
         }
     } else if (const auto version = AppVersion(*update); version && *version != Version) {
-        Tell(fmt::format("The update in {} is version {}. GR2port needs Gravity Rush 2 update "
-                         "1.11.",
-                         update_name, *version));
+        Tell(Say("The update in {} is version {}. GR2port needs Gravity Rush 2 update 1.11.",
+                 update_name, *version));
         return std::nullopt;
     }
 
@@ -238,13 +248,13 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
         eboot = game.get();
     }
     if (eboot == nullptr) {
-        Tell("No eboot.bin found. Your game files may be corrupted.");
+        Tell(Say("No eboot.bin found. Your game files may be corrupted."));
         return std::nullopt;
     }
     if (!EbootFits(*eboot)) {
-        Tell(fmt::format("Your game files are corrupted: eboot.bin in {} is not the Gravity Rush 2 "
-                         "v1.11 eboot.bin that GR2port's patches fit.",
-                         eboot == update.get() ? update_name : id));
+        Tell(Say("Your game files are corrupted: eboot.bin in {} is not the Gravity Rush 2 "
+                 "v1.11 eboot.bin that GR2port's patches fit.",
+                 eboot == update.get() ? update_name : id));
         return std::nullopt;
     }
 
@@ -253,15 +263,16 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
     std::string listing;
     for (size_t i = 0; i < Archives.size(); ++i) {
         forms[i] = FormOf(Archives[i], {update.get(), game.get()});
-        listing += fmt::format("\n{}: {}", Archives[i], FormNames[static_cast<size_t>(forms[i])]);
+        listing += fmt::format("\n{}: {}", Archives[i],
+                               Language::Text(FormNames[static_cast<size_t>(forms[i])]));
     }
     const auto all = [&forms](Form form) {
         return std::ranges::all_of(forms, [form](Form found) { return found == form; });
     };
     if (!all(Form::Archive) && !all(Form::Folder)) {
-        Tell(fmt::format("Bad dump: the game's four archives must all be .psarc files, or all be "
-                         "extracted to folders of the same names.\n{}",
-                         listing));
+        Tell(Say("Bad dump: the game's four archives must all be .psarc files, or all be "
+                 "extracted to folders of the same names.\n{}",
+                 listing));
         return std::nullopt;
     }
     const bool loose_files = all(Form::Folder);

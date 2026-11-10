@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 #include <windows.h>
 // windows.h first
@@ -30,6 +31,7 @@
 #include "core/emulator_settings.h"
 #include "core/game_check/game_check.h"
 #include "core/game_check/game_patches.h"
+#include "core/language/language.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
 #include "input/input_handler.h"
@@ -87,6 +89,8 @@ enum Control : int {
     IdAspect,
     IdRenderSizeLabel,
     IdRenderSize,
+    IdLanguageLabel,
+    IdLanguage,
     IdDlc,
     IdHalloween,
     IdSignUp,
@@ -363,6 +367,7 @@ constexpr std::array Rows{
     Row{IdFrameRateLabel, IdFrameRate, L"FPS Cap", 299},
     Row{IdAspectLabel, IdAspect, L"Aspect Ratio", 328},
     Row{IdRenderSizeLabel, IdRenderSize, L"Render Resolution", 357},
+    Row{IdLanguageLabel, IdLanguage, L"Language", 386},
 };
 
 // In the order of Settings::VSync.
@@ -533,6 +538,45 @@ HWND Item(const Dialog& dialog, int id) {
     return nullptr;
 }
 
+// English text and the values its {N} markers name, shown in the language in use.
+struct Phrase {
+    std::wstring english;
+    std::vector<std::wstring> values;
+
+    Phrase(const wchar_t* text) : english{text} {}
+    Phrase(std::wstring text) : english{std::move(text)} {}
+    Phrase(std::wstring text, std::vector<std::wstring> named)
+        : english{std::move(text)}, values{std::move(named)} {}
+
+    std::wstring Shown() const {
+        return Language::Text(english, values);
+    }
+};
+
+// What each control and combo box item says in English, so a change of language can show it
+// again. The dialog is modal: one at a time.
+std::unordered_map<HWND, Phrase> g_texts;
+std::unordered_map<HWND, std::vector<Phrase>> g_items;
+
+void SetText(HWND control, Phrase text) {
+    SetWindowTextW(control, text.Shown().c_str());
+    g_texts.insert_or_assign(control, std::move(text));
+}
+
+void AddText(HWND combo, Phrase text) {
+    SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text.Shown().c_str()));
+    g_items[combo].push_back(std::move(text));
+}
+
+void ClearItems(HWND combo) {
+    SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+    g_items.erase(combo);
+}
+
+int Tell(HWND window, const wchar_t* text, const wchar_t* title, UINT style) {
+    return MessageBoxW(window, Language::Text(text).c_str(), Language::Text(title).c_str(), style);
+}
+
 std::wstring Wide(std::string_view text) {
     std::wstring wide(
         MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0),
@@ -591,13 +635,19 @@ void ShowOnline(Dialog& dialog) {
 
 void ChooseAvatar(HWND window, Dialog& dialog) {
     std::wstring file(MAX_PATH, L'\0');
+    // The filter's name, then its pattern, each ending in a null.
+    std::wstring filter = Language::Text(L"Images") + L" (*.png;*.jpg;*.jpeg;*.bmp)";
+    filter.push_back(L'\0');
+    filter += L"*.png;*.jpg;*.jpeg;*.bmp";
+    filter.push_back(L'\0');
+    const std::wstring title = Language::Text(L"Select Profile Picture");
     OPENFILENAMEW open{};
     open.lStructSize = sizeof(open);
     open.hwndOwner = window;
-    open.lpstrFilter = L"Images (*.png;*.jpg;*.jpeg;*.bmp)\0*.png;*.jpg;*.jpeg;*.bmp\0";
+    open.lpstrFilter = filter.c_str();
     open.lpstrFile = file.data();
     open.nMaxFile = static_cast<DWORD>(file.size());
-    open.lpstrTitle = L"Select Profile Picture";
+    open.lpstrTitle = title.c_str();
     open.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     if (!GetOpenFileNameW(&open)) {
         return;
@@ -605,8 +655,7 @@ void ChooseAvatar(HWND window, Dialog& dialog) {
     file.resize(std::wcslen(file.c_str()));
     std::unique_ptr<Gdiplus::Bitmap> picture = Avatar::Make(file);
     if (picture == nullptr) {
-        MessageBoxW(window, L"The image could not be loaded.", L"Profile Picture",
-                    MB_OK | MB_ICONWARNING);
+        Tell(window, L"The image could not be loaded.", L"Profile Picture", MB_OK | MB_ICONWARNING);
         return;
     }
     dialog.avatar = std::move(picture);
@@ -625,8 +674,8 @@ void SaveOnline(HWND window, const Dialog& dialog) {
     UserSettings.Save();
     if (dialog.avatar != nullptr &&
         !Avatar::Save(*dialog.avatar, Avatar::Path(dialog.player->user_id))) {
-        MessageBoxW(window, L"The profile picture could not be saved.", L"Profile Picture",
-                    MB_OK | MB_ICONWARNING);
+        Tell(window, L"The profile picture could not be saved.", L"Profile Picture",
+             MB_OK | MB_ICONWARNING);
     }
 }
 
@@ -646,10 +695,6 @@ bool RowChecked(HWND list, int row) {
     const LRESULT state =
         SendMessageW(list, LVM_GETITEMSTATE, static_cast<WPARAM>(row), LVIS_STATEIMAGEMASK);
     return (state & LVIS_STATEIMAGEMASK) == INDEXTOSTATEIMAGEMASK(2);
-}
-
-void AddText(HWND combo, const std::wstring& text) {
-    SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text.c_str()));
 }
 
 int Selected(HWND combo) {
@@ -851,13 +896,16 @@ void ShowAutomaticPrompts(const Dialog& dialog) {
     const auto choice = std::ranges::find(PromptChoices, setting,
                                           &std::pair<const wchar_t*, std::string_view>::second);
     const std::wstring name = choice != PromptChoices.end() ? choice->first : L"PlayStation";
-    const std::wstring text = std::wstring(PromptChoices[0].first) + L" (" + name + L")";
+    const Phrase text{L"Automatic ({0})", {Language::Text(name)}};
     for (const int id : {IdPrompts, IdPadPrompts}) {
         const HWND combo = Item(dialog, id);
         const int selected = Selected(combo);
         SendMessageW(combo, CB_DELETESTRING, 0, 0);
-        SendMessageW(combo, CB_INSERTSTRING, 0, reinterpret_cast<LPARAM>(text.c_str()));
+        SendMessageW(combo, CB_INSERTSTRING, 0, reinterpret_cast<LPARAM>(text.Shown().c_str()));
         Select(combo, selected);
+        if (auto& items = g_items[combo]; !items.empty()) {
+            items.front() = text;
+        }
     }
 }
 
@@ -894,24 +942,24 @@ std::vector<Pad> ListPads() {
 }
 
 // GR2Launcher shows the last 16 digits of a GUID.
-std::wstring PadId(std::string_view guid) {
-    return L"ID: " + Wide(guid.substr(guid.size() > 16 ? guid.size() - 16 : 0));
+Phrase PadId(std::string_view guid) {
+    return {L"ID: {0}", {Wide(guid.substr(guid.size() > 16 ? guid.size() - 16 : 0))}};
 }
 
 void ShowActivePadId(const Dialog& dialog) {
     const int pad = Selected(Item(dialog, IdActivePad));
     const bool listed = pad >= 0 && pad < static_cast<int>(dialog.pads.size());
-    SetWindowTextW(Item(dialog, IdActivePadId),
-                   listed ? PadId(dialog.pads[pad].guid).c_str() : L"n/a");
+    SetText(Item(dialog, IdActivePadId), listed ? PadId(dialog.pads[pad].guid) : Phrase{L"n/a"});
 }
 
 void ShowDefaultPad(const Dialog& dialog) {
     const auto pad = std::ranges::find(dialog.pads, dialog.default_pad, &Pad::guid);
     const bool connected = !dialog.default_pad.empty() && pad != dialog.pads.end();
-    const wchar_t* const missing =
+    const Phrase missing =
         dialog.default_pad.empty() ? L"No default selected" : L"Default controller not connected";
-    SetWindowTextW(Item(dialog, IdDefaultPadName), connected ? pad->name.c_str() : missing);
-    SetWindowTextW(Item(dialog, IdDefaultPadId), connected ? PadId(pad->guid).c_str() : L"n/a");
+    // A gamepad's name is shown as SDL gives it.
+    SetText(Item(dialog, IdDefaultPadName), connected ? Phrase{L"{0}", {pad->name}} : missing);
+    SetText(Item(dialog, IdDefaultPadId), connected ? PadId(pad->guid) : Phrase{L"n/a"});
 }
 
 // Lists the gamepads again. The one shown stays chosen; at first it is the one player 1 gets.
@@ -925,12 +973,12 @@ void ShowPads(Dialog& dialog) {
                                  ? dialog.pads[shown].guid
                                  : Input::SelectedPad::Guid();
     dialog.pads = dialog.gamepads_started ? ListPads() : std::vector<Pad>{};
-    SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+    ClearItems(combo);
     if (dialog.pads.empty()) {
         AddText(combo, L"No gamepads detected");
     }
     for (size_t i = 0; i < dialog.pads.size(); ++i) {
-        AddText(combo, std::to_wstring(i + 1) + L": " + dialog.pads[i].name);
+        AddText(combo, Phrase{L"{0}: {1}", {std::to_wstring(i + 1), dialog.pads[i].name}});
     }
     const auto pad = std::ranges::find(dialog.pads, kept, &Pad::guid);
     Select(combo, pad != dialog.pads.end() ? static_cast<int>(pad - dialog.pads.begin()) : 0);
@@ -978,14 +1026,14 @@ void SaveController(HWND window, const Dialog& dialog) {
                                                             (touch_swipe ? "true" : "false")});
     }
     if (!lines.empty() && !SaveConfigLines(dialog.input_config, lines)) {
-        MessageBoxW(window, L"The input config could not be saved.", L"Controller",
-                    MB_OK | MB_ICONWARNING);
+        Tell(window, L"The input config could not be saved.", L"Controller",
+             MB_OK | MB_ICONWARNING);
     }
 }
 
 void FillResolutions(Dialog& dialog, u32 width, u32 height) {
     const HWND combo = Item(dialog, IdResolution);
-    SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+    ClearItems(combo);
     int chosen = -1;
     int current = -1;
     for (size_t i = 0; i < dialog.modes.sizes.size(); ++i) {
@@ -1005,7 +1053,7 @@ void FillResolutions(Dialog& dialog, u32 width, u32 height) {
 // A rate of 0 picks the monitor's current rate, or the highest when the size is not current.
 void FillRates(Dialog& dialog, u32 rate) {
     const HWND combo = Item(dialog, IdRefresh);
-    SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+    ClearItems(combo);
     const int size = Selected(Item(dialog, IdResolution));
     if (size < 0) {
         return;
@@ -1253,12 +1301,12 @@ std::wstring Gigabytes(u64 megabytes) {
 void FillTextureStreaming(Dialog& dialog, u32 saved) {
     const HWND combo = Item(dialog, IdTextureStreaming);
     const VideoCard card = FindVideoCard();
-    std::wstring automatic = L"Auto";
+    Phrase automatic = L"Auto";
     if (card.integrated) {
         const u64 share = std::min(card.bytes + card.shared, Settings::RamShare(InstalledRam()));
-        automatic += L" (" + Gigabytes(share >> 20) + L" of RAM, " + card.name + L")";
+        automatic = {L"Auto ({0} of RAM, {1})", {Gigabytes(share >> 20), card.name}};
     } else if (card.bytes != 0) {
-        automatic += L" (" + Gigabytes(card.bytes >> 20) + L", " + card.name + L")";
+        automatic = {L"Auto ({0}, {1})", {Gigabytes(card.bytes >> 20), card.name}};
     }
     dialog.texture_streaming = {0};
     AddText(combo, automatic);
@@ -1350,17 +1398,21 @@ HBITMAP ComposeBanner(const Art& art, int width, int height, float scale) {
 
 // left and top are in the dialog's client area at 96 DPI; origin is the parent's place in it.
 HWND MakeControl(const Dialog& dialog, HWND parent, POINT origin, const wchar_t* type,
-                 const wchar_t* text, DWORD style, int id, int left, int top, int width,
+                 const Phrase& text, DWORD style, int id, int left, int top, int width,
                  int height) {
     const HWND control = CreateWindowExW(
-        0, type, text, WS_CHILD | WS_VISIBLE | style, Scaled(dialog, left) - origin.x,
-        Scaled(dialog, top) - origin.y, Scaled(dialog, width), Scaled(dialog, height), parent,
-        reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), GetModuleHandleW(nullptr), nullptr);
+        0, type, text.Shown().c_str(), WS_CHILD | WS_VISIBLE | style,
+        Scaled(dialog, left) - origin.x, Scaled(dialog, top) - origin.y, Scaled(dialog, width),
+        Scaled(dialog, height), parent, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),
+        GetModuleHandleW(nullptr), nullptr);
     SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(dialog.font), FALSE);
+    if (!text.english.empty()) {
+        g_texts.insert_or_assign(control, text);
+    }
     return control;
 }
 
-HWND MakeButton(const Dialog& dialog, HWND parent, const wchar_t* text, DWORD style, int id,
+HWND MakeButton(const Dialog& dialog, HWND parent, const Phrase& text, DWORD style, int id,
                 const RECT& area) {
     return MakeControl(dialog, parent, POINT{0, 0}, WC_BUTTONW, text, style | WS_TABSTOP, id,
                        area.left, area.top, area.right - area.left, area.bottom - area.top);
@@ -1373,7 +1425,47 @@ void KeepTabOrder(const std::vector<HWND>& controls) {
     }
 }
 
+// Shows every text again in the language in use.
+void Retranslate(const Dialog& dialog) {
+    for (const auto& [control, text] : g_texts) {
+        SetWindowTextW(control, text.Shown().c_str());
+    }
+    for (const auto& [combo, items] : g_items) {
+        const int selected = Selected(combo);
+        SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+        for (const Phrase& item : items) {
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(item.Shown().c_str()));
+        }
+        Select(combo, selected);
+    }
+    for (size_t i = 0; i < PageCount; ++i) {
+        std::wstring name = Language::Text(PageNames[i]);
+        TCITEMW tab_item{};
+        tab_item.mask = TCIF_TEXT;
+        tab_item.pszText = name.data();
+        SendMessageW(dialog.tab, TCM_SETITEMW, i, reinterpret_cast<LPARAM>(&tab_item));
+    }
+    ShowAutomaticPrompts(dialog);
+}
+
+// Picks a console language in the Language list and shows the texts in it.
+void ShowLanguage(const Dialog& dialog, int language) {
+    const auto listed = Language::Listed();
+    const auto found = std::ranges::find(listed, language);
+    if (found == listed.end()) {
+        return;
+    }
+    Select(Item(dialog, IdLanguage), static_cast<int>(found - listed.begin()));
+    if (language != Language::Current()) {
+        Language::Use(language);
+        Retranslate(dialog);
+    }
+}
+
 void Build(HWND window, Dialog& dialog) {
+    g_texts.clear();
+    g_items.clear();
+    SetText(window, L"Gravity Rush 2 - Setup");
     dialog.dpi = GetDpiForWindow(window);
     dialog.font =
         CreateFontW(-MulDiv(8, static_cast<int>(dialog.dpi), 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE,
@@ -1404,7 +1496,7 @@ void Build(HWND window, Dialog& dialog) {
     SendMessageW(tab, WM_SETFONT, reinterpret_cast<WPARAM>(dialog.font), FALSE);
     dialog.tab = tab;
     for (size_t i = 0; i < PageCount; ++i) {
-        std::wstring name = PageNames[i];
+        std::wstring name = Language::Text(PageNames[i]);
         TCITEMW tab_item{};
         tab_item.mask = TCIF_TEXT;
         tab_item.pszText = name.data();
@@ -1619,12 +1711,11 @@ void Build(HWND window, Dialog& dialog) {
     });
 
     const HWND online_page = dialog.pages[OnlinePage];
-    const std::wstring sign_up_url = Wide(GamePatches::ShadNetSignUp);
-    const std::wstring sign_up =
-        L"Sign up for shadNet: <a href=\"" + sign_up_url + L"\">" + sign_up_url + L"</a>";
+    const Phrase sign_up{L"Sign up for shadNet: <a href=\"{0}\">{0}</a>",
+                         {Wide(GamePatches::ShadNetSignUp)}};
     KeepTabOrder({
-        MakeControl(dialog, online_page, page_origin, WC_LINK, sign_up.c_str(), WS_TABSTOP,
-                    IdSignUp, LabelLeft, FullscreenTop, ExtrasList.right - LabelLeft, CheckHeight),
+        MakeControl(dialog, online_page, page_origin, WC_LINK, sign_up, WS_TABSTOP, IdSignUp,
+                    LabelLeft, FullscreenTop, ExtrasList.right - LabelLeft, CheckHeight),
         MakeControl(dialog, online_page, page_origin, WC_STATICW, L"Online ID",
                     SS_LEFT | SS_CENTERIMAGE, IdOnlineIdLabel, LabelLeft, OnlineIdTop, LabelWidth,
                     ComboHeight),
@@ -1651,11 +1742,10 @@ void Build(HWND window, Dialog& dialog) {
                     ExtrasList.right - ComboLeft, CheckHeight),
     });
 
-    const std::wstring trophies = L"Sign in to <a href=\"" + Wide(GamePatches::ShadNetTrophies) +
-                                  L"\">shadNet Trophies</a> to view your trophies.";
-    MakeControl(dialog, dialog.pages[TrophiesPage], page_origin, WC_LINK, trophies.c_str(),
-                WS_TABSTOP, IdTrophies, LabelLeft, FullscreenTop, ExtrasList.right - LabelLeft,
-                CheckHeight);
+    const Phrase trophies{L"Sign in to <a href=\"{0}\">shadNet Trophies</a> to view your trophies.",
+                          {Wide(GamePatches::ShadNetTrophies)}};
+    MakeControl(dialog, dialog.pages[TrophiesPage], page_origin, WC_LINK, trophies, WS_TABSTOP,
+                IdTrophies, LabelLeft, FullscreenTop, ExtrasList.right - LabelLeft, CheckHeight);
 
     const HWND list =
         MakeControl(dialog, dialog.pages[ExtrasPage], page_origin, WC_LISTVIEWW, L"",
@@ -1701,6 +1791,11 @@ void Build(HWND window, Dialog& dialog) {
     for (const GamePatches::RenderSize& size : GamePatches::RenderSizes) {
         AddText(Item(dialog, IdRenderSize), Wide(size.name));
     }
+    // Each language is named in itself, whatever the language in use.
+    for (const int language : Language::Listed()) {
+        AddText(Item(dialog, IdLanguage), Phrase{L"{0}", {Language::WideName(language)}});
+    }
+    ShowLanguage(dialog, Language::Current());
     Show(dialog, dialog.values.display);
     ShowGame(dialog, dialog.values.game);
     ShowGraphics(dialog, dialog.values.graphics);
@@ -1737,6 +1832,15 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             FillRates(dialog, ShownRate(dialog));
         }
         break;
+    case IdLanguage:
+        if (code == CBN_SELCHANGE) {
+            const int chosen = Selected(Item(dialog, IdLanguage));
+            const auto listed = Language::Listed();
+            if (chosen >= 0 && chosen < static_cast<int>(listed.size())) {
+                ShowLanguage(dialog, listed[chosen]);
+            }
+        }
+        break;
     case IdPreset:
         if (code == CBN_SELCHANGE) {
             ApplyPreset(dialog, Selected(Item(dialog, IdPreset)));
@@ -1769,6 +1873,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             ShowMouse(dialog, Settings::Mouse{});
             Check(dialog, IdTouchSwipe, false);
             dialog.key_bindings = DefaultKeyBindings();
+            ShowLanguage(dialog, GeneralSettings{}.console_language.value);
         }
         break;
     case IdPrompts:
@@ -1821,15 +1926,18 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         dialog.values.graphics = ReadGraphics(dialog);
         dialog.values.mouse = ReadMouse(dialog);
         Settings::Set(dialog.values);
+        // The game starts in the language the launcher shows; SaveController saves it.
+        EmulatorSettings.SetConsoleLanguage(Language::Current());
         SaveOnline(window, dialog);
         SaveController(window, dialog);
         if (dialog.key_bindings && !SaveKeyBindings(dialog.input_config, *dialog.key_bindings)) {
-            MessageBoxW(window, L"The key bindings could not be saved.", L"Key Bindings",
-                        MB_OK | MB_ICONWARNING);
+            Tell(window, L"The key bindings could not be saved.", L"Key Bindings",
+                 MB_OK | MB_ICONWARNING);
         }
         EndDialog(window, IDOK);
         break;
     case IDCANCEL:
+        Language::Use(EmulatorSettings.GetConsoleLanguage());
         EndDialog(window, IDCANCEL);
         break;
     default:

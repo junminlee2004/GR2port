@@ -14,6 +14,7 @@
 
 #include "common/logging/log.h"
 #include "common/scm_rev.h"
+#include "core/language/language.h"
 #include "launcher/art.h"
 #include "launcher/launcher.h"
 #include "launcher/setup_dialog.h"
@@ -114,6 +115,32 @@ HBITMAP ComposeBackground(const Art& art, int width, int height, float scale) {
     });
 }
 
+// The menu's typeface: Verdana, as in the original, or one with the language's letters.
+const wchar_t* MenuFace() {
+    constexpr int Japanese = 0;
+    constexpr int Korean = 9;
+    constexpr int TraditionalChinese = 10;
+    constexpr int SimplifiedChinese = 11;
+    constexpr int Arabic = 21;
+    constexpr int Thai = 27;
+    switch (Language::Current()) {
+    case Japanese:
+        return L"Meiryo UI";
+    case Korean:
+        return L"Malgun Gothic";
+    case TraditionalChinese:
+        return L"Microsoft JhengHei UI";
+    case SimplifiedChinese:
+        return L"Microsoft YaHei UI";
+    case Arabic:
+        return L"Segoe UI";
+    case Thai:
+        return L"Leelawadee UI";
+    default:
+        return L"Verdana";
+    }
+}
+
 HFONT MakeFont(int height, const wchar_t* face) {
     return CreateFontW(height, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
@@ -128,7 +155,7 @@ void Layout(HWND window, State& state) {
     GetClientRect(window, &client);
     const float scale = static_cast<float>(state.dpi) / USER_DEFAULT_SCREEN_DPI;
     state.background = ComposeBackground(*state.art, client.right, client.bottom, scale);
-    state.menu_font = MakeFont(-Scaled(state, MenuFontSize), L"Verdana");
+    state.menu_font = MakeFont(-Scaled(state, MenuFontSize), MenuFace());
     state.version_font = MakeFont(-MulDiv(8, static_cast<int>(state.dpi), 72), L"Segoe UI");
 
     const HDC dc = GetDC(window);
@@ -136,8 +163,8 @@ void Layout(HWND window, State& state) {
     const int right = client.right - Scaled(state, MenuRight);
     for (size_t i = 0; i < Entries.size(); ++i) {
         SIZE size{};
-        GetTextExtentPoint32W(dc, Entries[i].text.data(), static_cast<int>(Entries[i].text.size()),
-                              &size);
+        const std::wstring text = Language::Text(Entries[i].text);
+        GetTextExtentPoint32W(dc, text.data(), static_cast<int>(text.size()), &size);
         const int top = Scaled(state, Entries[i].top);
         state.item_rects[i] = RECT{right - size.cx, top, right, top + size.cy};
     }
@@ -194,7 +221,7 @@ void Paint(HWND window, const State& state) {
     {
         Gdiplus::Graphics graphics{frame};
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        const Gdiplus::FontFamily family{L"Verdana"};
+        const Gdiplus::FontFamily family{MenuFace()};
         const float scale = static_cast<float>(state.dpi) / USER_DEFAULT_SCREEN_DPI;
         Gdiplus::Pen outline{Gdiplus::Color{255, 0, 0, 0}, MenuOutline * scale};
         outline.SetLineJoin(Gdiplus::LineJoinRound);
@@ -202,8 +229,9 @@ void Paint(HWND window, const State& state) {
         const Gdiplus::SolidBrush black{Gdiplus::Color{255, 0, 0, 0}};
         for (size_t i = 0; i < Entries.size(); ++i) {
             Gdiplus::GraphicsPath path;
-            path.AddString(Entries[i].text.data(), static_cast<INT>(Entries[i].text.size()),
-                           &family, Gdiplus::FontStyleRegular,
+            const std::wstring text = Language::Text(Entries[i].text);
+            path.AddString(text.data(), static_cast<INT>(text.size()), &family,
+                           Gdiplus::FontStyleRegular,
                            static_cast<Gdiplus::REAL>(Scaled(state, MenuFontSize)),
                            Gdiplus::PointF{static_cast<Gdiplus::REAL>(state.item_rects[i].left),
                                            static_cast<Gdiplus::REAL>(state.item_rects[i].top)},
@@ -235,6 +263,9 @@ void Activate(HWND window, State& state, Item item) {
         break;
     case Item::Options:
         ShowSetup(window, *state.art);
+        // The menu takes the language Setup left.
+        Layout(window, state);
+        InvalidateRect(window, nullptr, FALSE);
         break;
     case Item::Quit:
         state.play = false;

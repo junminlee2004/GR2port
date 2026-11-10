@@ -1576,6 +1576,7 @@ cmrc_add_resource_library(embedded-resources
 target_link_libraries(shadps4 PRIVATE res::embedded)
 include("${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/launcher.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/src/core/game_check/game_check.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/src/core/language/language.cmake")
 
 # ImGui resources
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/imgui/renderer)
