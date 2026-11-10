@@ -39,6 +39,7 @@
 #include "video_core/gr2port/motion_blur.h"
 #include "video_core/gr2port/overlays.h"
 #include "video_core/gr2port/particles.h"
+#include "video_core/gr2port/pass_times.h"
 #include "video_core/gr2port/photo.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/point_lights.h"
@@ -328,6 +329,7 @@ bool Thread::Init() {
         };
         timestamps = d.device.createQueryPool(info, nullptr, dl).value;
     }
+    PassTimes::Start(d, FramesInFlight);
     memory = std::make_unique<Memory>(d);
     if (!memory->Create()) {
         return false;
@@ -788,17 +790,22 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     if (drawn) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Deformers);
         Deformers::Record(cmd, header, packet.address);
+        PassTimes::Mark(cmd, PassTimes::Pass::Deformers);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Kernels);
         Vegetation::RecordKernels(cmd, header, packet.address);
+        PassTimes::Mark(cmd, PassTimes::Pass::Kernels);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Simulation);
         Particles::RecordSimulation(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                     offset);
+        PassTimes::Mark(cmd, PassTimes::Pass::Simulation);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::PointLights);
         PointLights::Record(cmd, header, packet.address);
         Glass::Prepare(cmd);
+        PassTimes::Mark(cmd, PassTimes::Pass::PointLights);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::SelfTranslucent);
         SelfTranslucent::Record(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                 offset);
+        PassTimes::Mark(cmd, PassTimes::Pass::SelfTranslucent);
     }
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
@@ -814,10 +821,12 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                                 Timestamps * slot_index + 3 + c, dl);
         }
     }
+    PassTimes::Mark(cmd, PassTimes::Pass::Shadows);
     if (drawn) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::FogVolumes);
         Fog::RecordVolumes(cmd, header, packet.address);
     }
+    PassTimes::Mark(cmd, PassTimes::Pass::FogVolumes);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + FogTimestamp, dl);
@@ -863,6 +872,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Lines);
         World::RecordLines(cmd, packet.address);
     }
+    PassTimes::Mark(cmd, PassTimes::Pass::Lines);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + LinesTimestamp, dl);
@@ -899,13 +909,16 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                 vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
                 vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderSampledRead,
                 vk::ImageAspectFlagBits::eDepth);
+        PassTimes::Mark(cmd, PassTimes::Pass::CharacterDepth);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Occlusion);
         World::RecordOcclusion(cmd, packet.address);
     }
+    PassTimes::Mark(cmd, PassTimes::Pass::Occlusion);
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Velocity);
     Velocity::Record(cmd, drawn, packet.address);
     const auto* light = reinterpret_cast<const Scene::Light*>(packet.data + Scene::LightOffset);
     ShadowTrace::Record(cmd, packet.address, drawn && light->shadow_trace != 0);
+    PassTimes::Mark(cmd, PassTimes::Pass::Velocity);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + OcclusionTimestamp, dl);
@@ -938,6 +951,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         World::RecordLight(cmd, packet.address);
     }
     cmd.endRendering(dl);
+    PassTimes::Mark(cmd, PassTimes::Pass::Light);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + LightTimestamp, dl);
@@ -980,26 +994,33 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         const std::array sets{Textures::Set(), Shadows::Set(), SelfTranslucent::Set()};
         DrawCharacters(cmd, Scene::DrawList::Lambert, lambert_pipeline, sets, header, packet,
                        offset, extent);
+        PassTimes::Mark(cmd, PassTimes::Pass::Lambert);
         Enemies::RecordForward(cmd, header, packet.address, scene_ring.buffer, offset, extent);
+        PassTimes::Mark(cmd, PassTimes::Pass::EnemiesForward);
         DrawCharacters(cmd, Scene::DrawList::Vision, vision_pipeline, sets, header, packet, offset,
                        extent);
         DrawCharacters(cmd, Scene::DrawList::Character, character_pipeline, sets, header, packet,
                        offset, extent);
         DrawCharacters(cmd, Scene::DrawList::Interior, interior_pipeline, sets, header, packet,
                        offset, extent);
+        PassTimes::Mark(cmd, PassTimes::Pass::Characters);
     }
     if (header.sky != 0) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Sky);
         Look::RecordSky(cmd, packet.address);
     }
+    PassTimes::Mark(cmd, PassTimes::Pass::Sky);
     if (drawn) {
         Enemies::RecordAlpha(cmd, header, packet.address, scene_ring.buffer, offset, extent);
+        PassTimes::Mark(cmd, PassTimes::Pass::EnemiesAlpha);
         CharacterGlass::Record(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
                                extent);
+        PassTimes::Mark(cmd, PassTimes::Pass::CharacterGlass);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Contours);
         Contours::Record(cmd, header, packet.address, scene_ring.buffer, offset, extent);
     }
     cmd.endRendering(dl);
+    PassTimes::Mark(cmd, PassTimes::Pass::Contours);
     // The fog's low path draws its particles before the fog: its opaque pass with the opaque
     // draws, the others after TransparentBg. Depth is readable while they draw.
     const auto low_particles = [&](Particles::Group group) {
@@ -1021,16 +1042,21 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                       vk::AccessFlagBits2::eNone, depth_tests, depth_writes);
     };
     low_particles(Particles::Group::LowOpaque);
+    PassTimes::Mark(cmd, PassTimes::Pass::LowOpaque);
     if (drawn) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::EffectsBehind);
         Effects::RecordTransparentBg(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                      offset, Look::SceneView(), depth, extent);
+        PassTimes::Mark(cmd, PassTimes::Pass::EffectsBg);
         low_particles(Particles::Group::LowTransparent);
+        PassTimes::Mark(cmd, PassTimes::Pass::LowTransparent);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Glass);
         Glass::Record(cmd, header, packet.address, scene_ring.buffer, offset, depth, extent);
+        PassTimes::Mark(cmd, PassTimes::Pass::Glass);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Water);
         Water::Record(cmd, header, packet.address, scene_ring.buffer, offset, Look::SceneView(),
                       depth, extent);
+        PassTimes::Mark(cmd, PassTimes::Pass::Water);
     }
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
@@ -1045,6 +1071,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::EffectsInFront);
         Effects::RecordTransparentFg(cmd, header, packet.data, packet.address, scene_ring.buffer,
                                      offset, Look::SceneView(), depth.view, extent);
+        PassTimes::Mark(cmd, PassTimes::Pass::EffectsFg);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::FogApply);
         // The fog blends over the forward draws' colour.
         const vk::MemoryBarrier2 forward_barrier{
@@ -1068,13 +1095,16 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                            dl);
         Fog::RecordApply(cmd, packet.address, extent);
         cmd.endRendering(dl);
+        PassTimes::Mark(cmd, PassTimes::Pass::FogApply);
         // The game's particle passes, after its fog.
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Particles);
         Particles::RecordDraws(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
                                Look::SceneView(), depth, extent, Particles::Group::AfterFog);
+        PassTimes::Mark(cmd, PassTimes::Pass::Particles);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::EffectsTopMost);
         Effects::RecordTopMost(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
                                Look::SceneView(), depth.view, extent);
+        PassTimes::Mark(cmd, PassTimes::Pass::EffectsTopMost);
     }
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
@@ -1089,6 +1119,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         vk::AccessFlagBits2::eShaderSampledRead);
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Meter);
     Look::RecordMeter(cmd, packet.address);
+    PassTimes::Mark(cmd, PassTimes::Pass::Meter);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + MeterTimestamp, dl);
@@ -1101,6 +1132,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                                          character_glow_pipeline, glow_sets, header, packet, offset,
                                          glow_extent, true);
                       });
+    PassTimes::Mark(cmd, PassTimes::Pass::Bloom);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + BloomTimestamp, dl);
@@ -1109,8 +1141,10 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     if (drawn) {
         MotionBlur::Record(cmd, packet.address);
     }
+    PassTimes::Mark(cmd, PassTimes::Pass::MotionBlur);
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Antialias);
     Look::RecordAntialias(cmd, packet.address);
+    PassTimes::Mark(cmd, PassTimes::Pass::Antialias);
 }
 
 void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
@@ -1125,6 +1159,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, timestamps,
                             Timestamps * slot_index, dl);
     }
+    PassTimes::Begin(cmd, slot_index, header);
     memory->Refresh(frame);
     Meshes::Update(cmd, frame, frame - FramesInFlight);
     Textures::Update(cmd, frame, frame - FramesInFlight);
@@ -1135,6 +1170,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
     Textures::Refresh(cmd, frame,
                       std::span{header.dynamic}.first(
                           std::min(header.dynamic_textures, Scene::MaxDynamicTextures)));
+    PassTimes::Mark(cmd, PassTimes::Pass::Uploads);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                             Timestamps * slot_index + 1, dl);
@@ -1148,6 +1184,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
             Look::RecordComposite(cmd, packet.address, world);
             Ui::EndWorld(cmd);
         }
+        PassTimes::Mark(cmd, PassTimes::Pass::Composite);
     } else if (timestamps) {
         // A frame of the screen drawing alone: its world passes take no time.
         for (u32 t = 2; t < Timestamps - 1; t++) {
@@ -1159,6 +1196,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
     Ui::Record(cmd, header, packet.data, packet.address, scene_ring.buffer, offset);
     Photo::Record(*memory, cmd, header, slot_index);
     ImGuiRelay::Update(cmd, frame, frame - FramesInFlight);
+    PassTimes::Mark(cmd, PassTimes::Pass::Ui);
 
     const vk::Image image = swapchain->Image(index);
     Barrier(d, cmd, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
@@ -1275,6 +1313,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
                             Timestamps * slot_index + Timestamps - 1, dl);
         slot.timed = true;
     }
+    PassTimes::Mark(cmd, PassTimes::Pass::Present);
     (void)cmd.end(dl);
 }
 
@@ -1294,6 +1333,7 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     DeviceLost::Check(d, d.device.waitForFences(slot.done, true, UINT64_MAX, dl));
     const auto wait_end = std::chrono::steady_clock::now();
     ReadTimes(slot_index);
+    PassTimes::Collect(slot_index);
     Photo::Collect(slot_index);
     if (slot.snapshot) {
         slot.snapshot = false;
@@ -1362,6 +1402,7 @@ void Thread::Frame(const SceneRing::Packet& packet) {
 }
 
 void Thread::Report() {
+    PassTimes::Report();
     const auto now = std::chrono::steady_clock::now();
     const double seconds = std::chrono::duration<double>(now - stats.start).count();
     const u64 game_frames = Capture::Frames();

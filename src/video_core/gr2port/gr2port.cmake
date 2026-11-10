@@ -55,6 +55,8 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/photo.h
     ${CMAKE_CURRENT_LIST_DIR}/particles.cpp
     ${CMAKE_CURRENT_LIST_DIR}/particles.h
+    ${CMAKE_CURRENT_LIST_DIR}/pass_times.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/pass_times.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.cpp
     ${CMAKE_CURRENT_LIST_DIR}/player_control.cpp
     ${CMAKE_CURRENT_LIST_DIR}/player_control.h

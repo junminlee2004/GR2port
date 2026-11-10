@@ -9,6 +9,7 @@
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/metaballs.h"
 #include "video_core/gr2port/particles.h"
+#include "video_core/gr2port/pass_times.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/point_lights.h"
 #include "video_core/gr2port/shaders/deferred_frag.h"
@@ -537,6 +538,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
         }
         first += count;
     }
+    PassTimes::Mark(cmd, PassTimes::Pass::WorldOpaque);
     // The game's stencil keeps vegetation out of its decals: here, the vegetation draws after them.
     if (drawn && header.world_decals != 0) {
         cmd.endRendering(dl);
@@ -544,6 +546,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
             color.loadOp = vk::AttachmentLoadOp::eLoad;
         }
         RecordDecals(cmd, header.world_decals, address, depth.image, colors);
+        PassTimes::Mark(cmd, PassTimes::Pass::WorldDecals);
         depth_attachment.loadOp = vk::AttachmentLoadOp::eLoad;
         cmd.beginRendering({.renderArea = {{0, 0}, g_extent},
                             .layerCount = 1,
@@ -561,6 +564,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
         }
         depth_attachment.loadOp = vk::AttachmentLoadOp::eLoad;
         Metaballs::RecordSurfaces(cmd, header, address, buffer, offset, colors, depth_attachment);
+        PassTimes::Mark(cmd, PassTimes::Pass::Metaballs);
         cmd.beginRendering({.renderArea = {{0, 0}, g_extent},
                             .layerCount = 1,
                             .colorAttachmentCount = static_cast<u32>(colors.size()),
@@ -570,6 +574,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
     }
     if (drawn) {
         Vegetation::RecordSurfaces(cmd, header, address, buffer, offset);
+        PassTimes::Mark(cmd, PassTimes::Pass::Vegetation);
         // The particles collide with the world without the mesh particles and characters.
         cmd.endRendering(dl);
         Particles::RecordCollision(cmd, depth);
@@ -584,6 +589,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
                             .pDepthAttachment = &depth_attachment},
                            dl);
         Particles::RecordSurfaces(cmd, header, packet, address, buffer, offset);
+        PassTimes::Mark(cmd, PassTimes::Pass::ParticleSurfaces);
     }
     cmd.endRendering(dl);
     for (vk::ImageMemoryBarrier2& barrier : barriers) {
@@ -602,6 +608,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
         Metaballs::RecordBlur(cmd, header, g_surfaces[1]);
         Particles::RecordEmitterColors(cmd, header, address);
     }
+    PassTimes::Mark(cmd, PassTimes::Pass::SurfacesEnd);
 }
 
 void RecordLines(vk::CommandBuffer cmd, u64 address) {
