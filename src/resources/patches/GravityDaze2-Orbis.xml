@@ -8450,6 +8450,13 @@
             <Line Type="bytes" Address="0x01c1b1a0" Value="e9a28b3f"/>
             <Line Type="bytes" Address="0x01c1b1a8" Value="66662241"/>
             <Line Type="bytes" Address="0x01c1b3d8" Value="907d9eeb2800f560"/>
+            <Line Type="bytes" Address="0x01777f16" Value="c5f82e0dfa468000"/>
+            <Line Type="bytes" Address="0x01777f28" Value="c5fa1015e8468000"/>
+            <Line Type="bytes" Address="0x017786da" Value="c5f82e0d363f8000"/>
+            <Line Type="bytes" Address="0x017787b1" Value="c5f82e0d5f3e8000"/>
+            <Line Type="bytes" Address="0x01773471" Value="c5fa10059f918000"/>
+            <Line Type="bytes" Address="0x017734b6" Value="e845ca2e000f1f00"/>
+            <Line Type="bytes" Address="0x01a5ff00" Value="c5fa100510c75100c5fa590508000000c3cccccccccccccc0000a0c0"/>
         </PatchList>
     </Metadata>
     <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="60fps v6.0 test (READ NOTES)" Note="Test of the one-clock build for 60 FPS: the game keeps real-time speed when the frame rate drops below 60 FPS, and at a steady 60 FPS it plays like 60fps v5.0. Below 30 FPS the game slows down. Movie audio can play up to 25% faster or 20% slower to stay in sync with the picture on a PC that stutters. Use one FPS patch at a time. Set Vblank Frequency to 60. In the launcher it is on the Experimental tab, which only a game's own settings show: right-click the game &gt; Game-specific Settings... &gt; Create Game-specific Settings from Global Settings (or Configure Game-specific Settings) &gt; Experimental &gt; Vblank Frequency, then Save." Author="Junmin Lee" PatchVer="6.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
@@ -9856,6 +9863,13 @@
             <Line Type="bytes" Address="0x01c1b1a0" Value="0000403f"/>
             <Line Type="bytes" Address="0x01c1b1a8" Value="66667241"/>
             <Line Type="bytes" Address="0x01c1b3d8" Value="907d9eeb3c00f560"/>
+            <Line Type="bytes" Address="0x01777f16" Value="c5f82e0dfa468000"/>
+            <Line Type="bytes" Address="0x01777f28" Value="c5fa1015e8468000"/>
+            <Line Type="bytes" Address="0x017786da" Value="c5f82e0d363f8000"/>
+            <Line Type="bytes" Address="0x017787b1" Value="c5f82e0d5f3e8000"/>
+            <Line Type="bytes" Address="0x01773471" Value="c5fa10059f918000"/>
+            <Line Type="bytes" Address="0x017734b6" Value="e845ca2e000f1f00"/>
+            <Line Type="bytes" Address="0x01a5ff00" Value="c5fa100510c75100c5fa590508000000c3cccccccccccccc0000a0c0"/>
         </PatchList>
     </Metadata>
     <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="90fps v6.0 test (READ NOTES)" Note="Test of the one-clock build for 90 FPS: the game keeps real-time speed when the frame rate drops below 90 FPS, and at a steady 90 FPS it plays like 90fps v5.0. Below 30 FPS the game slows down. Movie audio can play up to 25% faster or 20% slower to stay in sync with the picture on a PC that stutters. Use one FPS patch at a time. Set Vblank Frequency to 90. In the launcher it is on the Experimental tab, which only a game's own settings show: right-click the game &gt; Game-specific Settings... &gt; Create Game-specific Settings from Global Settings (or Configure Game-specific Settings) &gt; Experimental &gt; Vblank Frequency, then Save." Author="Junmin Lee" PatchVer="6.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
@@ -11262,6 +11276,13 @@
             <Line Type="bytes" Address="0x01c1b1a0" Value="0000003f"/>
             <Line Type="bytes" Address="0x01c1b1a8" Value="3333b941"/>
             <Line Type="bytes" Address="0x01c1b3d8" Value="907d9eeb5a00f560"/>
+            <Line Type="bytes" Address="0x01777f16" Value="c5f82e0dfa468000"/>
+            <Line Type="bytes" Address="0x01777f28" Value="c5fa1015e8468000"/>
+            <Line Type="bytes" Address="0x017786da" Value="c5f82e0d363f8000"/>
+            <Line Type="bytes" Address="0x017787b1" Value="c5f82e0d5f3e8000"/>
+            <Line Type="bytes" Address="0x01773471" Value="c5fa10059f918000"/>
+            <Line Type="bytes" Address="0x017734b6" Value="e845ca2e000f1f00"/>
+            <Line Type="bytes" Address="0x01a5ff00" Value="c5fa100510c75100c5fa590508000000c3cccccccccccccc0000a0c0"/>
         </PatchList>
     </Metadata>
     <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="120fps v6.0 test (READ NOTES)" Note="Test of the one-clock build for 120 FPS: the game keeps real-time speed when the frame rate drops below 120 FPS, and at a steady 120 FPS it plays like 120fps v5.0. Below 30 FPS the game slows down. Movie audio can play up to 25% faster or 20% slower to stay in sync with the picture on a PC that stutters. Use one FPS patch at a time. Set Vblank Frequency to 120. In the launcher it is on the Experimental tab, which only a game's own settings show: right-click the game &gt; Game-specific Settings... &gt; Create Game-specific Settings from Global Settings (or Configure Game-specific Settings) &gt; Experimental &gt; Vblank Frequency, then Save." Author="Junmin Lee" PatchVer="6.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
@@ -12668,6 +12689,13 @@
             <Line Type="bytes" Address="0x01c1b1a0" Value="0000c03e"/>
             <Line Type="bytes" Address="0x01c1b1a8" Value="3333f941"/>
             <Line Type="bytes" Address="0x01c1b3d8" Value="907d9eeb7800f560"/>
+            <Line Type="bytes" Address="0x01777f16" Value="c5f82e0dfa468000"/>
+            <Line Type="bytes" Address="0x01777f28" Value="c5fa1015e8468000"/>
+            <Line Type="bytes" Address="0x017786da" Value="c5f82e0d363f8000"/>
+            <Line Type="bytes" Address="0x017787b1" Value="c5f82e0d5f3e8000"/>
+            <Line Type="bytes" Address="0x01773471" Value="c5fa10059f918000"/>
+            <Line Type="bytes" Address="0x017734b6" Value="e845ca2e000f1f00"/>
+            <Line Type="bytes" Address="0x01a5ff00" Value="c5fa100510c75100c5fa590508000000c3cccccccccccccc0000a0c0"/>
         </PatchList>
     </Metadata>
     <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="144fps v6.0 test (READ NOTES)" Note="Test of the one-clock build for 144 FPS: the game keeps real-time speed when the frame rate drops below 144 FPS, and at a steady 144 FPS it plays like 144fps v5.0. Below 30 FPS the game slows down. Movie audio can play up to 25% faster or 20% slower to stay in sync with the picture on a PC that stutters. Use one FPS patch at a time. Set Vblank Frequency to 144. In the launcher it is on the Experimental tab, which only a game's own settings show: right-click the game &gt; Game-specific Settings... &gt; Create Game-specific Settings from Global Settings (or Configure Game-specific Settings) &gt; Experimental &gt; Vblank Frequency, then Save." Author="Junmin Lee" PatchVer="6.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="true">
@@ -14072,6 +14100,13 @@
             <Line Type="bytes" Address="0x01c1b1a0" Value="28afa13e"/>
             <Line Type="bytes" Address="0x01c1b1a8" Value="9a991442"/>
             <Line Type="bytes" Address="0x01c1b3d8" Value="907d9eeb9000f560"/>
+            <Line Type="bytes" Address="0x01777f16" Value="c5f82e0dfa468000"/>
+            <Line Type="bytes" Address="0x01777f28" Value="c5fa1015e8468000"/>
+            <Line Type="bytes" Address="0x017786da" Value="c5f82e0d363f8000"/>
+            <Line Type="bytes" Address="0x017787b1" Value="c5f82e0d5f3e8000"/>
+            <Line Type="bytes" Address="0x01773471" Value="c5fa10059f918000"/>
+            <Line Type="bytes" Address="0x017734b6" Value="e845ca2e000f1f00"/>
+            <Line Type="bytes" Address="0x01a5ff00" Value="c5fa100510c75100c5fa590508000000c3cccccccccccccc0000a0c0"/>
         </PatchList>
     </Metadata>
     <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="165fps v6.0 test (READ NOTES)" Note="Test of the one-clock build for 165 FPS: the game keeps real-time speed when the frame rate drops below 165 FPS. Below 30 FPS the game slows down. Movie audio can play up to 25% faster or 20% slower to stay in sync with the picture on a PC that stutters. Use one FPS patch at a time. Set Vblank Frequency to 165. In the launcher it is on the Experimental tab, which only a game's own settings show: right-click the game &gt; Game-specific Settings... &gt; Create Game-specific Settings from Global Settings (or Configure Game-specific Settings) &gt; Experimental &gt; Vblank Frequency, then Save." Author="Junmin Lee" PatchVer="6.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
@@ -15476,6 +15511,13 @@
             <Line Type="bytes" Address="0x01c1b1a0" Value="e9a28b3e"/>
             <Line Type="bytes" Address="0x01c1b1a8" Value="9a992c42"/>
             <Line Type="bytes" Address="0x01c1b3d8" Value="907d9eeba500f560"/>
+            <Line Type="bytes" Address="0x01777f16" Value="c5f82e0dfa468000"/>
+            <Line Type="bytes" Address="0x01777f28" Value="c5fa1015e8468000"/>
+            <Line Type="bytes" Address="0x017786da" Value="c5f82e0d363f8000"/>
+            <Line Type="bytes" Address="0x017787b1" Value="c5f82e0d5f3e8000"/>
+            <Line Type="bytes" Address="0x01773471" Value="c5fa10059f918000"/>
+            <Line Type="bytes" Address="0x017734b6" Value="e845ca2e000f1f00"/>
+            <Line Type="bytes" Address="0x01a5ff00" Value="c5fa100510c75100c5fa590508000000c3cccccccccccccc0000a0c0"/>
         </PatchList>
     </Metadata>
     <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="240fps v6.0 test (READ NOTES)" Note="Test of the one-clock build for 240 FPS: the game keeps real-time speed when the frame rate drops below 240 FPS. Below 30 FPS the game slows down. Movie audio can play up to 25% faster or 20% slower to stay in sync with the picture on a PC that stutters. Use one FPS patch at a time. Set Vblank Frequency to 240. In the launcher it is on the Experimental tab, which only a game's own settings show: right-click the game &gt; Game-specific Settings... &gt; Create Game-specific Settings from Global Settings (or Configure Game-specific Settings) &gt; Experimental &gt; Vblank Frequency, then Save." Author="Junmin Lee" PatchVer="6.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
@@ -16880,6 +16922,13 @@
             <Line Type="bytes" Address="0x01c1b1a0" Value="0000403e"/>
             <Line Type="bytes" Address="0x01c1b1a8" Value="9a997c42"/>
             <Line Type="bytes" Address="0x01c1b3d8" Value="907d9eebf000f560"/>
+            <Line Type="bytes" Address="0x01777f16" Value="c5f82e0dfa468000"/>
+            <Line Type="bytes" Address="0x01777f28" Value="c5fa1015e8468000"/>
+            <Line Type="bytes" Address="0x017786da" Value="c5f82e0d363f8000"/>
+            <Line Type="bytes" Address="0x017787b1" Value="c5f82e0d5f3e8000"/>
+            <Line Type="bytes" Address="0x01773471" Value="c5fa10059f918000"/>
+            <Line Type="bytes" Address="0x017734b6" Value="e845ca2e000f1f00"/>
+            <Line Type="bytes" Address="0x01a5ff00" Value="c5fa100510c75100c5fa590508000000c3cccccccccccccc0000a0c0"/>
         </PatchList>
     </Metadata>
     <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="360fps v6.0 test (READ NOTES)" Note="Test of the one-clock build for 360 FPS: the game keeps real-time speed when the frame rate drops below 360 FPS. Below 30 FPS the game slows down. Movie audio can play up to 25% faster or 20% slower to stay in sync with the picture on a PC that stutters. Use one FPS patch at a time. Set Vblank Frequency to 360. In the launcher it is on the Experimental tab, which only a game's own settings show: right-click the game &gt; Game-specific Settings... &gt; Create Game-specific Settings from Global Settings (or Configure Game-specific Settings) &gt; Experimental &gt; Vblank Frequency, then Save." Author="Junmin Lee" PatchVer="6.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
@@ -18284,6 +18333,13 @@
             <Line Type="bytes" Address="0x01c1b1a0" Value="0000003e"/>
             <Line Type="bytes" Address="0x01c1b1a8" Value="cd4cbe42"/>
             <Line Type="bytes" Address="0x01c1b3d8" Value="907d9eeb6801f560"/>
+            <Line Type="bytes" Address="0x01777f16" Value="c5f82e0dfa468000"/>
+            <Line Type="bytes" Address="0x01777f28" Value="c5fa1015e8468000"/>
+            <Line Type="bytes" Address="0x017786da" Value="c5f82e0d363f8000"/>
+            <Line Type="bytes" Address="0x017787b1" Value="c5f82e0d5f3e8000"/>
+            <Line Type="bytes" Address="0x01773471" Value="c5fa10059f918000"/>
+            <Line Type="bytes" Address="0x017734b6" Value="e845ca2e000f1f00"/>
+            <Line Type="bytes" Address="0x01a5ff00" Value="c5fa100510c75100c5fa590508000000c3cccccccccccccc0000a0c0"/>
         </PatchList>
     </Metadata>
     <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="Boot with loose files exclusively (READ NOTES)" Category="Debug and hidden levels" Note="Work in Progress, you will not be able to boot game without raw files extracted to `/data/GoldHEN/AFR/(title id)/`!!." Author="illusion" PatchVer="1.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
