@@ -34,7 +34,7 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 | CPU | intel i5 3470 | intel i7 4790 | Ryzen 5 1600 | Ryzen 5 3600 |
 | GPU | GTX 1050 2 GB | RX 570 4 GB | RTX 3060 8 GB | RTX 3080 Ti 12 GB |
 | RAM | 8 GB | 12 GB | 12 GB | 12 GB |
-| Storage | SSD | SSD | SSD | SSD |
+| Storage | HDD | HDD | HDD | HDD |
 
 **Included Features for Gravity Rush 2 and Gravity Rush Remastered**
 - Fully customizable graphics presets
