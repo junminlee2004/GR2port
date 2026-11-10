@@ -29,80 +29,82 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 
 **System Requirements**
 
-| | 1080p 60 (locked) | 1080p 60 (locked) | 4K 60 (locked) | 4K 120 (locked) |
+| | 720p 60 LOW PRESET (locked) | 1080p 60 (locked) MEDIUM PRESET | 4K 60 (locked) | 4K 120 (locked) |
 |---|---|---|---|---|
 | CPU | intel i5 3470 | intel i7 4790 | Ryzen 5 1600 | Ryzen 5 3600 |
-| GPU | GTX 960 4 GB | RX 570 4 GB | RTX 3060 8 GB | RTX 3080 Ti 12 GB |
-| RAM | 12 GB | 12 GB | 12 GB | 12 GB |
+| GPU | GTX 1050 2 GB | RX 570 4 GB | RTX 3060 8 GB | RTX 3080 Ti 12 GB |
+| RAM | 8 GB | 12 GB | 12 GB | 12 GB |
 | Storage | SSD | SSD | SSD | SSD |
 
 **Included Features for Gravity Rush 2 and Gravity Rush Remastered**
-- Flagship performance, graphical accuracy, and stability
-- Feature complete fps patches (60fps, 40fps, 90fps, 120fps, 144fps)
-- Feature complete resolution patches (240p-8K)
-- Feature complete ultrawide patches (21:9, 32:9, 32:10, 16:10...)
+- Fully customizable graphics presets
+- Steam deck preset
+- Impeccable performance, graphical accuracy, and stability
+- 30-360fps supported
+- 540p-8k resolution supported
+- ultrawide and 16:10 supported
 - Feature complete online modes
 - Feature complete photo mode, photo export and ingame photo gallery
-- New performance patches and the ability to disable motion blur
-- Infinite Gems patch
-- Queen Alua costume swap patch
-- Elektricitie costume swap patch
-- The Other costume swap patch
-- Raven costume swap patch
-- Lisa costume swap patch
-- Cecie costume swap patch
-- Permet costume swap patch
-- Kali costume swap patch
-- Durga costume swap patch
-- skip intro patches
-- SSAO - TAA ghosting fix patch
+- All GR2fork patches
 - FSR 3.1 + FSR 4.1 support (Windows + Linux) + DLSS support (Windows Only)
-- XBOX, NINTENDO and STEAM (Steam Deck, Steam Controller) button prompts for GR2 and GRR
+- Keyboard, XBOX, NINTENDO and STEAM (Steam Deck, Steam Controller) button prompts for GR2 and GRR
 
-# Keyboard and Mouse Mappings
-
-> [!NOTE]
-> Some keyboards may also require you to hold the Fn key to use the F\* keys. Mac users should use the Command key instead of Control, and need to use Command+F11 for full screen to avoid conflicting with system key bindings.
+# Keyboard and Mouse + Controller Mappings
 
 | Button | Function |
 |-------------|-------------|
 F10 | FPS Counter
 Ctrl+F10 | Video Debug Info
 F11 | Fullscreen
-F12 | Trigger RenderDoc Capture (or game-only screenshot if RenderDoc is unavailable)
-Alt+F12 | Capture screenshot including HUD/dialog overlays
 
 > [!NOTE]
 > Xbox and DualShock controllers work out of the box.
 
-| Controller button | Keyboard equivalent |
-|-------------|-------------|
-LEFT AXIS UP | W |
-LEFT AXIS DOWN | S |
-LEFT AXIS LEFT | A |
-LEFT AXIS RIGHT | D |
-RIGHT AXIS UP | I |
-RIGHT AXIS DOWN | K |
-RIGHT AXIS LEFT | J |
-RIGHT AXIS RIGHT | L |
-TRIANGLE | Numpad 8 or C |
-CIRCLE | Numpad 6 or B |
-CROSS | Numpad 2 or N |
-SQUARE | Numpad 4 or V |
-PAD UP | UP |
-PAD DOWN | DOWN |
-PAD LEFT | LEFT |
-PAD RIGHT | RIGHT |
-OPTIONS | RETURN |
-BACK BUTTON / TOUCH PAD | SPACE |
-L1 | Q |
-R1 | U |
-L2 | E |
-R2 | O |
-L3 | X |
-R3 | M |
+## Controls
 
-Keyboard and mouse inputs can be customized in the settings menu by clicking the key bindings button
+The mouse turns the camera (native mouse input). Keys can be changed in Options > Key Bindings.
+
+| Game Function | Controller | Keyboard & Mouse |
+|---|---|---|
+| Move Forward | Left stick up | W |
+| Move Back | Left stick down | S |
+| Move Left | Left stick left | A |
+| Move Right | Left stick right | D |
+| Jump | Cross | Space |
+| Normal Attack | Square | Left Mouse Button |
+| Special Attack | Triangle | F |
+| Stasis Field (Grab) | Circle | R |
+| Shift Gravity | R1 | Right Mouse Button |
+| Return Gravity | L1 | Q |
+| Gravity Slide (Hold) | L2 | Left Shift |
+| Evade | See below | E |
+| Lunar Style | See below | Mouse Wheel Up |
+| Jupiter Style | See below | Mouse Wheel Down |
+| Normal Style | See below | Middle Mouse Button |
+| Panther Mode (Hold) | Hold the touch pad | C |
+| Reset Camera | R3 | None |
+| Enter Photo Mode | D-pad up | 1 |
+| Display the Map | D-pad right | 2 |
+| Initiate Gesture | D-pad down | 3 |
+| First-person View | D-pad left | 4 |
+| Pause | OPTIONS | Esc |
+| Zoom In (Photo Mode) | R2 | None |
+| Flick Up (Touch Pad) | Flick the touch pad up | None |
+| Flick Down (Touch Pad) | Flick the touch pad down | None |
+| Flick Left (Touch Pad) | Flick the touch pad left | Z |
+| Flick Right (Touch Pad) | Flick the touch pad right | X |
+
+### Controller buttons that depend on the control type (Options > Controls)
+
+Each key keeps its function in every type.
+
+| Game Function | Type A | Type B | Type C | Type D | Type E |
+|---|---|---|---|---|---|
+| Evade | R2 | Flick the touch pad | Flick the touch pad | Flick the touch pad | Flick the touch pad |
+| Lunar Style | Flick the touch pad up | R2 until Lunar | R2 + left stick up | R2 + right stick up | R2 + triangle |
+| Jupiter Style | Flick the touch pad down | R2 until Jupiter | R2 + left stick down | R2 + right stick down | R2 + cross |
+| Normal Style | Tap the touch pad | R2 until Normal | R2 | R2 | R2 |
+
 
 
 # Contributing
