@@ -1150,7 +1150,8 @@ void ShowPreset(const Dialog& dialog) {
     Select(Item(dialog, IdPreset), static_cast<int>(found - Settings::Presets.begin()));
 }
 
-// Shows a preset's passes and, for the one that sets them, its aspect and render size.
+// Shows a preset's passes and, for the one that sets them, its aspect and render size and its
+// handheld settings.
 void ApplyPreset(const Dialog& dialog, int index) {
     if (index < 0 || index >= static_cast<int>(Settings::Presets.size())) {
         return;
@@ -1167,6 +1168,11 @@ void ApplyPreset(const Dialog& dialog, int index) {
     if (size != GamePatches::RenderSizes.end()) {
         Select(Item(dialog, IdRenderSize),
                static_cast<int>(size - GamePatches::RenderSizes.begin()));
+    }
+    if (preset.handheld) {
+        Select(Item(dialog, IdVSync), static_cast<int>(Settings::VSync::Off));
+        Check(dialog, IdGyroSwap, true);
+        Check(dialog, IdGyroYaw, true);
     }
 }
 
@@ -1464,12 +1470,13 @@ void Build(HWND window, Dialog& dialog) {
     FillTextureStreaming(dialog, dialog.values.graphics.texture_streaming_mb);
     graphics_order.push_back(MakeControl(
         dialog, graphics_page, page_origin, WC_STATICW,
-        L"Steam Deck also sets Aspect Ratio to 16:10 and Render Resolution to 720p on the Display "
-        L"tab: 1280 x 800. Changing a choice makes the preset Custom. With Texture Streaming "
+        L"Steam Deck also sets Aspect Ratio to 16:10, Render Resolution to 720p (1280 x 800) and "
+        L"VSync to Off on the Display tab, and Swap Gyro Yaw/Roll and Invert Gyro Yaw on the "
+        L"Controller tab. Changing a choice makes the preset Custom. With Texture Streaming "
         L"below the GPU's memory, textures keep fewer mip levels: first those not drawn for a "
         L"while, then the largest.",
         SS_LEFT, IdGraphicsNote, LabelLeft, GraphicsNoteTop, ExtrasList.right - LabelLeft,
-        4 * InfoHeight));
+        5 * InfoHeight));
     KeepTabOrder(graphics_order);
     for (const Settings::Preset& preset : Settings::Presets) {
         AddText(Item(dialog, IdPreset), Wide(preset.name));

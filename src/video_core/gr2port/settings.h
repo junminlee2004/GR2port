@@ -117,6 +117,9 @@ struct Preset {
     /// The aspect and render size the preset also sets, or empty to leave them.
     std::string_view aspect;
     std::string_view render_size;
+    /// Also sets VSync off and the gyro fixes of a device held upright, as GR2fork's Steam Deck
+    /// preset does: Swap Gyro Yaw/Roll and Invert Gyro Yaw.
+    bool handheld{false};
 };
 
 /// From the cheapest to the game's own.
@@ -124,7 +127,7 @@ inline constexpr std::array Presets{
     Preset{"lowest", "Lowest", Quality::Off, Quality::Low, false, false, false, false, {}, {}},
     Preset{"low", "Low", Quality::Low, Quality::Low, false, false, false, true, {}, {}},
     Preset{"steamdeck", "Steam Deck", Quality::Low, Quality::Low, true, false, false, true, "16:10",
-           "720p"},
+           "720p", true},
     Preset{"medium", "Medium", Quality::Medium, Quality::Medium, true, true, false, true, {}, {}},
     Preset{"ps4",
            "PS4 Original",
