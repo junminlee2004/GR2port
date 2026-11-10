@@ -305,7 +305,10 @@ std::array<Image, Capacity> g_resident;
 std::array<Residency, Capacity> g_residency{};
 // The movie frame each image holds, 0 for none.
 std::array<u32, Capacity> g_refreshed{};
-constexpr u64 MaxMovieFrameAge = 120;
+constexpr u32 LoggedKept = 16;
+u32 g_logged_kept = 0;
+// The handle of each movie surface a frame read, by its slot in Movies.
+std::array<u32, Movies::Surfaces> g_movie_handles{};
 std::vector<Retiring> g_retiring;
 std::vector<Staging> g_staging;
 std::deque<Upload> g_uploads;
@@ -959,6 +962,65 @@ void ClearWhite(vk::CommandBuffer cmd) {
     cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier}, dl);
 }
 
+// Copies the image of the texture at source into the image of handle, as the game's DMA between
+// their memories does on the GPU; false when source has no image of the same shape, or when its
+// image does not hold movie, the last job into source.
+bool CopyKept(vk::CommandBuffer cmd, u32 handle, VAddr source, const Movies::Frame& movie) {
+    const auto& dl = g_device->dispatch;
+    const u32 from = FindAddress(source);
+    const Image& to = g_resident[handle];
+    if (from == 0 || from >= FirstReserved || !g_resident[from].image ||
+        !g_textures[from].ready.load(std::memory_order_acquire) ||
+        g_resident[from].extent != to.extent || g_resident[from].format != to.format ||
+        (movie.found && g_refreshed[from] != movie.generation)) {
+        return false;
+    }
+    const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+    const auto samplers =
+        vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader;
+    std::array<vk::ImageMemoryBarrier2, 2> barriers{{
+        {
+            .srcStageMask = samplers,
+            .dstStageMask = vk::PipelineStageFlagBits2::eCopy,
+            .dstAccessMask = vk::AccessFlagBits2::eTransferRead,
+            .oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+            .newLayout = vk::ImageLayout::eTransferSrcOptimal,
+            .image = g_resident[from].image,
+            .subresourceRange = range,
+        },
+        {
+            .srcStageMask = samplers,
+            .dstStageMask = vk::PipelineStageFlagBits2::eCopy,
+            .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            .oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+            .newLayout = vk::ImageLayout::eTransferDstOptimal,
+            .image = to.image,
+            .subresourceRange = range,
+        },
+    }};
+    cmd.pipelineBarrier2({.imageMemoryBarrierCount = static_cast<u32>(barriers.size()),
+                          .pImageMemoryBarriers = barriers.data()},
+                         dl);
+    const vk::ImageCopy copy{
+        .srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+        .dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+        .extent = {to.extent.width, to.extent.height, 1},
+    };
+    cmd.copyImage(g_resident[from].image, vk::ImageLayout::eTransferSrcOptimal, to.image,
+                  vk::ImageLayout::eTransferDstOptimal, copy, dl);
+    for (auto& barrier : barriers) {
+        barrier.srcStageMask = vk::PipelineStageFlagBits2::eCopy;
+        barrier.srcAccessMask = barrier.dstAccessMask;
+        barrier.dstStageMask = samplers;
+        barrier.dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
+        std::swap(barrier.oldLayout, barrier.newLayout);
+    }
+    cmd.pipelineBarrier2({.imageMemoryBarrierCount = static_cast<u32>(barriers.size()),
+                          .pImageMemoryBarriers = barriers.data()},
+                         dl);
+    return true;
+}
+
 // The stages that sample textures.
 constexpr vk::PipelineStageFlags2 Samplers = vk::PipelineStageFlagBits2::eVertexShader |
                                              vk::PipelineStageFlagBits2::eFragmentShader |
@@ -1606,11 +1668,33 @@ u32 GetBySharp(const u32* words, bool& dynamic) {
     return 0;
 }
 
-void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> descriptors) {
+void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> read) {
     const auto& dl = g_device->dispatch;
-    for (const u32 descriptor : descriptors) {
-        // The frames name textures by descriptor: a handle or its twin.
-        const u32 handle = descriptor & (Capacity - 1);
+    // A movie surface a frame read before takes each frame the game's job copies into it, whether
+    // a frame reads it then or later.
+    constexpr u32 MaxRead = std::max(Scene::MaxUiDynamicTextures, Scene::MaxDynamicTextures);
+    std::array<u32, MaxRead + Movies::Surfaces> handles;
+    const auto first = std::min<std::size_t>(read.size(), MaxRead);
+    // The frames name textures by descriptor: a handle or its twin.
+    std::transform(read.begin(), read.begin() + first, handles.begin(),
+                   [](u32 slot) { return slot & (Capacity - 1); });
+    u32 count = static_cast<u32>(first);
+    for (u32 slot = 0; slot < Movies::Surfaces; slot++) {
+        const u32 handle = g_movie_handles[slot];
+        if (handle == 0) {
+            continue;
+        }
+        const Movies::Job job = Movies::Peek(slot);
+        if (job.generation == g_refreshed[handle] ||
+            g_textures[handle].address.load(std::memory_order_relaxed) != job.surface) {
+            continue;
+        }
+        if (std::find(handles.begin(), handles.begin() + count, handle) ==
+            handles.begin() + count) {
+            handles[count++] = handle;
+        }
+    }
+    for (const u32 handle : std::span{handles}.first(count)) {
         const Image& image = g_resident[handle];
         if (handle == 0 || handle >= FirstReserved || !image.image ||
             !g_textures[handle].ready.load(std::memory_order_acquire)) {
@@ -1628,12 +1712,41 @@ void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> descriptors)
             u64{info.pitch} * image.extent.height > layout.bytes) {
             continue;
         }
-        // A movie surface takes the frame the game's job copied into it, once per frame; a job
-        // long past may name memory AvPlayer has freed.
-        const Movies::Frame movie = Movies::Find(sharp.Address());
-        if (movie.found &&
-            (movie.generation == g_refreshed[handle] || movie.age > MaxMovieFrameAge)) {
-            continue;
+        // A surface that keeps a movie's frame takes, once per DMA, the copy of the frame the DMA
+        // copied, taken when the game kept it, as only the GPU writes its memory. Without a copy
+        // it takes the image of the source when that holds the source's last job.
+        const Movies::Kept kept = Movies::FindKept(sharp.Address());
+        Movies::Frame movie{};
+        if (kept.source != 0) {
+            if (kept.generation == g_refreshed[handle]) {
+                continue;
+            }
+            const bool copied =
+                !kept.frame.found && CopyKept(cmd, handle, kept.source, Movies::Find(kept.source));
+            if (g_logged_kept < LoggedKept) {
+                g_logged_kept++;
+                LOG_INFO(Render_Vulkan, "GR2port movies: kept surface {:#x} filled {}",
+                         sharp.Address(),
+                         kept.frame.found ? "from the frame copied at the keep"
+                                          : (copied ? "from its source's image" : "later"));
+            }
+            if (copied) {
+                g_refreshed[handle] = kept.generation;
+                continue;
+            }
+            if (!kept.frame.found) {
+                continue;
+            }
+            movie = kept.frame;
+        } else {
+            // A movie surface takes the copy of each frame the game's job copies into it.
+            movie = Movies::Find(sharp.Address());
+            if (movie.found) {
+                g_movie_handles[movie.slot] = handle;
+            }
+            if (movie.found && movie.generation == g_refreshed[handle]) {
+                continue;
+            }
         }
         Staging staging{
             .buffer = g_memory->CreateBuffer(layout.bytes, vk::BufferUsageFlagBits::eTransferSrc,
@@ -1646,6 +1759,14 @@ void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> descriptors)
         }
         if (movie.found) {
             Movies::Write(movie, staging.buffer.mapped, info.pitch, image.extent.height);
+            // Two new frames of the surface during the copy reuse its buffer: the next refresh
+            // takes the newest.
+            const u32 now = kept.source != 0 ? Movies::FindKept(sharp.Address()).generation
+                                             : Movies::Find(sharp.Address()).generation;
+            if (now != movie.generation) {
+                g_memory->Destroy(staging.buffer);
+                continue;
+            }
             g_refreshed[handle] = movie.generation;
         } else {
             std::memcpy(staging.buffer.mapped,
