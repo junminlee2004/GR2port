@@ -22,6 +22,7 @@
 #include <SDL3/SDL_init.h>
 #include <commctrl.h>
 #include <commdlg.h>
+#include <d3d11.h>
 #include <dxgi.h>
 #include <shellapi.h>
 
@@ -39,6 +40,7 @@
 #include "launcher/setup_dialog.h"
 #include "video_core/gr2port/settings.h"
 
+#pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 
 namespace Gr2Port::Launcher {
@@ -375,8 +377,6 @@ constexpr int GraphicsNoteTop = 345;
 // driver's budget, as Auto does.
 constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  4096,  6144, 8192,
                                                     10240, 11264, 12288, 16384, 24576, 32768};
-// GPUs with at least this much memory of their own are taken for discrete ones.
-constexpr u64 DiscreteBytes = 1ull << 30;
 constexpr std::array<const wchar_t*, 4> QualityChoices{L"PS4 Original", L"Medium", L"Low", L"Off"};
 constexpr std::array<const wchar_t*, 3> FogChoices{L"PS4 Original", L"Medium", L"Low"};
 constexpr std::array<const wchar_t*, 2> SwitchChoices{L"On", L"Off"};
@@ -1172,11 +1172,30 @@ void ApplyPreset(const Dialog& dialog, int index) {
 
 struct VideoCard {
     std::wstring name;
+    // Its own memory and the RAM the system lends it.
     u64 bytes = 0;
+    u64 shared = 0;
+    // An integrated GPU, whose memory is all RAM.
+    bool integrated = false;
 };
 
-// The GPU GR2port draws with, as it picks one: the first with memory of its own, as discrete GPUs
-// have, else the first; none when DXGI lists no hardware adapter.
+// Whether the adapter's memory is the system's RAM.
+bool Integrated(IDXGIAdapter1* adapter) {
+    ID3D11Device* device = nullptr;
+    if (FAILED(D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0, nullptr, 0,
+                                 D3D11_SDK_VERSION, &device, nullptr, nullptr))) {
+        return false;
+    }
+    D3D11_FEATURE_DATA_D3D11_OPTIONS2 options{};
+    const bool unified = SUCCEEDED(device->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS2,
+                                                               &options, sizeof(options))) &&
+                         options.UnifiedMemoryArchitecture;
+    device->Release();
+    return unified;
+}
+
+// The GPU GR2port draws with, as it picks one: the first that is not integrated, else the first;
+// none when DXGI lists no hardware adapter.
 VideoCard FindVideoCard() {
     IDXGIFactory1* factory = nullptr;
     if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) {
@@ -1185,23 +1204,32 @@ VideoCard FindVideoCard() {
     std::optional<VideoCard> first;
     std::optional<VideoCard> discrete;
     IDXGIAdapter1* adapter = nullptr;
-    for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; i++) {
+    for (UINT i = 0; !discrete && SUCCEEDED(factory->EnumAdapters1(i, &adapter)); i++) {
         DXGI_ADAPTER_DESC1 desc{};
-        const bool described = SUCCEEDED(adapter->GetDesc1(&desc));
+        if (SUCCEEDED(adapter->GetDesc1(&desc)) && (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0) {
+            const VideoCard card{desc.Description, desc.DedicatedVideoMemory,
+                                 desc.SharedSystemMemory, Integrated(adapter)};
+            if (!first) {
+                first = card;
+            }
+            if (!card.integrated) {
+                discrete = card;
+            }
+        }
         adapter->Release();
-        if (!described || (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0) {
-            continue;
-        }
-        const VideoCard card{desc.Description, desc.DedicatedVideoMemory};
-        if (!first) {
-            first = card;
-        }
-        if (!discrete && card.bytes >= DiscreteBytes) {
-            discrete = card;
-        }
     }
     factory->Release();
     return discrete.value_or(first.value_or(VideoCard{}));
+}
+
+// The installed RAM, which includes what firmware keeps for an integrated GPU.
+u64 InstalledRam() {
+    ULONGLONG kilobytes = 0;
+    if (GetPhysicallyInstalledSystemMemory(&kilobytes)) {
+        return u64{kilobytes} << 10;
+    }
+    MEMORYSTATUSEX status{.dwLength = sizeof(MEMORYSTATUSEX)};
+    return GlobalMemoryStatusEx(&status) ? status.ullTotalPhys : 0;
 }
 
 // A size in MB as GB with at most one decimal.
@@ -1214,14 +1242,17 @@ std::wstring Gigabytes(u64 megabytes) {
     return text + L" GB";
 }
 
-// Auto, naming the GPU and its memory, then the sizes, then saved when it is none of them.
+// Auto, naming the GPU and its memory, or for an integrated GPU its share of RAM, then the
+// sizes, then saved when it is none of them.
 void FillTextureStreaming(Dialog& dialog, u32 saved) {
     const HWND combo = Item(dialog, IdTextureStreaming);
     const VideoCard card = FindVideoCard();
-    const u64 card_megabytes = card.bytes >> 20;
     std::wstring automatic = L"Auto";
-    if (card.bytes != 0) {
-        automatic += L" (" + Gigabytes(card_megabytes) + L", " + card.name + L")";
+    if (card.integrated) {
+        const u64 share = std::min(card.bytes + card.shared, Settings::RamShare(InstalledRam()));
+        automatic += L" (" + Gigabytes(share >> 20) + L" of RAM, " + card.name + L")";
+    } else if (card.bytes != 0) {
+        automatic += L" (" + Gigabytes(card.bytes >> 20) + L", " + card.name + L")";
     }
     dialog.texture_streaming = {0};
     AddText(combo, automatic);

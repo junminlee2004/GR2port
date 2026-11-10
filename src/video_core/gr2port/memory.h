@@ -48,10 +48,12 @@ public:
     explicit Memory(const Device& device) : d{device} {}
 
     /// The Texture Streaming setting caps the budget at that many MB, as a smaller GPU's;
-    /// GR2PORT_VRAM_MB in the environment overrides it.
+    /// GR2PORT_VRAM_MB in the environment overrides it. Without either, an integrated GPU's budget
+    /// is its share of RAM (Settings::RamShare).
     bool Create();
 
-    /// Device-local memory: the process's use and budget (both renderers share the process),
+    /// The memory the GPU draws from: its device-local heaps, or every heap of an integrated GPU,
+    /// whose memory is all RAM. The process's use and budget (both renderers share the process),
     /// and the renderer's own use, as of the last Refresh.
     struct Budget {
         u64 usage;
@@ -94,6 +96,7 @@ private:
     const Device& d;
     VmaAllocator allocator = nullptr;
     u64 forced_budget = ~u64{0};
+    bool integrated = false;
     Budget device_budget{};
     u64 reserved = 0;
     bool logged_full = false;

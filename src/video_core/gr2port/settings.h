@@ -91,9 +91,19 @@ struct Graphics {
     bool antialiasing{true};
     bool bloom{true};
     /// Texture streaming: the device memory GR2port keeps within, in MB; 0 takes the budget the
-    /// driver gives the process. With less, textures keep fewer mip levels. Presets leave it.
+    /// driver gives the process, or on an integrated GPU its share of RAM. With less, textures
+    /// keep fewer mip levels. Presets leave it.
     u32 texture_streaming_mb{0};
 };
+
+/// An integrated GPU's share of installed RAM when texture streaming takes the budget itself: the
+/// RAM beyond what the game's process (a working set of about 4.2 GB) and the system keep, and
+/// at least LeastRamShare.
+inline constexpr u64 RamReserve = 6_GB;
+inline constexpr u64 LeastRamShare = 1_GB;
+constexpr u64 RamShare(u64 installed) {
+    return installed > RamReserve + LeastRamShare ? installed - RamReserve : LeastRamShare;
+}
 
 struct Preset {
     std::string_view key;

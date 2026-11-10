@@ -7,6 +7,14 @@
 #include <filesystem>
 #include <string_view>
 
+#ifdef _WIN32
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <sys/sysctl.h>
+#else
+#include <unistd.h>
+#endif
+
 #include <fmt/format.h>
 
 #include "common/logging/log.h"
@@ -39,6 +47,27 @@ void LogLarge(const std::source_location& where, u64 bytes, std::string_view wha
              std::filesystem::path{where.file_name()}.filename().string(), where.line());
 }
 
+// The machine's RAM: on Windows the installed modules', which include what firmware keeps for an
+// integrated GPU; elsewhere what the system manages. 0 when the system does not tell.
+u64 InstalledRam() {
+#ifdef _WIN32
+    ULONGLONG kilobytes = 0;
+    if (GetPhysicallyInstalledSystemMemory(&kilobytes)) {
+        return u64{kilobytes} << 10;
+    }
+    MEMORYSTATUSEX status{.dwLength = sizeof(MEMORYSTATUSEX)};
+    return GlobalMemoryStatusEx(&status) ? status.ullTotalPhys : 0;
+#elif defined(__APPLE__)
+    u64 bytes = 0;
+    size_t size = sizeof(bytes);
+    return sysctlbyname("hw.memsize", &bytes, &size, nullptr, 0) == 0 ? bytes : 0;
+#else
+    const long pages = sysconf(_SC_PHYS_PAGES);
+    const long page_size = sysconf(_SC_PAGE_SIZE);
+    return pages > 0 && page_size > 0 ? static_cast<u64>(pages) * static_cast<u64>(page_size) : 0;
+#endif
+}
+
 } // namespace
 
 bool Memory::Create() {
@@ -65,9 +94,18 @@ bool Memory::Create() {
     if (const char* forced = std::getenv("GR2PORT_VRAM_MB"); forced != nullptr) {
         megabytes = std::strtoull(forced, nullptr, 10);
     }
+    integrated =
+        d.gpu.getProperties(d.dispatch).deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
     if (megabytes != 0) {
         forced_budget = megabytes << 20;
         LOG_INFO(Render_Vulkan, "GR2port memory: device-local budget capped at {} MB", megabytes);
+    } else if (integrated) {
+        const u64 installed = InstalledRam();
+        forced_budget = Settings::RamShare(installed);
+        LOG_INFO(Render_Vulkan,
+                 "GR2port memory: an integrated GPU draws from every heap, at most {} MB of the "
+                 "{} MB of RAM",
+                 forced_budget >> 20, installed >> 20);
     }
     return true;
 }
@@ -121,7 +159,8 @@ void Memory::Refresh(u64 frame) {
     vmaGetHeapBudgets(allocator, budgets.data());
     device_budget = {};
     for (u32 i = 0; i < properties->memoryHeapCount; i++) {
-        if ((properties->memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0) {
+        if (!integrated &&
+            (properties->memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0) {
             continue;
         }
         device_budget.usage += budgets[i].usage;
