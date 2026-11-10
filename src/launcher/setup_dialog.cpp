@@ -11,6 +11,7 @@
 #include <fstream>
 #include <optional>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -147,11 +148,27 @@ enum Control : int {
     IdTouchSwipeNote,
     IdKeyBindings,
     IdExtras,
+    IdPresetLabel,
+    IdPreset,
+    IdShadowsLabel,
+    IdShadows,
+    IdFogLabel,
+    IdFog,
+    IdOcclusionLabel,
+    IdOcclusion,
+    IdMotionBlurLabel,
+    IdMotionBlur,
+    IdAntialiasLabel,
+    IdAntialias,
+    IdBloomLabel,
+    IdBloom,
+    IdGraphicsNote,
     IdDefaults,
 };
 
 enum Page : size_t {
     DisplayPage,
+    GraphicsPage,
     ControllerPage,
     MousePage,
     DlcPage,
@@ -163,8 +180,8 @@ enum Page : size_t {
 
 // Tab controls draw a single ampersand as an underline.
 constexpr std::array<const wchar_t*, PageCount> PageNames{
-    L"Display", L"Controller", L"Mouse && Keyboard", L"DLC",
-    L"Online",  L"Trophies",   L"Cheats && Extras"};
+    L"Display", L"Graphics", L"Controller", L"Mouse && Keyboard",
+    L"DLC",     L"Online",   L"Trophies",   L"Cheats && Extras"};
 
 constexpr RECT ExtrasList{18, 88, 577, 424};
 constexpr int OnlineIdTop = 121;
@@ -343,6 +360,31 @@ constexpr std::array Rows{
 
 // In the order of Settings::VSync.
 constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
+
+// The Graphics tab: the preset, then each pass's choice. Quality choices are in the order of
+// Settings::Quality; switches put On first.
+constexpr int PresetTop = 88;
+constexpr int GraphicsNoteTop = 316;
+constexpr std::array<const wchar_t*, 4> QualityChoices{L"PS4 Original", L"Medium", L"Low", L"Off"};
+constexpr std::array<const wchar_t*, 3> FogChoices{L"PS4 Original", L"Medium", L"Low"};
+constexpr std::array<const wchar_t*, 2> SwitchChoices{L"On", L"Off"};
+
+struct GraphicsRow {
+    int label;
+    int combo;
+    const wchar_t* text;
+    int top;
+    std::span<const wchar_t* const> choices;
+};
+
+constexpr std::array GraphicsRows{
+    GraphicsRow{IdShadowsLabel, IdShadows, L"Shadows", 128, QualityChoices},
+    GraphicsRow{IdFogLabel, IdFog, L"Volumetric Fog", 157, FogChoices},
+    GraphicsRow{IdOcclusionLabel, IdOcclusion, L"Ambient Occlusion", 186, SwitchChoices},
+    GraphicsRow{IdMotionBlurLabel, IdMotionBlur, L"Motion Blur", 215, SwitchChoices},
+    GraphicsRow{IdAntialiasLabel, IdAntialias, L"Anti-Aliasing", 244, SwitchChoices},
+    GraphicsRow{IdBloomLabel, IdBloom, L"Bloom", 273, SwitchChoices},
+};
 
 struct Monitor {
     std::wstring device;
@@ -1052,6 +1094,63 @@ Settings::Game ReadGame(const Dialog& dialog) {
     return game;
 }
 
+void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
+    Select(Item(dialog, IdShadows), static_cast<int>(graphics.shadows));
+    Select(Item(dialog, IdFog),
+           std::min(static_cast<int>(graphics.fog), static_cast<int>(FogChoices.size()) - 1));
+    Select(Item(dialog, IdOcclusion), graphics.ambient_occlusion ? 0 : 1);
+    Select(Item(dialog, IdMotionBlur), graphics.motion_blur ? 0 : 1);
+    Select(Item(dialog, IdAntialias), graphics.antialiasing ? 0 : 1);
+    Select(Item(dialog, IdBloom), graphics.bloom ? 0 : 1);
+}
+
+// The passes as shown, with the preset they and the Display tab's sizes match.
+Settings::Graphics ReadGraphics(const Dialog& dialog) {
+    Settings::Graphics graphics = dialog.values.graphics;
+    const int shadows = Selected(Item(dialog, IdShadows));
+    if (shadows >= 0 && shadows < static_cast<int>(QualityChoices.size())) {
+        graphics.shadows = static_cast<Settings::Quality>(shadows);
+    }
+    const int fog = Selected(Item(dialog, IdFog));
+    if (fog >= 0 && fog < static_cast<int>(FogChoices.size())) {
+        graphics.fog = static_cast<Settings::Quality>(fog);
+    }
+    graphics.ambient_occlusion = Selected(Item(dialog, IdOcclusion)) != 1;
+    graphics.motion_blur = Selected(Item(dialog, IdMotionBlur)) != 1;
+    graphics.antialiasing = Selected(Item(dialog, IdAntialias)) != 1;
+    graphics.bloom = Selected(Item(dialog, IdBloom)) != 1;
+    graphics.preset = std::string(Settings::MatchPreset(ReadGame(dialog), graphics));
+    return graphics;
+}
+
+// The preset the choices match, or Custom, the entry after the presets.
+void ShowPreset(const Dialog& dialog) {
+    const std::string preset = ReadGraphics(dialog).preset;
+    const auto found =
+        std::ranges::find(Settings::Presets, std::string_view{preset}, &Settings::Preset::key);
+    Select(Item(dialog, IdPreset), static_cast<int>(found - Settings::Presets.begin()));
+}
+
+// Shows a preset's passes and, for the one that sets them, its aspect and render size.
+void ApplyPreset(const Dialog& dialog, int index) {
+    if (index < 0 || index >= static_cast<int>(Settings::Presets.size())) {
+        return;
+    }
+    const Settings::Preset& preset = Settings::Presets[index];
+    ShowGraphics(dialog, Settings::FromPreset(preset));
+    const auto aspect =
+        std::ranges::find(GamePatches::Aspects, preset.aspect, &GamePatches::Aspect::name);
+    if (aspect != GamePatches::Aspects.end()) {
+        Select(Item(dialog, IdAspect), static_cast<int>(aspect - GamePatches::Aspects.begin()));
+    }
+    const auto size = std::ranges::find(GamePatches::RenderSizes, preset.render_size,
+                                        &GamePatches::RenderSize::name);
+    if (size != GamePatches::RenderSizes.end()) {
+        Select(Item(dialog, IdRenderSize),
+               static_cast<int>(size - GamePatches::RenderSizes.begin()));
+    }
+}
+
 void Show(Dialog& dialog, const Settings::Display& display) {
     Check(dialog, IdFullscreen, display.fullscreen);
     Check(dialog, IdExclusive, display.exclusive);
@@ -1211,6 +1310,37 @@ void Build(HWND window, Dialog& dialog) {
                                          ComboLeft, row.top, ComboWidth, ComboListHeight));
     }
     KeepTabOrder(page_order);
+
+    const HWND graphics_page = dialog.pages[GraphicsPage];
+    std::vector<HWND> graphics_order;
+    graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_STATICW, L"Preset",
+                                         SS_LEFT | SS_CENTERIMAGE, IdPresetLabel, LabelLeft,
+                                         PresetTop, LabelWidth, ComboHeight));
+    graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_COMBOBOXW, L"",
+                                         CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, IdPreset,
+                                         ComboLeft, PresetTop, ComboWidth, ComboListHeight));
+    for (const GraphicsRow& row : GraphicsRows) {
+        graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_STATICW,
+                                             row.text, SS_LEFT | SS_CENTERIMAGE, row.label,
+                                             LabelLeft, row.top, LabelWidth, ComboHeight));
+        graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_COMBOBOXW, L"",
+                                             CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, row.combo,
+                                             ComboLeft, row.top, ComboWidth, ComboListHeight));
+        for (const wchar_t* choice : row.choices) {
+            AddText(Item(dialog, row.combo), choice);
+        }
+    }
+    graphics_order.push_back(MakeControl(
+        dialog, graphics_page, page_origin, WC_STATICW,
+        L"Steam Deck also sets Aspect Ratio to 16:10 and Render Resolution to 720p on the Display "
+        L"tab: 1280 x 800. Changing a choice makes the preset Custom.",
+        SS_LEFT, IdGraphicsNote, LabelLeft, GraphicsNoteTop, ExtrasList.right - LabelLeft,
+        3 * InfoHeight));
+    KeepTabOrder(graphics_order);
+    for (const Settings::Preset& preset : Settings::Presets) {
+        AddText(Item(dialog, IdPreset), Wide(preset.name));
+    }
+    AddText(Item(dialog, IdPreset), L"Custom");
 
     const HWND controller_page = dialog.pages[ControllerPage];
     const auto add = [&](const wchar_t* type, const wchar_t* text, DWORD style, int id,
@@ -1432,6 +1562,8 @@ void Build(HWND window, Dialog& dialog) {
     }
     Show(dialog, dialog.values.display);
     ShowGame(dialog, dialog.values.game);
+    ShowGraphics(dialog, dialog.values.graphics);
+    ShowPreset(dialog);
     ShowController(dialog);
     ShowMouse(dialog, dialog.values.mouse);
     ShowOnline(dialog);
@@ -1463,10 +1595,30 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             FillRates(dialog, ShownRate(dialog));
         }
         break;
+    case IdPreset:
+        if (code == CBN_SELCHANGE) {
+            ApplyPreset(dialog, Selected(Item(dialog, IdPreset)));
+            ShowPreset(dialog);
+        }
+        break;
+    case IdShadows:
+    case IdFog:
+    case IdOcclusion:
+    case IdMotionBlur:
+    case IdAntialias:
+    case IdBloom:
+    case IdAspect:
+    case IdRenderSize:
+        if (code == CBN_SELCHANGE) {
+            ShowPreset(dialog);
+        }
+        break;
     case IdDefaults:
         if (code == BN_CLICKED) {
             Show(dialog, Settings::Display{});
             ShowGame(dialog, Settings::Game{});
+            ShowGraphics(dialog, Settings::Graphics{});
+            ShowPreset(dialog);
             for (const Toggle& toggle : Toggles) {
                 Check(dialog, toggle.id, toggle.fallback);
             }
@@ -1523,6 +1675,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
     case IDOK:
         dialog.values.display = Read(dialog);
         dialog.values.game = ReadGame(dialog);
+        dialog.values.graphics = ReadGraphics(dialog);
         dialog.values.mouse = ReadMouse(dialog);
         Settings::Set(dialog.values);
         SaveOnline(window, dialog);

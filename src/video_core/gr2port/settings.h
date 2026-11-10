@@ -3,9 +3,11 @@
 
 #pragma once
 
+#include <array>
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "common/types.h"
 
@@ -68,10 +70,72 @@ struct Mouse {
     u32 control_type{0};
 };
 
+/// A pass's quality: Original draws it as the game does, the lower ones cost less and show less.
+enum class Quality : u32 {
+    Original,
+    Medium,
+    Low,
+    Off,
+};
+
+/// What the renderer draws and how finely. A preset sets them all; "custom" is any other mix.
+struct Graphics {
+    std::string preset{"ps4"};
+    /// The sun's shadow maps: Original 2048, 2048 and 4096 texels a side, Medium 2048 for each,
+    /// Low 1024, 1024 and 2048; Off draws no shadows.
+    Quality shadows{Quality::Original};
+    /// The fog's grid of cells: Original 160 x 90 x 128, Medium 120 x 68 x 96, Low 80 x 45 x 64.
+    Quality fog{Quality::Original};
+    bool ambient_occlusion{true};
+    bool motion_blur{true};
+    bool antialiasing{true};
+    bool bloom{true};
+};
+
+struct Preset {
+    std::string_view key;
+    std::string_view name;
+    Quality shadows;
+    Quality fog;
+    bool ambient_occlusion;
+    bool motion_blur;
+    bool antialiasing;
+    bool bloom;
+    /// The aspect and render size the preset also sets, or empty to leave them.
+    std::string_view aspect;
+    std::string_view render_size;
+};
+
+/// From the cheapest to the game's own.
+inline constexpr std::array Presets{
+    Preset{"lowest", "Lowest", Quality::Off, Quality::Low, false, false, false, false, {}, {}},
+    Preset{"low", "Low", Quality::Low, Quality::Low, false, false, false, true, {}, {}},
+    Preset{"steamdeck", "Steam Deck", Quality::Low, Quality::Low, true, false, false, true, "16:10",
+           "720p"},
+    Preset{"medium", "Medium", Quality::Medium, Quality::Medium, true, true, false, true, {}, {}},
+    Preset{"ps4",
+           "PS4 Original",
+           Quality::Original,
+           Quality::Original,
+           true,
+           true,
+           true,
+           true,
+           {},
+           {}},
+};
+
+/// The preset's passes, with its key.
+Graphics FromPreset(const Preset& preset);
+
+/// The key of the preset that game and graphics match, or "custom".
+std::string_view MatchPreset(const Game& game, const Graphics& graphics);
+
 struct Values {
     Display display;
     Game game;
     Mouse mouse;
+    Graphics graphics;
 };
 
 /// Any thread: the settings, read from config.json on first use.

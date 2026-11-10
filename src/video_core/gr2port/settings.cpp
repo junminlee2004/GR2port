@@ -49,6 +49,51 @@ u32 ReadU32(const json& section, const char* key, u32 fallback) {
     return it != section.end() && it->is_number_unsigned() ? it->get<u32>() : fallback;
 }
 
+constexpr std::pair<Quality, std::string_view> QualityNames[] = {
+    {Quality::Original, "original"},
+    {Quality::Medium, "medium"},
+    {Quality::Low, "low"},
+    {Quality::Off, "off"},
+};
+
+Quality ReadQuality(const json& section, const char* key, Quality fallback) {
+    const auto it = section.find(key);
+    if (it == section.end() || !it->is_string()) {
+        return fallback;
+    }
+    for (const auto& [quality, name] : QualityNames) {
+        if (it->get<std::string>() == name) {
+            return quality;
+        }
+    }
+    return fallback;
+}
+
+std::string QualityName(Quality quality) {
+    for (const auto& [value, name] : QualityNames) {
+        if (value == quality) {
+            return std::string(name);
+        }
+    }
+    return "original";
+}
+
+void ReadGraphics(const json& section, Graphics& graphics) {
+    if (const auto preset = section.find("graphics_preset");
+        preset != section.end() && preset->is_string()) {
+        graphics.preset = preset->get<std::string>();
+    }
+    graphics.shadows = ReadQuality(section, "shadow_quality", graphics.shadows);
+    graphics.fog = ReadQuality(section, "fog_quality", graphics.fog);
+    if (graphics.fog == Quality::Off) {
+        graphics.fog = Quality::Low;
+    }
+    graphics.ambient_occlusion = ReadBool(section, "ambient_occlusion", graphics.ambient_occlusion);
+    graphics.motion_blur = ReadBool(section, "motion_blur", graphics.motion_blur);
+    graphics.antialiasing = ReadBool(section, "antialiasing", graphics.antialiasing);
+    graphics.bloom = ReadBool(section, "bloom", graphics.bloom);
+}
+
 constexpr std::pair<VSync, std::string_view> VSyncNames[] = {
     {VSync::Off, "off"},
     {VSync::DoubleBuffered, "double"},
@@ -86,6 +131,7 @@ Values FromJson(const json& root) {
     }
     const json& section = *it;
     ReadGame(section, values.game);
+    ReadGraphics(section, values.graphics);
     Mouse& mouse = values.mouse;
     mouse.foot_horizontal = ReadU32(section, "mouse_foot_horizontal", mouse.foot_horizontal);
     mouse.foot_vertical = ReadU32(section, "mouse_foot_vertical", mouse.foot_vertical);
@@ -150,6 +196,13 @@ json ToJson(const Values& values) {
         {"mouse_shift_vertical", values.mouse.shift_vertical},
         {"prompts", values.mouse.prompts},
         {"control_type", values.mouse.control_type},
+        {"graphics_preset", values.graphics.preset},
+        {"shadow_quality", QualityName(values.graphics.shadows)},
+        {"fog_quality", QualityName(values.graphics.fog)},
+        {"ambient_occlusion", values.graphics.ambient_occlusion},
+        {"motion_blur", values.graphics.motion_blur},
+        {"antialiasing", values.graphics.antialiasing},
+        {"bloom", values.graphics.bloom},
     };
 }
 
@@ -179,6 +232,35 @@ bool Write(const Values& values) {
 }
 
 } // namespace
+
+Graphics FromPreset(const Preset& preset) {
+    return Graphics{
+        .preset = std::string(preset.key),
+        .shadows = preset.shadows,
+        .fog = preset.fog,
+        .ambient_occlusion = preset.ambient_occlusion,
+        .motion_blur = preset.motion_blur,
+        .antialiasing = preset.antialiasing,
+        .bloom = preset.bloom,
+    };
+}
+
+std::string_view MatchPreset(const Game& game, const Graphics& graphics) {
+    for (const Preset& preset : Presets) {
+        const Graphics passes = FromPreset(preset);
+        const bool same_passes = passes.shadows == graphics.shadows && passes.fog == graphics.fog &&
+                                 passes.ambient_occlusion == graphics.ambient_occlusion &&
+                                 passes.motion_blur == graphics.motion_blur &&
+                                 passes.antialiasing == graphics.antialiasing &&
+                                 passes.bloom == graphics.bloom;
+        const bool same_size = preset.aspect.empty() || (preset.aspect == game.aspect &&
+                                                         preset.render_size == game.render_size);
+        if (same_passes && same_size) {
+            return preset.key;
+        }
+    }
+    return "custom";
+}
 
 Values Get() {
     std::scoped_lock lock{g_mutex};
