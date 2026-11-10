@@ -89,7 +89,10 @@ void SDLCALL CreateOnMainThread(void*) {
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, initial_height);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_VULKAN_BOOLEAN, true);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
-    if (game != nullptr) {
+    // Wayland shows a child window only after its parent has drawn a frame, and nothing draws in
+    // the game's window. That window never shows there, so there is no window to close but this
+    // one.
+    if (game != nullptr && SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") != 0) {
         SDL_SetPointerProperty(props, SDL_PROP_WINDOW_CREATE_PARENT_POINTER, game);
     }
     g_window = SDL_CreateWindowWithProperties(props);

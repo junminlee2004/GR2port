@@ -17,7 +17,8 @@ struct Size {
 };
 
 /// Creates the window, a child of the game's window so that closing the game's window still
-/// quits, and waits until the main thread has done so. Returns null on failure.
+/// quits, and waits until the main thread has done so. On Wayland the window has no parent.
+/// Returns null on failure.
 SDL_Window* Create();
 
 /// The window's size in pixels as of its last resize. Any thread.
