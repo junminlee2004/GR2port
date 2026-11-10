@@ -20,6 +20,8 @@
 #include "video_core/gr2port/shaders/ui_copy_frag.h"
 #include "video_core/gr2port/shaders/ui_frame_frag.h"
 #include "video_core/gr2port/shaders/ui_gamma_frag.h"
+#include "video_core/gr2port/shaders/ui_mask_frag.h"
+#include "video_core/gr2port/shaders/ui_mask_sprite_frag.h"
 #include "video_core/gr2port/shaders/ui_masked_frag.h"
 #include "video_core/gr2port/shaders/ui_master_vert.h"
 #include "video_core/gr2port/shaders/ui_movie_frag.h"
@@ -31,6 +33,9 @@
 #include "video_core/gr2port/shaders/ui_skinned_b_vert.h"
 #include "video_core/gr2port/shaders/ui_skinned_vert.h"
 #include "video_core/gr2port/shaders/ui_sprite_frag.h"
+#include "video_core/gr2port/shaders/ui_stroke_frag.h"
+#include "video_core/gr2port/shaders/ui_stroke_geom.h"
+#include "video_core/gr2port/shaders/ui_stroke_vert.h"
 #include "video_core/gr2port/shaders/ui_text_flat_geom.h"
 #include "video_core/gr2port/shaders/ui_text_geom.h"
 #include "video_core/gr2port/shaders/ui_threshold_frag.h"
@@ -58,11 +63,13 @@ std::array<Image, Scene::MaxUiTargets> g_images;
 std::unordered_map<u64, Pipeline> g_pipelines;
 // With dynamic blend, a pipeline for each pair of programs whose interfaces match, made at start:
 // the vertex programs write locations 0 and 1 but PassFlat only 0, and each pixel program reads
-// the locations in its mask.
+// the locations in its mask. The strokes' programs pair only with each other.
 constexpr u32 VertexPrograms = static_cast<u32>(Scene::UiVertexProgram::Count);
 constexpr u32 PixelPrograms = static_cast<u32>(Scene::UiPixelProgram::Count);
-constexpr std::array<u32, VertexPrograms> VertexOutputs{3, 1, 3, 3, 3, 3, 3, 3};
-constexpr std::array<u32, PixelPrograms> PixelInputs{1, 2, 1, 2, 1, 3, 3, 3, 2, 2, 2, 2};
+constexpr std::array<u32, VertexPrograms> VertexOutputs{3, 1, 3, 3, 3, 3, 3, 3, 3};
+constexpr std::array<u32, PixelPrograms> PixelInputs{1, 2, 1, 2, 1, 3, 3, 3, 2, 2, 2, 2, 1, 3, 3};
+constexpr u32 StrokeVertex = static_cast<u32>(Scene::UiVertexProgram::Stroke);
+constexpr u32 StrokePixel = static_cast<u32>(Scene::UiPixelProgram::Stroke);
 std::array<Pipeline, VertexPrograms * PixelPrograms> g_pairs;
 Pipeline g_present;
 u32 g_open_target = Scene::MaxUiTargets;
@@ -78,7 +85,15 @@ struct Push {
     std::array<float, 2> text_scale;
 };
 
+bool Pairs(u32 vertex_program, u32 pixel_program) {
+    return (PixelInputs[pixel_program] & ~VertexOutputs[vertex_program]) == 0 &&
+           (vertex_program == StrokeVertex) == (pixel_program == StrokePixel);
+}
+
 std::span<const u32> GeometryCode(u32 vertex_program) {
+    if (vertex_program == StrokeVertex) {
+        return UI_STROKE_GEOM;
+    }
     if (!g_narrow_text) {
         return {};
     }
@@ -236,6 +251,8 @@ std::span<const u32> VertexCode(u32 program) {
         return UI_SKINNED_VERT;
     case Scene::UiVertexProgram::Photo:
         return UI_PHOTO_VERT;
+    case Scene::UiVertexProgram::Stroke:
+        return UI_STROKE_VERT;
     default:
         return UI_SKINNED_B_VERT;
     }
@@ -265,6 +282,12 @@ std::span<const u32> PixelCode(u32 program) {
         return UI_BLUR_HISTORY_FRAG;
     case Scene::UiPixelProgram::Photo:
         return UI_PHOTO_FRAG;
+    case Scene::UiPixelProgram::Mask:
+        return UI_MASK_FRAG;
+    case Scene::UiPixelProgram::MaskSprite:
+        return UI_MASK_SPRITE_FRAG;
+    case Scene::UiPixelProgram::Stroke:
+        return UI_STROKE_FRAG;
     default:
         return UI_COLOR_CONTROL_FRAG;
     }
@@ -361,7 +384,7 @@ bool Start(const Device& device, Memory& memory) {
     u32 made = 0;
     for (u32 vertex = 0; vertex < VertexPrograms; vertex++) {
         for (u32 pixel = 0; pixel < PixelPrograms; pixel++) {
-            if ((PixelInputs[pixel] & ~VertexOutputs[vertex]) != 0) {
+            if (!Pairs(vertex, pixel) || (vertex == StrokeVertex && !device.geometry_shaders)) {
                 continue;
             }
             Pipeline& pipeline = g_pairs[vertex * PixelPrograms + pixel];
@@ -490,7 +513,9 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
         if (!HasImage(header, run.target)) {
             continue;
         }
-        if (run.vertex >= VertexPrograms || run.pixel >= PixelPrograms) {
+        if (run.vertex >= VertexPrograms || run.pixel >= PixelPrograms ||
+            !Pairs(run.vertex, run.pixel) ||
+            (run.vertex == StrokeVertex && !g_device->geometry_shaders)) {
             continue;
         }
         const Pipeline& pipeline = g_device->dynamic_blend

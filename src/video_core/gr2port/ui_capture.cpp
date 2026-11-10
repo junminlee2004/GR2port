@@ -74,6 +74,10 @@ constexpr u32 ShUserDataPs = 0x0c;
 constexpr u32 ShPgmLoVs = 0x48;
 constexpr u32 ShPgmHiVs = 0x49;
 constexpr u32 ShUserDataVs = 0x4c;
+constexpr u32 ShUserDataGs = 0x8c;
+constexpr u32 ShPgmLoEs = 0xc8;
+constexpr u32 ShPgmHiEs = 0xc9;
+constexpr u32 ShUserDataEs = 0xcc;
 // The engine sets the screen scissor to the viewport, and to the target's whole size right after
 // it sets a target.
 constexpr u32 ContextScreenScissor = 0x0c;
@@ -101,47 +105,69 @@ constexpr u64 ProgramHash = 0xc;
 
 struct VertexProgram {
     u32 hash;
+    // The entries of the inputs' table the fetch reads, one bit each: an input's semantic.
     u32 inputs;
     bool constants;
     bool palette;
 };
-// In Scene::UiVertexProgram's order.
+// In Scene::UiVertexProgram's order. The stroke's hash is its copy program's, which runs in the
+// vertex stage after the export and geometry programs.
 constexpr std::array<VertexProgram, static_cast<u32>(Scene::UiVertexProgram::Count)> VertexPrograms{
     {
-        {0xd77886dc, 3, false, false},
-        {0xac069417, 0, false, false},
-        {0x5a43fff7, 3, true, false},
-        {0x591e6b63, 4, true, false},
-        {0x7ff3ec61, 3, true, false},
-        {0x239eaa3a, 5, true, true},
-        {0x13c2ea85, 6, true, true},
-        {0xc1dfc610, 4, true, false},
+        {0xd77886dc, 0x7, false, false},
+        {0xac069417, 0x0, false, false},
+        {0x5a43fff7, 0x7, true, false},
+        {0x591e6b63, 0xf, true, false},
+        {0x7ff3ec61, 0x7, true, false},
+        {0x239eaa3a, 0x1f, true, true},
+        {0x13c2ea85, 0x3f, true, true},
+        {0xc1dfc610, 0xf, true, false},
+        {0x8f10f663, 0x5, true, true},
     }};
+// The stroke's export program, which ui_stroke.vert is generated from. The export program takes
+// the vertex user data; the geometry program's constants are the first of its user data.
+constexpr u32 StrokeExportHash = 0xc0858fae;
 
 struct PixelProgram {
     u32 hash;
     u32 textures;
     bool constants;
+    // The user data the constants start at, without a second texture.
+    u32 constants_at;
 };
 // In Scene::UiPixelProgram's order.
 constexpr std::array<PixelProgram, static_cast<u32>(Scene::UiPixelProgram::Count)> PixelPrograms{{
-    {0x0c97af79, 0, false},
-    {0xdc63f6b2, 1, false},
-    {0x15305830, 0, false},
-    {0x7c7ac89f, 1, true},
-    {0x3e062520, 1, true},
-    {0xbf81268f, 1, true},
-    {0x915e83e6, 1, true},
-    {0x6b493faa, 2, true},
-    {0xb11cba5e, 1, true},
-    {0xe2f10454, 2, true},
-    {0x69770dd9, 1, true},
-    {0xf64d728c, 2, true},
+    {0x0c97af79, 0, false, 12},
+    {0xdc63f6b2, 1, false, 12},
+    {0x15305830, 0, false, 12},
+    {0x7c7ac89f, 1, true, 12},
+    {0x3e062520, 1, true, 12},
+    {0xbf81268f, 1, true, 12},
+    {0x915e83e6, 1, true, 12},
+    {0x6b493faa, 2, true, 12},
+    {0xb11cba5e, 1, true, 12},
+    {0xe2f10454, 2, true, 12},
+    {0x69770dd9, 1, true, 12},
+    {0xf64d728c, 2, true, 12},
+    {0x20a4b7dc, 0, true, 0},
+    {0xdd06831e, 2, true, 12},
+    {0x794c452f, 0, true, 0},
 }};
 
 constexpr u32 ReportFrames = 600;
 constexpr u32 LoggedUnknowns = 64;
-constexpr u32 RecentBuffers = 16;
+// The buffers a frame's draws copied, by the game's address: an open table that each frame's
+// writer empties by moving to a new generation. Draws often share their vertices and indices.
+constexpr u32 SharedSlots = 8192;
+constexpr u32 SharedProbes = 16;
+struct SharedCopy {
+    VAddr from;
+    u64 bytes;
+    u64 to;
+    u32 generation;
+};
+std::array<SharedCopy, SharedSlots> g_shared{};
+u32 g_shared_generation = 0;
 // TextureHandle's answer for a texture the renderer does not have yet.
 constexpr u32 NotReady = ~0u;
 
@@ -162,10 +188,19 @@ std::array<Scene::UiTarget, Scene::MaxUiTargets> g_targets{};
 u32 g_target_count = 0;
 
 std::array<Scene::UiRun, Scene::MaxUiRuns> g_runs;
+// Per target, the frame that last wrote it, plus one. A write after FreshGap frames without one
+// is fresh: the game keeps what it drew there for later frames.
+constexpr u64 FreshGap = 16;
+std::array<u64, Scene::MaxUiTargets> g_written{};
+// The targets the frame wrote so far, and the back buffers seen so far.
+u32 g_frame_writes = 0;
+u32 g_back_buffers = 0;
 std::array<Scene::VertexCommand, Scene::MaxUiDraws> g_commands;
 std::array<u32, Scene::MaxUiDynamicTextures> g_dynamic;
 
 u32 g_logged_programs = 0;
+u32 g_logged_primitives = 0;
+u32 g_logged_drops = 0;
 u32 g_logged_textures = 0;
 std::array<u64, LoggedUnknowns> g_unknown_textures{};
 u32 g_frames = 0;
@@ -214,6 +249,12 @@ u64 BufferBytes(const Buffer& buffer) {
         break;
     }
     return u64{buffer.stride} * (std::max(buffer.elements, 1u) - 1) + element;
+}
+
+// The bytes of a vertex input's first vertices elements.
+u64 InputBytes(Buffer buffer, u32 vertices) {
+    buffer.elements = std::min(buffer.elements, std::max(vertices, 1u));
+    return BufferBytes(buffer);
 }
 
 u64 ProgramAddress(u32 low, u32 high) {
@@ -273,7 +314,9 @@ u32 PhotoTarget(const Scene::UiHeader& ui) {
 class Writer {
 public:
     Writer(u8* packet_, u64 address_, Scene::UiHeader& ui_)
-        : packet{packet_}, address{address_}, ui{ui_} {}
+        : packet{packet_}, address{address_}, ui{ui_} {
+        g_shared_generation++;
+    }
 
     void Draw(u32 opcode, const u32* body);
     void Finish();
@@ -285,7 +328,8 @@ public:
 private:
     u64 Copy(VAddr from, u64 bytes);
     u64 CopyShared(VAddr from, u64 bytes);
-    bool CopyInputs(VAddr table, u32 inputs, Scene::UiDraw& draw);
+    u64 CopyIndices(VAddr from, u32 first, u32 count, u32 bits, u32& lowest, u32& highest);
+    bool CopyInputs(VAddr table, u32 inputs, u32 first_vertex, u32 vertices, Scene::UiDraw& draw);
     u32 TextureHandle(const u32* sharp, bool* linear = nullptr);
     void AddRun(const Scene::UiRun& state);
 
@@ -293,11 +337,6 @@ private:
     u64 address;
     Scene::UiHeader& ui;
     u64 used = 0;
-    // The buffers copied last, which the next draws often share.
-    std::array<VAddr, RecentBuffers> recent_from{};
-    std::array<u64, RecentBuffers> recent_bytes{};
-    std::array<u64, RecentBuffers> recent_to{};
-    u32 next_recent = 0;
 };
 
 u64 Writer::Copy(VAddr from, u64 bytes) {
@@ -312,38 +351,89 @@ u64 Writer::Copy(VAddr from, u64 bytes) {
 }
 
 u64 Writer::CopyShared(VAddr from, u64 bytes) {
-    for (u32 i = 0; i < RecentBuffers; i++) {
-        if (recent_from[i] == from && recent_bytes[i] >= bytes) {
-            return recent_to[i];
+    u32 slot = static_cast<u32>((from >> 4) * 0x9e3779b97f4a7c15ull >> 51);
+    for (u32 probe = 0; probe < SharedProbes; probe++, slot = (slot + 1) % SharedSlots) {
+        SharedCopy& entry = g_shared[slot];
+        if (entry.generation != g_shared_generation) {
+            const u64 to = Copy(from, bytes);
+            if (to != 0) {
+                entry = {from, bytes, to, g_shared_generation};
+            }
+            return to;
+        }
+        if (entry.from == from && entry.bytes >= bytes) {
+            return entry.to;
         }
     }
-    const u64 to = Copy(from, bytes);
-    recent_from[next_recent] = from;
-    recent_bytes[next_recent] = bytes;
-    recent_to[next_recent] = to;
-    next_recent = (next_recent + 1) % RecentBuffers;
-    return to;
+    return Copy(from, bytes);
 }
 
-// The inputs of one vertex usually lie in one buffer, so their range is copied once.
-bool Writer::CopyInputs(VAddr table, u32 inputs, Scene::UiDraw& draw) {
+// The game's UI draws share one large index buffer, each from its own first index, and one
+// large vertex buffer. A draw's indices are copied from its first one, less the lowest, so only
+// the vertices from the lowest to the highest are copied.
+u64 Writer::CopyIndices(VAddr from, u32 first, u32 count, u32 bits, u32& lowest, u32& highest) {
+    constexpr u64 Alignment = 16;
+    const u64 size = bits / 8;
+    const u64 bytes = u64{count} * size;
+    if (from == 0 || count == 0 || used + bytes > Scene::MaxUiDataBytes) {
+        return 0;
+    }
+    lowest = ~0u;
+    highest = 0;
+    for (u32 i = 0; i < count; i++) {
+        const VAddr at = from + (u64{first} + i) * size;
+        const u32 index = bits == 32 ? Load<u32>(at) : Load<u16>(at);
+        lowest = std::min(lowest, index);
+        highest = std::max(highest, index);
+    }
+    u8* const out = packet + Scene::UiDataOffset + used;
+    for (u32 i = 0; i < count; i++) {
+        const VAddr at = from + (u64{first} + i) * size;
+        if (bits == 32) {
+            const u32 index = Load<u32>(at) - lowest;
+            std::memcpy(out + u64{i} * 4, &index, sizeof(index));
+        } else {
+            const u16 index = static_cast<u16>(Load<u16>(at) - lowest);
+            std::memcpy(out + u64{i} * 2, &index, sizeof(index));
+        }
+    }
+    const u64 at = used;
+    used = (used + bytes + Alignment - 1) & ~(Alignment - 1);
+    return address + Scene::UiDataOffset + at;
+}
+
+// The inputs of one vertex usually lie in one buffer, so their range is copied once. Only the
+// vertices the draw reads, from first_vertex on, are copied.
+bool Writer::CopyInputs(VAddr table, u32 inputs, u32 first_vertex, u32 vertices,
+                        Scene::UiDraw& draw) {
     std::array<Buffer, Scene::UiAttributes> buffers;
     u64 low = ~u64{0};
     u64 high = 0;
     u64 total = 0;
-    for (u32 i = 0; i < inputs; i++) {
+    for (u32 i = 0; i < Scene::UiAttributes; i++) {
+        if ((inputs >> i & 1) == 0) {
+            continue;
+        }
         const auto words = Load<std::array<u32, 4>>(table + u64{i} * 16);
         buffers[i] = ReadBuffer(words.data());
-        const u64 bytes = BufferBytes(buffers[i]);
+        if (first_vertex >= std::max(buffers[i].elements, 1u)) {
+            return false;
+        }
+        buffers[i].base += u64{first_vertex} * buffers[i].stride;
+        buffers[i].elements -= std::min(buffers[i].elements, first_vertex);
+        const u64 bytes = InputBytes(buffers[i], vertices);
         low = std::min(low, buffers[i].base);
         high = std::max(high, buffers[i].base + bytes);
         total += bytes;
     }
     const bool together = high - low <= total;
     const u64 whole = together ? CopyShared(low, high - low) : 0;
-    for (u32 i = 0; i < inputs; i++) {
+    for (u32 i = 0; i < Scene::UiAttributes; i++) {
+        if ((inputs >> i & 1) == 0) {
+            continue;
+        }
         const u64 copied = together ? (whole != 0 ? whole + (buffers[i].base - low) : 0)
-                                    : CopyShared(buffers[i].base, BufferBytes(buffers[i]));
+                                    : CopyShared(buffers[i].base, InputBytes(buffers[i], vertices));
         if (copied == 0) {
             return false;
         }
@@ -411,25 +501,49 @@ void Writer::Draw(u32 opcode, const u32* body) {
     const u64 ps = ProgramAddress(g_sh[ShPgmLoPs], g_sh[ShPgmHiPs]);
     if (vs == 0 || ps == 0) {
         ui.dropped++;
+        if (g_logged_drops < LoggedUnknowns) {
+            g_logged_drops++;
+            LOG_INFO(Render_Vulkan, "GR2port UI: draw not drawn, no program: vs {:#x} ps {:#x}", vs,
+                     ps);
+        }
         return;
     }
     const u32 vs_hash = Load<u32>(vs + ProgramHash);
     const u32 ps_hash = Load<u32>(ps + ProgramHash);
     const auto vertex_program = std::ranges::find(VertexPrograms, vs_hash, &VertexProgram::hash);
     const auto pixel_program = std::ranges::find(PixelPrograms, ps_hash, &PixelProgram::hash);
-    if (vertex_program == VertexPrograms.end() || pixel_program == PixelPrograms.end()) {
+    const auto vertex_index = static_cast<u32>(vertex_program - VertexPrograms.begin());
+    const bool stroke = vertex_index == static_cast<u32>(Scene::UiVertexProgram::Stroke);
+    const u64 es = ProgramAddress(g_sh[ShPgmLoEs], g_sh[ShPgmHiEs]);
+    const u32 es_hash = stroke && es != 0 ? Load<u32>(es + ProgramHash) : 0;
+    if (vertex_program == VertexPrograms.end() || pixel_program == PixelPrograms.end() ||
+        (stroke && es_hash != StrokeExportHash)) {
         ui.unported++;
         if (g_logged_programs < LoggedUnknowns) {
             g_logged_programs++;
-            LOG_INFO(Render_Vulkan, "GR2port UI: programs not ported: vs {:#x} ps {:#x}", vs_hash,
-                     ps_hash);
+            LOG_INFO(Render_Vulkan, "GR2port UI: programs not ported: vs {:#x} ps {:#x} es {:#x}",
+                     vs_hash, ps_hash, es_hash);
         }
         return;
     }
+    const auto drop = [&](const char* why) {
+        ui.dropped++;
+        if (g_logged_drops < LoggedUnknowns) {
+            g_logged_drops++;
+            LOG_INFO(Render_Vulkan, "GR2port UI: draw not drawn, {}: vs {:#x} ps {:#x}", why,
+                     vs_hash, ps_hash);
+        }
+    };
     const u32 primitive = g_uconfig[UconfigPrimitive];
     if (ui.draws == Scene::MaxUiDraws || ui.runs == Scene::MaxUiRuns ||
         (primitive != Scene::UiPrimitiveList && primitive != Scene::UiPrimitiveStrip)) {
         ui.dropped++;
+        if (g_logged_primitives < LoggedUnknowns && ui.runs != Scene::MaxUiRuns &&
+            ui.draws != Scene::MaxUiDraws) {
+            g_logged_primitives++;
+            LOG_INFO(Render_Vulkan, "GR2port UI: primitive {} not drawn: vs {:#x} ps {:#x}",
+                     primitive, vs_hash, ps_hash);
+        }
         return;
     }
     const auto viewport_value = [](u32 reg) {
@@ -445,46 +559,61 @@ void Writer::Draw(u32 opcode, const u32* body) {
                    sized ? g_target_width : static_cast<u32>(2.0f * std::abs(scale_x) + 0.5f),
                    sized ? g_target_height : static_cast<u32>(2.0f * std::abs(scale_y) + 0.5f));
     if (target == Scene::MaxUiTargets) {
-        ui.dropped++;
+        drop("no target");
         return;
     }
 
     u32 count = 0;
+    // The vertices the draw reads: from first_vertex on, vertices of them.
+    u32 first_vertex = 0;
+    u32 vertices = 0;
     Scene::UiDraw draw{};
     if (opcode == OpDrawIndexAuto) {
         count = body[0];
+        vertices = count;
     } else {
         // DRAW_INDEX_OFFSET_2 reads the index buffer the engine set, DRAW_INDEX_2 its own.
         const bool offset = opcode == OpDrawIndexOffset2;
-        const u64 indices = offset ? std::max<u64>(body[0], u64{body[1]} + body[2]) : body[3];
         count = offset ? body[2] : body[3];
-        draw.first_index = offset ? body[1] : 0;
         draw.index_bits = g_index_bits;
-        draw.indices = CopyShared(offset ? g_index_base : u64{body[1]} | u64{body[2]} << 32,
-                                  indices * (g_index_bits / 8));
+        u32 highest = 0;
+        draw.indices =
+            CopyIndices(offset ? g_index_base : u64{body[1]} | u64{body[2]} << 32,
+                        offset ? body[1] : 0, count, g_index_bits, first_vertex, highest);
         if (draw.indices == 0) {
-            ui.dropped++;
+            drop("no indices");
             return;
         }
+        vertices = highest - first_vertex + 1;
     }
 
-    const u32* const vs_user = &g_sh[ShUserDataVs];
+    const u32* const vs_user = stroke ? &g_sh[ShUserDataEs] : &g_sh[ShUserDataVs];
     const u32* const ps_user = &g_sh[ShUserDataPs];
     if (vertex_program->inputs != 0 &&
         !CopyInputs(u64{vs_user[VsUserTable]} | u64{vs_user[VsUserTable + 1]} << 32,
-                    vertex_program->inputs, draw)) {
-        ui.dropped++;
+                    vertex_program->inputs, first_vertex, vertices, draw)) {
+        drop("no inputs");
         return;
     }
     const auto constants_of = [&](const u32* words) {
         const Buffer buffer = ReadBuffer(words);
         return Copy(buffer.base, u64{buffer.stride} * buffer.elements);
     };
+    // A buffer the game has not set, or one past the packet's room, would leave the program
+    // reading address 0.
     if (vertex_program->constants) {
         draw.vs_constants = constants_of(vs_user + VsUserConstants);
+        if (draw.vs_constants == 0) {
+            drop("no vertex constants");
+            return;
+        }
     }
     if (vertex_program->palette) {
-        draw.vs_palette = constants_of(vs_user + VsUserPalette);
+        draw.vs_palette = constants_of(stroke ? &g_sh[ShUserDataGs] : vs_user + VsUserPalette);
+        if (draw.vs_palette == 0) {
+            drop("no palette");
+            return;
+        }
     }
     // Bit 0 clamps, bit 1 filters by point, as Ui's samplers.
     const auto sampler_of = [](const u32* words) {
@@ -501,10 +630,8 @@ void Writer::Draw(u32 opcode, const u32* body) {
         if (linear && pixel_index != static_cast<u32>(Scene::UiPixelProgram::Movie) &&
             pixel_index != static_cast<u32>(Scene::UiPixelProgram::Photo)) {
             draw.flags |= Scene::UiDrawText;
-            const auto vertex_index =
-                static_cast<Scene::UiVertexProgram>(vertex_program - VertexPrograms.begin());
-            if (vertex_index == Scene::UiVertexProgram::Transform ||
-                vertex_index == Scene::UiVertexProgram::TransformB) {
+            if (vertex_index == static_cast<u32>(Scene::UiVertexProgram::Transform) ||
+                vertex_index == static_cast<u32>(Scene::UiVertexProgram::TransformB)) {
                 draw.flags |= Scene::UiDrawAnchored;
             }
         }
@@ -512,12 +639,20 @@ void Writer::Draw(u32 opcode, const u32* body) {
     std::array<u32, 16> table_words{};
     if (pixel_program->textures == 2) {
         const VAddr table = u64{ps_user[PsUserConstants]} | u64{ps_user[PsUserConstants + 1]} << 32;
+        if (table == 0) {
+            drop("no texture table");
+            return;
+        }
         table_words = Load<std::array<u32, 16>>(table);
         draw.textures[1] = TextureHandle(table_words.data());
         draw.samplers[1] = sampler_of(table_words.data() + TableSampler);
         draw.ps_constants = constants_of(table_words.data() + TableConstants);
     } else if (pixel_program->constants) {
-        draw.ps_constants = constants_of(ps_user + PsUserConstants);
+        draw.ps_constants = constants_of(ps_user + pixel_program->constants_at);
+    }
+    if ((pixel_program->textures == 2 || pixel_program->constants) && draw.ps_constants == 0) {
+        drop("no pixel constants");
+        return;
     }
     if (static_cast<u32>(pixel_program - PixelPrograms.begin()) ==
         static_cast<u32>(Scene::UiPixelProgram::Photo)) {
@@ -536,6 +671,9 @@ void Writer::Draw(u32 opcode, const u32* body) {
         return;
     }
 
+    if (target < Scene::MaxUiTargets) {
+        g_frame_writes |= 1u << target;
+    }
     AddRun({
         .target = target,
         .vertex = static_cast<u32>(vertex_program - VertexPrograms.begin()),
@@ -656,6 +794,28 @@ void Skip() {
     g_context = 0;
 }
 
+namespace {
+
+// Marks the targets other than back buffers that the frame writes after a while without writes.
+void MarkTargets(Scene::Header& header) {
+    const u64 frame = header.frame;
+    u32 fresh = 0;
+    for (u32 t = 0; t < Scene::MaxUiTargets; t++) {
+        const u32 bit = 1u << t;
+        if ((g_frame_writes & bit) == 0) {
+            continue;
+        }
+        if ((g_back_buffers & bit) == 0 &&
+            (g_written[t] == 0 || frame - (g_written[t] - 1) > FreshGap)) {
+            fresh |= bit;
+        }
+        g_written[t] = frame + 1;
+    }
+    header.ui.fresh_targets = fresh;
+}
+
+} // namespace
+
 void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
     const auto start = std::chrono::steady_clock::now();
     const u32 index = Load<u32>(g_base + PreviousContextIndex - GoldHenBase);
@@ -673,6 +833,9 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
     ui.picture = picture == Scene::MaxUiTargets ? 0 : picture;
     const u32 world_target = world != 0 ? ObjectTarget(world) : ui.picture;
     ui.world = world_target == Scene::MaxUiTargets ? ui.picture : world_target;
+    // The world's picture goes into its target before the screen drawing.
+    g_frame_writes = ui.only == 0 ? 1u << ui.world : 0;
+    g_back_buffers |= picture != Scene::MaxUiTargets ? 1u << picture : 0;
     Writer writer{packet, address, ui};
     if (begin != 0 && from >= begin && from <= next && next <= end) {
         Scan(reinterpret_cast<const u32*>(from), reinterpret_cast<const u32*>(next), writer);
@@ -681,6 +844,7 @@ void Write(u8* packet, u64 address, Scene::Header& header, VAddr world) {
     }
     writer.Finish();
     ui.photo = PhotoTarget(ui);
+    MarkTargets(header);
 
     g_draws += ui.draws;
     g_runs_total += ui.runs;

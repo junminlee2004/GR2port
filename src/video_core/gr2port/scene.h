@@ -106,11 +106,11 @@ inline constexpr u32 GridCells = 360;
 inline constexpr u32 GridEntries = 128;
 /// The screen drawing per packet: draws, runs, the game's targets, the textures it reads that
 /// change each frame, and the bytes of the game's buffers it copies.
-inline constexpr u32 MaxUiDraws = 2048;
+inline constexpr u32 MaxUiDraws = 4096;
 inline constexpr u32 MaxUiRuns = 1024;
 inline constexpr u32 MaxUiTargets = 32;
 inline constexpr u32 MaxUiDynamicTextures = 64;
-inline constexpr u64 MaxUiDataBytes = 4_MB;
+inline constexpr u64 MaxUiDataBytes = 16_MB;
 /// The inputs of the screen drawing's vertex programs, at most.
 inline constexpr u32 UiAttributes = 6;
 /// The texture handles of the targets: the last MaxUiTargets of the texture array.
@@ -289,6 +289,9 @@ enum class UiVertexProgram : u32 {
     Skinned,
     SkinnedB,
     Photo,
+    /// The comic's ink strokes: an export and a geometry program, whose constants ride in the
+    /// palette's place.
+    Stroke,
     Count,
 };
 enum class UiPixelProgram : u32 {
@@ -304,6 +307,11 @@ enum class UiPixelProgram : u32 {
     BlurHistory,
     ColorControl,
     Photo,
+    /// The comic's panels: a shape's number into the mask target, a sprite where the mask target
+    /// holds its number, and the ink strokes.
+    Mask,
+    MaskSprite,
+    Stroke,
     Count,
 };
 
