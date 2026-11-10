@@ -72,10 +72,12 @@ struct Pipeline {
 /// shaders pull their data by device address) and push constants for every stage.
 Pipeline CreateGraphicsPipeline(const Device& device, const GraphicsPipelineInfo& info);
 
-/// A compute pipeline with push_constant_bytes of push constants and the given descriptor sets.
+/// A compute pipeline with push_constant_bytes of push constants and the given descriptor sets, its
+/// specialization constants set by specialization when given.
 Pipeline CreateComputePipeline(const Device& device, std::span<const u32> code,
                                u32 push_constant_bytes,
-                               std::span<const vk::DescriptorSetLayout> set_layouts = {});
+                               std::span<const vk::DescriptorSetLayout> set_layouts = {},
+                               const vk::SpecializationInfo* specialization = nullptr);
 
 void DestroyPipeline(const Device& device, Pipeline& pipeline);
 

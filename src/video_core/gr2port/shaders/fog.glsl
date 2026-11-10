@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// The fog's cells: 160 by 90 columns over the screen, each of 128 slices that grow with depth. A
-// slice's depth runs as the square of its share, between the near plane and the fog's far one.
+// The fog's cells: columns over the screen, each of slices that grow with depth, the game's 160 by
+// 90 by 128 unless the fog quality sets fewer. A slice's depth runs as the square of its share,
+// between the near plane and the fog's far one.
 
-const int FogColumns = 160;
-const int FogRows = 90;
-const int FogSlices = 128;
+layout(constant_id = 0) const int FogColumns = 160;
+layout(constant_id = 1) const int FogRows = 90;
+layout(constant_id = 2) const int FogSlices = 128;
 
 // The game's jitter of a cell from 0 to 1, by its place and a clock.
 float FogJitter(ivec3 cell, float clock) {

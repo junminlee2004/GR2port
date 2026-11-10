@@ -221,7 +221,8 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
 }
 
 Pipeline CreateComputePipeline(const Device& d, std::span<const u32> code, u32 push_constant_bytes,
-                               std::span<const vk::DescriptorSetLayout> set_layouts) {
+                               std::span<const vk::DescriptorSetLayout> set_layouts,
+                               const vk::SpecializationInfo* specialization) {
     const auto& dl = d.dispatch;
     Pipeline result;
     const vk::PushConstantRange push{
@@ -242,6 +243,7 @@ Pipeline CreateComputePipeline(const Device& d, std::span<const u32> code, u32 p
                 .stage = vk::ShaderStageFlagBits::eCompute,
                 .module = module,
                 .pName = "main",
+                .pSpecializationInfo = specialization,
             },
         .layout = result.layout,
     };

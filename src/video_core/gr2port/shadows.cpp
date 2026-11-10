@@ -1,13 +1,16 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
 
 #include "common/logging/log.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/particles.h"
+#include "video_core/gr2port/pass_times.h"
 #include "video_core/gr2port/pipeline.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/gr2port/shaders/shadow_alpha_frag.h"
 #include "video_core/gr2port/shaders/shadow_alpha_vert.h"
 #include "video_core/gr2port/shaders/shadow_vert.h"
@@ -19,10 +22,14 @@ namespace Gr2Port::Shadows {
 
 namespace {
 
-// A 2048x2048 map for each of the first two cascades and a 4096x4096 map for the last.
+// A map for each of the first two cascades and a map for the last, their sides by shadow quality:
+// the game's 2048 and 4096, then 2048 and 2048, then 1024 and 2048.
 constexpr u32 LastCascade = Scene::Cascades - 1;
-constexpr u32 ArraySize = 2048;
-constexpr u32 LastSize = 4096;
+constexpr std::array<std::array<u32, 2>, 3> MapSides{{{2048, 4096}, {2048, 2048}, {1024, 2048}}};
+u32 g_array_size = MapSides[0][0];
+u32 g_last_size = MapSides[0][1];
+// With shadows off the maps stay clear: every point is lit.
+bool g_draw_casters = true;
 // GCN polygon offset slopes count sixteenths.
 constexpr float SlopeScale = 1.0f / 16.0f;
 
@@ -51,7 +58,7 @@ bool AlphaTested(u32 list) {
 }
 
 u32 MapSize(u32 cascade) {
-    return cascade == LastCascade ? LastSize : ArraySize;
+    return cascade == LastCascade ? g_last_size : g_array_size;
 }
 
 bool CullsBackFaces(u32 list) {
@@ -157,16 +164,28 @@ void Transition(vk::CommandBuffer cmd, vk::ImageLayout from, vk::ImageLayout to,
                          g_device->dispatch);
 }
 
+// The timer's mark after part of cascade: opaque casters, alpha-tested casters, leaves, particles.
+void MarkPart(vk::CommandBuffer cmd, u32 cascade, u32 part) {
+    PassTimes::Mark(cmd,
+                    static_cast<PassTimes::Pass>(static_cast<u32>(PassTimes::Pass::ShadowOpaque0) +
+                                                 cascade * 4 + part));
+}
+
 } // namespace
 
 bool Start(const Device& device, Memory& memory) {
     g_device = &device;
     const auto& dl = device.dispatch;
+    const Settings::Quality quality = Settings::Get().graphics.shadows;
+    const auto& sides = MapSides[std::min(static_cast<u32>(quality), 2u)];
+    g_array_size = sides[0];
+    g_last_size = sides[1];
+    g_draw_casters = quality != Settings::Quality::Off;
     const vk::ImageUsageFlags usage =
         vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
-    g_maps = memory.CreateImage(DepthFormat, vk::Extent2D{ArraySize, ArraySize}, usage,
+    g_maps = memory.CreateImage(DepthFormat, vk::Extent2D{g_array_size, g_array_size}, usage,
                                 vk::ImageAspectFlagBits::eDepth, LastCascade);
-    g_last_map = memory.CreateImage(DepthFormat, vk::Extent2D{LastSize, LastSize}, usage,
+    g_last_map = memory.CreateImage(DepthFormat, vk::Extent2D{g_last_size, g_last_size}, usage,
                                     vk::ImageAspectFlagBits::eDepth);
     if (!g_maps.image || !g_last_map.image) {
         return false;
@@ -253,8 +272,11 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
         cmd.setDepthBias(header.depth_bias[c][0], 0.0f, header.depth_bias[c][1] * SlopeScale, dl);
         push.cascade = c;
         for (u32 list = 0; list < Scene::CasterLists; list++) {
+            if (list == 2) {
+                MarkPart(cmd, c, 0);
+            }
             const u32 count = header.caster_commands[c][list];
-            if ((header.cascades >> c & 1) == 0 || count == 0) {
+            if (!g_draw_casters || (header.cascades >> c & 1) == 0 || count == 0) {
                 continue;
             }
             const Pipeline& pipeline = g_pipelines[list];
@@ -271,11 +293,18 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
                 buffer, offset + Scene::CasterCommandsOffset + first * sizeof(Scene::Command),
                 count, sizeof(Scene::Command), dl);
         }
-        Vegetation::RecordShadows(cmd, header, address, buffer, offset, c);
-        if ((header.cascades >> c & 1) != 0) {
+        MarkPart(cmd, c, 1);
+        if (g_draw_casters) {
+            Vegetation::RecordShadows(cmd, header, address, buffer, offset, c);
+        }
+        MarkPart(cmd, c, 2);
+        if (g_draw_casters && (header.cascades >> c & 1) != 0) {
             Particles::RecordShadows(cmd, header, packet, address, buffer, offset, c);
         }
         cmd.endRendering(dl);
+        if (c + 1 < Scene::Cascades) {
+            MarkPart(cmd, c, 3);
+        }
         if (timestamps) {
             cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,
                                 first_query + c, dl);

@@ -1,0 +1,31 @@
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// With antialiasing off: the toned colour into the antialias program's output, encoded to sRGB as
+// that program ends, for the picture to read back through sRGB. It takes the program's set.
+
+#version 460
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform texture2D toned;
+layout(set = 0, binding = 1) uniform sampler toned_sampler;
+layout(set = 0, binding = 2, rgba8) uniform writeonly image2D picture;
+
+// The program's encoding: 12.92 x below 0.0031308, else 1.055 x^(1/2.4) - 0.055.
+float Encode(float x) {
+    const float curve = uintBitsToFloat(0x3f870a3du) *
+                            exp2(uintBitsToFloat(0x3ed55555u) * log2(max(0.0, x))) +
+                        uintBitsToFloat(0xbd6147aeu);
+    return uintBitsToFloat(0x3b4d2e1cu) > x ? uintBitsToFloat(0x414eb852u) * x : curve;
+}
+
+void main() {
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, imageSize(picture)))) {
+        return;
+    }
+    const vec4 color = texelFetch(sampler2D(toned, toned_sampler), pixel, 0);
+    imageStore(picture, pixel,
+               vec4(Encode(color.r), Encode(color.g), Encode(color.b), color.a));
+}

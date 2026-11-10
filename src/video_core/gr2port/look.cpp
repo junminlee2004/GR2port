@@ -11,7 +11,9 @@
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/scene.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/gr2port/shaders/antialias_comp.h"
+#include "video_core/gr2port/shaders/antialias_off_comp.h"
 #include "video_core/gr2port/shaders/bloom_blur_frag.h"
 #include "video_core/gr2port/shaders/bloom_depth_frag.h"
 #include "video_core/gr2port/shaders/bloom_extract_frag.h"
@@ -158,6 +160,10 @@ Pipeline g_exposure;
 Pipeline g_composite;
 Pipeline g_tonemap;
 Pipeline g_antialias;
+Pipeline g_antialias_off;
+// The graphics settings' bloom and antialiasing; without bloom the game's own no-bloom path runs.
+bool g_bloom_enabled = true;
+bool g_antialias_enabled = true;
 Pipeline g_extract;
 Pipeline g_blur;
 vk::Format g_picture_format = vk::Format::eUndefined;
@@ -439,10 +445,15 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format) {
                                             });
     const std::array antialias_set{g_antialias_layout};
     g_antialias = CreateComputePipeline(device, ANTIALIAS_COMP, sizeof(u64), antialias_set);
+    g_antialias_off = CreateComputePipeline(device, ANTIALIAS_OFF_COMP, 0, antialias_set);
+    const Settings::Graphics& graphics = Settings::Get().graphics;
+    g_bloom_enabled = graphics.bloom;
+    g_antialias_enabled = graphics.antialiasing;
     g_antialias_constants = memory.CreateBuffer(
         sizeof(AntialiasConstants), vk::BufferUsageFlagBits::eStorageBuffer, Placement::Upload);
     return g_sky.pipeline && g_luminance.pipeline && g_exposure.pipeline && g_extract.pipeline &&
            g_blur.pipeline && g_tonemap.pipeline && g_antialias.pipeline &&
+           g_antialias_off.pipeline &&
            g_glow_depth_copy.pipeline && g_glow.pipeline && g_antialias_constants.mapped != nullptr;
 }
 
@@ -801,7 +812,7 @@ void RecordBloom(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_
                          vk::AccessFlagBits2::eShaderSampledRead);
         }
     }
-    if ((bloom & Scene::BloomOn) == 0) {
+    if (!g_bloom_enabled || (bloom & Scene::BloomOn) == 0) {
         g_bloom_ran = false;
         return;
     }
@@ -865,11 +876,14 @@ void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address) {
     ImageBarrier(cmd, output, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral, Compute,
                  vk::AccessFlagBits2::eNone, Compute, vk::AccessFlagBits2::eShaderStorageWrite);
     const u64 constants = g_antialias_constants.address;
-    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_antialias.pipeline, dl);
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_antialias.layout, 0,
+    const Pipeline& pipeline = g_antialias_enabled ? g_antialias : g_antialias_off;
+    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.layout, 0,
                            g_antialias_sets[g_antialiased_image], {}, dl);
-    cmd.pushConstants(g_antialias.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(constants),
-                      &constants, dl);
+    if (g_antialias_enabled) {
+        cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0,
+                          sizeof(constants), &constants, dl);
+    }
     cmd.dispatch((g_extent.width + AntialiasGroupPixels - 1) / AntialiasGroupPixels,
                  (g_extent.height + AntialiasGroupPixels - 1) / AntialiasGroupPixels, 1, dl);
     // The picture reads the output, and the next frame reads it as its history.

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <span>
@@ -9,7 +10,9 @@
 #include "common/logging/log.h"
 #include "video_core/gr2port/fog.h"
 #include "video_core/gr2port/memory.h"
+#include "video_core/gr2port/pass_times.h"
 #include "video_core/gr2port/pipeline.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/gr2port/shaders/fog_apply_frag.h"
 #include "video_core/gr2port/shaders/fog_bake_comp.h"
 #include "video_core/gr2port/shaders/fog_darkness_comp.h"
@@ -25,7 +28,10 @@ namespace Gr2Port::Fog {
 namespace {
 
 // The game's fog cells, cloud maps and noise volumes.
-constexpr vk::Extent3D CellExtent{160, 90, 128};
+// The fog's cells by fog quality: the game's 160 x 90 x 128, then 120 x 68 x 96 and 80 x 45 x 64.
+constexpr std::array<vk::Extent3D, 3> CellExtents{
+    vk::Extent3D{160, 90, 128}, vk::Extent3D{120, 68, 96}, vk::Extent3D{80, 45, 64}};
+vk::Extent3D g_cells_extent = CellExtents[0];
 constexpr vk::Extent3D MapExtent{128, 128, 32};
 constexpr vk::Extent3D NoiseExtent{64, 64, 64};
 constexpr u64 NoiseBytes = 64 * 64 * 64;
@@ -159,10 +165,10 @@ bool CreateVolumes() {
                                       vk::ImageUsageFlagBits::eTransferDst;
     for (auto* volumes : {&g_density, &g_darkness, &g_shadow}) {
         for (Image& image : *volumes) {
-            image = g_memory->CreateVolume(CellFormat, CellExtent, usage);
+            image = g_memory->CreateVolume(CellFormat, g_cells_extent, usage);
         }
     }
-    g_scattered = g_memory->CreateVolume(ScatterFormat, CellExtent, usage);
+    g_scattered = g_memory->CreateVolume(ScatterFormat, g_cells_extent, usage);
     for (u32 i = 0; i < Layers; i++) {
         g_maps[i] = g_memory->CreateVolume(CellFormat, MapExtent, usage);
         g_map_darkness[i] = g_memory->CreateVolume(CellFormat, MapExtent, usage);
@@ -423,6 +429,7 @@ vk::ImageView ScatteredView() {
 bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     g_device = &device;
     g_memory = &memory;
+    g_cells_extent = CellExtents[std::min(static_cast<u32>(Settings::Get().graphics.fog), 2u)];
     if (!device.storage_extended_formats) {
         LOG_WARNING(Render_Vulkan, "GR2port: no 8-bit storage images, so no fog");
         return true;
@@ -449,10 +456,27 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     g_bake = CreateComputePipeline(device, FOG_BAKE_COMP, sizeof(BakePush), bake_sets);
     g_darkness_pipeline =
         CreateComputePipeline(device, FOG_DARKNESS_COMP, sizeof(FogPush), darkness_sets);
-    g_cells_pipeline = CreateComputePipeline(device, FOG_DENSITY_COMP, sizeof(CellPush), cell_sets);
+    // The cell programs' grid, constant ids 0 to 2 of fog.glsl.
+    const std::array<s32, 3> grid{static_cast<s32>(g_cells_extent.width),
+                                  static_cast<s32>(g_cells_extent.height),
+                                  static_cast<s32>(g_cells_extent.depth)};
+    const std::array<vk::SpecializationMapEntry, 3> grid_entries{{
+        {0, 0, sizeof(s32)},
+        {1, sizeof(s32), sizeof(s32)},
+        {2, 2 * sizeof(s32), sizeof(s32)},
+    }};
+    const vk::SpecializationInfo grid_info{
+        .mapEntryCount = static_cast<u32>(grid_entries.size()),
+        .pMapEntries = grid_entries.data(),
+        .dataSize = sizeof(grid),
+        .pData = grid.data(),
+    };
+    g_cells_pipeline =
+        CreateComputePipeline(device, FOG_DENSITY_COMP, sizeof(CellPush), cell_sets, &grid_info);
     g_shadow_pipeline =
-        CreateComputePipeline(device, FOG_SHADOW_COMP, sizeof(CellPush), shadow_sets);
-    g_scatter = CreateComputePipeline(device, FOG_SCATTER_COMP, sizeof(FogPush), scatter_sets);
+        CreateComputePipeline(device, FOG_SHADOW_COMP, sizeof(CellPush), shadow_sets, &grid_info);
+    g_scatter =
+        CreateComputePipeline(device, FOG_SCATTER_COMP, sizeof(FogPush), scatter_sets, &grid_info);
     g_apply = CreateGraphicsPipeline(device, {
                                                  .vertex = FULLSCREEN_VERT,
                                                  .fragment = FOG_APPLY_FRAG,
@@ -496,6 +520,7 @@ void RecordVolumes(vk::CommandBuffer cmd, const Scene::Header& header, u64 addre
     }
     const u64 fog = address + Scene::FogOffset;
     Bake(cmd, header, fog);
+    PassTimes::Mark(cmd, PassTimes::Pass::FogBake);
 
     g_cells ^= 1;
     const CellPush cells{.fog = fog, .light = address + Scene::LightOffset};
@@ -504,8 +529,9 @@ void RecordVolumes(vk::CommandBuffer cmd, const Scene::Header& header, u64 addre
     cmd.bindDescriptorSets(compute, g_cells_pipeline.layout, 0, cell_sets, {}, dl);
     cmd.pushConstants(g_cells_pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(cells),
                       &cells, dl);
-    cmd.dispatch(Groups(CellExtent.width, GroupSize), Groups(CellExtent.height, GroupSize),
-                 CellExtent.depth, dl);
+    cmd.dispatch(Groups(g_cells_extent.width, GroupSize), Groups(g_cells_extent.height, GroupSize),
+                 g_cells_extent.depth, dl);
+    PassTimes::Mark(cmd, PassTimes::Pass::FogDensity);
     if ((header.fog & Scene::FogShadow) != 0) {
         g_shadows ^= 1;
         const std::array shadow_sets{g_shadow_sets[g_shadows], Shadows::Set()};
@@ -513,8 +539,9 @@ void RecordVolumes(vk::CommandBuffer cmd, const Scene::Header& header, u64 addre
         cmd.bindDescriptorSets(compute, g_shadow_pipeline.layout, 0, shadow_sets, {}, dl);
         cmd.pushConstants(g_shadow_pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0,
                           sizeof(cells), &cells, dl);
-        cmd.dispatch(Groups(CellExtent.width, GroupSize), Groups(CellExtent.height, GroupSize),
-                     CellExtent.depth, dl);
+        cmd.dispatch(Groups(g_cells_extent.width, GroupSize),
+                     Groups(g_cells_extent.height, GroupSize), g_cells_extent.depth, dl);
+        PassTimes::Mark(cmd, PassTimes::Pass::FogShadow);
     }
     ComputeBarrier(cmd, vk::PipelineStageFlagBits2::eComputeShader,
                    vk::AccessFlagBits2::eShaderStorageWrite,
@@ -526,7 +553,7 @@ void RecordVolumes(vk::CommandBuffer cmd, const Scene::Header& header, u64 addre
                            dl);
     cmd.pushConstants(g_scatter.layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(push), &push,
                       dl);
-    cmd.dispatch(Groups(CellExtent.width, ScatterGroupSize), CellExtent.height, 1, dl);
+    cmd.dispatch(Groups(g_cells_extent.width, ScatterGroupSize), g_cells_extent.height, 1, dl);
     ComputeBarrier(cmd, vk::PipelineStageFlagBits2::eComputeShader,
                    vk::AccessFlagBits2::eShaderStorageWrite,
                    vk::PipelineStageFlagBits2::eFragmentShader);

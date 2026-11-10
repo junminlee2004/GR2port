@@ -47,6 +47,7 @@
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/scene_ring.h"
 #include "video_core/gr2port/self_translucent.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/gr2port/shaders/character_depth_frag.h"
 #include "video_core/gr2port/shaders/character_frag.h"
 #include "video_core/gr2port/shaders/character_vert.h"
@@ -280,6 +281,8 @@ private:
     bool snapshot_wanted = false;
     bool needs_swapchain = false;
     Stats stats;
+    // The launcher's graphics settings, read once at start.
+    Settings::Graphics graphics = Settings::Get().graphics;
 };
 
 void Barrier(const Device& d, vk::CommandBuffer cmd, vk::Image image, vk::ImageLayout from,
@@ -911,7 +914,10 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                 vk::ImageAspectFlagBits::eDepth);
         PassTimes::Mark(cmd, PassTimes::Pass::CharacterDepth);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Occlusion);
-        World::RecordOcclusion(cmd, packet.address);
+        // Without ambient occlusion its images keep their clear: nothing is occluded.
+        if (graphics.ambient_occlusion) {
+            World::RecordOcclusion(cmd, packet.address);
+        }
     }
     PassTimes::Mark(cmd, PassTimes::Pass::Occlusion);
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::Velocity);
@@ -1138,7 +1144,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                             Timestamps * slot_index + BloomTimestamp, dl);
     }
 
-    if (drawn) {
+    if (drawn && graphics.motion_blur) {
         MotionBlur::Record(cmd, packet.address);
     }
     PassTimes::Mark(cmd, PassTimes::Pass::MotionBlur);
