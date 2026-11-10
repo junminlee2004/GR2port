@@ -8,7 +8,6 @@
 #include <span>
 #include <string>
 #include <vector>
-#include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_messagebox.h>
 #include <cmrc/cmrc.hpp>
 #include <fmt/format.h>
@@ -107,14 +106,9 @@ void Tell(const std::string& text) {
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Gravity Rush 2", text.c_str(), nullptr);
 }
 
+// The user folder is beside the executable, or beside the app bundle or AppImage that holds it.
 std::filesystem::path ExecutableFolder() {
-    const char* const base = SDL_GetBasePath();
-    if (base == nullptr) {
-        return std::filesystem::current_path();
-    }
-    const std::string_view text{base};
-    return std::filesystem::path{
-        std::u8string_view{reinterpret_cast<const char8_t*>(text.data()), text.size()}};
+    return Common::FS::GetUserPath(Common::FS::PathType::UserDir).parent_path();
 }
 
 // The title IDs of the regions the patches fit, from the patch file's own list.

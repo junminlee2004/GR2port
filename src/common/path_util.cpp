@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cstdlib>
 #include <fstream>
 #include <unordered_map>
 #include "common/logging/log.h"
@@ -83,7 +84,8 @@ static std::optional<std::filesystem::path> GetBundleDirectory() {
 }
 #endif
 
-// The folder that holds the executable, or on macOS the one that holds its app bundle.
+// The folder that holds the executable, on macOS the one that holds its app bundle, and on Linux
+// the one that holds its AppImage.
 static fs::path ExecutableDirectory() {
 #ifdef _WIN32
     std::wstring path(MAX_PATH, L'\0');
@@ -105,6 +107,10 @@ static fs::path ExecutableDirectory() {
     }
     return fs::current_path();
 #else
+    // An AppImage runs from a read-only mount, so the folder that holds the AppImage counts.
+    if (const char* const appimage = std::getenv("APPIMAGE")) {
+        return fs::path{appimage}.parent_path();
+    }
     std::error_code ec;
     const auto executable = fs::read_symlink("/proc/self/exe", ec);
     return ec ? fs::current_path() : executable.parent_path();
