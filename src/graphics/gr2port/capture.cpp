@@ -2933,27 +2933,83 @@ void Prefetch(VAddr address) {
     __builtin_prefetch(reinterpret_cast<const void*>(address));
 }
 
+// The gradation of a material, past its item's matrices.
+constexpr u64 GradationBytes = 32;
+
+// What a loop over items fetches ahead besides what every item has.
+struct Ahead {
+    // The offset of GradationBytes more of the item's first constants.
+    u64 more = None;
+    // The items' index buffers are their shapes', and the record of the mesh is fetched too, a
+    // quarter as far ahead: the shape's handle is in the cache by then.
+    bool shaped = false;
+    // The item's texture objects: the offset of the first and how many follow one another. Their
+    // records are fetched with the mesh's, once the objects have come.
+    u64 textures = None;
+    u32 texture_count = 0;
+};
+
 // The submesh, the shape's handle (just before its index buffer object) and the matrices of an
-// item, and of an item with pixel constants, the second matrix and those constants.
-void PrefetchObjects(VAddr item, u64 matrices, u64 pixel_constants) {
+// item, with what ahead names, and of an item with pixel constants, the second matrix and those
+// constants.
+void PrefetchObjects(VAddr item, u64 matrices, u64 pixel_constants, const Ahead& ahead) {
     const VAddr submesh = Load<VAddr>(item + ItemSubmesh);
     Prefetch(submesh);
     Prefetch(submesh + SubmeshRange);
     Prefetch(Load<VAddr>(item + ItemIndexBuffer) - 4);
+    // Constants start anywhere in a line: the line of their last byte is fetched too.
     const VAddr constants = Load<VAddr>(item + matrices);
     Prefetch(constants);
+    Prefetch(constants + MatrixBytes - 1);
+    if (ahead.more != None) {
+        Prefetch(constants + ahead.more);
+        Prefetch(constants + ahead.more + GradationBytes - 1);
+    }
+    if (ahead.textures != None) {
+        Textures::Prefetch(reinterpret_cast<const VAddr*>(item + ahead.textures),
+                           ahead.texture_count);
+    }
     if (pixel_constants == None) {
         return;
     }
-    Prefetch(constants + LineBytes);
+    Prefetch(constants + 2 * MatrixBytes - 1);
     const VAddr pixels = Load<VAddr>(item + pixel_constants);
     Prefetch(pixels);
     Prefetch(pixels + LineBytes);
     Prefetch(pixels + 2 * LineBytes);
+    Prefetch(pixels + MainPixelConstantBytes - 1);
 }
 
+// What Writer::Add reads of a category's item: the gradation of G2_BG_Main and of the layers, and
+// the texture objects after the colour texture, which are G2_BG_Main's four maps, a character's
+// three maps and decal, the layers' other seven maps and a gem's normal map.
+constexpr Ahead AheadOf(const Category& category) {
+    return {
+        .more = category.main_material || category.layers ? MainGradation : None,
+        .shaped = true,
+        .textures = category.texture,
+        .texture_count = category.texture == None                       ? 0u
+                         : category.main_material || category.character ? 5u
+                         : category.layers                              ? 8u
+                         : category.gem                                 ? 2u
+                                                                        : 1u,
+    };
+}
+static_assert(MainLayeredColor == MainCategory.texture + 8 &&
+              MainNormalMap == MainLayeredColor + 8 && MainLayeredNormal == MainNormalMap + 8 &&
+              MainMask == MainLayeredNormal + 8);
+static_assert(CharacterNormalMap == CharacterCategory.texture + 8 &&
+              CharacterReflection == CharacterNormalMap + 8 &&
+              CharacterDetail == CharacterReflection + 8 &&
+              CharacterCategory.decal == CharacterDetail + 8);
+static_assert(LayerColorMaps == WorldCategories[0].texture && WorldCategories[0].layers &&
+              LayerNormalMaps == LayerColorMaps + 4 * 8);
+static_assert(GemColorMap == WorldCategories[2].texture && WorldCategories[2].gem &&
+              GemNormalMap == GemColorMap + 8);
+
 template <typename ItemAt, typename Visit>
-void ForEachItem(s32 count, u64 matrices, u64 pixel_constants, ItemAt item_at, Visit visit) {
+void ForEachItem(s32 count, u64 matrices, u64 pixel_constants, ItemAt item_at, Visit visit,
+                 const Ahead& ahead = {}) {
     for (s32 i = 0; i < count; i++) {
         if (i + Lookahead < count) {
             Prefetch(item_at(i + Lookahead));
@@ -2963,7 +3019,18 @@ void ForEachItem(s32 count, u64 matrices, u64 pixel_constants, ItemAt item_at, V
             }
         }
         if (i + Lookahead / 2 < count) {
-            PrefetchObjects(item_at(i + Lookahead / 2), matrices, pixel_constants);
+            PrefetchObjects(item_at(i + Lookahead / 2), matrices, pixel_constants, ahead);
+        }
+        if (ahead.shaped && i + Lookahead / 4 < count) {
+            const VAddr next = item_at(i + Lookahead / 4);
+            const VAddr index_buffer = Load<VAddr>(next + ItemIndexBuffer);
+            if (index_buffer != 0) {
+                Meshes::Prefetch(index_buffer - ShapeIndexBuffer);
+            }
+            if (ahead.textures != None) {
+                Textures::PrefetchRecords(reinterpret_cast<const VAddr*>(next + ahead.textures),
+                                          ahead.texture_count);
+            }
         }
         visit(item_at(i));
     }
@@ -3719,7 +3786,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     for (const CasterCategory& category : CasterCategories) {
         const s32 count = Load<s32>(view + ViewCategoryCount + category.index * 4);
         ForEachItem(count, CasterWorld, None, keyed(category.index),
-                    [&](VAddr item) { writer.AddCaster(item, category); });
+                    [&](VAddr item) { writer.AddCaster(item, category); }, {.shaped = true});
     }
     ForEachItem(Load<s32>(view + ViewCategoryCount + LeafShadowCategory * 4), LeafDomainConstants,
                 LeafPixelConstants, keyed(LeafShadowCategory),
@@ -3728,8 +3795,9 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     const auto add_category = [&](const Category& category) {
         const s32 count = std::min(Load<s32>(view + ViewCategoryCount + category.index * 4),
                                    static_cast<s32>(Scene::MaxDraws));
-        ForEachItem(count, category.constants, category.material, keyed(category.index),
-                    [&](VAddr item) { writer.Add(item, category); });
+        ForEachItem(
+            count, category.constants, category.material, keyed(category.index),
+            [&](VAddr item) { writer.Add(item, category); }, AheadOf(category));
     };
     add_category(MainCategory);
     const VAddr batch = Load<VAddr>(view + ViewBatchList);
@@ -3741,7 +3809,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
             [items, entries](s32 i) {
                 return items + static_cast<u32>(Load<u32>(entries + i * 8 + 4) << 6);
             },
-            [&](VAddr item) { writer.Add(item, MainCategory); });
+            [&](VAddr item) { writer.Add(item, MainCategory); }, AheadOf(MainCategory));
     }
     for (const Category& category : WorldCategories) {
         add_category(category);

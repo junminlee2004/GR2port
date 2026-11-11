@@ -33,7 +33,8 @@ struct ChunkBox {
     float high[3];
 };
 
-struct Mesh {
+// A record starts on a cache line: what a draw reads of it is in its first two.
+struct alignas(64) Mesh {
     std::atomic<VAddr> shape{0};
     std::atomic<bool> ready{false};
     /// The collector's state: kept, evicting (no new draws, buffers live), evicted (buffers
@@ -93,6 +94,10 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 
 /// The ready mesh of shape, or null. Any thread.
 const Mesh* Get(VAddr shape);
+
+/// Any thread: asks the cache for what Get(shape) and a draw read of the mesh. Reads the shape's
+/// handle.
+void Prefetch(VAddr shape);
 
 /// Render thread: creates the shared index buffer.
 bool Start(const Device& device, Memory& memory);

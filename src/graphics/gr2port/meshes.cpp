@@ -747,7 +747,10 @@ const Mesh* Get(VAddr shape) {
     if (mesh.shape.load(std::memory_order_relaxed) != shape) {
         return nullptr;
     }
-    mesh.used.store(g_seconds.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    const u32 seconds = g_seconds.load(std::memory_order_relaxed);
+    if (mesh.used.load(std::memory_order_relaxed) != seconds) {
+        mesh.used.store(seconds, std::memory_order_relaxed);
+    }
     if (mesh.ready.load(std::memory_order_acquire)) {
         return &mesh;
     }
@@ -760,6 +763,15 @@ const Mesh* Get(VAddr shape) {
         g_pending.push_back(handle);
     }
     return nullptr;
+}
+
+void Prefetch(VAddr shape) {
+    const u32 handle = Load<u32>(shape + ShapeHandle);
+    if (handle < Capacity) {
+        const auto* const mesh = reinterpret_cast<const u8*>(&g_meshes[handle]);
+        __builtin_prefetch(mesh);
+        __builtin_prefetch(mesh + 64);
+    }
 }
 
 bool Start(const Device& device, Memory& memory) {
