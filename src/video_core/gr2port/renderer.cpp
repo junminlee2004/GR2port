@@ -348,7 +348,9 @@ bool Thread::Init() {
         };
         timestamps = d.device.createQueryPool(info, nullptr, dl).value;
     }
-    PassTimes::Start(d, FramesInFlight);
+    if (graphics.pass_times) {
+        PassTimes::Start(d, FramesInFlight);
+    }
     memory = std::make_unique<Memory>(d);
     if (!memory->Create()) {
         return false;

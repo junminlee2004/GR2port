@@ -94,6 +94,10 @@ struct Graphics {
     /// driver gives the process, or on an integrated GPU its share of RAM. With less, textures
     /// keep fewer mip levels. Presets leave it.
     u32 texture_streaming_mb{0};
+    /// If pass_times is true, the renderer times each pass on the GPU and writes a line per report
+    /// in the log and a row per frame in gr2port_pass_times.csv in the log folder. The renderer
+    /// reads it when it starts. Presets leave it.
+    bool pass_times{false};
 };
 
 /// An integrated GPU's share of installed RAM when texture streaming takes the budget itself: the

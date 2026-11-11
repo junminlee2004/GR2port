@@ -94,6 +94,7 @@ void ReadGraphics(const json& section, Graphics& graphics) {
     graphics.bloom = ReadBool(section, "bloom", graphics.bloom);
     graphics.texture_streaming_mb =
         ReadU32(section, "texture_streaming_mb", graphics.texture_streaming_mb);
+    graphics.pass_times = ReadBool(section, "pass_times", graphics.pass_times);
 }
 
 constexpr std::pair<VSync, std::string_view> VSyncNames[] = {
@@ -206,6 +207,7 @@ json ToJson(const Values& values) {
         {"antialiasing", values.graphics.antialiasing},
         {"bloom", values.graphics.bloom},
         {"texture_streaming_mb", values.graphics.texture_streaming_mb},
+        {"pass_times", values.graphics.pass_times},
     };
 }
 

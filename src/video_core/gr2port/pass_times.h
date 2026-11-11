@@ -7,7 +7,7 @@
 #include "video_core/gr2port/scene.h"
 
 // GPU time of each pass: a timestamp after each, a line per report and a row per frame in
-// gr2port_pass_times.csv in the log folder.
+// gr2port_pass_times.csv in the log folder. Without Start, the other functions do nothing.
 namespace Gr2Port::PassTimes {
 
 /// Each pass ends at its mark, in recording order.
