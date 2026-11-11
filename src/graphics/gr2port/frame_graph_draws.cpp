@@ -4,10 +4,10 @@
 #include <array>
 
 #include "common/logging/log.h"
-#include "graphics/gr2port/emulated_gpu.h"
+#include "graphics/gr2port/frame_graph_draws.h"
 #include "graphics/gr2port/hooks.h"
 
-namespace Gr2Port::EmulatedGpu {
+namespace Gr2Port::FrameGraphDraws {
 
 namespace {
 
@@ -80,8 +80,4 @@ void SetFrameGraphRunning(bool running) {
     t_frame_graph = running;
 }
 
-bool On() {
-    return false;
-}
-
-} // namespace Gr2Port::EmulatedGpu
+} // namespace Gr2Port::FrameGraphDraws

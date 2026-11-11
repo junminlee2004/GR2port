@@ -20,7 +20,6 @@
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/deformers.h"
-#include "graphics/gr2port/emulated_gpu.h"
 #include "graphics/gr2port/frame_stats.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/particle_capture.h"
@@ -3665,23 +3664,21 @@ void LogFrameRate(std::chrono::steady_clock::time_point now, bool capturing) {
     }
     const double seconds = std::chrono::duration<double>(now - g_rate_start).count();
     const double rate = (g_rate_frames - 1) / seconds;
-    const char* const renderer = capturing ? "on" : "off";
-    const char* const fork = EmulatedGpu::On() ? "on" : "off";
     LOG_INFO(Render_Vulkan,
              "GR2port frame rate: {:.1f} game frames/s, longest gap {:.1f} ms, {} gaps over 50 ms; "
-             "GR2port {}, GR2fork {}",
+             "GR2port {}",
              rate, std::chrono::duration<double, std::milli>(g_rate_longest).count(),
-             g_rate_long_gaps, renderer, fork);
+             g_rate_long_gaps, capturing ? "on" : "off");
     if (!capturing) {
-        FrameStats::Publish({.fork = EmulatedGpu::On(), .game_fps = rate});
+        FrameStats::Publish({.game_fps = rate});
     }
     g_rate_frames = 0;
     g_rate_long_gaps = 0;
     g_rate_longest = {};
 }
 
-// The game's draw loop calls each movie screen's update. While GR2fork is off the loop does not
-// run, so the capture calls the updates in its place, once per frame for each screen drawn.
+// The game's draw loop calls each movie screen's update. The loop does not run, so the capture
+// calls the updates in its place, once per frame for each screen drawn.
 void UpdateScreens(VAddr view) {
     const VAddr items = Load<VAddr>(view + ViewItems);
     const VAddr keys = Load<VAddr>(view + ViewKeys);
@@ -3708,9 +3705,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     g_frames.store(frame, std::memory_order_relaxed);
     const bool capturing = g_capturing.load(std::memory_order_relaxed);
     LogFrameRate(start, capturing);
-    if (!EmulatedGpu::On()) {
-        UpdateScreens(view);
-    }
+    UpdateScreens(view);
     if (!capturing) {
         return;
     }

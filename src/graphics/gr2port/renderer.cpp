@@ -28,7 +28,6 @@
 #include "graphics/gr2port/device.h"
 #include "graphics/gr2port/device_lost.h"
 #include "graphics/gr2port/effects.h"
-#include "graphics/gr2port/emulated_gpu.h"
 #include "graphics/gr2port/enemies.h"
 #include "graphics/gr2port/fog.h"
 #include "graphics/gr2port/frame_stats.h"
@@ -1659,7 +1658,6 @@ void Thread::PublishStats() {
         const u32 timed = stats.timed - published.timed;
         FrameStats::Publish({
             .drawing = true,
-            .fork = EmulatedGpu::On(),
             .game_fps = static_cast<double>(game_frames - published.game_frames) / seconds,
             .gpu_ms = timed > 0 ? (stats.gpu_ms[0] - published.gpu_ms) / timed : 0.0,
             .render_ms = (stats.work_ms - published.work_ms) / frames,

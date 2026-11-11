@@ -21,10 +21,8 @@
 
 #include "common/alignment.h"
 #include "common/logging/log.h"
-#include "graphics/gr2port/emulated_gpu.h"
 #include "graphics/gr2port/imgui_relay.h"
 #include "graphics/gr2port/memory.h"
-#include "graphics/gr2port/overlays.h"
 #include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/scene.h"
 #include "graphics/gr2port/shaders/imgui_relay_frag.h"
@@ -86,7 +84,7 @@ bool g_fresh = false;
 // Present thread.
 Snapshot g_capturing;
 
-// For the main thread's events: whether the windows show on GR2port's, and where. A pixel of
+// For the main thread's events: whether the windows show on GR2port's yet, and where. A pixel of
 // GR2port's window is left + x * scale for x in the game window's coordinates.
 std::atomic<bool> g_active{false};
 std::atomic<float> g_view_left{0.0f};
@@ -338,9 +336,8 @@ void Upload(vk::CommandBuffer cmd, u64 frame, u32 texture, Pixels& pixels) {
 } // namespace
 
 void Capture(const ImDrawData& draw_data) {
-    // GR2fork's window shows the windows itself, unless an overlay keeps it from presenting.
-    const bool wanted = !EmulatedGpu::On() || OverlayHooksEveryDevice();
-    g_active.store(wanted, std::memory_order_relaxed);
+    // The windows show on GR2port's from the first snapshot.
+    g_active.store(true, std::memory_order_relaxed);
     Snapshot& snapshot = g_capturing;
     snapshot.position = draw_data.DisplayPos;
     snapshot.size = draw_data.DisplaySize;
@@ -359,7 +356,7 @@ void Capture(const ImDrawData& draw_data) {
     std::scoped_lock lock{g_mutex};
     TakeOwnTextures(draw_data);
     for (const ImDrawList* list : draw_data.CmdLists) {
-        if (!wanted || list == display || list == host) {
+        if (list == display || list == host) {
             continue;
         }
         const u32 vertex_base = static_cast<u32>(snapshot.vertices.size());

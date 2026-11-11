@@ -22,10 +22,6 @@ private:
     std::array<std::optional<std::string>, 2> saved;
 };
 
-/// Whether an overlay that hooks every device's present is in the process. The emulator's window
-/// then presents nothing, so the overlay draws only on the renderer's.
-bool OverlayHooksEveryDevice();
-
 /// Logs whether an overlay's hooks are in the process.
 void LogOverlays();
 

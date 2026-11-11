@@ -11,7 +11,6 @@
 #include "common/logging/log.h"
 #include "common/path_util.h"
 #include "common/stb.h"
-#include "graphics/gr2port/emulated_gpu.h"
 #include "graphics/gr2port/photo.h"
 #include "graphics/gr2port/ui.h"
 
@@ -107,9 +106,6 @@ void Collect(u32 slot) {
 }
 
 bool Read(std::vector<u8>& pixels, u32& width, u32& height, u32& pitch) {
-    if (EmulatedGpu::On()) {
-        return false;
-    }
     std::unique_lock lock{g_mutex};
     if (!g_delivered_cv.wait_for(lock, ReadWait, [] { return g_delivered > g_taken; })) {
         LOG_WARNING(Render_Vulkan, "GR2port photo: no photo drawn for the encoder");

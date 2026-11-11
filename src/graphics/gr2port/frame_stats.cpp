@@ -56,7 +56,7 @@ void Draw(float presented_fps) {
         line += fmt::format(" | CPU FPS {:.0f}", values.game_fps);
     }
     if (!values.drawing) {
-        line += fmt::format(" | GR2port off, GR2fork {}", values.fork ? "on" : "off");
+        line += " | GR2port off";
     } else {
         if (values.gpu_ms > 0.0) {
             line += fmt::format(" | GPU FPS {:.0f}", 1000.0 / values.gpu_ms);
@@ -64,9 +64,6 @@ void Draw(float presented_fps) {
         line += fmt::format(" | Render thread {:.2f} ms | Render thread wait {:.2f} ms | Capture "
                             "thread {:.2f} ms",
                             values.render_ms, values.wait_ms, values.capture_ms);
-        if (values.fork) {
-            line += " | GR2fork on";
-        }
     }
     OutlinedText(line);
 }

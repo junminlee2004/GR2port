@@ -15,8 +15,6 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/device_lost.cpp
     ${CMAKE_CURRENT_LIST_DIR}/device_lost.h
     ${CMAKE_CURRENT_LIST_DIR}/device.h
-    ${CMAKE_CURRENT_LIST_DIR}/emulated_gpu.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/emulated_gpu.h
     ${CMAKE_CURRENT_LIST_DIR}/fault_report.cpp
     ${CMAKE_CURRENT_LIST_DIR}/fault_report.h
     ${CMAKE_CURRENT_LIST_DIR}/effects.cpp
@@ -25,6 +23,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/enemies.h
     ${CMAKE_CURRENT_LIST_DIR}/fog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/fog.h
+    ${CMAKE_CURRENT_LIST_DIR}/frame_graph_draws.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/frame_graph_draws.h
     ${CMAKE_CURRENT_LIST_DIR}/frame_stats.cpp
     ${CMAKE_CURRENT_LIST_DIR}/frame_stats.h
     ${CMAKE_CURRENT_LIST_DIR}/glass.cpp

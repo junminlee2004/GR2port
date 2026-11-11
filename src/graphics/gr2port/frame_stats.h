@@ -10,8 +10,6 @@ namespace Gr2Port::FrameStats {
 struct Values {
     /// GR2port draws the game; the timings below are its own.
     bool drawing = false;
-    /// GR2fork's GPU emulation runs beside GR2port.
-    bool fork = false;
     /// Game frames per second, as the game's own threads finish them.
     double game_fps = 0.0;
     /// GPU time per drawn frame, render thread work per drawn frame, its wait for a frame slot

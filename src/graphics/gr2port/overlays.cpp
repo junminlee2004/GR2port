@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include <atomic>
 #include <cstddef>
 #include <cstdlib>
 
@@ -21,8 +20,6 @@ namespace {
 // The variables that keep RTSS's and MangoHud's implicit Vulkan layers out of an instance, as
 // their layer manifests name them.
 constexpr std::array<const char*, 2> LayerSwitches{"DISABLE_RTSS_LAYER", "DISABLE_MANGOHUD"};
-
-std::atomic<bool> g_logged_hooks{false};
 
 // The Vulkan loader reads the process environment itself, so on Windows these go through the
 // Win32 block rather than the C runtime's copy.
@@ -65,21 +62,6 @@ OverlaysOutOfInstance::~OverlaysOutOfInstance() {
     for (std::size_t i = 0; i < LayerSwitches.size(); i++) {
         WriteVariable(LayerSwitches[i], saved[i]);
     }
-}
-
-bool OverlayHooksEveryDevice() {
-#ifdef _WIN32
-    // RTSS's hooks come in through its global window hook and catch every device's present,
-    // whichever instance its layer is in; drawing on the emulator's device faults the driver.
-    const bool hooked = GetModuleHandleW(L"RTSSHooks64.dll") != nullptr;
-    if (hooked && !g_logged_hooks.exchange(true)) {
-        LOG_INFO(Render_Vulkan, "GR2port: RTSS is in the process, so the emulator's window stops "
-                                "presenting and RTSS draws on GR2port's");
-    }
-    return hooked;
-#else
-    return false;
-#endif
 }
 
 void LogOverlays() {
