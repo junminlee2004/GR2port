@@ -613,6 +613,11 @@ static bool FilterNoMOVBE(const ZydisDecodedOperand*) {
     return missing || LegacyCpuPatchesForced();
 }
 
+static bool FilterNoF16C(const ZydisDecodedOperand*) {
+    static const bool missing = !Cpu().has(Cpu::tF16C);
+    return missing || LegacyCpuPatchesForced();
+}
+
 // Picks two general registers that no operand uses. RCX is left out for shift counts.
 static std::array<Xbyak::Reg64, 2> PickFreeRegisters(const ZydisDecodedInstruction& instruction,
                                                      const ZydisDecodedOperand* operands) {
@@ -853,6 +858,188 @@ static void GenerateMOVBE(void* address, const ZydisDecodedInstruction& instruct
     c.lea(rsp, ptr[rsp + 136]);
 }
 
+constexpr u32 MaxFreeVectors = 5;
+
+// Picks vector registers that neither of the two register operands uses.
+static std::array<Xbyak::Xmm, MaxFreeVectors> PickFreeVectors(const ZydisDecodedOperand* operands) {
+    std::bitset<16> used;
+    used.set(ZydisToXbyakRegisterOperand(operands[0]).getIdx());
+    used.set(ZydisToXbyakRegisterOperand(operands[1]).getIdx());
+    std::array<Xbyak::Xmm, MaxFreeVectors> picked;
+    for (size_t index = 0, count = 0; count < picked.size(); ++index) {
+        if (!used[index]) {
+            picked[count++] = Xbyak::Xmm(static_cast<int>(index));
+        }
+    }
+    return picked;
+}
+
+// Keeps the first count registers below the red zone. They are kept whole: a VEX write to an
+// XMM register clears the upper half of its YMM register.
+static void SaveVectors(Xbyak::CodeGenerator& c,
+                        const std::array<Xbyak::Xmm, MaxFreeVectors>& vectors, u32 count) {
+    c.lea(rsp, ptr[rsp - (128 + 32 * count)]);
+    for (u32 i = 0; i < count; ++i) {
+        c.vmovups(ptr[rsp + 32 * i], Xbyak::Ymm(vectors[i].getIdx()));
+    }
+}
+
+static void RestoreVectors(Xbyak::CodeGenerator& c,
+                           const std::array<Xbyak::Xmm, MaxFreeVectors>& vectors, u32 count) {
+    for (u32 i = 0; i < count; ++i) {
+        c.vmovups(Xbyak::Ymm(vectors[i].getIdx()), ptr[rsp + 32 * i]);
+    }
+    c.lea(rsp, ptr[rsp + (128 + 32 * count)]);
+}
+
+// Places four copies of each value after the code of a trampoline, for vector memory operands.
+template <size_t N>
+static void EmitVectorConstants(Xbyak::CodeGenerator& c, std::array<Xbyak::Label, N>& labels,
+                                const std::array<u32, N>& values) {
+    Xbyak::Label done;
+    c.jmp(done, Xbyak::CodeGenerator::T_NEAR);
+    for (size_t i = 0; i < N; ++i) {
+        c.L(labels[i]);
+        for (u32 lane = 0; lane < 4; ++lane) {
+            c.dd(values[i]);
+        }
+    }
+    c.L(done);
+}
+
+// VCVTPH2PS of the four halves of a register. The conversion is exact, so no rounding mode
+// enters into it, and like the instruction it leaves the flags alone: the trampoline uses vector
+// instructions only.
+static void GenerateVCVTPH2PS(void* /* address */, const ZydisDecodedInstruction&,
+                              const ZydisDecodedOperand* operands, Xbyak::CodeGenerator& c) {
+    const Xbyak::Xmm dst(ZydisToXbyakRegisterOperand(operands[0]).getIdx());
+    const Xbyak::Xmm src(ZydisToXbyakRegisterOperand(operands[1]).getIdx());
+    const auto scratch = PickFreeVectors(operands);
+    const auto& mantissa = scratch[0];
+    const auto& exponent = scratch[1];
+    const auto& bits = scratch[2];
+    enum { Thirty, Rebias, One, Tiny, Count };
+    std::array<Xbyak::Label, Count> labels;
+    const auto k = [&labels](int index) { return ptr[rip + labels[index]]; };
+
+    SaveVectors(c, scratch, 3);
+    c.vpmovzxwd(dst, src);
+    // The mantissa where a float has it, the exponent, the sign.
+    c.vpslld(mantissa, dst, 22);
+    c.vpsrld(mantissa, mantissa, 9);
+    c.vpslld(exponent, dst, 17);
+    c.vpsrld(exponent, exponent, 27);
+    c.vpsrld(dst, dst, 15);
+    c.vpslld(dst, dst, 31);
+    // The exponent field of the float: 112 more than that of the half, all ones for Inf and NaN.
+    c.vpcmpgtd(bits, exponent, k(Thirty));
+    c.vpaddd(exponent, exponent, k(Rebias));
+    c.vpor(bits, bits, exponent);
+    c.vpslld(bits, bits, 24);
+    c.vpsrld(bits, bits, 1);
+    c.vpor(bits, bits, mantissa);
+    // Times one changes only a signaling NaN, which turns quiet as VCVTPH2PS turns it.
+    c.vmulps(bits, bits, k(One));
+    // A half with exponent 0 is its mantissa times 2^-24. The mantissa sits 13 bits up here, and
+    // both steps are exact.
+    c.vcvtdq2ps(mantissa, mantissa);
+    c.vmulps(mantissa, mantissa, k(Tiny));
+    c.vpcmpgtd(exponent, exponent, k(Rebias));
+    c.vblendvps(bits, mantissa, bits, exponent);
+    c.vpor(dst, dst, bits);
+    RestoreVectors(c, scratch, 3);
+    // 30, 112, 1.0 and 2^-37.
+    EmitVectorConstants<Count>(c, labels, {30, 112, 0x3f800000, 0x2d000000});
+}
+
+// VCVTPS2PH of the four floats of a register into a register, rounding to nearest even
+// (immediate 0) or toward zero (immediate 3), the two ways the game asks for. Whole numbers
+// carry the rounding, so MXCSR does not enter into it, and the flags are left alone.
+static void GenerateVCVTPS2PH(void* /* address */, const ZydisDecodedInstruction&,
+                              const ZydisDecodedOperand* operands, Xbyak::CodeGenerator& c) {
+    const Xbyak::Xmm dst(ZydisToXbyakRegisterOperand(operands[0]).getIdx());
+    const Xbyak::Xmm src(ZydisToXbyakRegisterOperand(operands[1]).getIdx());
+    const u64 rounding = operands[2].imm.value.u;
+    ASSERT_MSG(rounding == 0 || rounding == 3, "Unsupported VCVTPS2PH rounding: {}", rounding);
+    const bool nearest = rounding == 0;
+    const auto scratch = PickFreeVectors(operands);
+    const u32 saved = nearest ? 5 : 3;
+    const auto& magnitude = scratch[0];
+    const auto& mask = scratch[1];
+    const auto& half = scratch[2];
+    const auto& whole = scratch[3];
+    const auto& tie = scratch[4];
+    enum { Small, Scale, Bias, Most, Finite, Infinity, Quiet, Field, Middle, One, Count };
+    std::array<Xbyak::Label, Count> labels;
+    const auto k = [&labels](int index) { return ptr[rip + labels[index]]; };
+
+    SaveVectors(c, scratch, saved);
+    // The bits without the sign, and the sign where a half has it.
+    c.vpslld(magnitude, src, 1);
+    c.vpsrld(magnitude, magnitude, 1);
+    c.vpsrld(dst, src, 31);
+    c.vpslld(dst, dst, 15);
+    // Below 2^-14 the half has exponent 0 and its mantissa is the value times 2^24, an exact
+    // product. The other lanes go into it as zero.
+    c.vpcmpgtd(mask, magnitude, k(Small));
+    c.vpandn(half, mask, magnitude);
+    c.vmulps(half, half, k(Scale));
+    if (nearest) {
+        // What the truncation drops, exact: above a half it rounds up, at a half to even.
+        c.vcvttps2dq(whole, half);
+        c.vcvtdq2ps(tie, whole);
+        c.vsubps(half, half, tie);
+        c.vcmpps(tie, half, k(Middle), 0);
+        c.vcmpps(half, half, k(Middle), 6);
+        c.vpsubd(whole, whole, half);
+        c.vpand(tie, tie, whole);
+        c.vpand(tie, tie, k(One));
+        c.vpaddd(whole, whole, tie);
+        c.vpor(dst, dst, whole);
+    } else {
+        c.vcvttps2dq(half, half);
+        c.vpor(dst, dst, half);
+    }
+    // From 2^-14 up the half is the bits of the float less the difference of the exponent
+    // biases, without the low 13 bits of the mantissa. To nearest, those bits round first: the
+    // bias constant holds 0xfff more, and an odd result of the truncation adds one.
+    if (nearest) {
+        c.vpsrld(half, magnitude, 13);
+        c.vpand(half, half, k(One));
+        c.vpaddd(half, half, magnitude);
+        c.vpaddd(half, half, k(Bias));
+    } else {
+        c.vpaddd(half, magnitude, k(Bias));
+    }
+    c.vpsrld(half, half, 13);
+    // Past the largest half: Inf to nearest, the largest half toward zero.
+    c.vpminsd(half, half, k(Most));
+    c.vpand(half, half, mask);
+    if (!nearest) {
+        // Inf stays Inf.
+        c.vpcmpgtd(mask, magnitude, k(Finite));
+        c.vpsubd(half, half, mask);
+    }
+    // A NaN keeps the top of its mantissa and is quiet.
+    c.vpcmpgtd(mask, magnitude, k(Infinity));
+    c.vpsrld(magnitude, magnitude, 13);
+    c.vpor(magnitude, magnitude, k(Quiet));
+    c.vpand(magnitude, magnitude, k(Field));
+    c.vblendvps(half, half, magnitude, mask);
+    c.vpor(half, half, dst);
+    // The four halves go into the low half of the register, with zero above.
+    c.vpxor(magnitude, magnitude, magnitude);
+    c.vpackusdw(dst, half, magnitude);
+    RestoreVectors(c, scratch, saved);
+    // The largest float below 2^-14, 2^24, the bias difference (less the rounding), the most a
+    // finite float gives, the largest finite float, Inf, the quiet bit, the bits of a half
+    // without its sign, 0.5 and 1.
+    EmitVectorConstants<Count>(c, labels,
+                               {0x387fffff, 0x4b800000, nearest ? 0xc8000fffu : 0xc8000000u,
+                                nearest ? 0x7c00u : 0x7bffu, 0x7f7fffff, 0x7f800000, 0x200, 0x7fff,
+                                0x3f000000, 1});
+}
+
 #if defined(__APPLE__)
 // Rosetta 2 mistranslates VCMPSS with NEQ, NLT or NLE: if the destination is then reloaded by a
 // full width VEX load, later scalar reads of it still return the compare mask.
@@ -1089,6 +1276,10 @@ static const std::unordered_map<ZydisMnemonic, std::vector<PatchInfo>> Patches =
     {ZYDIS_MNEMONIC_TZCNT, {{FilterNoBMI1, GenerateZeroCount, true}}},
     {ZYDIS_MNEMONIC_LZCNT, {{FilterNoLZCNT, GenerateZeroCount, true}}},
     {ZYDIS_MNEMONIC_MOVBE, {{FilterNoMOVBE, GenerateMOVBE, true}}},
+
+    // F16C, which Intel CPUs before Ivy Bridge lack
+    {ZYDIS_MNEMONIC_VCVTPH2PS, {{FilterNoF16C, GenerateVCVTPH2PS, true}}},
+    {ZYDIS_MNEMONIC_VCVTPS2PH, {{FilterNoF16C, GenerateVCVTPS2PH, true}}},
 
 #if defined(__APPLE__)
     // Rosetta 2
@@ -2448,7 +2639,8 @@ static RedZonePatchResult PatchSegmentStatically(u64 segment_addr, u64 segment_s
                 // An unpatched LZCNT or TZCNT runs as BSR or BSF, and the other legacy CPU
                 // instructions fault, so each one is reported.
                 const auto filter = rewrite.cpu_patch->filter;
-                if (filter == FilterNoBMI1 || filter == FilterNoLZCNT || filter == FilterNoMOVBE) {
+                if (filter == FilterNoBMI1 || filter == FilterNoLZCNT || filter == FilterNoMOVBE ||
+                    filter == FilterNoF16C) {
                     LOG_WARNING(
                         Core, "Could not patch {} at {:#x} for this CPU",
                         ZydisMnemonicGetString(function.instructions.at(site).instruction.mnemonic),
