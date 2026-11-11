@@ -1240,6 +1240,8 @@ void ShowPreset(const Dialog& dialog) {
     Select(Item(dialog, IdPreset), static_cast<int>(found - Settings::Presets.begin()));
 }
 
+void ShowTextureStreaming(const Dialog& dialog, u32 megabytes);
+
 // Shows a preset's passes and, for the one that sets them, its aspect and render size and its
 // handheld settings.
 void ApplyPreset(const Dialog& dialog, int index) {
@@ -1263,6 +1265,9 @@ void ApplyPreset(const Dialog& dialog, int index) {
         Select(Item(dialog, IdVSync), static_cast<int>(Settings::VSync::Off));
         Check(dialog, IdGyroSwap, true);
         Check(dialog, IdGyroYaw, true);
+    }
+    if (preset.texture_streaming_mb != 0) {
+        ShowTextureStreaming(dialog, preset.texture_streaming_mb);
     }
 }
 
@@ -1900,6 +1905,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
     case IdBloom:
     case IdAspect:
     case IdRenderSize:
+    case IdTextureStreaming:
         if (code == CBN_SELCHANGE) {
             ShowPreset(dialog);
         }

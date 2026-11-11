@@ -834,6 +834,8 @@ void ShowPreset(const Dialog& dialog) {
     dialog.preset->setCurrentIndex(static_cast<int>(found - Settings::Presets.begin()));
 }
 
+void ShowTextureStreaming(const Dialog& dialog, u32 megabytes);
+
 // Shows a preset's passes and, for the one that sets them, its aspect and render size and its
 // handheld settings.
 void ApplyPreset(const Dialog& dialog, int index) {
@@ -857,6 +859,9 @@ void ApplyPreset(const Dialog& dialog, int index) {
         dialog.vsync->setCurrentIndex(static_cast<int>(Settings::VSync::Off));
         dialog.toggles[GyroSwapToggle]->setChecked(true);
         dialog.toggles[GyroYawToggle]->setChecked(true);
+    }
+    if (preset.texture_streaming_mb != 0) {
+        ShowTextureStreaming(dialog, preset.texture_streaming_mb);
     }
 }
 
@@ -1469,7 +1474,7 @@ void Build(Dialog& dialog) {
     });
     for (QComboBox* const combo :
          {dialog.shadows, dialog.fog, dialog.occlusion, dialog.motion_blur, dialog.antialias,
-          dialog.bloom, dialog.aspect, dialog.render_size}) {
+          dialog.bloom, dialog.aspect, dialog.render_size, dialog.texture_streaming_list}) {
         QObject::connect(combo, &QComboBox::activated, window, [&dialog] { ShowPreset(dialog); });
     }
     QObject::connect(defaults, &QPushButton::clicked, window, [&dialog] { SetDefaults(dialog); });

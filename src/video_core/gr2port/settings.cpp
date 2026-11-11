@@ -305,7 +305,9 @@ std::string_view MatchPreset(const Game& game, const Graphics& graphics) {
                                  passes.bloom == graphics.bloom;
         const bool same_size = preset.aspect.empty() || (preset.aspect == game.aspect &&
                                                          preset.render_size == game.render_size);
-        if (same_passes && same_size) {
+        const bool same_streaming = preset.texture_streaming_mb == 0 ||
+                                    preset.texture_streaming_mb == graphics.texture_streaming_mb;
+        if (same_passes && same_size && same_streaming) {
             return preset.key;
         }
     }

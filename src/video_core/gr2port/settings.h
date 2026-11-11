@@ -120,7 +120,7 @@ struct Graphics {
     UpscaleQuality upscale_quality{UpscaleQuality::Quality};
     /// Texture streaming: the device memory GR2port keeps within, in MB; 0 takes the budget the
     /// driver gives the process, or on an integrated GPU its share of RAM. With less, textures
-    /// keep fewer mip levels. Presets leave it.
+    /// keep fewer mip levels. The Steam Deck preset sets 4 GB; the others leave it.
     u32 texture_streaming_mb{0};
     /// If pass_times is true, the renderer times each pass on the GPU and writes a line per report
     /// in the log and a row per frame in gr2port_pass_times.csv in the log folder. The renderer
@@ -152,6 +152,8 @@ struct Preset {
     /// Also sets VSync off and the gyro fixes of a device held upright, as GR2fork's Steam Deck
     /// preset does: Swap Gyro Yaw/Roll and Invert Gyro Yaw.
     bool handheld{false};
+    /// The texture streaming budget the preset also sets, in MB, or 0 to leave it.
+    u32 texture_streaming_mb{0};
 };
 
 /// From the cheapest to the game's own.
@@ -159,7 +161,7 @@ inline constexpr std::array Presets{
     Preset{"lowest", "Lowest", Quality::Off, Quality::Low, false, false, false, false, {}, {}},
     Preset{"low", "Low", Quality::Low, Quality::Low, false, false, false, true, {}, {}},
     Preset{"steamdeck", "Steam Deck", Quality::Low, Quality::Low, true, false, false, true, "16:10",
-           "720p", true},
+           "720p", true, 4096},
     Preset{"medium", "Medium", Quality::Medium, Quality::Medium, true, true, false, true, {}, {}},
     Preset{"ps4",
            "PS4 Original",
