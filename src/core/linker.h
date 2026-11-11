@@ -109,15 +109,27 @@ public:
         return static_tls_size;
     }
 
+    /// Whether m is the game's libc, which also serves imports from libSceLibcInternal.
+    static bool ExportsLibc(const Module& m) {
+        return std::ranges::any_of(m.GetExportLibs(),
+                                   [](const LibraryInfo& lib) { return lib.name == "libc"; });
+    }
+
     void RelocateAnyImports(Module* m) {
         std::scoped_lock lk{mutex};
 
         Relocate(m);
         const auto exports = m->GetExportModules();
+        const bool is_libc = ExportsLibc(*m);
         for (auto& export_mod : exports) {
             for (auto& module : m_modules) {
                 const auto imports = module->GetImportModules();
-                if (std::ranges::contains(imports, export_mod.name, &ModuleInfo::name)) {
+                const auto imports_from = [&](std::string_view name) {
+                    return std::ranges::any_of(
+                        imports, [&](const ModuleInfo& info) { return info.name == name; });
+                };
+                if (imports_from(export_mod.name) ||
+                    (is_libc && imports_from("libSceLibcInternal"))) {
                     Relocate(module.get());
                 }
             }

@@ -422,6 +422,26 @@ bool Linker::Resolve(const std::string& name, Loader::SymbolType sym_type, Modul
         }
     }
 
+    // No firmware module is loaded, and the game's own libc exports the C runtime functions that
+    // its other modules import from libSceLibcInternal, under the same NIDs.
+    if (library->name == "libSceLibcInternal") {
+        for (const auto& mod : m_modules) {
+            if (!ExportsLibc(*mod)) {
+                continue;
+            }
+            for (const auto& export_module : mod->GetExportModules()) {
+                Loader::SymbolResolver libc_symbol = sr;
+                libc_symbol.library = "libc";
+                libc_symbol.module = export_module.name;
+                record = mod->export_sym.FindSymbol(libc_symbol);
+                if (record) {
+                    *return_info = *record;
+                    return true;
+                }
+            }
+        }
+    }
+
     const auto aeronid = AeroLib::FindByNid(sr.name.c_str());
     if (sym_type == Loader::SymbolType::Object) {
         return_info->symbol.nidName = aeronid ? aeronid->name : "Unknown object";
