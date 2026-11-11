@@ -68,6 +68,10 @@ u64 Address(const u8* data) {
     return g_address + static_cast<u64>(data - g_cpu.load(std::memory_order_relaxed));
 }
 
+u32 WritingSlot() {
+    return g_writing;
+}
+
 void Publish(u64 frame, bool keep) {
     // Empties the CPU's write-combining buffers: a plain store could pass the packet's last writes.
     std::atomic_thread_fence(std::memory_order_seq_cst);

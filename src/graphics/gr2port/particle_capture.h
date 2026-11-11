@@ -17,4 +17,12 @@ void OnSetup(VAddr fx);
 /// blocks of the packet and their numbers to header. view is the frame's view.
 void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header);
 
+/// When the engine's manager has filled one effect of the simulation's tables, FUN_00763370:
+/// effect is the effect's number, record its record in the table of effects, owners the table of
+/// owners or null.
+void OnEffectFilled(u32 effect, VAddr record, VAddr owners);
+
+/// When manager, the engine's, has filled the simulation's tables, FUN_00766b70.
+void OnTablesFilled(VAddr manager);
+
 } // namespace Gr2Port::ParticleCapture

@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <bit>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -16,6 +18,7 @@
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/particle_capture.h"
 #include "graphics/gr2port/particles.h"
+#include "graphics/gr2port/scene_ring.h"
 #include "graphics/gr2port/textures.h"
 
 namespace Gr2Port::ParticleCapture {
@@ -1119,6 +1122,173 @@ void OnSetup(VAddr fx) {
     }
 }
 
+namespace {
+
+// The simulation's tables, of effects and of owners, are zeros but for the effects that run: the
+// engine's manager zeros both each frame, FUN_00766b70, then fills the record of each running
+// effect and the owners of its emitters, FUN_00763370. A table's lines of 64 bytes, a bit each.
+constexpr u64 TableLine = 64;
+using TableLines = std::array<u64, Scene::MaxParticleOwners * sizeof(u64) / TableLine / 64>;
+static_assert(Scene::MaxParticleEffectBytes <= Scene::MaxParticleOwners * sizeof(u64));
+static_assert(Scene::ParticleEffectBytes % TableLine == 0);
+constexpr u32 MaxEffects = Scene::MaxParticleEffectBytes / Scene::ParticleEffectBytes;
+// An effect's record holds its first emitter's object, and the effect's emitters are that object
+// and the ones below it, at most as many as a byte counts. An owner is two words, the effect's
+// number first.
+constexpr u64 EffectFirstObject = 0xb8;
+constexpr u32 MaxEffectEmitters = 0xff;
+constexpr u64 OwnerBytes = 8;
+
+void Mark(TableLines& lines, u64 first, u64 last) {
+    for (u64 line = first; line <= last; line++) {
+        lines[line / 64] |= u64{1} << (line % 64);
+    }
+}
+
+// The lines a fill wrote, and the tables it wrote them in.
+struct Fill {
+    VAddr effects = 0;
+    VAddr owners = 0;
+    u32 calls = 0;
+    // The effects did not name one pair of tables, or named places past the packet's room.
+    bool broken = false;
+    TableLines effect_lines{};
+    TableLines owner_lines{};
+};
+// The fill in progress, on the thread that fills.
+Fill g_filling;
+// The last fill that ended, which the capture reads: the sequence is odd while it changes.
+Fill g_filled;
+std::atomic<u32> g_filled_sequence{0};
+
+// What the packet of one of the ring's slots holds of a table: a bit for each line that may not
+// be all zeros. A slot's packet keeps what the last frame in it wrote.
+struct HeldTable {
+    const u8* packet = nullptr;
+    u64 bytes = 0;
+    TableLines lines;
+};
+std::array<HeldTable, SceneRing::Slots> g_held_owners;
+std::array<HeldTable, SceneRing::Slots> g_held_effects;
+
+// Makes the bytes at out, in the packet of the slot held is for, those at in, by reading all of
+// them: writes the lines that are not zeros and zeros the ones the packet holds that are no
+// longer. The packet is write-combined, and most of what it would take is zeros it holds already.
+void CopyTable(HeldTable& held, const u8* packet, u8* out, VAddr source, u64 bytes) {
+    const auto* const in = reinterpret_cast<const u8*>(source);
+    if (held.packet != packet || held.bytes != bytes) {
+        // What the packet holds is not known: any line may hold something.
+        std::memcpy(out, in, bytes);
+        held.packet = packet;
+        held.bytes = bytes;
+        held.lines.fill(~u64{0});
+        return;
+    }
+    const u64 whole = bytes / TableLine;
+    for (u64 line = 0; line < whole; line++) {
+        std::array<u64, TableLine / sizeof(u64)> words;
+        std::memcpy(words.data(), in + line * TableLine, TableLine);
+        const bool set = (words[0] | words[1] | words[2] | words[3] | words[4] | words[5] |
+                          words[6] | words[7]) != 0;
+        u64& bits = held.lines[line / 64];
+        const u64 bit = u64{1} << (line % 64);
+        if (set) {
+            std::memcpy(out + line * TableLine, words.data(), TableLine);
+            bits |= bit;
+        } else if ((bits & bit) != 0) {
+            std::memset(out + line * TableLine, 0, TableLine);
+            bits &= ~bit;
+        }
+    }
+    std::memcpy(out + whole * TableLine, in + whole * TableLine, bytes - whole * TableLine);
+}
+
+// As CopyTable, for a table that is zeros but for the lines written, which are whole ones of the
+// table: reads only those.
+void CopyTable(HeldTable& held, const u8* packet, u8* out, VAddr source, u64 bytes,
+               const TableLines& written) {
+    const auto* const in = reinterpret_cast<const u8*>(source);
+    if (held.packet != packet || held.bytes != bytes) {
+        std::memcpy(out, in, bytes);
+        held.packet = packet;
+        held.bytes = bytes;
+        held.lines = written;
+        return;
+    }
+    for (u64 word = 0; word < written.size(); word++) {
+        // The lines the packet holds that the fill left zeros, then the lines it wrote.
+        for (u64 stale = held.lines[word] & ~written[word]; stale != 0; stale &= stale - 1) {
+            std::memset(out + (word * 64 + std::countr_zero(stale)) * TableLine, 0, TableLine);
+        }
+        for (u64 fresh = written[word]; fresh != 0; fresh &= fresh - 1) {
+            const u64 at = (word * 64 + std::countr_zero(fresh)) * TableLine;
+            if (at < bytes) {
+                std::memcpy(out + at, in + at, TableLine);
+            }
+        }
+        held.lines[word] = written[word];
+    }
+}
+
+} // namespace
+
+void OnEffectFilled(u32 effect, VAddr record, VAddr owners) {
+    Fill& fill = g_filling;
+    const VAddr effects = record - u64{effect} * Scene::ParticleEffectBytes;
+    if (fill.calls++ == 0) {
+        fill.effects = effects;
+        fill.owners = owners;
+    } else if (fill.effects != effects || fill.owners != owners) {
+        fill.broken = true;
+    }
+    if (effect >= MaxEffects) {
+        fill.broken = true;
+        return;
+    }
+    constexpr u64 RecordLines = Scene::ParticleEffectBytes / TableLine;
+    Mark(fill.effect_lines, effect * RecordLines, effect * RecordLines + RecordLines - 1);
+    if (owners == 0) {
+        return;
+    }
+    // The function wrote the effect's number into the owner of each of its emitters, from the
+    // first one down: the owners that hold it there are the ones it wrote, or zeros.
+    const u32 first = Load<u32>(record + EffectFirstObject);
+    if (first >= Scene::MaxParticleOwners) {
+        fill.broken = true;
+        return;
+    }
+    u32 emitters = 0;
+    while (emitters < MaxEffectEmitters && emitters <= first &&
+           Load<u32>(owners + u64{first - emitters} * OwnerBytes) == effect) {
+        emitters++;
+    }
+    if (emitters != 0) {
+        Mark(fill.owner_lines, u64{first - emitters + 1} * OwnerBytes / TableLine,
+             u64{first} * OwnerBytes / TableLine);
+    }
+}
+
+void OnTablesFilled(VAddr manager) {
+    // The fill wrote the slot the ring names, as FUN_00766b70 reads it.
+    const VAddr ring = Load<VAddr>(manager + ManagerRing);
+    const s32 slot = ring != 0 ? Load<s32>(ring) : -1;
+    Fill& fill = g_filling;
+    if (slot < 0 || slot >= Load<s32>(ring + 4)) {
+        fill.broken = true;
+    } else {
+        const VAddr effects = BufferData(Load<VAddr>(manager + ManagerEffects + slot * 8));
+        const VAddr owners = BufferData(Load<VAddr>(manager + ManagerOwners + slot * 8));
+        fill.broken = fill.broken || effects == 0 || owners == 0 ||
+                      (fill.calls != 0 && (fill.effects != effects || fill.owners != owners));
+        fill.effects = effects;
+        fill.owners = owners;
+    }
+    g_filled_sequence.fetch_add(1, std::memory_order_acq_rel);
+    std::memcpy(static_cast<void*>(&g_filled), &fill, sizeof(fill));
+    g_filled_sequence.fetch_add(1, std::memory_order_release);
+    fill = {};
+}
+
 void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
     const VAddr renderer = Load<VAddr>(fx + FxRenderer);
     const VAddr manager = renderer != 0 ? Load<VAddr>(renderer + RendererManager) : 0;
@@ -1167,10 +1337,27 @@ void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
         }
         return;
     }
-    std::memcpy(packet + Scene::ParticleEffectsOffset, reinterpret_cast<const void*>(effects),
-                effect_bytes);
-    std::memcpy(packet + Scene::ParticleOwnersOffset, reinterpret_cast<const void*>(owners),
-                u64{out.objects} * sizeof(u64));
+    // The lines the last fill wrote, when it filled these tables and no fill ended meanwhile.
+    static Fill filled;
+    const u32 sequence = g_filled_sequence.load(std::memory_order_acquire);
+    std::memcpy(static_cast<void*>(&filled), &g_filled, sizeof(filled));
+    const bool known =
+        (sequence & 1) == 0 && g_filled_sequence.load(std::memory_order_acquire) == sequence &&
+        !filled.broken && filled.effects == effects && filled.owners == owners &&
+        effect_bytes % TableLine == 0 && u64{out.objects} * sizeof(u64) % TableLine == 0;
+    const u32 writing = SceneRing::WritingSlot();
+    u8* const effects_out = packet + Scene::ParticleEffectsOffset;
+    u8* const owners_out = packet + Scene::ParticleOwnersOffset;
+    const u64 owner_bytes = u64{out.objects} * sizeof(u64);
+    if (known) {
+        CopyTable(g_held_effects[writing], packet, effects_out, effects, effect_bytes,
+                  filled.effect_lines);
+        CopyTable(g_held_owners[writing], packet, owners_out, owners, owner_bytes,
+                  filled.owner_lines);
+    } else {
+        CopyTable(g_held_effects[writing], packet, effects_out, effects, effect_bytes);
+        CopyTable(g_held_owners[writing], packet, owners_out, owners, owner_bytes);
+    }
     // The move's constants, which the game has just set: the pool's size is among them.
     const u32 words = std::min(Load<u32>(move + ComputeConstantWords), Scene::ParticleSceneWords);
     std::memcpy(packet + Scene::ParticleSceneOffset,

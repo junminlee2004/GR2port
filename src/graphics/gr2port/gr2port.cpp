@@ -17,6 +17,7 @@
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/mouse_camera.h"
 #include "graphics/gr2port/movies.h"
+#include "graphics/gr2port/particle_capture.h"
 #include "graphics/gr2port/player_control.h"
 #include "graphics/gr2port/renderer.h"
 #include "graphics/gr2port/textures.h"
@@ -47,6 +48,20 @@ void PS4_SYSV_ABI OnParticleSetup(u32, const Hooks::Registers* registers, u64) {
 
 void PS4_SYSV_ABI OnParticleList(u32, const Hooks::Arguments* arguments, u64) {
     Capture::OnParticleList(arguments->rdi);
+}
+
+// The engine's manager fills the simulation's tables in FUN_00766b70, an effect at a time in
+// FUN_00763370(manager, effect, record, object, owners): mov rax, [rcx]; test rax, rax.
+constexpr Hooks::Entry ParticleTables{0x766b70, 6, Hooks::FramePrologue};
+constexpr Hooks::Entry ParticleEffect{0x763370, 6, {0x48, 0x8b, 0x01, 0x48, 0x85, 0xc0}};
+
+void PS4_SYSV_ABI OnParticleEffect(u32, const Hooks::Arguments* arguments, u64) {
+    ParticleCapture::OnEffectFilled(static_cast<u16>(arguments->rsi), arguments->rdx,
+                                    arguments->r8);
+}
+
+void PS4_SYSV_ABI OnParticleTables(u32, const Hooks::Arguments* arguments, u64) {
+    ParticleCapture::OnTablesFilled(arguments->rdi);
 }
 
 // FUN_0142ec00(T + 0xa0, view, ...): rdi is the frame graph, rsi the view the frame draws.
@@ -103,6 +118,13 @@ void Install(VAddr module_base) {
         Hooks::ObserveReturn(module_base, ParticleList, c, StubAreaSize, &OnParticleList, 0) ==
             Hooks::Result::Mismatch) {
         LOG_ERROR(Render_Vulkan, "GR2port: the particle manager is not the expected code");
+    }
+    // Without these the capture reads the whole of the simulation's tables each frame.
+    if (Hooks::ObserveReturn(module_base, ParticleEffect, c, StubAreaSize, &OnParticleEffect, 0) ==
+            Hooks::Result::Mismatch ||
+        Hooks::ObserveReturn(module_base, ParticleTables, c, StubAreaSize, &OnParticleTables, 0) ==
+            Hooks::Result::Mismatch) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the particle tables' fill is not the expected code");
     }
     if (!Meshes::Install(module_base, c, StubAreaSize) ||
         !Textures::Install(module_base, c, StubAreaSize)) {

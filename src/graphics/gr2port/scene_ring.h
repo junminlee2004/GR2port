@@ -26,6 +26,9 @@ u8* Begin(bool keep = false);
 /// Draw thread: the GPU address of data in the slot Begin returned.
 u64 Address(const u8* data);
 
+/// Draw thread: the slot Begin returned last.
+u32 WritingSlot();
+
 /// Draw thread: the slot Begin returned holds frame's scene; a kept frame is always drawn.
 void Publish(u64 frame, bool keep);
 
