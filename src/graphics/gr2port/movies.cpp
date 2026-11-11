@@ -152,12 +152,12 @@ void CollectSlots(Slots& slots, u32 now) {
     }
 }
 
-// Copies bytes from data into the buffer of slot readers do not read; false when they do not fit.
+// Under g_buffers, held until the copy is published: copies bytes from data into the buffer of
+// slot readers do not read; false when they do not fit.
 bool CopyFrame(Slot& slot, const void* data, u64 bytes) {
     if (data == nullptr || bytes == 0 || bytes > FrameBytes) {
         return false;
     }
-    std::scoped_lock lock{g_buffers};
     slot.written.store(Seconds(), std::memory_order_relaxed);
     auto& buffer = slot.pixels[slot.published.load(std::memory_order_relaxed) ^ 1];
     if (!buffer) {
@@ -175,9 +175,9 @@ bool CopyFrame(Slot& slot, const void* data, u64 bytes) {
     return true;
 }
 
+// Under g_buffers.
 void Publish(Slot& slot, VAddr surface, VAddr source, bool copied,
              const std::array<u32, 7>& values) {
-    std::scoped_lock lock{g_buffers};
     const u32 sequence = slot.sequence.load(std::memory_order_relaxed);
     slot.sequence.store(sequence + 1, std::memory_order_relaxed);
     std::atomic_thread_fence(std::memory_order_release);
@@ -328,6 +328,8 @@ void PS4_SYSV_ABI OnUpdate(u32, const Hooks::Arguments* arguments, u64 result) {
     Drop(g_kept, surface);
     Slot& slot = SlotOf(g_slots, g_next, surface);
     const auto values = Load<std::array<u32, 7>>(constants);
+    // The collector takes the buffers of a slot no surface owns, so it waits for the publish.
+    std::scoped_lock lock{g_buffers};
     const bool copied = CopyFrame(slot, reinterpret_cast<const void*>(source),
                                   u64{values[SourcePitch]} * values[SourceHeight] * 3 / 2);
     Publish(slot, surface, 0, copied, values);
@@ -360,6 +362,7 @@ void PS4_SYSV_ABI OnKeep(u32, const Hooks::Arguments*, u64 result) {
     // The DMA copies what the source holds now: the copy of the source's last job.
     Drop(g_slots, surface);
     Slot& slot = SlotOf(g_kept, g_next_kept, surface);
+    std::scoped_lock lock{g_buffers};
     const auto job = std::ranges::find_if(g_slots, [source](const Slot& job) {
         return job.surface.load(std::memory_order_relaxed) == source &&
                job.copied.load(std::memory_order_relaxed);
@@ -415,8 +418,9 @@ Kept FindKept(VAddr surface) {
 }
 
 void Collect() {
-    const u32 now = Seconds();
     std::scoped_lock lock{g_buffers};
+    // Read under the lock, so no copy is later than it.
+    const u32 now = Seconds();
     CollectSlots(g_slots, now);
     CollectSlots(g_kept, now);
     std::erase_if(g_freed, [now](const Freed& f) { return now - f.at >= GraceSeconds; });
