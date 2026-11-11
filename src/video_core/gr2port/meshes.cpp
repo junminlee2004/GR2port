@@ -140,6 +140,9 @@ std::array<Resident, Capacity> g_resident;
 std::vector<Retiring> g_retiring;
 std::vector<Staging> g_staging;
 Stats g_stats{};
+// Indices in the shared buffer's ranges, now and at most.
+u64 g_used_indices = 0;
+u64 g_peak_indices = 0;
 
 bool AllocateIndices(u32 count, u32& first) {
     if (count == 0) {
@@ -156,6 +159,8 @@ bool AllocateIndices(u32 count, u32& first) {
         if (left != 0) {
             g_free_indices.emplace(first + count, left);
         }
+        g_used_indices += count;
+        g_peak_indices = std::max(g_peak_indices, g_used_indices);
         return true;
     }
     return false;
@@ -165,6 +170,7 @@ void FreeIndices(u32 first, u32 count) {
     if (count == 0) {
         return;
     }
+    g_used_indices -= count;
     auto [it, inserted] = g_free_indices.emplace(first, count);
     const auto next = std::next(it);
     if (next != g_free_indices.end() && it->first + it->second == next->first) {
@@ -785,6 +791,9 @@ vk::Buffer IndexBuffer() {
 
 Stats TakeStats() {
     Stats stats = g_stats;
+    stats.index_bytes = g_used_indices * sizeof(u16);
+    stats.index_peak_bytes = g_peak_indices * sizeof(u16);
+    stats.index_capacity_bytes = IndexCapacity * sizeof(u16);
     g_stats.uploaded_bytes = 0;
     g_stats.skipped = 0;
     g_stats.bad_indices = 0;
