@@ -31,4 +31,37 @@ if (WIN32)
             "language='*'")
         target_link_options(shadps4 PRIVATE /ENTRY:mainCRTStartup "${GR2PORT_COMMON_CONTROLS}")
     endif()
+elseif (UNIX AND NOT APPLE)
+    # The same launcher with Qt's widgets. Its classes need no moc.
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)
+    target_sources(shadps4 PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/launcher.h
+        ${CMAKE_CURRENT_LIST_DIR}/qt/art.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/art.h
+        ${CMAKE_CURRENT_LIST_DIR}/qt/avatar.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/avatar.h
+        ${CMAKE_CURRENT_LIST_DIR}/qt/displays.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/displays.h
+        ${CMAKE_CURRENT_LIST_DIR}/qt/input_config.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/input_config.h
+        ${CMAKE_CURRENT_LIST_DIR}/qt/key_bindings.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/key_bindings.h
+        ${CMAKE_CURRENT_LIST_DIR}/qt/launcher.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/setup_dialog.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/setup_dialog.h
+        ${CMAKE_CURRENT_LIST_DIR}/qt/style.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/style.h
+        ${CMAKE_CURRENT_LIST_DIR}/qt/text.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/text.h
+        ${CMAKE_CURRENT_LIST_DIR}/qt/video_card.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/video_card.h)
+
+    cmrc_add_resource_library(launcher-resources
+        ALIAS res::launcher
+        NAMESPACE launcher
+        src/resources/launcher/logo.png
+        src/resources/launcher/splash.jpg
+        src/dist/gravity_rush_2.ico)
+    target_link_libraries(shadps4 PRIVATE res::launcher Qt6::Widgets)
+    target_compile_definitions(shadps4 PRIVATE QT_NO_KEYWORDS)
 endif()

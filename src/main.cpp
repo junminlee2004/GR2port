@@ -34,6 +34,8 @@
 #include "launcher/launcher.h"
 #elif defined(__APPLE__)
 #include <sys/sysctl.h>
+#elif defined(__linux__)
+#include "launcher/launcher.h"
 #endif
 
 int main(int argc, char* argv[]) {
@@ -180,7 +182,7 @@ int main(int argc, char* argv[]) {
     }
     PromptPacks::InstallBundled();
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__linux__)
     if (!noLauncher && !IPC::Instance().IsEnabled() && !Gr2Port::Launcher::Run()) {
         return 0;
     }
