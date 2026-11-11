@@ -5,12 +5,14 @@
 
 #include <array>
 #include <filesystem>
+#include <functional>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
 
-// The launcher's lines of the input config: the stick deadzones, the touch pad swipe switch and
-// the keys of the game's functions.
+// The launcher's lines of the input config: the stick deadzones, the touch pad swipe switch, the
+// keys of the game's functions and the pad buttons of the PlayStation buttons they use.
 namespace Gr2Port::Launcher {
 
 inline constexpr int DeadzoneLow = 1;
@@ -57,5 +59,18 @@ KeyBindings ReadKeyBindings(const std::filesystem::path& file);
 /// Writes the keys as the input config's gr2_ lines, in place of its keyboard and mouse lines for
 /// the pad inputs the functions use.
 bool SaveKeyBindings(const std::filesystem::path& file, const KeyBindings& keys);
+
+/// The pad button that presses each PlayStation button the game's functions use, by the input
+/// config's names: "cross" -> "r1" means R1 presses cross. A button left out has none.
+using PadBindings = std::map<std::string, std::string, std::less<>>;
+
+/// Each button presses itself, and Back presses the touch pad.
+PadBindings DefaultPadBindings();
+
+/// The input config's controller lines for those buttons; the defaults when it has none.
+PadBindings ReadPadBindings(const std::filesystem::path& file);
+
+/// Writes the buttons as the input config's controller lines for them, in place of the old ones.
+bool SavePadBindings(const std::filesystem::path& file, const PadBindings& buttons);
 
 } // namespace Gr2Port::Launcher

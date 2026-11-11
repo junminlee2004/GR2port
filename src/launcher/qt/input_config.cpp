@@ -11,6 +11,7 @@
 
 #include "input/game_functions.h"
 #include "input/input_handler.h"
+#include "input/pad_bindings.h"
 #include "launcher/qt/input_config.h"
 
 namespace Gr2Port::Launcher {
@@ -210,6 +211,55 @@ bool SaveKeyBindings(const std::filesystem::path& file, const KeyBindings& keys)
     for (size_t i = 0; i < functions.size(); ++i) {
         const std::string& key = i < keys.size() ? keys[i] : std::string{};
         block.push_back(std::string(functions[i].name) + " = " + (key.empty() ? "unmapped" : key));
+    }
+    const size_t at = block_at.value_or(lines.size());
+    if (at < lines.size() && !blank(lines[at])) {
+        block.emplace_back();
+    }
+    lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(at), block.begin(), block.end());
+    std::ofstream out(file, std::ios::trunc);
+    for (const std::string& line : lines) {
+        out << line << '\n';
+    }
+    return !out.fail();
+}
+
+PadBindings DefaultPadBindings() {
+    return Input::PadBindings::Defaults();
+}
+
+PadBindings ReadPadBindings(const std::filesystem::path& file) {
+    return Input::PadBindings::Read(file);
+}
+
+bool SavePadBindings(const std::filesystem::path& file, const PadBindings& buttons) {
+    const auto blank = [](std::string_view line) {
+        return std::ranges::all_of(line, [](unsigned char c) { return std::isspace(c) != 0; });
+    };
+    std::vector<std::string> lines;
+    std::optional<size_t> block_at;
+    {
+        std::ifstream in(file);
+        for (std::string line; std::getline(in, line);) {
+            if (Input::PadBindings::ParseLine(Compact(line))) {
+                block_at = block_at.value_or(lines.size());
+                continue;
+            }
+            if (blank(line) && !lines.empty() && blank(lines.back())) {
+                continue;
+            }
+            lines.push_back(std::move(line));
+        }
+    }
+    std::vector<std::string> block;
+    if (!block_at) {
+        block.emplace_back();
+        block.emplace_back("# Controller bindings");
+    }
+    for (const std::string_view button : Input::PadBindings::GameButtons()) {
+        const auto bound = buttons.find(button);
+        const bool none = bound == buttons.end() || bound->second.empty();
+        block.push_back(std::string(button) + " = " + (none ? "unmapped" : bound->second));
     }
     const size_t at = block_at.value_or(lines.size());
     if (at < lines.size() && !blank(lines[at])) {

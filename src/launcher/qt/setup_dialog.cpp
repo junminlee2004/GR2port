@@ -189,6 +189,7 @@ constexpr int MouseNoteTop = 280;
 constexpr int TouchSwipeTop = 336;
 constexpr int TouchSwipeNoteTop = 356;
 constexpr Area KeyBindingsButton{18, 396, 178, 419};
+constexpr Area PadBindingsButton{433, 402, 577, 424};
 
 // The button prompts setting's values, in the order of the combo box.
 constexpr std::array<std::pair<std::string_view, std::string_view>, 7> PromptChoices{{
@@ -324,6 +325,8 @@ struct Dialog {
     bool touch_swipe = false;
     // The keys of the game's functions as the Key Bindings dialog left them, to save on Ok.
     std::optional<KeyBindings> key_bindings;
+    // The pad buttons as the Button Bindings dialog left them, to save on Ok.
+    std::optional<PadBindings> pad_bindings;
     // The MB of each Texture Streaming choice; 0 for Auto.
     std::vector<u32> texture_streaming;
 
@@ -513,6 +516,19 @@ void ShowAutomaticPrompts(Dialog& dialog) {
             items.front() = text;
         }
     }
+}
+
+// The prompts whose names the Button Bindings dialog gives the pad's buttons: the Controller
+// tab's Button Prompts choice, PlayStation for the keyboard's.
+std::string PadNamesLayout(const Dialog& dialog) {
+    const int chosen = dialog.pad_prompts->currentIndex();
+    std::string layout = chosen >= 0 && chosen < static_cast<int>(PromptChoices.size())
+                             ? std::string(PromptChoices[chosen].second)
+                             : std::string("auto");
+    if (layout == "auto") {
+        layout = PromptPacks::AutomaticLayout();
+    }
+    return layout == "keyboard" ? std::string("playstation") : layout;
 }
 
 Settings::Mouse ReadMouse(const Dialog& dialog) {
@@ -1142,10 +1158,20 @@ void BuildController(Dialog& dialog, QWidget* page) {
         }
     }
     dialog.pad_prompts = MakeRow(dialog, page, "Button Prompts", PadPromptsTop);
+    QPushButton* const pad_bindings =
+        MakeButton(dialog, page, "Button Bindings...", PadBindingsButton);
 
     QObject::connect(dialog.active_pad, &QComboBox::activated, dialog.window, [&dialog] {
         dialog.pad_picked = true;
         ShowActivePadId(dialog);
+    });
+    QObject::connect(pad_bindings, &QPushButton::clicked, dialog.window, [&dialog] {
+        const PadBindings buttons =
+            dialog.pad_bindings ? *dialog.pad_bindings : ReadPadBindings(dialog.input_config);
+        if (auto edited = EditPadBindings(dialog.window, buttons, dialog.values.mouse.control_type,
+                                          PadNamesLayout(dialog))) {
+            dialog.pad_bindings = std::move(edited);
+        }
     });
     QObject::connect(dialog.set_default_pad, &QPushButton::clicked, dialog.window, [&dialog] {
         const int pad = dialog.active_pad->currentIndex();
@@ -1284,6 +1310,9 @@ void Save(Dialog& dialog) {
     if (dialog.key_bindings && !SaveKeyBindings(dialog.input_config, *dialog.key_bindings)) {
         Tell(dialog, "The key bindings could not be saved.", "Key Bindings");
     }
+    if (dialog.pad_bindings && !SavePadBindings(dialog.input_config, *dialog.pad_bindings)) {
+        Tell(dialog, "The button bindings could not be saved.", "Button Bindings");
+    }
 }
 
 void SetDefaults(Dialog& dialog) {
@@ -1299,6 +1328,7 @@ void SetDefaults(Dialog& dialog) {
     ShowMouse(dialog, Settings::Mouse{});
     dialog.touch_swipe_box->setChecked(false);
     dialog.key_bindings = DefaultKeyBindings();
+    dialog.pad_bindings = DefaultPadBindings();
     ShowLanguage(dialog, GeneralSettings{}.console_language.value);
 }
 

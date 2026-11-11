@@ -4,8 +4,11 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <set>
+#include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 #include <QDialog>
 #include <QHeaderView>
 #include <QKeyEvent>
@@ -17,9 +20,12 @@
 #include <QTableWidget>
 #include <QTimer>
 #include <QWheelEvent>
+#include <SDL3/SDL_gamepad.h>
+#include <SDL3/SDL_init.h>
 
 #include "input/game_functions.h"
 #include "input/input_handler.h"
+#include "input/pad_bindings.h"
 #include "launcher/qt/key_bindings.h"
 #include "launcher/qt/text.h"
 
@@ -35,7 +41,7 @@ constexpr int ClientHeight = 430;
 constexpr QRect TabArea{QPoint{10, 10}, QPoint{549, 329}};
 constexpr QRect TypeLine{QPoint{10, 338}, QPoint{549, 352}};
 constexpr QRect StatusLine{QPoint{10, 358}, QPoint{549, 372}};
-constexpr QRect ChangeButton{QPoint{10, 398}, QPoint{109, 419}};
+constexpr QRect ChangeArea{QPoint{10, 398}, QPoint{109, 419}};
 constexpr QRect ClearButton{QPoint{116, 398}, QPoint{205, 419}};
 constexpr QRect DefaultsButton{QPoint{212, 398}, QPoint{301, 419}};
 constexpr QRect OkButton{QPoint{394, 398}, QPoint{466, 419}};
@@ -45,6 +51,9 @@ constexpr int RowHeight = 19;
 constexpr int CaptureWidth = 320;
 constexpr int CaptureHeight = 90;
 constexpr int CaptureSeconds = 5;
+constexpr int PadPollMs = 15;
+// A trigger counts as pressed past half its travel.
+constexpr Sint16 TriggerPressed = 16384;
 
 constexpr std::array<std::string_view, Game::TypeCount> TypeNames{"Type A", "Type B", "Type C",
                                                                   "Type D", "Type E"};
@@ -231,14 +240,103 @@ std::string KeyName(const QKeyEvent& event) {
     }
 }
 
+// ------------------------------------------------------------------------------ pad buttons
+
+// A pad button by the input config's input name; triggers are axes.
+struct PadInput {
+    std::string_view name;
+    SDL_GamepadButton button;
+    SDL_GamepadAxis axis;
+};
+
+constexpr std::array<PadInput, 16> PadInputs{{
+    {"cross", SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_AXIS_INVALID},
+    {"circle", SDL_GAMEPAD_BUTTON_EAST, SDL_GAMEPAD_AXIS_INVALID},
+    {"square", SDL_GAMEPAD_BUTTON_WEST, SDL_GAMEPAD_AXIS_INVALID},
+    {"triangle", SDL_GAMEPAD_BUTTON_NORTH, SDL_GAMEPAD_AXIS_INVALID},
+    {"l1", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, SDL_GAMEPAD_AXIS_INVALID},
+    {"r1", SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, SDL_GAMEPAD_AXIS_INVALID},
+    {"l2", SDL_GAMEPAD_BUTTON_INVALID, SDL_GAMEPAD_AXIS_LEFT_TRIGGER},
+    {"r2", SDL_GAMEPAD_BUTTON_INVALID, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER},
+    {"l3", SDL_GAMEPAD_BUTTON_LEFT_STICK, SDL_GAMEPAD_AXIS_INVALID},
+    {"r3", SDL_GAMEPAD_BUTTON_RIGHT_STICK, SDL_GAMEPAD_AXIS_INVALID},
+    {"options", SDL_GAMEPAD_BUTTON_START, SDL_GAMEPAD_AXIS_INVALID},
+    {"back", SDL_GAMEPAD_BUTTON_BACK, SDL_GAMEPAD_AXIS_INVALID},
+    {"pad_up", SDL_GAMEPAD_BUTTON_DPAD_UP, SDL_GAMEPAD_AXIS_INVALID},
+    {"pad_down", SDL_GAMEPAD_BUTTON_DPAD_DOWN, SDL_GAMEPAD_AXIS_INVALID},
+    {"pad_left", SDL_GAMEPAD_BUTTON_DPAD_LEFT, SDL_GAMEPAD_AXIS_INVALID},
+    {"pad_right", SDL_GAMEPAD_BUTTON_DPAD_RIGHT, SDL_GAMEPAD_AXIS_INVALID},
+}};
+
+// A pad button's name as the layout's prompts show it: the face buttons by position, the rest by
+// their print on that pad.
+QString PadText(std::string_view layout, std::string_view name) {
+    if (name.empty()) {
+        return QString{QChar{0x2014}};
+    }
+    struct Names {
+        std::string_view layout;
+        std::array<std::string_view, 12> text;
+    };
+    // cross circle square triangle l1 r1 l2 r2 l3 r3 options back
+    static constexpr std::array<Names, 5> Layouts{{
+        {"xbox", {"A", "B", "X", "Y", "LB", "RB", "LT", "RT", "LS", "RS", "Menu", "View"}},
+        {"switch", {"B", "A", "Y", "X", "L", "R", "ZL", "ZR", "LS", "RS", "+", "\xe2\x88\x92"}},
+        {"steamdeck", {"A", "B", "X", "Y", "L1", "R1", "L2", "R2", "L3", "R3", "Menu", "View"}},
+        {"steamcontroller",
+         {"A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Stick", "Right Pad", "Start", "Back"}},
+        {"playstation",
+         {"Cross", "Circle", "Square", "Triangle", "L1", "R1", "L2", "R2", "L3", "R3", "OPTIONS",
+          "SHARE"}},
+    }};
+    static constexpr std::array<std::string_view, 12> Order{
+        "cross", "circle", "square", "triangle", "l1",      "r1",
+        "l2",    "r2",     "l3",     "r3",       "options", "back"};
+    const auto names = std::ranges::find(Layouts, layout, &Names::layout);
+    const Names& chosen = names != Layouts.end() ? *names : Layouts.back();
+    if (const auto at = std::ranges::find(Order, name); at != Order.end()) {
+        return Tr(chosen.text[at - Order.begin()]);
+    }
+    if (name == "pad_up") {
+        return Tr("D-pad up");
+    }
+    if (name == "pad_down") {
+        return Tr("D-pad down");
+    }
+    if (name == "pad_left") {
+        return Tr("D-pad left");
+    }
+    if (name == "pad_right") {
+        return Tr("D-pad right");
+    }
+    return QString::fromUtf8(name.data(), static_cast<qsizetype>(name.size()));
+}
+
+// The PlayStation button a function is on in a control type, or empty when the type uses a
+// stick, a touch pad flick or a button held with another.
+std::string_view GameButton(const Game::Function& function, u32 type) {
+    const auto buttons = Input::PadBindings::GameButtons();
+    if (std::ranges::find(buttons, function.output) != buttons.end()) {
+        return function.output;
+    }
+    if (function.name == "gr2_evade" && type == 0) {
+        return "r2";
+    }
+    if (function.name == "gr2_normal_style") {
+        return type == 0 ? "touchpad_center" : type >= 2 ? "r2" : "";
+    }
+    return {};
+}
+
 // ------------------------------------------------------------------------------- key capture
 
-// A popup that takes the next key or mouse button, or nothing when the countdown ends.
+// A popup that takes the next key or mouse button, or a pad button when pad_buttons is true, or
+// nothing when the countdown ends.
 class Capture : public QDialog {
 public:
-    Capture(QWidget* owner, QString function_name)
+    Capture(QWidget* owner, QString function_name, bool pad_buttons)
         : QDialog{owner, Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint},
-          function{std::move(function_name)} {
+          function{std::move(function_name)}, pad{pad_buttons} {
         setModal(true);
         setFixedSize(CaptureWidth, CaptureHeight);
         setFont(DialogFont());
@@ -260,6 +358,29 @@ public:
         if (owner != nullptr) {
             move(owner->mapToGlobal(owner->rect().center()) - rect().center());
         }
+        gamepads = pad && SDL_InitSubSystem(SDL_INIT_GAMEPAD);
+        if (gamepads) {
+            int count = 0;
+            SDL_JoystickID* const ids = SDL_GetGamepads(&count);
+            for (int i = 0; i < count; ++i) {
+                if (SDL_Gamepad* const opened = SDL_OpenGamepad(ids[i])) {
+                    pads.push_back(opened);
+                }
+            }
+            SDL_free(ids);
+            held = PressedPadInputs();
+            QObject::connect(&pad_timer, &QTimer::timeout, this, [this] { PollPads(); });
+            pad_timer.start(PadPollMs);
+        }
+    }
+
+    ~Capture() override {
+        for (SDL_Gamepad* const opened : pads) {
+            SDL_CloseGamepad(opened);
+        }
+        if (gamepads) {
+            SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
+        }
     }
 
     /// The key or button taken; empty when the countdown ended first.
@@ -274,7 +395,12 @@ protected:
             return true;
         case QEvent::KeyPress: {
             const auto* pressed = static_cast<const QKeyEvent*>(event);
-            if (!pressed->isAutoRepeat()) {
+            if (pad) {
+                // Escape gives up; other keys do nothing.
+                if (pressed->key() == Qt::Key_Escape) {
+                    Finish({});
+                }
+            } else if (!pressed->isAutoRepeat()) {
                 Finish(KeyName(*pressed));
             }
             return true;
@@ -309,6 +435,9 @@ protected:
     }
 
     void mousePressEvent(QMouseEvent* event) override {
+        if (pad) {
+            return;
+        }
         switch (event->button()) {
         case Qt::LeftButton:
             Finish("leftbutton");
@@ -332,6 +461,9 @@ protected:
 
     // Qt counts a turn to the left as positive.
     void wheelEvent(QWheelEvent* event) override {
+        if (pad) {
+            return;
+        }
         const QPoint turn = event->angleDelta();
         if (turn.y() != 0) {
             Finish(turn.y() > 0 ? "mousewheelup" : "mousewheeldown");
@@ -342,33 +474,76 @@ protected:
 
 private:
     void ShowText() {
-        label->setText(Tr("Press a key or mouse button for\n{0}\n\nNothing changes in {1} s.",
-                          {function.toStdString(), std::to_string(seconds_left)}));
+        label->setText(
+            Tr(pad ? "Press a button on the controller for\n{0}\n\nNothing changes in {1} s."
+                   : "Press a key or mouse button for\n{0}\n\nNothing changes in {1} s.",
+               {function.toStdString(), std::to_string(seconds_left)}));
+    }
+
+    // The pad buttons pressed now on any open pad.
+    std::set<std::string_view> PressedPadInputs() const {
+        SDL_UpdateGamepads();
+        std::set<std::string_view> pressed;
+        for (SDL_Gamepad* const opened : pads) {
+            for (const PadInput& input : PadInputs) {
+                const bool down = input.button != SDL_GAMEPAD_BUTTON_INVALID
+                                      ? SDL_GetGamepadButton(opened, input.button)
+                                      : SDL_GetGamepadAxis(opened, input.axis) > TriggerPressed;
+                if (down) {
+                    pressed.insert(input.name);
+                }
+            }
+        }
+        return pressed;
+    }
+
+    // Takes the first pad button pressed since the popup opened.
+    void PollPads() {
+        const std::set<std::string_view> pressed = PressedPadInputs();
+        std::erase_if(held, [&](std::string_view name) { return !pressed.contains(name); });
+        for (const std::string_view name : pressed) {
+            if (!held.contains(name)) {
+                Finish(std::string(name));
+                return;
+            }
+        }
     }
 
     // A key the config cannot name ends the capture with no key; a name the input handler does
     // not know is passed over.
     void Finish(std::string taken) {
-        if (done || !(taken.empty() || Input::string_to_keyboard_key_map.contains(taken))) {
+        if (done || !(taken.empty() || pad || Input::string_to_keyboard_key_map.contains(taken))) {
             return;
         }
         key = std::move(taken);
         done = true;
         timer.stop();
+        pad_timer.stop();
         accept();
     }
 
     QString function;
+    // Takes a pad button instead of a key or mouse button.
+    bool pad = false;
     QLabel* label = nullptr;
     QTimer timer;
+    QTimer pad_timer;
     int seconds_left = CaptureSeconds;
     bool done = false;
+    bool gamepads = false;
+    std::vector<SDL_Gamepad*> pads;
+    // Pad buttons held since before the popup opened, which count once released.
+    std::set<std::string_view> held;
 };
 
 // ------------------------------------------------------------------------------------ dialog
 
 struct Editor {
     KeyBindings keys;
+    // The Button Bindings dialog edits buttons, named as layout's prompts show them.
+    bool pad = false;
+    PadBindings buttons;
+    std::string layout;
     u32 type = 0;
     u32 game_type = 0;
     QDialog* dialog = nullptr;
@@ -376,13 +551,26 @@ struct Editor {
     QLabel* status = nullptr;
 };
 
-// The pad column shows the type's pad inputs; the key column is the same in every type.
+// The pad button bound to the PlayStation button a function is on in the type shown; blank for a
+// function on a stick, a flick or a combination.
+QString PadCell(const Editor& editor, const Game::Function& function) {
+    const std::string_view button = GameButton(function, editor.type);
+    if (button.empty()) {
+        return {};
+    }
+    const auto bound = editor.buttons.find(button);
+    return PadText(editor.layout, bound != editor.buttons.end() ? bound->second : std::string{});
+}
+
+// The pad column shows the type's pad inputs; the key column is the same in every type, and the
+// button column shows the pad button of each function's PlayStation button.
 void ShowRows(const Editor& editor) {
     const auto functions = Game::Functions();
     for (size_t i = 0; i < functions.size(); ++i) {
         const int row = static_cast<int>(i);
         editor.list->item(row, 1)->setText(Tr(functions[i].pad[editor.type]));
-        editor.list->item(row, 2)->setText(KeyText(editor.keys[i]));
+        editor.list->item(row, 2)->setText(editor.pad ? PadCell(editor, functions[i])
+                                                      : KeyText(editor.keys[i]));
     }
     editor.list->horizontalHeaderItem(1)->setText(
         Tr("Controller ({0})", {Tr(TypeNames[editor.type]).toStdString()}));
@@ -393,6 +581,50 @@ int SelectedRow(const Editor& editor) {
     return selected.isEmpty() ? -1 : selected.front().row();
 }
 
+// The functions on a PlayStation button in the type shown, for the status line.
+QString FunctionsOn(const Editor& editor, std::string_view button) {
+    QString names;
+    for (const Game::Function& function : Game::Functions()) {
+        if (GameButton(function, editor.type) == button) {
+            names += (names.isEmpty() ? QString{} : QStringLiteral(", ")) + Tr(function.label);
+        }
+    }
+    return names;
+}
+
+// Takes a pad button for the selected function's PlayStation button. A pad button that another
+// PlayStation button had moves to this one.
+void ChangeButton(Editor& editor, int row) {
+    const Game::Function& function = Game::Functions()[row];
+    const QString label = Tr(function.label);
+    const std::string_view button = GameButton(function, editor.type);
+    if (button.empty()) {
+        editor.status->setText(Tr("{0} is not on one button in {1}.",
+                                  {label.toStdString(), Tr(TypeNames[editor.type]).toStdString()}));
+        return;
+    }
+    Capture capture{editor.dialog, label, true};
+    capture.exec();
+    const std::string input = capture.key;
+    if (input.empty()) {
+        editor.status->setText(
+            Tr("No button was pressed; {0} keeps its button.", {label.toStdString()}));
+        return;
+    }
+    QString status =
+        Tr("{0} now does {1}.", {PadText(editor.layout, input).toStdString(), label.toStdString()});
+    for (auto& [other, bound] : editor.buttons) {
+        if (other != button && bound == input) {
+            bound.clear();
+            status += QLatin1Char(' ') +
+                      Tr("{0} has no button now.", {FunctionsOn(editor, other).toStdString()});
+        }
+    }
+    editor.buttons[std::string(button)] = input;
+    ShowRows(editor);
+    editor.status->setText(status);
+}
+
 // Takes a key for the selected function. A key that another function had moves to this one.
 void ChangeKey(Editor& editor) {
     const int row = SelectedRow(editor);
@@ -401,8 +633,12 @@ void ChangeKey(Editor& editor) {
         editor.status->setText(Tr("Pick a game function first."));
         return;
     }
+    if (editor.pad) {
+        ChangeButton(editor, row);
+        return;
+    }
     const QString label = Tr(functions[row].label);
-    Capture capture{editor.dialog, label};
+    Capture capture{editor.dialog, label, false};
     capture.exec();
     const std::string key = capture.key;
     if (key.empty()) {
@@ -429,18 +665,15 @@ QPushButton* MakeButton(QDialog* dialog, std::string_view text, const QRect& are
     return button;
 }
 
-} // namespace
-
-std::optional<KeyBindings> EditKeyBindings(QWidget* owner, const KeyBindings& keys,
-                                           u32 control_type) {
+// Shows the editor's dialog over owner, opened on the control type the game used last. True on
+// OK.
+bool ShowEditor(QWidget* owner, Editor& editor, u32 control_type) {
     QDialog dialog{owner};
-    dialog.setWindowTitle(Tr("Key Bindings"));
+    dialog.setWindowTitle(Tr(editor.pad ? "Button Bindings" : "Key Bindings"));
     dialog.setFixedSize(ClientWidth, ClientHeight);
     dialog.setFont(DialogFont());
 
-    Editor editor;
     editor.dialog = &dialog;
-    editor.keys = keys;
     editor.keys.resize(Game::Functions().size());
     editor.game_type = std::min(control_type, Game::TypeCount - 1);
     editor.type = editor.game_type;
@@ -471,7 +704,8 @@ std::optional<KeyBindings> EditKeyBindings(QWidget* owner, const KeyBindings& ke
     editor.list->horizontalHeader()->setSectionsClickable(false);
     editor.list->horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed);
     editor.list->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    constexpr std::array<std::string_view, 3> Headers{"Game Function", "Controller", "Key"};
+    const std::array<std::string_view, 3> Headers{"Game Function", "Controller",
+                                                  editor.pad ? "Button" : "Key"};
     for (size_t i = 0; i < Headers.size(); ++i) {
         const int column = static_cast<int>(i);
         editor.list->setHorizontalHeaderItem(column, new QTableWidgetItem{Tr(Headers[i])});
@@ -486,18 +720,24 @@ std::optional<KeyBindings> EditKeyBindings(QWidget* owner, const KeyBindings& ke
     ShowRows(editor);
 
     auto* const in_use =
-        new QLabel{Tr("The game used {0} last (Options > Controls). Each key does its function "
-                      "in every type.",
+        new QLabel{Tr(editor.pad ? "The game used {0} last (Options > Controls). A button presses "
+                                   "the same PlayStation button in every type."
+                                 : "The game used {0} last (Options > Controls). Each key does its "
+                                   "function in every type.",
                       {Tr(TypeNames[editor.game_type]).toStdString()}),
                    &dialog};
     in_use->setGeometry(TypeLine);
     editor.status = new QLabel{
-        Tr("Double-click a function, then press its key. Mouse buttons and the wheel count."),
+        Tr(editor.pad ? "Double-click a function, then press its button on the controller."
+                      : "Double-click a function, then press its key. Mouse buttons and the wheel "
+                        "count."),
         &dialog};
     editor.status->setGeometry(StatusLine);
 
-    QPushButton* const change = MakeButton(&dialog, "Change Key...", ChangeButton);
-    QPushButton* const clear = MakeButton(&dialog, "Clear Key", ClearButton);
+    QPushButton* const change =
+        MakeButton(&dialog, editor.pad ? "Change Button..." : "Change Key...", ChangeArea);
+    QPushButton* const clear =
+        MakeButton(&dialog, editor.pad ? "Clear Button" : "Clear Key", ClearButton);
     QPushButton* const defaults = MakeButton(&dialog, "Defaults", DefaultsButton);
     QPushButton* const ok = MakeButton(&dialog, "OK", OkButton);
     QPushButton* const cancel = MakeButton(&dialog, "Cancel", CancelButton);
@@ -512,23 +752,55 @@ std::optional<KeyBindings> EditKeyBindings(QWidget* owner, const KeyBindings& ke
     QObject::connect(change, &QPushButton::clicked, &dialog, [&editor] { ChangeKey(editor); });
     QObject::connect(clear, &QPushButton::clicked, &dialog, [&editor] {
         if (const int row = SelectedRow(editor); row >= 0) {
-            editor.keys[row].clear();
+            if (!editor.pad) {
+                editor.keys[row].clear();
+            } else if (const std::string_view button =
+                           GameButton(Game::Functions()[row], editor.type);
+                       !button.empty()) {
+                editor.buttons[std::string(button)].clear();
+            }
             ShowRows(editor);
         }
     });
     QObject::connect(defaults, &QPushButton::clicked, &dialog, [&editor] {
-        editor.keys = DefaultKeyBindings();
+        if (editor.pad) {
+            editor.buttons = DefaultPadBindings();
+        } else {
+            editor.keys = DefaultKeyBindings();
+        }
         ShowRows(editor);
-        editor.status->setText(Tr("Every function has its default key again."));
+        editor.status->setText(Tr(editor.pad ? "Every function has its default button again."
+                                             : "Every function has its default key again."));
     });
     QObject::connect(ok, &QPushButton::clicked, &dialog, &QDialog::accept);
     QObject::connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
 
     editor.list->setFocus();
-    if (dialog.exec() != QDialog::Accepted) {
+    return dialog.exec() == QDialog::Accepted;
+}
+
+} // namespace
+
+std::optional<KeyBindings> EditKeyBindings(QWidget* owner, const KeyBindings& keys,
+                                           u32 control_type) {
+    Editor editor;
+    editor.keys = keys;
+    if (!ShowEditor(owner, editor, control_type)) {
         return std::nullopt;
     }
     return editor.keys;
+}
+
+std::optional<PadBindings> EditPadBindings(QWidget* owner, const PadBindings& buttons,
+                                           u32 control_type, std::string_view layout) {
+    Editor editor;
+    editor.pad = true;
+    editor.buttons = buttons;
+    editor.layout = layout;
+    if (!ShowEditor(owner, editor, control_type)) {
+        return std::nullopt;
+    }
+    return editor.buttons;
 }
 
 } // namespace Gr2Port::Launcher
