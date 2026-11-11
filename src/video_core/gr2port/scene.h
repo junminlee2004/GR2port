@@ -110,7 +110,8 @@ inline constexpr u32 MaxUiDraws = 4096;
 inline constexpr u32 MaxUiRuns = 1024;
 inline constexpr u32 MaxUiTargets = 32;
 inline constexpr u32 MaxUiDynamicTextures = 64;
-inline constexpr u64 MaxUiDataBytes = 16_MB;
+// The game's screens copy at most about 1 MB a frame; each of the ring's slots holds this much.
+inline constexpr u64 MaxUiDataBytes = 4_MB;
 /// The inputs of the screen drawing's vertex programs, at most.
 inline constexpr u32 UiAttributes = 6;
 /// The texture handles of the targets: the last MaxUiTargets of the texture array.
