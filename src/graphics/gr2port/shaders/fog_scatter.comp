@@ -46,6 +46,8 @@ void main() {
     const float inverse_reach = 1.0 / (CloudReach * fog.depth_scale);
     const float inverse_sustain = 1.0 / (1.0 - CloudSustain);
     float optical_depth = 0.0;
+    // What shows at a slice is what the slice before it stored as left.
+    float shown = 1.0;
     vec3 light_in = vec3(0.0);
     for (int i = 0; i < FogSlices; i++) {
         const float a = float(i) / float(FogSlices);
@@ -65,13 +67,14 @@ void main() {
         const float extinction =
             max(fog.light_color.w, texelFetch(density, cell, 0).r * smooth_fade * DensityScale);
         const float step_depth = path * extinction;
-        const float shown = clamp(exp(-optical_depth), 0.0, 1.0);
         const float sun = pow(texelFetch(shadow, cell, 0).r, 4.0);
         const float visible = exp(-fog.darkness_scale * texelFetch(darkness, cell, 0).r);
         const float air_visible = min(visible, 1.0 + fog.shadow_darkness * (sun - 1.0));
         const float cloud_visible = min(visible, 1.0 + fog.cloud_shadow * (sun - 1.0));
         light_in += shown * (air * slice * air_visible + cloud * step_depth * cloud_visible);
         optical_depth += step_depth;
-        imageStore(scattered, cell, vec4(light_in, exp(-optical_depth)));
+        const float left = exp(-optical_depth);
+        imageStore(scattered, cell, vec4(light_in, left));
+        shown = clamp(left, 0.0, 1.0);
     }
 }
