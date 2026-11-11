@@ -41,6 +41,13 @@ u32 Get(VAddr texture);
 /// As Get, for a cube map.
 u32 GetCube(VAddr texture);
 
+/// Any thread: asks the cache for what Get reads first of each of the count texture objects whose
+/// addresses are at objects. An address may be null.
+void Prefetch(const VAddr* objects, u32 count);
+
+/// Any thread, once what Prefetch asked for has come: asks for what Get reads next of each.
+void PrefetchRecords(const VAddr* objects, u32 count);
+
 /// Draw thread: the descriptor of the 2D texture a T# of 8 words describes, when it is ready, else
 /// 0. A T# of no texture object the hooks saw gets a texture of its own, converted like the others;
 /// dynamic says whether it is linear, as the textures the CPU writes each frame are, and needs

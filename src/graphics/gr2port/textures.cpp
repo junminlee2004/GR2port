@@ -153,20 +153,26 @@ T Load(VAddr address) {
     return value;
 }
 
-struct Texture {
+// What a capture reads of a texture at each draw that names it. It is apart from the rest of the
+// texture so that four textures share a cache line.
+struct Sampled {
     std::atomic<VAddr> object{0};
+    /// The streaming tick of the last capture that read it.
+    std::atomic<u32> used{0};
+    /// The descriptor shaders sample it by: its handle or the handle's twin.
+    std::atomic<u16> slot{0};
     std::atomic<bool> ready{false};
     std::atomic<bool> cube{false};
+};
+static_assert(sizeof(Sampled) == 16 && Descriptors - 1 <= 0xffff);
+
+struct Texture {
     /// The address of its data, and for a texture of a T# alone, that T#'s key and whether it is
     /// linear.
     std::atomic<VAddr> address{0};
     std::atomic<u64> key{0};
     std::atomic<bool> sharp_only{false};
     std::atomic<bool> linear{false};
-    /// The descriptor shaders sample it by: its handle or the handle's twin.
-    std::atomic<u32> slot{0};
-    /// The streaming tick of the last capture that read it.
-    std::atomic<u32> used{0};
 };
 
 // The handles by the address of their data: open addressing over AddressProbes slots from a home
@@ -186,6 +192,7 @@ struct Source {
 };
 
 std::array<Texture, Capacity> g_textures;
+std::array<Sampled, Capacity> g_sampled;
 std::array<Source, Capacity> g_sources;
 std::array<std::atomic<u32>, AddressSlots + AddressProbes> g_by_address{};
 std::atomic<u32> g_tick{1u << 16};
@@ -505,18 +512,18 @@ u32 FindAddress(VAddr address) {
 // Under g_mutex: the texture is no longer the game's, and its handle is freed once no frame can
 // sample it.
 void Drop(u32 handle) {
-    g_textures[handle].ready.store(false, std::memory_order_relaxed);
-    g_textures[handle].object.store(0, std::memory_order_release);
+    g_sampled[handle].ready.store(false, std::memory_order_relaxed);
+    g_sampled[handle].object.store(0, std::memory_order_release);
     g_generations[handle]++;
     RemoveAddress(handle);
     g_destroyed.push_back(handle);
 }
 
 // Notes that a capture reads the texture in the current tick.
-void MarkUsed(Texture& t) {
+void MarkUsed(Sampled& s) {
     const u32 tick = g_tick.load(std::memory_order_relaxed);
-    if (t.used.load(std::memory_order_relaxed) != tick) {
-        t.used.store(tick, std::memory_order_relaxed);
+    if (s.used.load(std::memory_order_relaxed) != tick) {
+        s.used.store(tick, std::memory_order_relaxed);
     }
 }
 
@@ -552,7 +559,7 @@ void PS4_SYSV_ABI OnInit(u32, const Hooks::Arguments* arguments, u64) {
     // at this address.
     const u32 earlier = Load<u32>(texture + TextureHandle);
     if (earlier != 0 && earlier < Capacity &&
-        g_textures[earlier].object.load(std::memory_order_relaxed) == texture) {
+        g_sampled[earlier].object.load(std::memory_order_relaxed) == texture) {
         Drop(earlier);
         g_missed_destroys++;
     }
@@ -580,10 +587,10 @@ void PS4_SYSV_ABI OnInit(u32, const Hooks::Arguments* arguments, u64) {
     }
     const VAddr stream = blob + BlobContents + Load<u32>(blob + BlobContentsSize);
     g_sources[handle] = {.sharp = sharp, .end = stream + Load<u32>(blob + BlobStreamSize)};
-    g_textures[handle].ready.store(false, std::memory_order_relaxed);
-    g_textures[handle].cube.store(IsCube(sharp), std::memory_order_relaxed);
+    g_sampled[handle].ready.store(false, std::memory_order_relaxed);
+    g_sampled[handle].cube.store(IsCube(sharp), std::memory_order_relaxed);
     g_textures[handle].sharp_only.store(false, std::memory_order_relaxed);
-    g_textures[handle].object.store(texture, std::memory_order_release);
+    g_sampled[handle].object.store(texture, std::memory_order_release);
     AddAddress(handle, sharp.Address());
     g_pending.push_back(handle);
 }
@@ -595,11 +602,11 @@ void PS4_SYSV_ABI OnDestroy(u32, const Hooks::Registers* registers, u64) {
     }
     const u32 handle = Load<u32>(texture + TextureHandle);
     if (handle == 0 || handle >= Capacity ||
-        g_textures[handle].object.load(std::memory_order_relaxed) != texture) {
+        g_sampled[handle].object.load(std::memory_order_relaxed) != texture) {
         return;
     }
     std::scoped_lock lock{g_mutex};
-    if (g_textures[handle].object.load(std::memory_order_relaxed) != texture) {
+    if (g_sampled[handle].object.load(std::memory_order_relaxed) != texture) {
         return;
     }
     Drop(handle);
@@ -675,8 +682,7 @@ void Retire(u64 frame, u64 completed) {
         }
         Image& image = g_resident[r.handle];
         if (image.image) {
-            WriteDescriptor(g_textures[r.handle].slot.load(std::memory_order_relaxed),
-                            g_white.view);
+            WriteDescriptor(g_sampled[r.handle].slot.load(std::memory_order_relaxed), g_white.view);
             g_stats.resident_bytes -= image.size;
             g_allocated -= image.size;
             g_memory->Destroy(image);
@@ -985,7 +991,7 @@ bool CopyKept(vk::CommandBuffer cmd, u32 handle, VAddr source, const Movies::Fra
     const u32 from = FindAddress(source);
     const Image& to = g_resident[handle];
     if (from == 0 || from >= FirstReserved || !g_resident[from].image ||
-        !g_textures[from].ready.load(std::memory_order_acquire) ||
+        !g_sampled[from].ready.load(std::memory_order_acquire) ||
         g_resident[from].extent != to.extent || g_resident[from].format != to.format ||
         (movie.found && g_refreshed[from] != movie.generation)) {
         return false;
@@ -1046,7 +1052,7 @@ constexpr vk::PipelineStageFlags2 Samplers = vk::PipelineStageFlagBits2::eVertex
 // destroyed once no frame can sample it.
 void PutInUse(u32 handle, const Image& image, u32 first, u64 frame) {
     Residency& r = g_residency[handle];
-    Texture& t = g_textures[handle];
+    Sampled& t = g_sampled[handle];
     Image& current = g_resident[handle];
     r.installed_frame = frame;
     g_stats.resident_bytes += image.size;
@@ -1056,7 +1062,7 @@ void PutInUse(u32 handle, const Image& image, u32 first, u64 frame) {
         WriteDescriptor(handle, image.view);
         g_refreshed[handle] = 0;
         g_stats.textures++;
-        t.slot.store(handle, std::memory_order_relaxed);
+        t.slot.store(static_cast<u16>(handle), std::memory_order_relaxed);
         t.ready.store(true, std::memory_order_release);
         return;
     }
@@ -1069,7 +1075,7 @@ void PutInUse(u32 handle, const Image& image, u32 first, u64 frame) {
     g_replaced.push_back(handle);
     current = image;
     r.first = first;
-    t.slot.store(slot, std::memory_order_release);
+    t.slot.store(static_cast<u16>(slot), std::memory_order_release);
 }
 
 // Queues the copy of a texture's data from level first on for an upload into a new image. A first
@@ -1085,7 +1091,7 @@ Begun StartUpload(u32 handle, const Source& source, u32 generation, u32 first, b
             LOG_INFO(Render_Vulkan,
                      "GR2port: texture {:#x} not converted: a layout of {} bytes, {} in the GNF "
                      "data",
-                     g_textures[handle].object.load(std::memory_order_relaxed), layout.size,
+                     g_sampled[handle].object.load(std::memory_order_relaxed), layout.size,
                      source.end - std::min(data, source.end));
         }
         return Begun::Skip;
@@ -1150,7 +1156,7 @@ Begun StartUpload(u32 handle, const Source& source, u32 generation, u32 first, b
         LOG_INFO(Render_Vulkan,
                  "GR2port: texture {:#x}: {}x{} {}, {} levels from level {}, tile mode {}, {} of "
                  "{} bytes",
-                 g_textures[handle].object.load(std::memory_order_relaxed),
+                 g_sampled[handle].object.load(std::memory_order_relaxed),
                  layout.image_extent.width, layout.image_extent.height,
                  vk::to_string(layout.format), layout.levels, layout.first,
                  static_cast<u32>(layout.tile_mode), layout.bytes, layout.size);
@@ -1400,8 +1406,8 @@ void StartNew() {
             }
             const Texture& t = g_textures[handle];
             // A handle freed and reused before its first upload is queued twice.
-            if (t.object.load(std::memory_order_relaxed) == 0 || g_resident[handle].image ||
-                g_residency[handle].uploading) {
+            if (g_sampled[handle].object.load(std::memory_order_relaxed) == 0 ||
+                g_resident[handle].image || g_residency[handle].uploading) {
                 fresh.push_back({.handle = 0});
                 continue;
             }
@@ -1410,7 +1416,7 @@ void StartNew() {
                 .source = g_sources[handle],
                 .generation = g_generations[handle],
                 .streams = !t.sharp_only.load(std::memory_order_relaxed),
-                .used = tick - t.used.load(std::memory_order_relaxed) <= UsedTicks,
+                .used = tick - g_sampled[handle].used.load(std::memory_order_relaxed) <= UsedTicks,
             });
         }
         g_high = g_unused;
@@ -1477,7 +1483,7 @@ void Plan() {
             continue;
         }
         reduced += r.first != 0;
-        const u32 age = tick - g_textures[handle].used.load(std::memory_order_relaxed);
+        const u32 age = tick - g_sampled[handle].used.load(std::memory_order_relaxed);
         const bool used = age <= UsedTicks;
         parkable += age > ParkTicks && r.first < r.first_at[Parked];
         used_textures += used;
@@ -1540,10 +1546,11 @@ void Converge(vk::CommandBuffer cmd, u64 frame) {
         const Residency& r = g_residency[handle];
         const Texture& t = g_textures[handle];
         if (!r.streams || r.uploading || r.old.image || r.installed_frame == frame ||
-            !g_resident[handle].image || t.object.load(std::memory_order_relaxed) == 0) {
+            !g_resident[handle].image ||
+            g_sampled[handle].object.load(std::memory_order_relaxed) == 0) {
             continue;
         }
-        const u32 used = t.used.load(std::memory_order_relaxed);
+        const u32 used = g_sampled[handle].used.load(std::memory_order_relaxed);
         const u32 age = tick - used;
         const u32 first = r.first_at[CapOf(quality, age)];
         // A texture out of use but not shown gets larger levels only when the others may.
@@ -1578,7 +1585,7 @@ void Converge(vk::CommandBuffer cmd, u64 frame) {
             sources.push_back({
                 g_sources[grow.handle],
                 g_generations[grow.handle],
-                g_textures[grow.handle].object.load(std::memory_order_relaxed) != 0,
+                g_sampled[grow.handle].object.load(std::memory_order_relaxed) != 0,
             });
         }
     }
@@ -1621,19 +1628,34 @@ u32 GetOfKind(VAddr texture, bool cube) {
     if (handle == 0 || handle >= Capacity) {
         return 0;
     }
-    Texture& t = g_textures[handle];
-    if (t.object.load(std::memory_order_relaxed) != texture ||
-        t.cube.load(std::memory_order_relaxed) != cube) {
+    Sampled& s = g_sampled[handle];
+    if (s.object.load(std::memory_order_relaxed) != texture ||
+        s.cube.load(std::memory_order_relaxed) != cube) {
         return 0;
     }
-    MarkUsed(t);
-    return t.ready.load(std::memory_order_acquire) ? t.slot.load(std::memory_order_acquire) : 0;
+    MarkUsed(s);
+    return s.ready.load(std::memory_order_acquire) ? s.slot.load(std::memory_order_acquire) : 0;
 }
 
 } // namespace
 
 u32 Get(VAddr texture) {
     return GetOfKind(texture, false);
+}
+
+void Prefetch(const VAddr* objects, u32 count) {
+    for (u32 i = 0; i < count; i++) {
+        __builtin_prefetch(reinterpret_cast<const void*>(objects[i] + TextureHandle));
+    }
+}
+
+void PrefetchRecords(const VAddr* objects, u32 count) {
+    for (u32 i = 0; i < count; i++) {
+        const u32 handle = objects[i] != 0 ? Load<u32>(objects[i] + TextureHandle) : 0;
+        if (handle < Capacity) {
+            __builtin_prefetch(&g_sampled[handle]);
+        }
+    }
 }
 
 u32 GetCube(VAddr texture) {
@@ -1651,10 +1673,11 @@ u32 GetBySharp(const u32* words, bool& dynamic) {
         const bool sharp_only = t.sharp_only.load(std::memory_order_relaxed);
         if (!sharp_only || t.key.load(std::memory_order_relaxed) == key) {
             dynamic = sharp_only && t.linear.load(std::memory_order_relaxed);
-            MarkUsed(t);
-            return t.ready.load(std::memory_order_acquire) &&
-                           !t.cube.load(std::memory_order_relaxed)
-                       ? t.slot.load(std::memory_order_acquire)
+            Sampled& s = g_sampled[found];
+            MarkUsed(s);
+            return s.ready.load(std::memory_order_acquire) &&
+                           !s.cube.load(std::memory_order_relaxed)
+                       ? s.slot.load(std::memory_order_acquire)
                        : 0;
         }
     }
@@ -1678,12 +1701,13 @@ u32 GetBySharp(const u32* words, bool& dynamic) {
     }
     g_sources[handle] = {.sharp = sharp, .end = ~VAddr{0}};
     Texture& t = g_textures[handle];
-    t.ready.store(false, std::memory_order_relaxed);
-    t.cube.store(false, std::memory_order_relaxed);
+    Sampled& s = g_sampled[handle];
+    s.ready.store(false, std::memory_order_relaxed);
+    s.cube.store(false, std::memory_order_relaxed);
     t.sharp_only.store(true, std::memory_order_relaxed);
     t.linear.store(!Tiled(sharp.GetTileMode()), std::memory_order_relaxed);
     t.key.store(key, std::memory_order_relaxed);
-    t.object.store(address, std::memory_order_release);
+    s.object.store(address, std::memory_order_release);
     AddAddress(handle, address);
     g_pending.push_back(handle);
     return 0;
@@ -1718,7 +1742,7 @@ void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> read) {
     for (const u32 handle : std::span{handles}.first(count)) {
         const Image& image = g_resident[handle];
         if (handle == 0 || handle >= FirstReserved || !image.image ||
-            !g_textures[handle].ready.load(std::memory_order_acquire)) {
+            !g_sampled[handle].ready.load(std::memory_order_acquire)) {
             continue;
         }
         AmdGpu::Image sharp;
