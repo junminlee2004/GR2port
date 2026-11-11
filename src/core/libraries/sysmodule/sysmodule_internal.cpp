@@ -12,6 +12,7 @@
 #include "core/libraries/font/font.h"
 #include "core/libraries/font/fontft.h"
 #include "core/libraries/jpeg/jpegenc.h"
+#include "core/libraries/json2/json2.h"
 #include "core/libraries/kernel/kernel.h"
 #include "core/libraries/kernel/orbis_error.h"
 #include "core/libraries/libc_internal/libc_internal.h"
@@ -225,7 +226,7 @@ s32 loadModuleInternal(s32 index, s32 argc, const void* argv, s32* res_out) {
              {"libScePngDec.sprx", &Libraries::PngDec::RegisterLib},
              {"libScePngEnc.sprx", &Libraries::PngEnc::RegisterLib},
              {"libSceJson.sprx", nullptr},
-             {"libSceJson2.sprx", nullptr},
+             {"libSceJson2.sprx", &Libraries::Json2::RegisterLib},
              {"libSceCesCs.sprx", nullptr},
              {"libSceAt9Enc.sprx", nullptr},
              {"libSceAudiodec.sprx", nullptr},

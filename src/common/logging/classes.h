@@ -111,6 +111,7 @@ enum class Class {
     Lib_VrTracker,           ///< The LibSceVrTracker implementation.
     Lib_Font,                ///< The libSceFont implementation.
     Lib_FontFt,              ///< The libSceFontFt implementation.
+    Lib_Json2,               ///< The libSceJson2 implementation.
     Frontend,                ///< Emulator UI
     NpHandler,               ///< NpHandler shadNet manager
     Render,                  ///< Video Core
