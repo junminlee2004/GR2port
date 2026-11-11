@@ -233,6 +233,15 @@ static bool FilterNoSSE4a(const ZydisDecodedOperand*) {
     return !cpu.has(Cpu::tSSE4a);
 }
 
+static bool LegacyCpuPatchesForced();
+
+// With BMI2, the register-form extrq and the insertq stubs use shifts, pdep and pext, which leave
+// the flags alone, so they skip saving and restoring them.
+static bool UseBmi2Stubs() {
+    static const bool use = Cpu().has(Cpu::tBMI2) && !LegacyCpuPatchesForced();
+    return use;
+}
+
 static void GenerateEXTRQ(void* /* address */, const ZydisDecodedInstruction&,
                           const ZydisDecodedOperand* operands, Xbyak::CodeGenerator& c) {
     bool immediateForm = operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE &&
@@ -252,47 +261,17 @@ static void GenerateEXTRQ(void* /* address */, const ZydisDecodedInstruction&,
 
         LOG_DEBUG(Core, "Patching immediate form EXTRQ, length: {}, index: {}", length, index);
 
-        const Xbyak::Reg64 scratch1 = rax;
-        const Xbyak::Reg64 scratch2 = rcx;
-
-        // Set rsp to before red zone and save scratch registers
-        c.lea(rsp, ptr[rsp - 128]);
-        c.pushfq();
-        c.push(scratch1);
-        c.push(scratch2);
-
-        u64 mask;
-        if (length == 0) {
-            length = 64; // for the check below
-            mask = 0xFFFF'FFFF'FFFF'FFFF;
-        } else {
-            mask = (1ULL << length) - 1;
-        }
-
-        if (length + index > 64) {
-            mask = 0xFFFF'FFFF'FFFF'FFFF;
-        }
-
-        // Get lower qword from xmm register
-        c.vmovq(scratch1, xmm_dst);
-
+        // vmovq zeroes the upper qword, as AMD CPUs do. The low qword shifts right by index, then
+        // left and right by 64 - length to keep its low length bits. A length of 0 means 64, and
+        // the mask is all ones when length + index passes 64.
+        c.vmovq(xmm_dst, xmm_dst);
         if (index != 0) {
-            c.shr(scratch1, index);
+            c.vpsrlq(xmm_dst, xmm_dst, index);
         }
-
-        // We need to move mask to a register because we can't use all the possible
-        // immediate values with `and reg, imm32`
-        c.mov(scratch2, mask);
-        c.and_(scratch1, scratch2);
-
-        // Writeback to xmm register, extrq instruction says top 64-bits are undefined but zeroed on
-        // AMD CPUs
-        c.vmovq(xmm_dst, scratch1);
-
-        c.pop(scratch2);
-        c.pop(scratch1);
-        c.popfq();
-        c.lea(rsp, ptr[rsp + 128]);
+        if (length != 0 && length + index <= 64) {
+            c.vpsllq(xmm_dst, xmm_dst, static_cast<u8>(64 - length));
+            c.vpsrlq(xmm_dst, xmm_dst, static_cast<u8>(64 - length));
+        }
     } else {
         ASSERT_MSG(operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
                        operands[1].type == ZYDIS_OPERAND_TYPE_REGISTER &&
@@ -307,6 +286,29 @@ static void GenerateEXTRQ(void* /* address */, const ZydisDecodedInstruction&,
         ASSERT_MSG(src.isXMM(), "operand 1 must be an XMM register");
 
         Xbyak::Xmm xmm_src = *reinterpret_cast<const Xbyak::Xmm*>(&src);
+
+        if (UseBmi2Stubs()) {
+            // dst = ((dst >> index) << n) >> n with n = -length mod 64, which keeps the low length
+            // bits, all of them when length is 0. BMI2 shifts read the low 6 bits of the count;
+            // not and lea turn the length into n.
+            c.lea(rsp, ptr[rsp - 128]);
+            c.push(rax);
+            c.push(rcx);
+            c.vmovq(rcx, xmm_src);
+            c.vmovq(rax, xmm_dst);
+            c.rorx(rcx, rcx, 8);
+            c.shrx(rax, rax, rcx);
+            c.rorx(rcx, rcx, 56);
+            c.not_(rcx);
+            c.lea(rcx, ptr[rcx + 65]);
+            c.shlx(rax, rax, rcx);
+            c.shrx(rax, rax, rcx);
+            c.vmovq(xmm_dst, rax);
+            c.pop(rcx);
+            c.pop(rax);
+            c.lea(rsp, ptr[rsp + 128]);
+            return;
+        }
 
         const Xbyak::Reg64 scratch1 = rax;
         const Xbyak::Reg64 scratch2 = rcx;
@@ -380,13 +382,6 @@ static void GenerateINSERTQ(void* /* address */, const ZydisDecodedInstruction&,
         const Xbyak::Reg64 scratch2 = rcx;
         const Xbyak::Reg64 mask = rdx;
 
-        // Set rsp to before red zone and save scratch registers
-        c.lea(rsp, ptr[rsp - 128]);
-        c.pushfq();
-        c.push(scratch1);
-        c.push(scratch2);
-        c.push(mask);
-
         u64 mask_value;
         if (length == 0) {
             length = 64; // for the check below
@@ -398,6 +393,37 @@ static void GenerateINSERTQ(void* /* address */, const ZydisDecodedInstruction&,
         if (length + index > 64) {
             mask_value = 0xFFFF'FFFF'FFFF'FFFF;
         }
+
+        if (UseBmi2Stubs()) {
+            // pdep moves the low bits of src to the set bits of field; pext and pdep with the
+            // inverted field keep the rest of dst. The two share no bit, so lea adds them.
+            const u64 field = mask_value << index;
+            c.lea(rsp, ptr[rsp - 128]);
+            c.push(rax);
+            c.push(rcx);
+            c.push(rdx);
+            c.vmovq(rax, xmm_src);
+            c.vmovq(rcx, xmm_dst);
+            c.mov(rdx, field);
+            c.pdep(rax, rax, rdx);
+            c.not_(rdx);
+            c.pext(rcx, rcx, rdx);
+            c.pdep(rcx, rcx, rdx);
+            c.lea(rax, ptr[rax + rcx]);
+            c.vmovq(xmm_dst, rax);
+            c.pop(rdx);
+            c.pop(rcx);
+            c.pop(rax);
+            c.lea(rsp, ptr[rsp + 128]);
+            return;
+        }
+
+        // Set rsp to before red zone and save scratch registers
+        c.lea(rsp, ptr[rsp - 128]);
+        c.pushfq();
+        c.push(scratch1);
+        c.push(scratch2);
+        c.push(mask);
 
         c.vmovq(scratch1, xmm_src);
         c.vmovq(scratch2, xmm_dst);
@@ -430,6 +456,38 @@ static void GenerateINSERTQ(void* /* address */, const ZydisDecodedInstruction&,
         ASSERT_MSG(operands[2].type == ZYDIS_OPERAND_TYPE_UNUSED &&
                        operands[3].type == ZYDIS_OPERAND_TYPE_UNUSED,
                    "operands 2 and 3 must be unused for register form.");
+
+        if (UseBmi2Stubs()) {
+            // The upper qword of src holds the length in bits 5:0 and the index in bits 13:8.
+            // field = (~0 >> n) << index with n = -length mod 64; then as in the immediate form.
+            c.lea(rsp, ptr[rsp - 128]);
+            c.push(rax);
+            c.push(rcx);
+            c.push(rdx);
+            c.push(rbx);
+            c.vpextrq(rdx, xmm_src, 1);
+            c.mov(rbx, rdx);
+            c.not_(rbx);
+            c.lea(rbx, ptr[rbx + 65]);
+            c.mov(rax, -1);
+            c.shrx(rbx, rax, rbx);
+            c.rorx(rdx, rdx, 8);
+            c.shlx(rbx, rbx, rdx);
+            c.vmovq(rax, xmm_src);
+            c.vmovq(rcx, xmm_dst);
+            c.pdep(rax, rax, rbx);
+            c.not_(rbx);
+            c.pext(rcx, rcx, rbx);
+            c.pdep(rcx, rcx, rbx);
+            c.lea(rax, ptr[rax + rcx]);
+            c.vmovq(xmm_dst, rax);
+            c.pop(rbx);
+            c.pop(rdx);
+            c.pop(rcx);
+            c.pop(rax);
+            c.lea(rsp, ptr[rsp + 128]);
+            return;
+        }
 
         const Xbyak::Reg64 scratch1 = rax;
         const Xbyak::Reg64 scratch2 = rcx;
