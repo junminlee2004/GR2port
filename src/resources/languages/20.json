@@ -65,6 +65,12 @@
     "Flick the touch pad left": "Mover a la izquierda (panel táctil)",
     "Flick Right (Touch Pad)": "Panel táctil: mover a la derecha",
     "Flick the touch pad right": "Mover a la derecha (panel táctil)",
-    "No trophies found.": "No se encontraron trofeos."
+    "No trophies found.": "No se encontraron trofeos.",
+    "Glass Refraction": "Refracción del vidrio",
+    "The button bindings could not be saved.": "No se pudo guardar la asignación de botones.",
+    "Press a button on the controller for\n{0}\n\nNothing changes in {1} s.": "Presiona un botón del control para\n{0}\n\nSe cancelará sin cambios en {1} s.",
+    "No button was pressed; {0} keeps its button.": "No se presionó ningún botón; {0} conserva su botón.",
+    "The game used {0} last (Options > Controls). A button presses the same PlayStation button in every type.": "Último tipo: {0} (Opciones > Controles). Un botón presiona el mismo botón PlayStation en todos los tipos.",
+    "Double-click a function, then press its button on the controller.": "Haz doble clic en una función y presiona su botón en el control."
   }
 }

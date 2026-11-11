@@ -19,7 +19,6 @@
     "PS4 Original": "Original da PS4",
     "Volumetric Fog": "Nevoeiro volumétrico",
     "Ambient Occlusion": "Oclusão ambiental",
-    "Motion Blur": "Desfocagem de movimento",
     "Select Profile Picture": "Selecionar imagem de perfil",
     "Profile Picture": "Imagem de perfil",
     "The profile picture could not be saved.": "Não foi possível guardar a imagem de perfil.",
@@ -102,6 +101,16 @@
     "Flick the touch pad right": "Deslizar à direita no painel tátil",
     "Show Earned Trophies": "Mostrar troféus obtidos",
     "Show Not Earned Trophies": "Mostrar troféus não obtidos",
-    "Time Unlocked": "Obtido em"
+    "Time Unlocked": "Obtido em",
+    "Fog Shadows": "Sombras do nevoeiro",
+    "The button bindings could not be saved.": "Não foi possível guardar a atribuição de botões.",
+    "Press a button on the controller for\n{0}\n\nNothing changes in {1} s.": "Prima um botão do comando para\n{0}\n\nNada muda em {1} s.",
+    "{0} is not on one button in {1}.": "{0} não está num único botão no {1}.",
+    "No button was pressed; {0} keeps its button.": "Nenhum botão premido; {0} mantém o seu botão.",
+    "The game used {0} last (Options > Controls). A button presses the same PlayStation button in every type.": "Último tipo do jogo: {0} (Opções > Controlos). Um botão aciona o mesmo botão PlayStation em cada tipo.",
+    "Double-click a function, then press its button on the controller.": "Faça duplo clique numa função e prima o botão no comando.",
+    "Every function has its default button again.": "Todas as funções voltaram aos botões predefinidos.",
+    "Stick": "Manípulo",
+    "Right Pad": "Painel direito"
   }
 }
