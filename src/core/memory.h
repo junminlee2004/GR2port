@@ -15,10 +15,6 @@
 #include "core/address_space.h"
 #include "core/libraries/kernel/memory.h"
 
-namespace Vulkan {
-class Rasterizer;
-}
-
 namespace Libraries::Kernel {
 struct OrbisQueryInfo;
 }
@@ -183,10 +179,6 @@ class MemoryManager {
 public:
     explicit MemoryManager();
     ~MemoryManager();
-
-    void SetRasterizer(Vulkan::Rasterizer* rasterizer_) {
-        rasterizer = rasterizer_;
-    }
 
     AddressSpace& GetAddressSpace() {
         return impl;
@@ -368,8 +360,6 @@ public:
 
     s32 GetMemoryPoolStats(::Libraries::Kernel::OrbisKernelMemoryPoolBlockStats* stats);
 
-    void InvalidateMemory(VAddr addr, u64 size) const;
-
 private:
     VMAHandle FindVMA(VAddr target) {
         return std::prev(vma_map.upper_bound(target));
@@ -431,7 +421,6 @@ private:
     u64 flexible_usage{};
     u64 pool_budget{};
     s32 sdk_version{};
-    Vulkan::Rasterizer* rasterizer{};
 
     struct PrtArea {
         VAddr start;

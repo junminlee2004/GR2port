@@ -15,7 +15,6 @@
 #include "core/devtools/layer.h"
 #include "imgui/imgui_std.h"
 #include "settings_dialog_imgui.h"
-#include "video_core/skipcache/skipcache.h"
 
 CMRC_DECLARE(res);
 
@@ -152,8 +151,6 @@ void SettingsWindow::SaveSettings(std::string profile) {
     if (isSpecific) {
         EmulatorSettings.SetReadbacksMode(readbacksModeSetting, true);
         EmulatorSettings.SetAdaptiveSkipCachesMode(adaptiveSkipCachesSetting, true);
-        VideoCore::Skipcache::Framework::Instance().SetRequestedMode(
-            static_cast<VideoCore::Skipcache::Mode>(adaptiveSkipCachesSetting));
         EmulatorSettings.SetReadbackLinearImagesEnabled(readbackLinearImagesSetting, true);
         EmulatorSettings.SetDirectMemoryAccessEnabled(directMemoryAccessSetting, true);
         // Windows static guest red-zone protection

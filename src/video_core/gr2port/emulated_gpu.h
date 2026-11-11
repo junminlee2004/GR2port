@@ -11,11 +11,7 @@ namespace Xbyak {
 class CodeGenerator;
 }
 
-namespace AmdGpu {
-struct Liverpool;
-} // namespace AmdGpu
-
-// GR2fork's GPU emulation does not run: its renderer is not created and there is no command
+// There is no GPU emulation: no renderer draws the game's command buffers and there is no command
 // processor. Gr2Port::Submits walks the game's submits for their fences and flips, and the game's
 // per-item draw loop does not run. Nor do the draws and dispatches the frame graph asks for: they
 // are for the world's picture, which nothing reads. The screen drawing after the frame graph is
@@ -30,14 +26,7 @@ void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 /// returned.
 void SetFrameGraphRunning(bool running);
 
-/// Any thread: whether GR2fork's renderer is created. It never is, so the emulator's window has
-/// no swapchain and does not present.
-bool Wanted();
-
-/// From the rasterizer's constructor, after it is bound unless the settings ask for no GPU.
-void Start(AmdGpu::Liverpool* liverpool);
-
-/// Any thread: whether GR2fork's GPU emulation runs.
+/// Any thread: whether a GPU emulation runs. None does.
 bool On();
 
 } // namespace Gr2Port::EmulatedGpu

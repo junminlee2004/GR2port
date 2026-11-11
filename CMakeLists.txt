@@ -596,8 +596,6 @@ list(APPEND JPEG_LIB src/core/libraries/gr2_photo/gr2_photo.cpp
                      src/core/libraries/gr2_photo/photo_jpegdec.h
                      src/core/libraries/gr2_photo/photo_jpegenc.cpp
                      src/core/libraries/gr2_photo/photo_jpegenc.h
-                     src/video_core/texture_cache/photo_readback.cpp
-                     src/video_core/texture_cache/photo_readback.h
 )
 
 # Online play of Gravity Rush 2
@@ -807,16 +805,7 @@ set(COMPANION_LIBS  src/core/libraries/companion/companion_httpd.cpp
 set(DEV_TOOLS src/core/devtools/layer.cpp
               src/core/devtools/layer.h
               src/core/devtools/layer_extra.cpp
-              src/core/devtools/options.cpp
-              src/core/devtools/options.h
-              src/core/devtools/gcn/gcn_context_regs.cpp
-              src/core/devtools/gcn/gcn_op_names.cpp
-              src/core/devtools/gcn/gcn_shader_regs.cpp
-              src/core/devtools/widget/cmd_list.cpp
-              src/core/devtools/widget/cmd_list.h
               src/core/devtools/widget/common.h
-              src/core/devtools/widget/frame_dump.cpp
-              src/core/devtools/widget/frame_dump.h
               src/core/devtools/widget/frame_graph.cpp
               src/core/devtools/widget/frame_graph.h
               src/core/devtools/widget/gpu_memory.cpp
@@ -826,14 +815,6 @@ set(DEV_TOOLS src/core/devtools/layer.cpp
               src/core/devtools/widget/memory_map.h
               src/core/devtools/widget/module_list.cpp
               src/core/devtools/widget/module_list.h
-              src/core/devtools/widget/reg_popup.cpp
-              src/core/devtools/widget/reg_popup.h
-              src/core/devtools/widget/reg_view.cpp
-              src/core/devtools/widget/reg_view.h
-              src/core/devtools/widget/shader_list.cpp
-              src/core/devtools/widget/shader_list.h
-              src/core/devtools/widget/text_editor.cpp
-              src/core/devtools/widget/text_editor.h
 )
 
 set(COMMON src/common/logging/classes.cpp
@@ -1077,157 +1058,17 @@ if (ARCHITECTURE STREQUAL "x86_64")
              ${FIBER_LIB})
 endif()
 
-set(SHADER_RECOMPILER src/shader_recompiler/profile.h
-                      src/shader_recompiler/recompiler.cpp
-                      src/shader_recompiler/recompiler.h
-                      src/shader_recompiler/resource.h
-                      src/shader_recompiler/info.h
-                      src/shader_recompiler/params.h
-                      src/shader_recompiler/runtime_info.h
-                      src/shader_recompiler/specialization.h
-                      src/shader_recompiler/backend/bindings.h
-                      src/shader_recompiler/backend/spirv/emit_spirv.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv.h
-                      src/shader_recompiler/backend/spirv/emit_spirv_atomic.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_barriers.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_bitwise_conversion.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_composite.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_context_get_set.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_convert.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_discard_frag.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_discard_frag.h
-                      src/shader_recompiler/backend/spirv/emit_spirv_floating_point.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_image.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_instructions.h
-                      src/shader_recompiler/backend/spirv/emit_spirv_integer.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_logical.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_quad_rect.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_quad_rect.h
-                      src/shader_recompiler/backend/spirv/emit_spirv_select.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_shared_memory.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_special.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_undefined.cpp
-                      src/shader_recompiler/backend/spirv/emit_spirv_warp.cpp
-                      src/shader_recompiler/backend/spirv/spirv_emit_context.cpp
-                      src/shader_recompiler/backend/spirv/spirv_emit_context.h
-                      src/shader_recompiler/frontend/translate/data_share.cpp
-                      src/shader_recompiler/frontend/translate/export.cpp
-                      src/shader_recompiler/frontend/translate/scalar_alu.cpp
-                      src/shader_recompiler/frontend/translate/scalar_flow.cpp
-                      src/shader_recompiler/frontend/translate/scalar_memory.cpp
-                      src/shader_recompiler/frontend/translate/translate.cpp
-                      src/shader_recompiler/frontend/translate/translate.h
-                      src/shader_recompiler/frontend/translate/vector_alu.cpp
-                      src/shader_recompiler/frontend/translate/vector_interpolation.cpp
-                      src/shader_recompiler/frontend/translate/vector_memory.cpp
-                      src/shader_recompiler/frontend/control_flow_graph.cpp
-                      src/shader_recompiler/frontend/control_flow_graph.h
-                      src/shader_recompiler/frontend/copy_shader.cpp
-                      src/shader_recompiler/frontend/copy_shader.h
-                      src/shader_recompiler/frontend/decode.cpp
-                      src/shader_recompiler/frontend/decode.h
-                      src/shader_recompiler/frontend/fetch_shader.cpp
-                      src/shader_recompiler/frontend/fetch_shader.h
-                      src/shader_recompiler/frontend/format.cpp
-                      src/shader_recompiler/frontend/instruction.cpp
-                      src/shader_recompiler/frontend/instruction.h
-                      src/shader_recompiler/frontend/opcodes.h
-                      src/shader_recompiler/frontend/structured_control_flow.cpp
-                      src/shader_recompiler/frontend/structured_control_flow.h
-                      src/shader_recompiler/ir/passes/constant_propagation_pass.cpp
-                      src/shader_recompiler/ir/passes/dead_code_elimination_pass.cpp
-                      src/shader_recompiler/ir/passes/expression_elimination.h
-                      src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp
-                      src/shader_recompiler/ir/passes/hull_shader_transform.cpp
-                      src/shader_recompiler/ir/passes/inject_clip_distance_attributes.cpp
-                      src/shader_recompiler/ir/passes/inverse_ballot_elimination_pass.cpp
-                      src/shader_recompiler/ir/passes/ir_passes.h
-                      src/shader_recompiler/ir/passes/lower_buffer_format_to_raw.cpp
-                      src/shader_recompiler/ir/passes/lower_fp64_to_fp32.cpp
-                      src/shader_recompiler/ir/passes/lower_hardware_intrinsics.cpp
-                      src/shader_recompiler/ir/passes/lower_user_clip_planes.cpp
-                      src/shader_recompiler/ir/passes/lower_wave64_pass.cpp
-                      src/shader_recompiler/ir/passes/phi_simplification_pass.cpp
-                      src/shader_recompiler/ir/passes/readlane_elimination_pass.cpp
-                      src/shader_recompiler/ir/passes/resource_discover_pass.cpp
-                      src/shader_recompiler/ir/passes/resource_pass.h
-                      src/shader_recompiler/ir/passes/resource_patching_pass.cpp
-                      src/shader_recompiler/ir/passes/ring_access_elimination.cpp
-                      src/shader_recompiler/ir/passes/shader_info_collection_pass.cpp
-                      src/shader_recompiler/ir/passes/shared_memory_barrier_pass.cpp
-                      src/shader_recompiler/ir/passes/shared_memory_simplify_pass.cpp
-                      src/shader_recompiler/ir/passes/shared_memory_to_storage_pass.cpp
-                      src/shader_recompiler/ir/passes/lower_phis_to_regs_pass.cpp
-                      src/shader_recompiler/ir/passes/ssa_repair_pass.cpp
-                      src/shader_recompiler/ir/passes/ssa_rewrite_pass.cpp
-                      src/shader_recompiler/ir/abstract_syntax_list.cpp
-                      src/shader_recompiler/ir/abstract_syntax_list.h
-                      src/shader_recompiler/ir/attribute.cpp
-                      src/shader_recompiler/ir/attribute.h
-                      src/shader_recompiler/ir/basic_block.cpp
-                      src/shader_recompiler/ir/basic_block.h
-                      src/shader_recompiler/ir/breadth_first_search.h
-                      src/shader_recompiler/ir/condition.h
-                      src/shader_recompiler/ir/dominance.cpp
-                      src/shader_recompiler/ir/dominance.h
-                      src/shader_recompiler/ir/ir_emitter.cpp
-                      src/shader_recompiler/ir/ir_emitter.h
-                      src/shader_recompiler/ir/microinstruction.cpp
-                      src/shader_recompiler/ir/microinstruction.h
-                      src/shader_recompiler/ir/opcodes.cpp
-                      src/shader_recompiler/ir/opcodes.h
-                      src/shader_recompiler/ir/opcodes.inc
-                      src/shader_recompiler/ir/operand_helper.h
-                      src/shader_recompiler/ir/patch.cpp
-                      src/shader_recompiler/ir/patch.h
-                      src/shader_recompiler/ir/position.h
-                      src/shader_recompiler/ir/post_order.cpp
-                      src/shader_recompiler/ir/post_order.h
-                      src/shader_recompiler/ir/program.cpp
-                      src/shader_recompiler/ir/program.h
-                      src/shader_recompiler/ir/reinterpret.h
-                      src/shader_recompiler/ir/srt_gvn_table.h
-                      src/shader_recompiler/ir/ssa.h
-                      src/shader_recompiler/ir/reg.h
-                      src/shader_recompiler/ir/type.cpp
-                      src/shader_recompiler/ir/type.h
-                      src/shader_recompiler/ir/value.cpp
-                      src/shader_recompiler/ir/value.h
-)
-
-set(VIDEO_CORE src/video_core/amdgpu/cb_db_extent.h
-               src/video_core/amdgpu/gfx_state_stamp.h
-               src/video_core/amdgpu/liverpool.cpp
-               src/video_core/amdgpu/liverpool.h
-               src/video_core/amdgpu/pixel_format.cpp
+set(VIDEO_CORE src/video_core/amdgpu/pixel_format.cpp
                src/video_core/amdgpu/pixel_format.h
                src/video_core/amdgpu/pm4_cmds.h
                src/video_core/amdgpu/pm4_opcodes.h
                src/video_core/amdgpu/regs_color.h
                src/video_core/amdgpu/regs_depth.h
-               src/video_core/amdgpu/regs.cpp
-               src/video_core/amdgpu/regs.h
                src/video_core/amdgpu/regs_primitive.h
-               src/video_core/amdgpu/regs_shader.h
-               src/video_core/amdgpu/regs_texture.h
                src/video_core/amdgpu/regs_vertex.h
                src/video_core/amdgpu/resource.h
                src/video_core/amdgpu/tiling.cpp
                src/video_core/amdgpu/tiling.h
-               src/video_core/buffer_cache/buffer.cpp
-               src/video_core/buffer_cache/buffer.h
-               src/video_core/buffer_cache/buffer_cache.cpp
-               src/video_core/buffer_cache/buffer_cache.h
-               src/video_core/buffer_cache/fault_manager.cpp
-               src/video_core/buffer_cache/fault_manager.h
-               src/video_core/buffer_cache/memory_tracker.h
-               src/video_core/buffer_cache/range_set.h
-               src/video_core/buffer_cache/readback_lane.cpp
-               src/video_core/buffer_cache/readback_lane.h
-               src/video_core/buffer_cache/region_definitions.h
-               src/video_core/buffer_cache/region_manager.h
-               src/video_core/buffer_cache/stream_copy_lane.cpp
-               src/video_core/buffer_cache/stream_copy_lane.h
                src/video_core/renderer_vulkan/liverpool_to_vk.cpp
                src/video_core/renderer_vulkan/liverpool_to_vk.h
                src/video_core/renderer_vulkan/vk_command_chunk.h
@@ -1235,69 +1076,22 @@ set(VIDEO_CORE src/video_core/amdgpu/cb_db_extent.h
                src/video_core/renderer_vulkan/vk_command_recorder.h
                src/video_core/renderer_vulkan/vk_common.cpp
                src/video_core/renderer_vulkan/vk_common.h
-               src/video_core/renderer_vulkan/vk_compute_pipeline.cpp
-               src/video_core/renderer_vulkan/vk_compute_pipeline.h
-               src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
-               src/video_core/renderer_vulkan/vk_graphics_pipeline.h
                src/video_core/renderer_vulkan/vk_instance.cpp
                src/video_core/renderer_vulkan/vk_instance.h
-               src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-               src/video_core/renderer_vulkan/vk_pipeline_cache.h
-               src/video_core/renderer_vulkan/vk_pipeline_common.cpp
-               src/video_core/renderer_vulkan/vk_pipeline_common.h
-               src/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
-               src/video_core/renderer_vulkan/vk_pipeline_serialization.h
                src/video_core/renderer_vulkan/vk_platform.cpp
                src/video_core/renderer_vulkan/vk_platform.h
                src/video_core/renderer_vulkan/vk_presenter.cpp
                src/video_core/renderer_vulkan/vk_presenter.h
-               src/video_core/renderer_vulkan/vk_rasterizer.cpp
-               src/video_core/renderer_vulkan/vk_rasterizer.h
                src/video_core/renderer_vulkan/vk_record_thread.cpp
                src/video_core/renderer_vulkan/vk_record_thread.h
                src/video_core/renderer_vulkan/vk_resource_pool.cpp
                src/video_core/renderer_vulkan/vk_resource_pool.h
-               src/video_core/renderer_vulkan/vk_runtime.cpp
-               src/video_core/renderer_vulkan/vk_runtime.h
                src/video_core/renderer_vulkan/vk_scheduler.cpp
                src/video_core/renderer_vulkan/vk_scheduler.h
                src/video_core/renderer_vulkan/vk_semaphore.cpp
                src/video_core/renderer_vulkan/vk_semaphore.h
-               src/video_core/renderer_vulkan/vk_shader_hle.cpp
-               src/video_core/renderer_vulkan/vk_shader_hle.h
-               src/video_core/renderer_vulkan/vk_shader_util.cpp
-               src/video_core/renderer_vulkan/vk_shader_util.h
-               src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
-               src/video_core/renderer_vulkan/vk_staging_buffer_pool.h
                src/video_core/renderer_vulkan/vk_swapchain.cpp
                src/video_core/renderer_vulkan/vk_swapchain.h
-               src/video_core/renderer_vulkan/host_passes/fsr_pass.cpp
-               src/video_core/renderer_vulkan/host_passes/fsr_pass.h
-               src/video_core/renderer_vulkan/host_passes/pp_pass.cpp
-               src/video_core/renderer_vulkan/host_passes/pp_pass.h
-               src/video_core/skipcache/skipcache.cpp
-               src/video_core/skipcache/skipcache.h
-               src/video_core/texture_cache/blit_helper.cpp
-               src/video_core/texture_cache/blit_helper.h
-               src/video_core/texture_cache/host_compatibility.cpp
-               src/video_core/texture_cache/host_compatibility.h
-               src/video_core/texture_cache/image.cpp
-               src/video_core/texture_cache/image.h
-               src/video_core/texture_cache/image_info.cpp
-               src/video_core/texture_cache/image_info.h
-               src/video_core/texture_cache/image_view.cpp
-               src/video_core/texture_cache/image_view.h
-               src/video_core/texture_cache/sampler.cpp
-               src/video_core/texture_cache/sampler.h
-               src/video_core/texture_cache/texture_cache.cpp
-               src/video_core/texture_cache/texture_cache.h
-               src/video_core/texture_cache/tile_manager.cpp
-               src/video_core/texture_cache/tile_manager.h
-               src/video_core/texture_cache/types.h
-               src/video_core/cache_storage.cpp
-               src/video_core/cache_storage.h
-               src/video_core/page_manager.cpp
-               src/video_core/page_manager.h
                src/video_core/renderdoc.cpp
                src/video_core/renderdoc.h
 )
@@ -1392,7 +1186,6 @@ add_executable(gr2port
     ${INPUT}
     ${COMMON}
     ${CORE}
-    ${SHADER_RECOMPILER}
     ${VIDEO_CORE}
     ${EMULATOR}
     ${SHADNET}

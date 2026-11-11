@@ -8,7 +8,6 @@
 #include <stb_image_write.h>
 #include "common/alignment.h"
 #include "common/logging/log.h"
-#include "common/scope_exit.h"
 #include "core/libraries/error_codes.h"
 #include "core/libraries/gr2_photo/photo_gallery.h"
 #include "core/libraries/gr2_photo/photo_jpegenc.h"
@@ -16,7 +15,6 @@
 #include "core/libraries/jpeg/jpegenc.h"
 #include "core/libraries/libs.h"
 #include "video_core/gr2port/photo.h"
-#include "video_core/texture_cache/photo_readback.h"
 
 namespace Libraries::Gr2Photo::JpegEnc {
 
@@ -25,6 +23,9 @@ using namespace Libraries::JpegEnc;
 constexpr u32 ORBIS_JPEG_ENC_MAX_IMAGE_DIMENSION = 0xFFFF;
 constexpr u32 ORBIS_JPEG_ENC_MAX_IMAGE_PITCH = 0xFFFFFFF;
 constexpr u32 ORBIS_JPEG_ENC_MAX_IMAGE_SIZE = 0x7FFFFFFF;
+
+// The game renders a photo into a square target of this size before it encodes it.
+constexpr u32 PhotoSize = 1024;
 
 // A photo that encodes to less than this is taken for an empty frame and is not kept.
 constexpr size_t MinPhotoSize = 30000;
@@ -120,9 +121,14 @@ static s32 ValidateJpecEngHandle(OrbisJpegEncHandle handle) {
 // The game hands over its own copy of the photo target, read from guest memory the GPU never
 // wrote back. The pixels of the target itself take its place.
 static void ReadPhotoTarget(const OrbisJpegEncEncodeParam* param) {
-    VideoCore::PhotoReadback::Frame frame;
-    if (!Gr2Port::Photo::Read(frame.pixels, frame.width, frame.height, frame.pitch) &&
-        !VideoCore::PhotoReadback::Download(frame)) {
+    // Rows of pitch bytes, top row first.
+    struct {
+        std::vector<u8> pixels;
+        u32 width{};
+        u32 height{};
+        u32 pitch{};
+    } frame;
+    if (!Gr2Port::Photo::Read(frame.pixels, frame.width, frame.height, frame.pitch)) {
         LOG_WARNING(Lib_Jpeg, "No photo target to read, encoding the guest buffer as it is");
         return;
     }
@@ -191,22 +197,6 @@ static int PackImage(const OrbisJpegEncEncodeParam* param, std::vector<u8>& pack
     return 3;
 }
 
-// The game draws the photo between creating the encoder and encoding the photo. A draw skipped
-// for a shader or pipeline still compiling would leave the photo black, so those are waited for.
-s32 PS4_SYSV_ABI sceJpegEncCreate(const OrbisJpegEncCreateParam* param, void* memory,
-                                  u32 memory_size, OrbisJpegEncHandle* handle) {
-    const s32 result = Libraries::JpegEnc::sceJpegEncCreate(param, memory, memory_size, handle);
-    if (result == ORBIS_OK) {
-        VideoCore::PhotoReadback::SetCapturing(true);
-    }
-    return result;
-}
-
-s32 PS4_SYSV_ABI sceJpegEncDelete(OrbisJpegEncHandle handle) {
-    VideoCore::PhotoReadback::SetCapturing(false);
-    return Libraries::JpegEnc::sceJpegEncDelete(handle);
-}
-
 s32 PS4_SYSV_ABI sceJpegEncEncode(OrbisJpegEncHandle handle, const OrbisJpegEncEncodeParam* param,
                                   OrbisJpegEncOutputInfo* output_info) {
     if (auto handle_ret = ValidateJpecEngHandle(handle); handle_ret != ORBIS_OK) {
@@ -218,13 +208,7 @@ s32 PS4_SYSV_ABI sceJpegEncEncode(OrbisJpegEncHandle handle, const OrbisJpegEncE
         return param_ret;
     }
 
-    const bool is_photo =
-        VideoCore::PhotoReadback::IsArmed(param->image_width, param->image_height);
-    SCOPE_EXIT {
-        if (is_photo) {
-            VideoCore::PhotoReadback::SetCapturing(false);
-        }
-    };
+    const bool is_photo = param->image_width == PhotoSize && param->image_height == PhotoSize;
     if (is_photo) {
         ReadPhotoTarget(param);
     }

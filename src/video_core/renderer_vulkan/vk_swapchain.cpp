@@ -9,7 +9,6 @@
 #include "core/emulator_settings.h"
 #include "imgui/renderer/imgui_core.h"
 #include "sdl_window.h"
-#include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_swapchain.h"
 
@@ -25,12 +24,8 @@ Swapchain::Swapchain(const Instance& instance_, const Frontend::WindowSDL& windo
     FindPresentFormat();
     FindPresentMode();
 
-    // GR2port: the window presents only while GR2fork's renderer runs.
-    if (Gr2Port::EmulatedGpu::Wanted()) {
-        Create(window.GetWidth(), window.GetHeight());
-    } else {
-        SetSurfaceProperties();
-    }
+    // GR2port: this window never presents, so it has no swapchain.
+    SetSurfaceProperties();
     ImGui::Core::Initialize(instance, window, image_count, surface_format.format);
 }
 

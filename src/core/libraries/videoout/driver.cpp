@@ -167,7 +167,6 @@ int VideoOutDriver::RegisterBuffers(VideoOutPort* port, s32 startIndex, void* co
         port->buffer_labels[startIndex + i] = 0;
         port->SignalVoLabel();
 
-        presenter->RegisterVideoOutSurface(group, address);
         LOG_INFO(Lib_VideoOut, "buffers[{}] = {:#x}", i + startIndex, address);
     }
 
@@ -311,15 +310,12 @@ bool VideoOutDriver::SubmitFlip(VideoOutPort* port, s32 index, s64 flip_arg,
 void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_arg, bool is_eop) {
     // GR2port: flips arrive from any thread, and one scheduler prepares their frames.
     std::scoped_lock flip_lock{flip_mutex};
-    Vulkan::Frame* frame;
-    if (index == -1) {
-        frame = presenter->PrepareBlankFrame(false);
-    } else {
-        const auto& buffer = port->buffer_slots[index];
-        ASSERT_MSG(buffer.group_index >= 0, "Trying to flip an unregistered buffer!");
-        const auto& group = port->groups[buffer.group_index];
-        frame = presenter->PrepareFrame(group, buffer.address_left);
+    if (index != -1) {
+        ASSERT_MSG(port->buffer_slots[index].group_index >= 0,
+                   "Trying to flip an unregistered buffer!");
     }
+    // GR2port: nothing draws into the buffers, so the frame only paces the flip.
+    Vulkan::Frame* const frame = presenter->PrepareBlankFrame(false);
 
     std::scoped_lock lock{mutex};
     requests.push({

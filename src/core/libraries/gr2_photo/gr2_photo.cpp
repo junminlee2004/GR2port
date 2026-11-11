@@ -8,22 +8,16 @@
 #include "core/libraries/gr2_photo/photo_gallery.h"
 #include "core/libraries/gr2_photo/photo_jpegdec.h"
 #include "core/libraries/gr2_photo/photo_jpegenc.h"
-#include "video_core/texture_cache/photo_readback.h"
 
 namespace Libraries::Gr2Photo {
-
-// The game renders a photo into a target of this size before it encodes it.
-constexpr u32 PhotoSize = 1024;
 
 void RegisterLib(Core::Loader::SymbolsResolver* sym) {
     if (!Common::IsGravityRush2()) {
         return;
     }
     // The linker asks the HLE table before the exports of a loaded module and takes the first
-    // match, so registering here, ahead of every other library, decides what the game calls:
-    // firmware modules in sys_modules may still load, and nothing binds to them.
+    // match, so registering here, ahead of every other library, decides what the game calls.
     LOG_INFO(Lib_Jpeg, "Gravity Rush 2: photo mode runs on HLE");
-    VideoCore::PhotoReadback::Arm(PhotoSize, PhotoSize);
     Gallery::Setup();
     JpegEnc::RegisterLib(sym);
     JpegDec::RegisterLib(sym);

@@ -119,60 +119,23 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
             VERBATIM)
         set(GR2_FSR3_SHADER_HEADERS ${GR2_FSR3_SHADER_HEADERS} ${HEADER_FILE} PARENT_SCOPE)
     endfunction()
-    gr2_fsr3_add_shader(fsr3_mask.comp fsr3_mask_comp)
-    gr2_fsr3_add_shader(fsr3_mvcopy.comp fsr3_mvcopy_comp)
-    gr2_fsr3_add_shader(fsr3_store.comp fsr3_store_comp)
-    gr2_fsr3_add_shader(fsr3_fallback.comp fsr3_fallback_comp)
-    gr2_fsr3_add_shader(fsr3_debug.comp fsr3_debug_comp)
     gr2_fsr3_add_shader(fsr4_inputs.comp fsr4_inputs_comp)
-    gr2_fsr3_add_shader(grr_camera_motion.comp grr_camera_motion_comp)
     add_custom_target(gr2_fsr3_shaders
         DEPENDS ${GR2_FSR3_SHADER_HEADERS}
         SOURCES
             ${GR2_FSR3_DIR}/shaders/fsr3_color.glsl
-            ${GR2_FSR3_DIR}/shaders/fsr3_debug.comp
-            ${GR2_FSR3_DIR}/shaders/fsr3_fallback.comp
-            ${GR2_FSR3_DIR}/shaders/fsr3_mask.comp
-            ${GR2_FSR3_DIR}/shaders/fsr3_mvcopy.comp
-            ${GR2_FSR3_DIR}/shaders/fsr3_store.comp
-            ${GR2_FSR3_DIR}/shaders/fsr4_inputs.comp
-            ${GR2_FSR3_DIR}/shaders/grr_camera_motion.comp)
+            ${GR2_FSR3_DIR}/shaders/fsr4_inputs.comp)
 
     # vk_trampolines.cpp defines the Vulkan commands that the FidelityFX libraries and the FSR 4 v07
     # provider call.
     target_sources(gr2port PRIVATE
-        ${GR2_FSR3_DIR}/context_images.cpp
-        ${GR2_FSR3_DIR}/context_images.h
-        ${GR2_FSR3_DIR}/dlss_context.cpp
-        ${GR2_FSR3_DIR}/dlss_context.h
         ${GR2_FSR3_DIR}/dlss_streamline.h
-        ${GR2_FSR3_DIR}/fsr3_context.cpp
-        ${GR2_FSR3_DIR}/fsr3_context.h
-        ${GR2_FSR3_DIR}/fsr3_inputs.cpp
-        ${GR2_FSR3_DIR}/fsr3_inputs.h
-        ${GR2_FSR3_DIR}/fsr3_jitter.cpp
-        ${GR2_FSR3_DIR}/fsr3_jitter.h
-        ${GR2_FSR3_DIR}/fsr3_passes.cpp
-        ${GR2_FSR3_DIR}/fsr3_passes.h
-        ${GR2_FSR3_DIR}/fsr3_settings.cpp
-        ${GR2_FSR3_DIR}/fsr3_settings.h
         ${GR2_FSR3_DIR}/fsr3_types.h
         ${GR2_FSR3_DIR}/fsr4_assets.cpp
         ${GR2_FSR3_DIR}/fsr4_assets.h
-        ${GR2_FSR3_DIR}/fsr4_context.cpp
         ${GR2_FSR3_DIR}/fsr4_context.h
-        ${GR2_FSR3_DIR}/fsr4_device.cpp
         ${GR2_FSR3_DIR}/fsr4_device.h
         ${GR2_FSR3_DIR}/fsr4_v07_bridge.h
-        ${GR2_FSR3_DIR}/fsr_worker.cpp
-        ${GR2_FSR3_DIR}/fsr_worker.h
-        ${GR2_FSR3_DIR}/gr2_fsr3.cpp
-        ${GR2_FSR3_DIR}/gr2_fsr3.h
-        ${GR2_FSR3_DIR}/grr_capture.cpp
-        ${GR2_FSR3_DIR}/grr_capture.h
-        ${GR2_FSR3_DIR}/grr_fsr3.cpp
-        ${GR2_FSR3_DIR}/grr_survey.cpp
-        ${GR2_FSR3_DIR}/grr_survey.h
         ${GR2_FSR3_DIR}/vk_trampolines.cpp
         ${GR2_FSR3_DIR}/vk_trampolines.h)
     # Streamline's MIT headers. The Streamline and DLSS libraries load at run time from the dlss

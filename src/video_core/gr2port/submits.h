@@ -15,6 +15,12 @@
 // for the GPU does not wait. The caller holds the submit lock.
 namespace Gr2Port::Submits {
 
+/// The compute pipes a game maps queues on, and the queues of each. The system keeps an eighth
+/// pipe.
+constexpr u32 NumComputePipes = 7;
+constexpr u32 NumQueuesPerPipe = 8;
+constexpr u32 NumComputeRings = NumComputePipes * NumQueuesPerPipe;
+
 /// A compute ring the game mapped.
 struct Ring {
     VAddr base;

@@ -20,15 +20,12 @@
 #include "core/libraries/videoout/video_out.h"
 #include "core/memory.h"
 #include "core/platform.h"
-#include "video_core/amdgpu/liverpool.h"
 #include "video_core/amdgpu/pm4_cmds.h"
 #include "video_core/gr2port/submits.h"
 #include "video_core/renderer_vulkan/vk_presenter.h"
 
 extern Frontend::WindowSDL* g_window;
 std::unique_ptr<Vulkan::Presenter> presenter;
-// GR2port: never created. GR2fork's GPU emulation, which does not run, still names it.
-std::unique_ptr<AmdGpu::Liverpool> liverpool;
 
 namespace Libraries::GnmDriver {
 
@@ -66,12 +63,11 @@ static constexpr std::array indirect_sgpr_offsets{0u, 0u, 0x4cu, 0u, 0xccu, 0u, 
 static constexpr bool UseNeoCompatSequences = false;
 
 std::mutex m_submit_lock{};
-static u64 frames_submitted{}; // frame counter
 static s32 sdk_version{0};
 
 // GR2port: the compute rings the game mapped. Gr2Port::Submits walks what the game adds to them.
 static Common::SlotVector<Gr2Port::Submits::Ring> compute_rings{64};
-static u32 asc_next_offs_dw[Liverpool::NumComputeRings];
+static u32 asc_next_offs_dw[Gr2Port::Submits::NumComputeRings];
 
 // This address is initialized in sceGnmGetTheTessellationFactorRingBufferBaseAddress
 static VAddr tessellation_factors_ring_addr = -1;
@@ -296,10 +292,6 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
 
     std::scoped_lock lk{m_submit_lock};
 
-    if (DebugState.ShouldPauseInSubmit()) {
-        DebugState.PauseGuestThreads();
-    }
-
     auto vqid = gnm_vqid - 1;
     auto& ring = compute_rings[{vqid}];
 
@@ -323,38 +315,6 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
 
     asc_next_offs_dw[vqid] = next_offs_dw;
 
-    if (DebugState.DumpingCurrentFrame()) {
-        static auto last_frame_num = -1LL;
-        static u32 seq_num{};
-        if (last_frame_num == frames_submitted) {
-            ++seq_num;
-        } else {
-            last_frame_num = frames_submitted;
-            seq_num = 0u;
-        }
-
-        // Up to this point, all ACB submissions have been stored in a secondary command buffer.
-        // Dumping them using the current ring pointer would result in files containing only the
-        // `IndirectBuffer` command. To access the actual command stream, we need to unwrap the IB.
-        auto acb = acb_span;
-        auto base_addr = reinterpret_cast<uintptr_t>(acb_ptr);
-        const auto* indirect_buffer =
-            reinterpret_cast<const PM4CmdIndirectBuffer*>(acb_span.data());
-        if (indirect_buffer->header.opcode == PM4ItOpcode::IndirectBuffer) {
-            base_addr = reinterpret_cast<uintptr_t>(indirect_buffer->Address<const u32>());
-            acb = {reinterpret_cast<const u32*>(base_addr), indirect_buffer->ib_size};
-        }
-
-        using namespace DebugStateType;
-
-        DebugState.PushQueueDump({
-            .type = QueueType::acb,
-            .submit_num = seq_num,
-            .num2 = gnm_vqid,
-            .data = {acb.begin(), acb.end()},
-            .base_addr = base_addr,
-        });
-    }
     Gr2Port::Submits::Compute(ring, acb_span);
 }
 
@@ -1222,11 +1182,11 @@ int PS4_SYSV_ABI sceGnmMapComputeQueue(u32 pipe_id, u32 queue_id, VAddr ring_bas
                                        u32 ring_size_dw, u32* read_ptr_addr) {
     LOG_TRACE(Lib_GnmDriver, "called");
 
-    if (pipe_id >= Liverpool::NumComputePipes) {
+    if (pipe_id >= Gr2Port::Submits::NumComputePipes) {
         return ORBIS_GNM_ERROR_COMPUTEQUEUE_INVALID_PIPE_ID;
     }
 
-    if (queue_id >= Liverpool::NumQueuesPerPipe) {
+    if (queue_id >= Gr2Port::Submits::NumQueuesPerPipe) {
         return ORBIS_GNM_ERROR_COMPUTEQUEUE_INVALID_QUEUE_ID;
     }
 
@@ -1434,26 +1394,6 @@ s32 PS4_SYSV_ABI sceGnmRequestFlipAndSubmitDoneForWorkload(u64 workload, u32* gp
 
     // Submit
     const auto& dcb_span = std::span{gpu_addr, 0x40};
-    if (DebugState.DumpingCurrentFrame()) {
-        static auto last_frame_num = -1LL;
-        static u32 seq_num{};
-        if (last_frame_num == frames_submitted) {
-            ++seq_num;
-        } else {
-            last_frame_num = frames_submitted;
-            seq_num = 0u;
-        }
-
-        using DebugStateType::QueueType;
-
-        DebugState.PushQueueDump({
-            .type = QueueType::dcb,
-            .submit_num = seq_num,
-            .num2 = 0,
-            .data = {dcb_span.begin(), dcb_span.end()},
-            .base_addr = reinterpret_cast<uintptr_t>(gpu_addr),
-        });
-    }
     Gr2Port::Submits::Graphics(dcb_span);
 
     return ORBIS_OK;
@@ -2265,47 +2205,11 @@ int PS4_SYSV_ABI sceGnmSqttWaitForEvent() {
 
 static inline s32 PerformSubmit(u32 count, const u32* dcb_gpu_addrs[], u32* dcb_sizes_in_bytes,
                                 const u32* ccb_gpu_addrs[], u32* ccb_sizes_in_bytes) {
-    if (DebugState.ShouldPauseInSubmit()) {
-        DebugState.PauseGuestThreads();
-    }
 
+    // GR2port: the constant command buffers write only what a GPU reads, so they are not walked.
     for (auto cbpair = 0u; cbpair < count; ++cbpair) {
-        const auto* ccb = ccb_gpu_addrs ? ccb_gpu_addrs[cbpair] : nullptr;
-        const auto ccb_size_in_bytes = ccb_sizes_in_bytes ? ccb_sizes_in_bytes[cbpair] : 0;
-
         const auto dcb_size_dw = dcb_sizes_in_bytes[cbpair] >> 2;
-        const auto ccb_size_dw = ccb_size_in_bytes >> 2;
-
         const auto& dcb_span = std::span{dcb_gpu_addrs[cbpair], dcb_size_dw};
-        const auto& ccb_span = std::span{ccb, ccb_size_dw};
-
-        if (DebugState.DumpingCurrentFrame()) {
-            static auto last_frame_num = -1LL;
-            static u32 seq_num{};
-            if (last_frame_num == frames_submitted && cbpair == 0) {
-                ++seq_num;
-            } else {
-                last_frame_num = frames_submitted;
-                seq_num = 0u;
-            }
-
-            using DebugStateType::QueueType;
-
-            DebugState.PushQueueDump({
-                .type = QueueType::dcb,
-                .submit_num = seq_num,
-                .num2 = cbpair,
-                .data = {dcb_span.begin(), dcb_span.end()},
-                .base_addr = reinterpret_cast<uintptr_t>(dcb_gpu_addrs[cbpair]),
-            });
-            DebugState.PushQueueDump({
-                .type = QueueType::ccb,
-                .submit_num = seq_num,
-                .num2 = cbpair,
-                .data = {ccb_span.begin(), ccb_span.end()},
-                .base_addr = reinterpret_cast<uintptr_t>(ccb),
-            });
-        }
         Gr2Port::Submits::Graphics(dcb_span);
     }
     return ORBIS_OK;
@@ -2419,7 +2323,6 @@ s32 PS4_SYSV_ABI sceGnmSubmitDone() {
     HLE_TRACE;
     LOG_DEBUG(Lib_GnmDriver, "called");
     std::scoped_lock lk{m_submit_lock};
-    ++frames_submitted;
     DebugState.IncGnmFrameNum();
     return ORBIS_OK;
 }
@@ -2977,7 +2880,7 @@ int PS4_SYSV_ABI Func_F916890425496553() {
 void RegisterLib(Core::Loader::SymbolsResolver* sym) {
     LOG_INFO(Lib_GnmDriver, "Initializing presenter");
     // GR2port: there is no command processor. Each submit is walked on the thread that makes it.
-    presenter = std::make_unique<Vulkan::Presenter>(*g_window, nullptr);
+    presenter = std::make_unique<Vulkan::Presenter>(*g_window);
 
     const s32 result = sceKernelGetCompiledSdkVersion(&sdk_version);
     if (result != ORBIS_OK) {

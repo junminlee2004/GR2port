@@ -12,7 +12,6 @@
 #include "core/emulator_settings.h"
 #include "imgui/renderer/imgui_core.h"
 #include "sdl_window.h"
-#include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/renderdoc.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
@@ -260,24 +259,12 @@ bool Instance::CreateDevice() {
     // Required
     ASSERT_MSG(add_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME),
                "Required Vulkan extension unavailable: {}", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    // GR2port: only GR2fork's renderer needs these; without it they are enabled when present.
-    const bool gr2fork = Gr2Port::EmulatedGpu::Wanted();
-    ASSERT_MSG(add_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME) || !gr2fork,
-               "Required Vulkan extension unavailable: {}", VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    // GR2port: nothing draws on this device, so these are enabled only when present.
+    add_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
     const bool attribute_divisor = add_extension(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
-    ASSERT_MSG(attribute_divisor || !gr2fork, "Required Vulkan extension unavailable: {}",
-               VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
     const bool robustness2_extension = add_extension(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
-    ASSERT_MSG(robustness2_extension || !gr2fork, "Required Vulkan extension unavailable: {}",
-               VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
 
     const auto robustness2_features = feature_chain.get<vk::PhysicalDeviceRobustness2FeaturesEXT>();
-    ASSERT_MSG(robustness2_features.robustBufferAccess2 || !gr2fork,
-               "Required Vulkan feature unavailable: robustBufferAccess2");
-    ASSERT_MSG(robustness2_features.robustImageAccess2 || !gr2fork,
-               "Required Vulkan feature unavailable: robustImageAccess2");
-    ASSERT_MSG(robustness2_features.nullDescriptor || !gr2fork,
-               "Required Vulkan feature unavailable: nullDescriptor");
     const bool robustness2 = robustness2_extension && robustness2_features.robustBufferAccess2 &&
                              robustness2_features.robustImageAccess2 &&
                              robustness2_features.nullDescriptor;

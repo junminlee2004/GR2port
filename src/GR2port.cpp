@@ -46,7 +46,6 @@
 #include "core/memory.h"
 #include "core/user_settings.h"
 #include "GR2port.h"
-#include "video_core/cache_storage.h"
 #include "video_core/gr2_fsr3/dlss_streamline.h"
 #include "video_core/renderdoc.h"
 
@@ -99,7 +98,6 @@ void Emulator::Shutdown() {
     }
     Common::Log::Flush();
     Libraries::SaveData::Backup::StopThread();
-    Storage::DataBase::Instance().Close();
     play_time_thread.request_stop();
     if (play_time_thread.joinable()) {
         play_time_thread.join();

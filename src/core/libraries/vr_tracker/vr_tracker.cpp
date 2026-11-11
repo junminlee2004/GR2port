@@ -8,7 +8,7 @@
 #include "core/libraries/vr_tracker/vr_tracker.h"
 #include "core/libraries/vr_tracker/vr_tracker_error.h"
 #include "core/memory.h"
-#include "video_core/amdgpu/liverpool.h"
+#include "video_core/gr2port/submits.h"
 
 namespace Libraries::VrTracker {
 
@@ -90,8 +90,8 @@ s32 PS4_SYSV_ABI sceVrTrackerInit(const OrbisVrTrackerInitParam* param) {
         param->work_memory_alignment != ORBIS_VR_TRACKER_MEMORY_ALIGNMENT ||
         param->work_memory_size != ORBIS_VR_TRACKER_WORK_SIZE ||
         // Check compute queue parameters
-        param->gpu_pipe_id >= AmdGpu::Liverpool::NumComputePipes ||
-        param->gpu_queue_id >= AmdGpu::Liverpool::NumQueuesPerPipe ||
+        param->gpu_pipe_id >= Gr2Port::Submits::NumComputePipes ||
+        param->gpu_queue_id >= Gr2Port::Submits::NumQueuesPerPipe ||
         // Check calibration settings
         param->calibration_settings.pad_position >
             OrbisVrTrackerCalibrationMode::ORBIS_VR_TRACKER_CALIBRATION_AUTO ||

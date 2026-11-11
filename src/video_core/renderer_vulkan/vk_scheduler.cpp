@@ -10,11 +10,9 @@
 #include "common/thread.h"
 #include "core/emulator_settings.h"
 #include "imgui/renderer/texture_manager.h"
-#include "video_core/buffer_cache/stream_copy_lane.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_record_thread.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
-#include "video_core/skipcache/skipcache.h"
 
 namespace Vulkan {
 
@@ -295,14 +293,7 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
     if (!threaded_recording) {
         lk.lock();
     }
-    // Every stream-lane byte this command buffer reads must be in place
-    // before the queue submit.
-    VideoCore::StreamCopyLane::Instance().DrainProducer();
     const u64 signal_value = work_semaphore.NextTick();
-    // Cmdbuf rollover: mid-draw submits (stream wraparound flushes) must
-    // synchronously invalidate all skip caches - a draw-entry token snapshot
-    // cannot see this flush.
-    VideoCore::Skipcache::Framework::Instance().InvalidateAll();
 
 #if TRACY_GPU_ENABLED
     auto* profiler_ctx = instance.GetProfilerContext();

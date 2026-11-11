@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
-#include <atomic>
 
 #include "common/logging/log.h"
-#include "video_core/amdgpu/liverpool.h"
 #include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/hooks.h"
 
@@ -13,11 +11,8 @@ namespace Gr2Port::EmulatedGpu {
 
 namespace {
 
-std::atomic<bool> g_on{false};
-std::atomic<VAddr> g_module_base{0};
-
 // SubmitCategory FUN_014214e0, the frame graph's per-item draw loop. Its handlers read the items
-// and write GNM commands, which only the emulation reads.
+// and write GNM commands, which nothing reads.
 constexpr Hooks::Entry DrawLoop{0x14214e0, 6, Hooks::FramePrologue};
 
 // What the game calls for each draw and dispatch on a graphics context. FUN_0042dc50 binds a
@@ -52,22 +47,12 @@ void PS4_SYSV_ABI OnWriter(u64 a, u64 b, u64 c, u64 d, u64 e, u64 f) {
     }
 }
 
-void UpdateDrawLoop() {
-    const VAddr module_base = g_module_base.load(std::memory_order_relaxed);
-    if (module_base == 0) {
-        return;
-    }
-    const bool returning = !g_on.load(std::memory_order_relaxed);
-    if (Hooks::SetReturning(module_base, DrawLoop, returning) != Hooks::Result::Hooked) {
-        LOG_ERROR(Render_Vulkan, "GR2port: the draw loop is not the expected code");
-    }
-}
-
 } // namespace
 
 void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
-    g_module_base.store(module_base, std::memory_order_relaxed);
-    UpdateDrawLoop();
+    if (Hooks::SetReturning(module_base, DrawLoop, true) != Hooks::Result::Hooked) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the draw loop is not the expected code");
+    }
     const std::array<const void*, Writers.size()> targets{
         reinterpret_cast<const void*>(&OnWriter<0>), reinterpret_cast<const void*>(&OnWriter<1>),
         reinterpret_cast<const void*>(&OnWriter<2>), reinterpret_cast<const void*>(&OnWriter<3>),
@@ -95,18 +80,8 @@ void SetFrameGraphRunning(bool running) {
     t_frame_graph = running;
 }
 
-bool Wanted() {
-    return false;
-}
-
-void Start(AmdGpu::Liverpool* liverpool) {
-    g_on.store(liverpool->GetRasterizer() != nullptr, std::memory_order_relaxed);
-    UpdateDrawLoop();
-    LOG_INFO(Render_Vulkan, "GR2port: GR2fork's GPU emulation {}", On() ? "on" : "off");
-}
-
 bool On() {
-    return g_on.load(std::memory_order_relaxed);
+    return false;
 }
 
 } // namespace Gr2Port::EmulatedGpu
