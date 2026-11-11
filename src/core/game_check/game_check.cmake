@@ -5,7 +5,9 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/game_check.cpp
     ${CMAKE_CURRENT_LIST_DIR}/game_check.h
     ${CMAKE_CURRENT_LIST_DIR}/game_patches.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/game_patches.h)
+    ${CMAKE_CURRENT_LIST_DIR}/game_patches.h
+    ${CMAKE_CURRENT_LIST_DIR}/trophy_list.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/trophy_list.h)
 
 # The Gravity Rush 2 patches, with their on and off flags, are part of the executable.
 cmrc_add_resource_library(gr2port-patches

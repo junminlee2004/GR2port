@@ -12,7 +12,9 @@ if (WIN32)
         ${CMAKE_CURRENT_LIST_DIR}/launcher.cpp
         ${CMAKE_CURRENT_LIST_DIR}/launcher.h
         ${CMAKE_CURRENT_LIST_DIR}/setup_dialog.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/setup_dialog.h)
+        ${CMAKE_CURRENT_LIST_DIR}/setup_dialog.h
+        ${CMAKE_CURRENT_LIST_DIR}/trophy_viewer.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/trophy_viewer.h)
 
     cmrc_add_resource_library(launcher-resources
         ALIAS res::launcher
@@ -53,6 +55,8 @@ elseif (UNIX AND NOT APPLE)
         ${CMAKE_CURRENT_LIST_DIR}/qt/style.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/text.cpp
         ${CMAKE_CURRENT_LIST_DIR}/qt/text.h
+        ${CMAKE_CURRENT_LIST_DIR}/qt/trophy_viewer.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/trophy_viewer.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/video_card.cpp
         ${CMAKE_CURRENT_LIST_DIR}/qt/video_card.h)
 

@@ -7,6 +7,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
+#include "common/types.h"
 
 // GR2port starts only Gravity Rush 2 v1.11, from the executable's own folder: the game and its
 // update as CUSAxxxxx and CUSAxxxxx-patch, or one with the update copied over it, each a folder or
@@ -29,6 +31,9 @@ bool LooseFiles();
 
 /// The title ID of the game Find found, such as CUSA04943.
 std::string TitleId();
+
+/// The copies of a file of the game Find found, the update's before the game's.
+std::vector<std::vector<u8>> Files(std::string_view path);
 
 /// The Gravity Rush 2 patch XML built into the executable.
 std::string_view PatchXml();

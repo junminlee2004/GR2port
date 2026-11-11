@@ -31,6 +31,7 @@
 #include "core/emulator_settings.h"
 #include "core/game_check/game_check.h"
 #include "core/game_check/game_patches.h"
+#include "core/game_check/trophy_list.h"
 #include "core/language/language.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
@@ -40,6 +41,7 @@
 #include "launcher/avatar.h"
 #include "launcher/key_bindings.h"
 #include "launcher/setup_dialog.h"
+#include "launcher/trophy_viewer.h"
 
 #include "graphics/gr2port/settings.h"
 
@@ -108,6 +110,8 @@ enum Control : int {
     IdAvatarChoose,
     IdAvatarNote,
     IdTrophies,
+    IdTrophyPopups,
+    IdTrophyViewer,
     IdControllerGroup,
     IdMotion,
     IdGyroSwap,
@@ -320,6 +324,8 @@ constexpr int TouchSwipeTop = 336;
 constexpr int TouchSwipeNoteTop = 356;
 constexpr RECT KeyBindingsButton{18, 396, 178, 419};
 constexpr RECT PadBindingsButton{433, 402, 577, 424};
+constexpr int TrophyPopupsTop = 118;
+constexpr RECT TrophyViewerButton{18, 146, 178, 169};
 
 // The button prompts setting's values, in the order of the combo box.
 constexpr std::array<std::pair<const wchar_t*, std::string_view>, 7> PromptChoices{{
@@ -1074,6 +1080,7 @@ void ShowController(Dialog& dialog) {
     for (const Toggle& toggle : Toggles) {
         Check(dialog, toggle.id, (EmulatorSettings.*toggle.get)());
     }
+    Check(dialog, IdTrophyPopups, !EmulatorSettings.IsTrophyPopupDisabled());
     dialog.input_config = Input::GetInputConfigFile(
         EmulatorSettings.IsUseUnifiedInputConfig() ? "default" : GameCheck::TitleId());
     dialog.deadzones = ReadDeadzones(dialog.input_config);
@@ -1874,6 +1881,14 @@ void Build(HWND window, Dialog& dialog) {
                           {Wide(GamePatches::ShadNetTrophies)}};
     MakeControl(dialog, dialog.pages[TrophiesPage], page_origin, WC_LINK, trophies, WS_TABSTOP,
                 IdTrophies, LabelLeft, FullscreenTop, ExtrasList.right - LabelLeft, CheckHeight);
+    // The game shows a pop-up when the player earns a trophy.
+    MakeControl(dialog, dialog.pages[TrophiesPage], page_origin, WC_BUTTONW, L"Show Trophy Pop-ups",
+                BS_AUTOCHECKBOX | WS_TABSTOP, IdTrophyPopups, LabelLeft, TrophyPopupsTop,
+                CheckWidth, CheckHeight);
+    MakeControl(dialog, dialog.pages[TrophiesPage], page_origin, WC_BUTTONW, L"View Trophies...",
+                BS_PUSHBUTTON | WS_TABSTOP, IdTrophyViewer, TrophyViewerButton.left,
+                TrophyViewerButton.top, TrophyViewerButton.right - TrophyViewerButton.left,
+                TrophyViewerButton.bottom - TrophyViewerButton.top);
 
     const HWND list =
         MakeControl(dialog, dialog.pages[ExtrasPage], page_origin, WC_LISTVIEWW, L"",
@@ -2015,6 +2030,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             ShowDeadzones(dialog, DefaultDeadzones());
             ShowMouse(dialog, Settings::Mouse{});
             Check(dialog, IdTouchSwipe, false);
+            Check(dialog, IdTrophyPopups, !GeneralSettings{}.trophy_popup_disabled.value);
             dialog.key_bindings = DefaultKeyBindings();
             dialog.pad_bindings = DefaultPadBindings();
             ShowLanguage(dialog, GeneralSettings{}.console_language.value);
@@ -2074,14 +2090,22 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             ChooseAvatar(window, dialog);
         }
         break;
+    case IdTrophyViewer:
+        if (code == BN_CLICKED) {
+            Trophies::Extract();
+            ShowTrophies(window);
+        }
+        break;
     case IDOK:
         dialog.values.display = Read(dialog);
         dialog.values.game = ReadGame(dialog);
         dialog.values.graphics = ReadGraphics(dialog);
         dialog.values.mouse = ReadMouse(dialog);
         Settings::Set(dialog.values);
-        // The game starts in the language the launcher shows; SaveController saves it.
+        // The game starts in the language the launcher shows; SaveController saves it and the
+        // trophy pop-ups' switch.
         EmulatorSettings.SetConsoleLanguage(Language::Current());
+        EmulatorSettings.SetTrophyPopupDisabled(!Checked(dialog, IdTrophyPopups));
         SaveOnline(window, dialog);
         SaveController(window, dialog);
         if (dialog.key_bindings && !SaveKeyBindings(dialog.input_config, *dialog.key_bindings)) {

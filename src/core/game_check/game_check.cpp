@@ -89,6 +89,8 @@ enum class Form {
 std::atomic<bool> g_loose_files{false};
 // Set by Find before anything reads it.
 std::string g_title_id;
+// The roots of the game Find found, the update's first.
+std::vector<std::filesystem::path> g_roots;
 
 // English text with fmt's {} markers in the player's language, filled in. A translation that does
 // not take the values falls back to the English.
@@ -272,6 +274,11 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
     const bool loose_files = all(Form::Folder);
     g_loose_files.store(loose_files, std::memory_order_relaxed);
     g_title_id = id;
+    g_roots.clear();
+    if (update_root) {
+        g_roots.push_back(*update_root);
+    }
+    g_roots.push_back(*root);
     LOG_INFO(Loader, "GR2port: Gravity Rush 2 v1.11 {} in {}, {}", id,
              Common::FS::PathToUTF8String(*root), loose_files ? "loose files" : "archives");
     return Game{*root, loose_files};
@@ -304,6 +311,16 @@ bool LooseFiles() {
 
 std::string TitleId() {
     return g_title_id;
+}
+
+std::vector<std::vector<u8>> Files(std::string_view path) {
+    std::vector<std::vector<u8>> copies;
+    for (const std::filesystem::path& root : g_roots) {
+        if (auto bytes = Core::FileSys::ReadGameFile(root, path)) {
+            copies.push_back(std::move(*bytes));
+        }
+    }
+    return copies;
 }
 
 std::string_view PatchXml() {

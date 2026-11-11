@@ -34,6 +34,7 @@
 #include "core/emulator_settings.h"
 #include "core/game_check/game_check.h"
 #include "core/game_check/game_patches.h"
+#include "core/game_check/trophy_list.h"
 #include "core/language/language.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
@@ -46,6 +47,7 @@
 #include "launcher/qt/key_bindings.h"
 #include "launcher/qt/setup_dialog.h"
 #include "launcher/qt/text.h"
+#include "launcher/qt/trophy_viewer.h"
 #include "launcher/qt/video_card.h"
 
 #include "graphics/gr2port/settings.h"
@@ -192,6 +194,8 @@ constexpr int TouchSwipeTop = 336;
 constexpr int TouchSwipeNoteTop = 356;
 constexpr Area KeyBindingsButton{18, 396, 178, 419};
 constexpr Area PadBindingsButton{433, 402, 577, 424};
+constexpr int TrophyPopupsTop = 118;
+constexpr Area TrophyViewerButton{18, 146, 178, 169};
 
 // The button prompts setting's values, in the order of the combo box.
 constexpr std::array<std::pair<std::string_view, std::string_view>, 7> PromptChoices{{
@@ -396,6 +400,7 @@ struct Dialog {
     QComboBox* prompts = nullptr;
     QComboBox* pad_prompts = nullptr;
     QCheckBox* touch_swipe_box = nullptr;
+    QCheckBox* trophy_popups = nullptr;
     QCheckBox* dlc = nullptr;
     QCheckBox* halloween = nullptr;
     QLineEdit* online_id = nullptr;
@@ -652,6 +657,7 @@ void ShowController(Dialog& dialog) {
     for (size_t i = 0; i < Toggles.size(); ++i) {
         dialog.toggles[i]->setChecked((EmulatorSettings.*Toggles[i].get)());
     }
+    dialog.trophy_popups->setChecked(!EmulatorSettings.IsTrophyPopupDisabled());
     dialog.input_config = Input::GetInputConfigFile(
         EmulatorSettings.IsUseUnifiedInputConfig() ? "default" : GameCheck::TitleId());
     dialog.deadzones = ReadDeadzones(dialog.input_config);
@@ -1384,6 +1390,15 @@ void BuildTrophies(Dialog& dialog, QWidget* page) {
              Phrase{"Sign in to <a href=\"{0}\">shadNet Trophies</a> to view your trophies.",
                     {std::string(GamePatches::ShadNetTrophies)}},
              Place(page, LabelLeft, FullscreenTop, ExtrasList.right - LabelLeft, CheckHeight));
+    // The game shows a pop-up when the player earns a trophy.
+    dialog.trophy_popups =
+        MakeCheck(dialog, page, "Show Trophy Pop-ups",
+                  Place(page, LabelLeft, TrophyPopupsTop, CheckWidth, CheckHeight));
+    QPushButton* const viewer = MakeButton(dialog, page, "View Trophies...", TrophyViewerButton);
+    QObject::connect(viewer, &QPushButton::clicked, dialog.window, [&dialog] {
+        Trophies::Extract();
+        ShowTrophies(dialog.window);
+    });
 }
 
 void BuildExtras(Dialog& dialog, QWidget* page) {
@@ -1405,8 +1420,10 @@ void Save(Dialog& dialog) {
     dialog.values.graphics = ReadGraphics(dialog);
     dialog.values.mouse = ReadMouse(dialog);
     Settings::Set(dialog.values);
-    // The game starts in the language the launcher shows; SaveController saves it.
+    // The game starts in the language the launcher shows; SaveController saves it and the trophy
+    // pop-ups' switch.
     EmulatorSettings.SetConsoleLanguage(Language::Current());
+    EmulatorSettings.SetTrophyPopupDisabled(!dialog.trophy_popups->isChecked());
     SaveOnline(dialog);
     SaveController(dialog);
     if (dialog.key_bindings && !SaveKeyBindings(dialog.input_config, *dialog.key_bindings)) {
@@ -1430,6 +1447,7 @@ void SetDefaults(Dialog& dialog) {
     ShowDeadzones(dialog, DefaultDeadzones());
     ShowMouse(dialog, Settings::Mouse{});
     dialog.touch_swipe_box->setChecked(false);
+    dialog.trophy_popups->setChecked(!GeneralSettings{}.trophy_popup_disabled.value);
     dialog.key_bindings = DefaultKeyBindings();
     dialog.pad_bindings = DefaultPadBindings();
     ShowLanguage(dialog, GeneralSettings{}.console_language.value);
