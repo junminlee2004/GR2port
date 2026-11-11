@@ -17,8 +17,11 @@
 #include "graphics/gr2port/fault_report.h"
 
 #ifdef _WIN32
+#include <csignal>
 #include <windows.h>
 static constexpr DWORD MS_VC_EXCEPTION = 0x406D1388;
+// The code of a C++ throw.
+static constexpr DWORD MS_CPP_EXCEPTION = 0xE06D7363;
 #else
 #include <csignal>
 #include <pthread.h>
@@ -136,6 +139,9 @@ static LONG WINAPI SignalHandler(EXCEPTION_POINTERS* pExp) noexcept {
     case MS_VC_EXCEPTION:
         LOG_DEBUG(Debug, "Pass MS_VC_EXCEPTION at {} to handler", address);
         return EXCEPTION_EXECUTE_HANDLER;
+    case MS_CPP_EXCEPTION:
+        // A C++ throw goes to its catch block. One without a catch block ends in AbortHandler.
+        return EXCEPTION_CONTINUE_SEARCH;
     default:
         break;
     }
@@ -160,6 +166,12 @@ static LONG WINAPI SignalHandler(EXCEPTION_POINTERS* pExp) noexcept {
     }
 
     return EXCEPTION_CONTINUE_SEARCH;
+}
+
+// The runtime aborts on a C++ throw without a catch block, and on its own failed checks.
+static void AbortHandler(int) {
+    LOG_CRITICAL(Debug, "The runtime aborts: an uncaught C++ exception or a failed runtime check");
+    Common::Singleton<Core::Emulator>::Instance()->Shutdown();
 }
 
 #else
@@ -347,6 +359,7 @@ SignalDispatch::SignalDispatch() {
 #if defined(_WIN32)
     ASSERT_MSG(handle = AddVectoredExceptionHandler(0, SignalHandler),
                "Failed to register exception handler.");
+    std::signal(SIGABRT, AbortHandler);
 #else
     struct sigaction action{};
     action.sa_sigaction = SignalHandler;
