@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -99,7 +100,8 @@ bool UserSettingsImpl::Load() {
             m_userManager.GetUsers() = default_users;
         }
 
-        if (m_userManager.GetUsers().commit_hash != Common::g_scm_rev)
+        const bool renamed = m_userManager.RenameShadPs4DefaultUsers();
+        if (renamed || m_userManager.GetUsers().commit_hash != Common::g_scm_rev)
             Save();
 
         return true;

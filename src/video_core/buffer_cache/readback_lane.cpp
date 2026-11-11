@@ -83,7 +83,7 @@ std::optional<u64> ReadbackLanes::Copy(const Request& request) {
 }
 
 void ReadbackLanes::Run(Lane& lane, std::stop_token stop) {
-    Common::SetCurrentThreadName("shadPS4:Readback");
+    Common::SetCurrentThreadName("GR2port:Readback");
     while (true) {
         Job* job{};
         {

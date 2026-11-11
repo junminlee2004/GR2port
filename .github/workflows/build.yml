@@ -102,6 +102,6 @@ jobs:
     - name: Upload Windows SDL artifact
       uses: actions/upload-artifact@v7
       with:
-        name: shadps4-win64-sdl-${{ needs.get-info.outputs.date }}-${{ needs.get-info.outputs.shorthash }}
+        name: gr2port-win64-sdl-${{ needs.get-info.outputs.date }}-${{ needs.get-info.outputs.shorthash }}
         path: ${{github.workspace}}/build/Gravity Rush 2™.exe
         retention-days: 7

@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // The guest <-> host translation used by the new libSceNet (src/core/libraries/net): pure
@@ -182,15 +183,15 @@ TEST(NetLibTranslate, UnixAddresses) {
     OrbisNetSockaddrUn guest{};
     guest.sun_len = sizeof(guest);
     guest.sun_family = ORBIS_NET_AF_UNIX;
-    std::strcpy(guest.sun_path, "/tmp/shadps4.sock");
+    std::strcpy(guest.sun_path, "/tmp/gr2port.sock");
     sockaddr_storage host{};
     socklen_t len = 0;
     ASSERT_EQ(
         ToHostSockaddr(reinterpret_cast<OrbisNetSockaddr*>(&guest), sizeof(guest), &host, &len), 0);
     const auto* un = reinterpret_cast<const sockaddr_un*>(&host);
     EXPECT_EQ(un->sun_family, AF_UNIX);
-    EXPECT_STREQ(un->sun_path, "/tmp/shadps4.sock");
-    EXPECT_EQ(len, offsetof(sockaddr_un, sun_path) + std::strlen("/tmp/shadps4.sock") + 1);
+    EXPECT_STREQ(un->sun_path, "/tmp/gr2port.sock");
+    EXPECT_EQ(len, offsetof(sockaddr_un, sun_path) + std::strlen("/tmp/gr2port.sock") + 1);
 
     OrbisNetSockaddrUn back{};
     u32 back_len = sizeof(back);
@@ -198,7 +199,7 @@ TEST(NetLibTranslate, UnixAddresses) {
                     reinterpret_cast<OrbisNetSockaddr*>(&back), &back_len);
     EXPECT_EQ(back_len, sizeof(OrbisNetSockaddrUn));
     EXPECT_EQ(back.sun_family, ORBIS_NET_AF_UNIX);
-    EXPECT_STREQ(back.sun_path, "/tmp/shadps4.sock");
+    EXPECT_STREQ(back.sun_path, "/tmp/gr2port.sock");
 
     // A path that does not fit the host's sun_path.
     std::memset(guest.sun_path, 'a', sizeof(guest.sun_path));

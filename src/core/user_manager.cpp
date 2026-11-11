@@ -2,8 +2,11 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <array>
 #include <filesystem>
 #include <iostream>
+#include <string_view>
+#include <utility>
 #include <common/assert.h>
 #include <common/path_util.h>
 #include "emulator_settings.h"
@@ -75,7 +78,7 @@ Users UserManager::CreateDefaultUsers() {
     default_users.user = {
         {
             .user_id = 1000,
-            .user_name = "shadPS4",
+            .user_name = "GR2port",
             .user_color = 1,
             .player_index = 1,
             .shadnet_npid = "",
@@ -86,7 +89,7 @@ Users UserManager::CreateDefaultUsers() {
         },
         {
             .user_id = 1001,
-            .user_name = "shadPS4-2",
+            .user_name = "GR2port-2",
             .user_color = 2,
             .player_index = 2,
             .shadnet_npid = "",
@@ -97,7 +100,7 @@ Users UserManager::CreateDefaultUsers() {
         },
         {
             .user_id = 1002,
-            .user_name = "shadPS4-3",
+            .user_name = "GR2port-3",
             .user_color = 3,
             .player_index = 3,
             .shadnet_npid = "",
@@ -108,7 +111,7 @@ Users UserManager::CreateDefaultUsers() {
         },
         {
             .user_id = 1003,
-            .user_name = "shadPS4-4",
+            .user_name = "GR2port-4",
             .user_color = 4,
             .player_index = 4,
             .shadnet_npid = "",
@@ -120,6 +123,26 @@ Users UserManager::CreateDefaultUsers() {
     };
 
     return default_users;
+}
+
+// Profiles that keep a shadPS4 default name take the matching GR2port default.
+bool UserManager::RenameShadPs4DefaultUsers() {
+    static constexpr std::array<std::pair<std::string_view, std::string_view>, 4> Names{{
+        {"shadPS4", "GR2port"},
+        {"shadPS4-2", "GR2port-2"},
+        {"shadPS4-3", "GR2port-3"},
+        {"shadPS4-4", "GR2port-4"},
+    }};
+    bool renamed = false;
+    for (auto& user : m_users.user) {
+        for (const auto& [old_name, new_name] : Names) {
+            if (user.user_name == old_name) {
+                user.user_name = new_name;
+                renamed = true;
+            }
+        }
+    }
+    return renamed;
 }
 
 bool UserManager::SetDefaultUser(u32 user_id) {

@@ -100,7 +100,7 @@ static Uint32 SDLCALL PollControllerLightColour(void* userdata, SDL_TimerID time
 WindowSDL::WindowSDL(s32 width_, s32 height_, Input::GameControllers* controllers_,
                      std::string_view window_title)
     : width{width_}, height{height_}, controllers{*controllers_} {
-    if (!SDL_SetHint(SDL_HINT_APP_NAME, "shadPS4")) {
+    if (!SDL_SetHint(SDL_HINT_APP_NAME, "GR2port")) {
         UNREACHABLE_MSG("Failed to set SDL window hint: {}", SDL_GetError());
     }
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -523,7 +523,7 @@ void SetWindowIcon(SDL_Window* window, const std::vector<u8>& png) {
 
 void SetDefaultWindowIcon(SDL_Window* window) {
     const auto resource = cmrc::res::get_filesystem();
-    const auto file = resource.open("src/resources/shadps4.png");
+    const auto file = resource.open("src/resources/gr2port.png");
     const std::vector<u8> texData = std::vector<u8>(file.begin(), file.end());
     SetWindowIcon(window, texData);
 }

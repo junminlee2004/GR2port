@@ -126,7 +126,7 @@ struct Context::Impl {
 
     // FidelityFX creates contexts through one process-global device copy. Creations and
     // destructions run on this worker, one at a time.
-    Worker worker{"shadPS4:Gr2Fsr3Worker"};
+    Worker worker{"GR2port:Gr2Fsr3Worker"};
 };
 
 Context::Impl::Impl(const Vulkan::Instance& instance) : instance{instance} {

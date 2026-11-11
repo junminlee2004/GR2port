@@ -31,7 +31,7 @@ namespace {
 
 // The server never checks the code. With this one the game's toolkit goes on to the login
 // request; with the emulator's six-character placeholder it stops before it.
-constexpr char Code[] = "v3.shadps4_gr2_dummy_auth_code_AAAAAAAAAAAAAAAA";
+constexpr char Code[] = "v3.gr2port_gr2_dummy_auth_code_AAAAAAAAAAAAAAAA";
 
 // The emulator's library writes a code only when it hands one out.
 s32 WithCode(s32 result, OrbisNpAuthorizationCode* auth_code) {

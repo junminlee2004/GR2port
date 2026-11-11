@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright 2026 GR2port
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-target_sources(shadps4 PRIVATE
+target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/language.cpp
     ${CMAKE_CURRENT_LIST_DIR}/language.h)
 
@@ -12,4 +12,4 @@ cmrc_add_resource_library(gr2port-languages
     ALIAS res::gr2port_languages
     NAMESPACE gr2port_languages
     ${GR2PORT_LANGUAGES})
-target_link_libraries(shadps4 PRIVATE res::gr2port_languages)
+target_link_libraries(gr2port PRIVATE res::gr2port_languages)

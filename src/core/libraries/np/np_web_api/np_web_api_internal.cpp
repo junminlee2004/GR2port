@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -726,7 +727,7 @@ s32 sendRequest(s64 requestId, s32 partIndex, const void* pData, u64 dataSize, s
         if (boundary.empty()) {
             // Fallback boundary derived from the unique request id.
             static const char kHex[] = "0123456789abcdef";
-            boundary = "----shadPS4Boundary";
+            boundary = "----GR2portBoundary";
             const u64 v = static_cast<u64>(requestId);
             for (int shift = 60; shift >= 0; shift -= 4) {
                 boundary += kHex[(v >> shift) & 0xf];

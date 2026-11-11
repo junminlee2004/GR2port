@@ -147,7 +147,7 @@ struct Fsr4Context::Impl {
 
     // The provider creates contexts through one process-global interface pointer. Loads,
     // creations and destructions run on this worker, one at a time.
-    Worker worker{"shadPS4:Gr2Fsr4Worker"};
+    Worker worker{"GR2port:Gr2Fsr4Worker"};
 };
 
 Fsr4Context::Impl::Impl(const Vulkan::Instance& instance) : instance{instance} {

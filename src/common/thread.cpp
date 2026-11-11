@@ -774,7 +774,7 @@ void StartPeriodicAffinityRewalk() {
     static std::once_flag started;
     std::call_once(started, [] {
         std::thread([] {
-            SetCurrentThreadName("shadPS4:AffinityW");
+            SetCurrentThreadName("GR2port:AffinityW");
             // Linux births this thread on the caller's pin and the walk skips its own thread.
             if (const u64 hot = GetReservedCoreMask()) {
                 SetCurrentThreadAffinityMask(~hot);

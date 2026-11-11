@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <cstdlib>
@@ -107,7 +108,7 @@ static auto UpdateColorLevels(T sink) {
     return sink;
 }
 
-void Setup(std::string_view shadps4_filename) {
+void Setup(std::string_view log_filename) {
     static std::once_flag already_registered;
 
     std::call_once(already_registered, []() {
@@ -140,7 +141,7 @@ void Setup(std::string_view shadps4_filename) {
     // Setup file
 
     g_shad_file_sink = std::make_shared<LogFileSink>(
-        (GetUserPath(Common::FS::PathType::LogDir) / shadps4_filename).string(), false,
+        (GetUserPath(Common::FS::PathType::LogDir) / log_filename).string(), false,
         EmulatorSettings.GetLogSizeLimit());
     g_shad_file_sink->set_pattern("%^%v%$");
 

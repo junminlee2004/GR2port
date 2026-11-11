@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -16,7 +17,7 @@ enum class position {
 };
 
 enum class stockIcons {
-    shadPS4,
+    GR2port,
     Settings,
     Profiles,
     Input,
@@ -48,7 +49,7 @@ private:
 };
 
 void QueueNotification(std::string message, float timer, position pos,
-                       stockIcons = shadNotifications::stockIcons::shadPS4);
+                       stockIcons = shadNotifications::stockIcons::GR2port);
 void QueueNotification(std::string message, float timer, position pos, std::vector<u8> pngData,
                        bool iconBackground = false);
 

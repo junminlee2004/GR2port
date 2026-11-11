@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -343,7 +344,7 @@ static HostOverrideState LoadHostOverrideState() {
     HostOverrideState s;
     s.loaded = true;
     std::filesystem::path path;
-    if (const char* path_env = std::getenv("SHADPS4_HTTP_HOST_OVERRIDES_JSON");
+    if (const char* path_env = std::getenv("GR2PORT_HTTP_HOST_OVERRIDES_JSON");
         path_env && path_env[0]) {
         // Explicit override path - useful for dev / testing.
         path = path_env;

@@ -293,9 +293,9 @@ vk::UniqueInstance CreateInstance(Frontend::WindowSystemType window_type, bool e
     const auto extensions = GetLayerExtensions(GetInstanceExtensions(window_type, true), layers);
 
     const vk::ApplicationInfo application_info = {
-        .pApplicationName = "shadPS4",
+        .pApplicationName = "GR2port",
         .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-        .pEngineName = "shadPS4 Vulkan",
+        .pEngineName = "GR2port Vulkan",
         .engineVersion = VK_MAKE_VERSION(1, 0, 0),
         .apiVersion = available_version,
     };

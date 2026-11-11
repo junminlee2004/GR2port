@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // The new libSceNet (src/core/libraries/net) driven through its exports, exactly as a game
@@ -1007,7 +1008,7 @@ TEST_F(NetLib, UnixDatagramSockets) {
 #ifdef _WIN32
     GTEST_SKIP() << "Windows has no AF_UNIX datagram sockets";
 #else
-    const std::string path = "/tmp/shadps4_net_test_" + std::to_string(::getpid());
+    const std::string path = "/tmp/gr2port_net_test_" + std::to_string(::getpid());
     ::unlink(path.c_str());
     OrbisNetSockaddrUn addr{};
     addr.sun_len = sizeof(addr);

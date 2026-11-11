@@ -380,7 +380,7 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
 }
 
 void Scheduler::PriorityPendingOpsThread(std::stop_token stoken) {
-    Common::SetCurrentThreadName("shadPS4:GpuSchedPriorityPendingOpsRunner");
+    Common::SetCurrentThreadName("GR2port:GpuSchedPriorityPendingOpsRunner");
 
     while (!stoken.stop_requested()) {
         PendingOp op;

@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -50,6 +51,7 @@ public:
     User* GetUserByPlayerIndex(s32 index);
     const std::vector<User>& GetAllUsers() const;
     Users CreateDefaultUsers();
+    bool RenameShadPs4DefaultUsers();
     bool SetDefaultUser(u32 user_id);
     User GetDefaultUser();
     void SetControllerPort(u32 user_id, int port);

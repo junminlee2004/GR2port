@@ -17,10 +17,10 @@ foreach(gtest_target gtest gtest_main gmock gmock_main)
 endforeach()
 
 set(TEST_TARGETS
-    shadps4_settings_test
-    shadps4_ngs2_test
-    shadps4_gcn_test
-    shadps4_range_set_test
+    gr2port_settings_test
+    gr2port_ngs2_test
+    gr2port_gcn_test
+    gr2port_range_set_test
 )
 
 set(SETTINGS_TEST_SOURCES
@@ -171,10 +171,10 @@ set(GCN_TEST_SOURCES
     gcn/test_gcn_instructions.cpp
 )
 
-add_executable(shadps4_settings_test ${SETTINGS_TEST_SOURCES})
-add_executable(shadps4_ngs2_test ${NGS2_TEST_SOURCES})
-add_executable(shadps4_gcn_test ${GCN_TEST_SOURCES})
-add_executable(shadps4_range_set_test test_range_set.cpp)
+add_executable(gr2port_settings_test ${SETTINGS_TEST_SOURCES})
+add_executable(gr2port_ngs2_test ${NGS2_TEST_SOURCES})
+add_executable(gr2port_gcn_test ${GCN_TEST_SOURCES})
+add_executable(gr2port_range_set_test test_range_set.cpp)
 
 foreach(t ${TEST_TARGETS})
     target_include_directories(${t} PRIVATE
@@ -185,7 +185,7 @@ foreach(t ${TEST_TARGETS})
     target_compile_definitions(${t} PRIVATE BOOST_ASIO_STANDALONE)
 endforeach()
 
-target_link_libraries(shadps4_settings_test PRIVATE
+target_link_libraries(gr2port_settings_test PRIVATE
     GTest::gtest_main
     fmt::fmt
     nlohmann_json::nlohmann_json
@@ -193,7 +193,7 @@ target_link_libraries(shadps4_settings_test PRIVATE
     SDL3::SDL3
     spdlog::spdlog
 )
-target_link_libraries(shadps4_ngs2_test PRIVATE
+target_link_libraries(gr2port_ngs2_test PRIVATE
     GTest::gtest_main
     fmt::fmt
     nlohmann_json::nlohmann_json
@@ -201,7 +201,7 @@ target_link_libraries(shadps4_ngs2_test PRIVATE
     SDL3::SDL3
     spdlog::spdlog
 )
-target_link_libraries(shadps4_gcn_test PRIVATE
+target_link_libraries(gr2port_gcn_test PRIVATE
     GTest::gtest_main
     fmt::fmt
     nlohmann_json::nlohmann_json
@@ -216,7 +216,7 @@ target_link_libraries(shadps4_gcn_test PRIVATE
     tsl::robin_map
     Tracy::TracyClient
 )
-target_link_libraries(shadps4_range_set_test PRIVATE
+target_link_libraries(gr2port_range_set_test PRIVATE
     GTest::gtest_main
     Boost::headers
 )
@@ -301,18 +301,18 @@ set(HTTP_TEST_SOURCES
     network/test_http_lifecycle.cpp
 )
 
-add_executable(shadps4_http_test ${HTTP_TEST_SOURCES})
+add_executable(gr2port_http_test ${HTTP_TEST_SOURCES})
 
-list(APPEND TEST_TARGETS shadps4_http_test)
+list(APPEND TEST_TARGETS gr2port_http_test)
 
-target_include_directories(shadps4_http_test PRIVATE
+target_include_directories(gr2port_http_test PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}
 )
-target_compile_features(shadps4_http_test PRIVATE cxx_std_23)
-target_compile_definitions(shadps4_http_test PRIVATE BOOST_ASIO_STANDALONE)
+target_compile_features(gr2port_http_test PRIVATE cxx_std_23)
+target_compile_definitions(gr2port_http_test PRIVATE BOOST_ASIO_STANDALONE)
 
-target_link_libraries(shadps4_http_test PRIVATE
+target_link_libraries(gr2port_http_test PRIVATE
     GTest::gtest_main
     fmt::fmt
     magic_enum::magic_enum
@@ -328,13 +328,13 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR
     include(CheckCXXSymbolExists)
     check_cxx_symbol_exists(_LIBCPP_VERSION version LIBCPP)
     if (LIBCPP)
-        target_compile_options(shadps4_http_test PRIVATE -fexperimental-library)
+        target_compile_options(gr2port_http_test PRIVATE -fexperimental-library)
     endif()
 endif()
 
 if (WIN32)
-    target_link_libraries(shadps4_http_test PRIVATE onecore)
-    target_compile_definitions(shadps4_http_test PRIVATE
+    target_link_libraries(gr2port_http_test PRIVATE onecore)
+    target_compile_definitions(gr2port_http_test PRIVATE
         NOMINMAX
         WIN32_LEAN_AND_MEAN
         NTDDI_VERSION=0x0A000006
@@ -342,7 +342,7 @@ if (WIN32)
         WINVER=0x0A00
     )
     if (MSVC)
-        target_compile_definitions(shadps4_http_test PRIVATE
+        target_compile_definitions(gr2port_http_test PRIVATE
             _CRT_SECURE_NO_WARNINGS
             _CRT_NONSTDC_NO_DEPRECATE
             _SCL_SECURE_NO_WARNINGS
@@ -351,7 +351,7 @@ if (WIN32)
     endif()
 endif()
 
-gtest_discover_tests(shadps4_http_test
+gtest_discover_tests(gr2port_http_test
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     DISCOVERY_TIMEOUT 60
 )
@@ -377,7 +377,7 @@ if (NOT NET_TEST_SSL_LIBS)
     set(NET_TEST_SSL_LIBS OpenSSL::Crypto)
 endif()
 
-add_executable(shadps4_net_test
+add_executable(gr2port_net_test
     ${NET_CORE_SOURCES}
     network/test_net_host.cpp
     network/test_net_p2p_codec.cpp
@@ -388,12 +388,12 @@ add_executable(shadps4_net_test
 # Our TCP against the Linux kernel's TCP through a TUN device. Needs root or CAP_NET_ADMIN
 # and skips itself otherwise (and on other platforms). Separate target so it can run serially:
 # every test creates the same TUN interface.
-add_executable(shadps4_net_interop_test
+add_executable(gr2port_net_interop_test
     ${CMAKE_SOURCE_DIR}/src/core/net/p2p_tcp.cpp
     network/test_net_p2p_tcp_interop.cpp
 )
 
-foreach(t shadps4_net_test shadps4_net_interop_test)
+foreach(t gr2port_net_test gr2port_net_interop_test)
     list(APPEND TEST_TARGETS ${t})
     target_include_directories(${t} PRIVATE
         ${CMAKE_SOURCE_DIR}/src
@@ -431,17 +431,17 @@ foreach(t shadps4_net_test shadps4_net_interop_test)
     endif()
 endforeach()
 
-target_link_libraries(shadps4_net_test PRIVATE ${NET_TEST_SSL_LIBS})
+target_link_libraries(gr2port_net_test PRIVATE ${NET_TEST_SSL_LIBS})
 if (WIN32)
-    target_link_libraries(shadps4_net_test PRIVATE wepoll)
+    target_link_libraries(gr2port_net_test PRIVATE wepoll)
 endif()
 
-gtest_discover_tests(shadps4_net_test
+gtest_discover_tests(gr2port_net_test
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     DISCOVERY_TIMEOUT 60
     PROPERTIES TIMEOUT 300
 )
-gtest_discover_tests(shadps4_net_interop_test
+gtest_discover_tests(gr2port_net_interop_test
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     DISCOVERY_TIMEOUT 60
     PROPERTIES RUN_SERIAL TRUE TIMEOUT 600
@@ -542,7 +542,7 @@ function(add_net_lib_test target)
     set(TEST_TARGETS ${TEST_TARGETS} PARENT_SCOPE)
 endfunction()
 
-add_net_lib_test(shadps4_net_lib_test
+add_net_lib_test(gr2port_net_lib_test
     ${NET_LIB_TEST_SOURCES}
     network/test_net_lib.cpp
     network/test_net_lib_p2p_ioctl.cpp
@@ -552,7 +552,7 @@ add_net_lib_test(shadps4_net_lib_test
 
 # The kernel glue: net ids as kernel file descriptors, the BSD socket calls. The kernel's
 # errno and file table come from a stub; everything else is the real code.
-add_net_lib_test(shadps4_net_kernel_test
+add_net_lib_test(gr2port_net_kernel_test
     ${NET_LIB_TEST_SOURCES}
     ${CMAKE_SOURCE_DIR}/src/core/libraries/net/net_kernel.cpp
     ${CMAKE_SOURCE_DIR}/src/core/libraries/net/net_upnp.cpp
@@ -560,7 +560,7 @@ add_net_lib_test(shadps4_net_kernel_test
     stubs/net_kernel_stub.cpp
     network/test_net_kernel.cpp
 )
-target_link_libraries(shadps4_net_kernel_test PRIVATE
+target_link_libraries(gr2port_net_kernel_test PRIVATE
     tsl::robin_map         # fs.h
     miniupnpc::miniupnpc   # UPnP forwarding of the P2P port
 )

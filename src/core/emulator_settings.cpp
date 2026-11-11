@@ -383,7 +383,7 @@ bool EmulatorSettingsImpl::Load(const std::string& serial) {
                     0,
                     nullptr,
                     "Config Migration",
-                    "The shadPS4 config backend has been updated, and you only have "
+                    "The GR2port config backend has been updated, and you only have "
                     "the old version of the config. Do you wish to update it "
                     "automatically, or continue with the default config?",
                     2,
@@ -452,7 +452,6 @@ bool EmulatorSettingsImpl::TransferSettings() {
         setFromToml(s.dev_kit_mode, general, "isDevKit");
         setFromToml(s.trophy_popup_disabled, general, "isTrophyPopupDisabled");
         setFromToml(s.trophy_notification_duration, general, "trophyNotificationDuration");
-        setFromToml(s.discord_rpc_enabled, general, "enableDiscordRPC");
         setFromToml(s.show_splash, general, "showSplash");
         setFromToml(s.trophy_notification_side, general, "sideTrophy");
         setFromToml(m_network.connected_to_network, general, "isConnectedToNetwork");

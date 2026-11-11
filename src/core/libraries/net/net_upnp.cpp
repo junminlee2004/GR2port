@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <chrono>
@@ -129,7 +130,7 @@ void UPnPClient::AddMapping(u16 port) {
     const std::string port_str = std::to_string(port);
     const int ret =
         UPNP_AddPortMapping(m_urls.controlURL, m_data.first.servicetype, port_str.c_str(),
-                            port_str.c_str(), m_lan_addr, "shadPS4", "UDP", nullptr, "0");
+                            port_str.c_str(), m_lan_addr, "GR2port", "UDP", nullptr, "0");
 
     if (ret == UPNPCOMMAND_SUCCESS) {
         m_external_port.store(port);

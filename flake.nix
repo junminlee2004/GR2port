@@ -1,8 +1,9 @@
 ## SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+## SPDX-FileCopyrightText: Copyright 2026 GR2port
 ## SPDX-License-Identifier: GPL-2.0-or-later
 
 {
-  description = "shadPS4 Nix Flake";
+  description = "GR2port Nix Flake";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
@@ -56,7 +57,7 @@
               ] ++ lib.optionals enableDebugTooling [ renderdoc gef strace perf vulkan-tools ];
 
               shellHook = ''
-                echo "Entering shadPS4 development shell!"
+                echo "Entering GR2port development shell!"
                 export LD_LIBRARY_PATH="${lib.makeLibraryPath runtimeBinaries}:$LD_LIBRARY_PATH"
               '';
 
@@ -129,7 +130,6 @@
               # Parameters:
             , dontStrip
             , releaseMode
-            , enableDiscordRpc ? false
             , enableSystemLibraries ? false
             , enableTests ? false
             ,
@@ -158,7 +158,7 @@
             in
             clangStdenv.mkDerivation (finalAttrs: {
               name = "${finalAttrs.pname}-${finalAttrs.version}-${finalAttrs.system}";
-              pname = "shadps4";
+              pname = "gr2port";
               version = "0.21.1";
               system = "${clangStdenv.hostPlatform.system}";
               src = ./.;
@@ -215,7 +215,6 @@
 
               cmakeFlags = [
                 (lib.cmakeFeature "CMAKE_BUILD_TYPE" releaseMode)
-                (lib.cmakeBool "ENABLE_DISCORD_RPC" enableDiscordRpc)
                 (lib.cmakeBool "ENABLE_SYSTEM_LIBRARIES" enableSystemLibraries)
                 (lib.cmakeBool "ENABLE_TESTS" false)
               ] ++ lib.optionals (!enableSystemLibraries) [

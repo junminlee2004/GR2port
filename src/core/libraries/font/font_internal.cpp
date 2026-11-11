@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "font_internal.h"
@@ -2280,7 +2281,7 @@ void NotifyBuiltinFontFallbackOnce() {
                                              "Using bundled fallback fonts instead.\n"
                                              "Text rendering may be inaccurate.",
                                              30.0f, shadNotifications::position::BottomRight,
-                                             shadNotifications::stockIcons::shadPS4);
+                                             shadNotifications::stockIcons::GR2port);
     });
 }
 

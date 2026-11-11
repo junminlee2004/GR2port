@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -218,7 +219,7 @@ static s32 PS4_SYSV_ABI sceUsbStorageGetDeviceInfo(u32 device_id, OrbisUsbStorag
     info->product_id = 0x0268;
     info->bcd_device = 0x0100;
 
-    std::strncpy(info->vendor, "shadPS4", sizeof(info->vendor) - 1);
+    std::strncpy(info->vendor, "GR2port", sizeof(info->vendor) - 1);
     info->vendor_len = std::strlen(info->vendor);
 
     std::strncpy(info->product, "Virtual USB Storage", sizeof(info->product) - 1);

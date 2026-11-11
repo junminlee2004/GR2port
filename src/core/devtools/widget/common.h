@@ -1,4 +1,5 @@
 //  SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+//  SPDX-FileCopyrightText: Copyright 2026 GR2port
 //  SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -140,7 +141,7 @@ inline std::string RunDisassembler(const std::string& disassembler_cli, const T&
             *success = false;
         }
     } else {
-        auto bin_path = std::filesystem::temp_directory_path() / "shadps4_tmp_shader.bin";
+        auto bin_path = std::filesystem::temp_directory_path() / "gr2port_tmp_shader.bin";
 
         constexpr std::string_view src_arg = "{src}";
         std::string cli = disassembler_cli + " 2>&1";

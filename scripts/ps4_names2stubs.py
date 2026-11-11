@@ -1,8 +1,9 @@
 # SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+# SPDX-FileCopyrightText: Copyright 2026 GR2port
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 # Helper script that generates stub implementation of all known nids + lookup tables
-# for shadps4
+# for GR2port
 
 import sys, os
 import struct

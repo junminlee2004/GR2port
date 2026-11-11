@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "vdecsw_impl.h"
@@ -229,7 +230,7 @@ s32 VdecDecoder::Reset() {
 }
 
 void VdecDecoder::WorkerLoop(std::stop_token stop_token) {
-    Common::SetCurrentThreadName("shadPS4:VdecswWorker");
+    Common::SetCurrentThreadName("GR2port:VdecswWorker");
 
     std::unique_lock lock{m_mutex};
     while (!stop_token.stop_requested()) {

@@ -1241,7 +1241,7 @@ bool Init(InitInfo info) {
     // Setup backend capabilities flags
     auto* bd = IM_NEW(VkData)(info);
     io.BackendRendererUserData = (void*)bd;
-    io.BackendRendererName = "imgui_impl_vulkan_shadps4";
+    io.BackendRendererName = "imgui_impl_vulkan_gr2port";
     // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
     io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
     // The font atlas grows on demand; UpdateTextures() services its texture requests.

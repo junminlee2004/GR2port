@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -125,7 +126,7 @@ SharedReader::~SharedReader() {
 }
 
 void SharedReader::WorkerLoop() {
-    Common::SetCurrentThreadName("shadPS4:ZArchiveIO");
+    Common::SetCurrentThreadName("GR2port:ZArchiveIO");
     std::unique_lock lk{m_job_mutex};
     while (true) {
         m_job_cv.wait(lk, [this] { return m_has_job || m_stop; });

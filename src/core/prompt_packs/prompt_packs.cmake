@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright 2026 GR2port
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-target_sources(shadps4 PRIVATE
+target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/gnf.cpp
     ${CMAKE_CURRENT_LIST_DIR}/gnf.h
     ${CMAKE_CURRENT_LIST_DIR}/keyboard_bindings.cpp

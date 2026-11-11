@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -22,7 +23,7 @@ enum class Level : std::uint8_t {
 };
 extern std::array<Level, NUM_LOG_CLASSES> g_class_levels;
 
-void Setup(std::string_view shadps4_filename);
+void Setup(std::string_view log_filename);
 void Switch(std::string_view game_filename, bool append_log);
 void Shutdown();
 void Flush();

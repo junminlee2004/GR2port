@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright 2019-2026 rpcs3 Project
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -87,7 +88,7 @@ bool NpHandler::SendSessionInvitation(s32 user_id, const std::string& session_id
     json += '}';
 
     // multipart/mixed with a single JSON part; shadNet keys on the Content-Description.
-    const std::string boundary = "shadps4invite" + std::to_string(user_id);
+    const std::string boundary = "gr2portinvite" + std::to_string(user_id);
     std::string body;
     body += "--" + boundary + "\r\n";
     body += "Content-Type: application/json; charset=utf-8\r\n";

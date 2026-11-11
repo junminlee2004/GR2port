@@ -1,4 +1,5 @@
 //  SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+//  SPDX-FileCopyrightText: Copyright 2026 GR2port
 //  SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "ipc.h"
@@ -25,7 +26,7 @@ extern std::unique_ptr<Vulkan::Presenter> presenter;
 
 /**
  * Protocol summary:
- * - IPC is enabled by setting the SHADPS4_ENABLE_IPC environment variable to "true"
+ * - IPC is enabled by setting the GR2PORT_ENABLE_IPC environment variable to "true"
  * - Input will be stdin & output stderr
  * - Strings are sent as UTF8
  * - Each communication line is terminated by a newline character ('\n')
@@ -66,7 +67,7 @@ extern std::unique_ptr<Vulkan::Presenter> presenter;
  **/
 
 void IPC::Init() {
-    const char* enabledEnv = std::getenv("SHADPS4_ENABLE_IPC");
+    const char* enabledEnv = std::getenv("GR2PORT_ENABLE_IPC");
     enabled = enabledEnv && strcmp(enabledEnv, "true") == 0;
     if (!enabled) {
         return;

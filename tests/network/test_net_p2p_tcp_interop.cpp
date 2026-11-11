@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // Linux only needs root or CAP_NET_ADMIN, otherwise every test is skipped.
@@ -218,7 +219,7 @@ protected:
         }
         ifreq ifr{};
         ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-        std::strncpy(ifr.ifr_name, "shadps4tun0", IFNAMSIZ - 1);
+        std::strncpy(ifr.ifr_name, "gr2porttun0", IFNAMSIZ - 1);
         if (ioctl(tun_, TUNSETIFF, &ifr) < 0) {
             GTEST_SKIP() << "cannot create TUN device: " << std::strerror(errno);
         }

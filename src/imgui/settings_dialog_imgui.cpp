@@ -357,7 +357,7 @@ void SettingsWindow::DrawMainContent(bool* open, const std::function<void()>& ap
 
     std::string centeredText;
     currentCategory == SettingsCategory::Folders
-        ? centeredText = "Manage shadPS4 Game Folders"
+        ? centeredText = "Manage GR2port Game Folders"
         : centeredText = "Selected Profile: " + currentProfile;
 
     ImGui::Separator();
@@ -451,7 +451,7 @@ void SettingsWindow::DrawGameFolderManager() {
                       window_flags);
 
     if (ImGui::Button("Add Folder", ImVec2(400.f * uiScale, 0))) {
-        ImGuiFileDialog::Instance()->OpenDialog("OpenFolder", "Add shadPS4 game folder", nullptr,
+        ImGuiFileDialog::Instance()->OpenDialog("OpenFolder", "Add GR2port game folder", nullptr,
                                                 ".", 1, nullptr,
                                                 ImGuiFileDialogFlags_DisableCreateDirectoryButton |
                                                     ImGuiFileDialogFlags_DontShowHiddenFiles);

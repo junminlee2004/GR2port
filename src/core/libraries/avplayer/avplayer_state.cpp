@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/elf_info.h"
@@ -233,7 +234,7 @@ void AvPlayerState::SetAvSyncMode(AvPlayerAvSyncMode sync_mode) {
 
 void AvPlayerState::AvControllerThread(std::stop_token stop) {
     using std::chrono::milliseconds;
-    Common::SetCurrentThreadName("shadPS4:AvController");
+    Common::SetCurrentThreadName("GR2port:AvController");
 
     while (!stop.stop_requested()) {
         if (m_event_queue.Size() != 0) {

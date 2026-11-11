@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
@@ -55,7 +56,7 @@ std::string DiscoveryResponder::BuildResponse() const {
     return fmt::format("HTTP/1.1 200 Ok\n"
                        "host-id:{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}\n"
                        "host-type:PS4\n"
-                       "host-name:shadPS4\n"
+                       "host-name:GR2port\n"
                        "host-request-port:997\n"
                        "device-discovery-protocol-version:00020020\n"
                        "system-version:{:08X}\n"

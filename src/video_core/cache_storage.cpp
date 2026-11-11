@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/elf_info.h"
@@ -35,7 +36,7 @@ bool ar_is_read_only{true};
 namespace Storage {
 
 void ProcessIO(const std::stop_token& stoken) {
-    Common::SetCurrentThreadName("shadPS4:PipelineCacheIO");
+    Common::SetCurrentThreadName("GR2port:PipelineCacheIO");
 
     while (!stoken.stop_requested()) {
         {

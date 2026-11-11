@@ -1024,7 +1024,7 @@ void Rasterizer::OnSubmit() {
     const u64 frame = DebugState.GetFrameNum();
     // Guest packet census. Deliberately outside the skipcache gate below: it describes what the
     // title submits, not how this fork caches. A non-zero occl or setpred means the title drives
-    // the occlusion path, which shadPS4 currently answers with a fixed "visible" result.
+    // the occlusion path, which GR2port currently answers with a fixed "visible" result.
     static u64 last_packet_frame = 0;
     if (frame - last_packet_frame >= 300) {
         last_packet_frame = frame;

@@ -73,7 +73,7 @@ void RecordThread::ResetCommandBuffer() {
 }
 
 void RecordThread::Run(std::stop_token stop) {
-    Common::SetCurrentThreadName("shadPS4:VkRecord");
+    Common::SetCurrentThreadName("GR2port:VkRecord");
     Common::SetCurrentThreadPriority(Common::ThreadPriority::High);
     while (true) {
         Work work;

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright 2026 GR2port
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-target_sources(shadps4 PRIVATE
+target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/capture.cpp
     ${CMAKE_CURRENT_LIST_DIR}/capture.h
     ${CMAKE_CURRENT_LIST_DIR}/capture_math.h
@@ -318,5 +318,5 @@ gr2port_add_shader(effector.comp effector_comp)
 gr2port_add_shader(soft_body.comp soft_body_comp)
 gr2port_add_shader(soft_body_write.comp soft_body_write_comp)
 add_custom_target(gr2port_shaders DEPENDS ${GR2PORT_SHADER_HEADERS})
-target_include_directories(shadps4 PRIVATE ${GR2PORT_SHADER_INCLUDE})
-add_dependencies(shadps4 gr2port_shaders)
+target_include_directories(gr2port PRIVATE ${GR2PORT_SHADER_INCLUDE})
+add_dependencies(gr2port gr2port_shaders)

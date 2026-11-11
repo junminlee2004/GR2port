@@ -48,7 +48,7 @@ constexpr VAddr SYSTEM_RESERVED_MAX = 0xFFFFFFFFFULL;
 constexpr VAddr USER_MIN = 0x1000000000ULL;
 #endif
 #if defined(__linux__)
-// Linux maps the shadPS4 executable around here, so limit the user maximum
+// Linux maps the GR2port executable around here, so limit the user maximum
 constexpr VAddr USER_MAX = 0x54FFFFFFFFFFULL;
 #elif defined(__FreeBSD__)
 // FreeBSD address space is extremely volatile, keep this lower for safety.

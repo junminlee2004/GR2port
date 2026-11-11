@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <gtest/gtest.h>
@@ -1984,7 +1985,7 @@ TEST(HostOverride, ParseZeroPortKeepsHostDropsPort) {
 
 // --- ApplyHostOverride: behavior with no JSON file present ---
 static bool HostOverrideJsonConfigured() {
-    if (const char* p = std::getenv("SHADPS4_HTTP_HOST_OVERRIDES_JSON"); p && p[0]) {
+    if (const char* p = std::getenv("GR2PORT_HTTP_HOST_OVERRIDES_JSON"); p && p[0]) {
         return true;
     }
     std::ifstream f("host_overrides.json");

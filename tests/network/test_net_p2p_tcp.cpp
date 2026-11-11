@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // The STREAM_P2P TCP state machine: wire format, and two connections over a simulated link with
@@ -143,7 +144,7 @@ public:
     Clock::time_point now{};
 
     void Transmit(int to, std::span<const u8> bytes) {
-        if (std::getenv("SHADPS4_NET_SIMLOG")) { // keep a trace, printed on failure
+        if (std::getenv("GR2PORT_NET_SIMLOG")) { // keep a trace, printed on failure
             const auto seg = ParseTcpSegment(bytes);
             char line[160];
             std::snprintf(line, sizeof(line), "%8.3f %s flags=%02x seq=%u ack=%u len=%zu win=%u",
@@ -347,7 +348,7 @@ TEST_P(NetP2PTcpSim, BidirectionalTransferAndClose) {
             << "seed " << seed << ": a got " << r.a_got.size() << ", b got " << r.b_got.size()
             << " of " << kBytes << "; a " << ToString(r.a_state) << " b " << ToString(r.b_state)
             << "\n"
-            << log << "(set SHADPS4_NET_SIMLOG=1 for a packet trace)";
+            << log << "(set GR2PORT_NET_SIMLOG=1 for a packet trace)";
         EXPECT_EQ(r.a_error, Error::Ok) << "seed " << seed;
         EXPECT_EQ(r.b_error, Error::Ok) << "seed " << seed;
     }

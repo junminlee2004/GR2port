@@ -1177,7 +1177,7 @@ PipelineCache::~PipelineCache() {
 }
 
 void PipelineCache::CompileWorker(u32 index) {
-    Common::SetCurrentThreadName(fmt::format("shadPS4:ShaderCompiler{}", index).c_str());
+    Common::SetCurrentThreadName(fmt::format("GR2port:ShaderCompiler{}", index).c_str());
     Common::SetCurrentThreadPriority(Common::ThreadPriority::Low);
     if (const u64 strip = Common::GetExclusionStripMask()) {
         Common::SetCurrentThreadAffinityMask(~strip);

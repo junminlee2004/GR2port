@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <thread>
@@ -60,7 +61,7 @@ void KernelSignalRequest() {
 }
 
 static void KernelServiceThread(std::stop_token stoken) {
-    Common::SetCurrentThreadName("shadPS4:KernelServiceThread");
+    Common::SetCurrentThreadName("GR2port:KernelServiceThread");
 
     while (!stoken.stop_requested()) {
         HLE_TRACE;

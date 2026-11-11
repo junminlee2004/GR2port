@@ -240,7 +240,7 @@ ImGuiID NewFrame(bool is_reusing_frame) {
 
     Sdl::NewFrame(is_reusing_frame);
     ImGui::NewFrame();
-    SetKeyOwner(ImGuiKey_GamepadFaceUp, ImHashStr("shadps4/pad"));
+    SetKeyOwner(ImGuiKey_GamepadFaceUp, ImHashStr("gr2port/pad"));
 
     ImGuiWindowFlags flags =
         ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_AutoHideTabBar;

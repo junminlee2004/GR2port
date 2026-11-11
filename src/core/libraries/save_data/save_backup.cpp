@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -138,7 +139,7 @@ static void backup(const std::filesystem::path& dir_name) {
 }
 
 static void BackupThreadBody() {
-    Common::SetCurrentThreadName("shadPS4:SaveData:BackupThread");
+    Common::SetCurrentThreadName("GR2port:SaveData:BackupThread");
     while (!g_backup_stopping) {
         g_backup_status = WorkerStatus::Waiting;
 

@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <condition_variable>
@@ -41,7 +42,7 @@ static std::unordered_map<u64, InflateResult> results;
 static u64 next_request_id;
 
 void ZlibTaskThread(const std::stop_token& stop) {
-    Common::SetCurrentThreadName("shadPS4:ZlibTaskThread");
+    Common::SetCurrentThreadName("GR2port:ZlibTaskThread");
 
     while (!stop.stop_requested()) {
         InflateTask task;

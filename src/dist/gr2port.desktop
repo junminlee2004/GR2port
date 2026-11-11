@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=GR2port
+Exec=gr2port
+Terminal=false
+Type=Application
+Icon=gr2port
+Comment=Native port of Gravity Rush 2
+Categories=Game;
+StartupWMClass=gr2port;

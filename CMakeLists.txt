@@ -18,7 +18,7 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-project(shadPS4 CXX C ASM ${ADDITIONAL_LANGUAGES})
+project(GR2port CXX C ASM ${ADDITIONAL_LANGUAGES})
 
 include(FetchContent)
 
@@ -37,7 +37,6 @@ endif()
 include(CMakeDependentOption)
 cmake_dependent_option(ENABLE_SYSTEM_VULKAN "Enable the system Vulkan driver" OFF APPLE OFF)
 
-option(ENABLE_DISCORD_RPC "Enable the Discord RPC integration" ON)
 option(ENABLE_UPDATER "Enables the options to updater" ON)
 option(ENABLE_TESTS "Build unit tests (requires GTest)" OFF)
 option(ENABLE_SYSTEM_LIBRARIES "Enable building against system libraries" OFF)
@@ -217,7 +216,7 @@ set(EMULATOR_VERSION_MAJOR "0")
 set(EMULATOR_VERSION_MINOR "21")
 set(EMULATOR_VERSION_PATCH "1")
 
-set_source_files_properties(src/dist/shadps4.rc PROPERTIES COMPILE_DEFINITIONS "EMULATOR_VERSION_MAJOR=${EMULATOR_VERSION_MAJOR};EMULATOR_VERSION_MINOR=${EMULATOR_VERSION_MINOR};EMULATOR_VERSION_PATCH=${EMULATOR_VERSION_PATCH}")
+set_source_files_properties(src/dist/gr2port.rc PROPERTIES COMPILE_DEFINITIONS "EMULATOR_VERSION_MAJOR=${EMULATOR_VERSION_MAJOR};EMULATOR_VERSION_MINOR=${EMULATOR_VERSION_MINOR};EMULATOR_VERSION_PATCH=${EMULATOR_VERSION_PATCH}")
 
 set(APP_VERSION_NUM "${EMULATOR_VERSION_MAJOR}.${EMULATOR_VERSION_MINOR}.${EMULATOR_VERSION_PATCH}")
 set(APP_VERSION "${APP_VERSION_NUM} WIP")
@@ -908,10 +907,6 @@ set(COMMON src/common/logging/classes.cpp
            src/common/key_manager.h
 )
 
-if (ENABLE_DISCORD_RPC)
-    list(APPEND COMMON src/common/discord_rpc_handler.cpp src/common/discord_rpc_handler.h)
-endif()
-
 set(NET_CORE  src/core/net/guest_net.cpp
               src/core/net/guest_net.h
               src/core/net/host_net.cpp
@@ -1382,7 +1377,7 @@ endif()
 
 if(NOT ENABLE_TESTS)
 
-add_executable(shadps4
+add_executable(gr2port
     ${AUDIO_CORE}
     ${IMGUI}
     ${INPUT}
@@ -1399,40 +1394,36 @@ add_executable(shadps4
     src/sdl_window.cpp
 )
 
-create_target_directory_groups(shadps4)
+create_target_directory_groups(gr2port)
 
-target_link_libraries(shadps4 PRIVATE spdlog::spdlog)
-target_link_libraries(shadps4 PRIVATE magic_enum::magic_enum fmt::fmt toml11::toml11 tsl::robin_map xbyak::xbyak Tracy::TracyClient RenderDoc::API FFmpeg::ffmpeg Dear_ImGui ImGuiFileDialog gcn half::half ZLIB::ZLIB PNG::PNG minimp3 dr_flac)
-target_link_libraries(shadps4 PRIVATE Boost::headers GPUOpen::VulkanMemoryAllocator LibAtrac9 sirit Vulkan::Headers xxHash::xxhash Zydis::Zydis SDL3::SDL3 pugixml::pugixml)
-target_link_libraries(shadps4 PRIVATE stb::headers lfreist-hwinfo::hwinfo nlohmann_json::nlohmann_json miniz::miniz fdk-aac CLI11::CLI11 OpenAL::OpenAL Cpp_Httplib miniupnpc::miniupnpc)
-target_link_libraries(shadps4 PRIVATE Freetype::Freetype)
-target_link_libraries(shadps4 PRIVATE libprotobuf)
-target_link_libraries(shadps4 PRIVATE ZArchive::zarchive)
-target_link_libraries(shadps4 PRIVATE zstd::libzstd)
-target_include_directories(shadps4 PRIVATE "${SHADNET_PROTO_OUT}")
+target_link_libraries(gr2port PRIVATE spdlog::spdlog)
+target_link_libraries(gr2port PRIVATE magic_enum::magic_enum fmt::fmt toml11::toml11 tsl::robin_map xbyak::xbyak Tracy::TracyClient RenderDoc::API FFmpeg::ffmpeg Dear_ImGui ImGuiFileDialog gcn half::half ZLIB::ZLIB PNG::PNG minimp3 dr_flac)
+target_link_libraries(gr2port PRIVATE Boost::headers GPUOpen::VulkanMemoryAllocator LibAtrac9 sirit Vulkan::Headers xxHash::xxhash Zydis::Zydis SDL3::SDL3 pugixml::pugixml)
+target_link_libraries(gr2port PRIVATE stb::headers lfreist-hwinfo::hwinfo nlohmann_json::nlohmann_json miniz::miniz fdk-aac CLI11::CLI11 OpenAL::OpenAL Cpp_Httplib miniupnpc::miniupnpc)
+target_link_libraries(gr2port PRIVATE Freetype::Freetype)
+target_link_libraries(gr2port PRIVATE libprotobuf)
+target_link_libraries(gr2port PRIVATE ZArchive::zarchive)
+target_link_libraries(gr2port PRIVATE zstd::libzstd)
+target_include_directories(gr2port PRIVATE "${SHADNET_PROTO_OUT}")
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
-    target_link_libraries(shadps4 PRIVATE "/usr/lib/libusb.so")
-    target_link_libraries(shadps4 PRIVATE "/usr/local/lib/libuuid.so")
+    target_link_libraries(gr2port PRIVATE "/usr/lib/libusb.so")
+    target_link_libraries(gr2port PRIVATE "/usr/local/lib/libuuid.so")
 else()
-    target_link_libraries(shadps4 PRIVATE libusb::usb)
+    target_link_libraries(gr2port PRIVATE libusb::usb)
 endif()
 
-target_compile_definitions(shadps4 PRIVATE IMGUI_USER_CONFIG="imgui/imgui_config.h")
+target_compile_definitions(gr2port PRIVATE IMGUI_USER_CONFIG="imgui/imgui_config.h")
 target_compile_definitions(Dear_ImGui PRIVATE IMGUI_USER_CONFIG="${PROJECT_SOURCE_DIR}/src/imgui/imgui_config.h")
 
-if (ENABLE_DISCORD_RPC)
-    target_compile_definitions(shadps4 PRIVATE ENABLE_DISCORD_RPC)
-endif()
-
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
-    target_link_libraries(shadps4 PRIVATE uuid)
+    target_link_libraries(gr2port PRIVATE uuid)
 endif()
 
 if (APPLE)
     if (NOT ENABLE_SYSTEM_VULKAN)
         # Bundle Vulkan loader and KosmicKrisp driver with the emulator.
-        set_property(TARGET shadps4 APPEND PROPERTY BUILD_RPATH "@executable_path")
+        set_property(TARGET gr2port APPEND PROPERTY BUILD_RPATH "@executable_path")
 
         set(LOADER_DEST "${CMAKE_CURRENT_BINARY_DIR}/libvulkan.dylib")
         set(DRIVER_DEST "${CMAKE_CURRENT_BINARY_DIR}/libvulkan_kosmickrisp.dylib")
@@ -1452,27 +1443,27 @@ if (APPLE)
             COMMAND ${CMAKE_COMMAND} -E copy ${VULKAN_ICD_PATH} ${ICD_DEST})
 
         add_custom_target(CopyVulkanDriver DEPENDS ${LOADER_DEST} ${DRIVER_DEST} ${ICD_DEST})
-        add_dependencies(shadps4 CopyVulkanDriver)
+        add_dependencies(gr2port CopyVulkanDriver)
     endif()
 
     if (ARCHITECTURE STREQUAL "x86_64")
         # Reserve system-managed memory space.
-        target_link_options(shadps4 PRIVATE -Wl,-ld_classic,-no_pie,-no_fixup_chains,-no_huge,-pagezero_size,0x4000,-segaddr,TCB_SPACE,0x4000,-segaddr,SYSTEM_MANAGED,0x400000,-segaddr,SYSTEM_RESERVED,0x7FFFFC000,-segaddr,USER_AREA,0x7000000000,-image_base,0x700000000000)
+        target_link_options(gr2port PRIVATE -Wl,-ld_classic,-no_pie,-no_fixup_chains,-no_huge,-pagezero_size,0x4000,-segaddr,TCB_SPACE,0x4000,-segaddr,SYSTEM_MANAGED,0x400000,-segaddr,SYSTEM_RESERVED,0x7FFFFC000,-segaddr,USER_AREA,0x7000000000,-image_base,0x700000000000)
     endif()
 
     # Replacement for std::chrono::time_zone
-    target_link_libraries(shadps4 PRIVATE date::date-tz epoll-shim)
+    target_link_libraries(gr2port PRIVATE date::date-tz epoll-shim)
 
     # Create and embed Info.plist
     set(INFO_PLIST_PATH ${CMAKE_CURRENT_BINARY_DIR}/src/dist/Info.plist)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/dist/MacOSBundleInfo.plist.in ${INFO_PLIST_PATH})
-    target_link_options(shadps4 PRIVATE LINKER:-sectcreate,__TEXT,__info_plist,${INFO_PLIST_PATH})
+    target_link_options(gr2port PRIVATE LINKER:-sectcreate,__TEXT,__info_plist,${INFO_PLIST_PATH})
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
-    target_link_libraries(shadps4 PRIVATE date::date-tz epoll-shim)
+    target_link_libraries(gr2port PRIVATE date::date-tz epoll-shim)
 endif()
 
 if (WIN32)
-    target_link_libraries(shadps4 PRIVATE mincore wepoll wbemuuid)
+    target_link_libraries(gr2port PRIVATE mincore wepoll wbemuuid)
 
     if (MSVC)
         # MSVC likes putting opinions on what people can use, disable:
@@ -1490,37 +1481,37 @@ if (WIN32)
     add_compile_definitions(NTDDI_VERSION=0x0A000006 _WIN32_WINNT=0x0A00 WINVER=0x0A00)
 
     if (MSVC)
-        target_link_libraries(shadps4 PRIVATE clang_rt.builtins-x86_64.lib)
+        target_link_libraries(gr2port PRIVATE clang_rt.builtins-x86_64.lib)
     endif()
 
     # Disable ASLR so we can reserve the user area
     if (MSVC)
-        target_link_options(shadps4 PRIVATE /DYNAMICBASE:NO)
+        target_link_options(gr2port PRIVATE /DYNAMICBASE:NO)
     else()
-        target_link_options(shadps4 PRIVATE -Wl,--disable-dynamicbase)
+        target_link_options(gr2port PRIVATE -Wl,--disable-dynamicbase)
     endif()
 
     # Increase stack commit area (Needed, otherwise there are crashes)
     if (MSVC)
-        target_link_options(shadps4 PRIVATE /STACK:0x200000,0x200000)
+        target_link_options(gr2port PRIVATE /STACK:0x200000,0x200000)
     else()
-        target_link_options(shadps4 PRIVATE -Wl,--stack,2097152)
+        target_link_options(gr2port PRIVATE -Wl,--stack,2097152)
     endif()
 
     # Change base image address
     if (MSVC)
-        target_link_options(shadps4 PRIVATE /BASE:0x700000000000)
+        target_link_options(gr2port PRIVATE /BASE:0x700000000000)
     else()
-        target_link_options(shadps4 PRIVATE -Wl,--image-base=0x700000000000)
+        target_link_options(gr2port PRIVATE -Wl,--image-base=0x700000000000)
     endif()
 endif()
 
 if (WIN32)
-    target_sources(shadps4 PRIVATE src/dist/shadps4.rc)
+    target_sources(gr2port PRIVATE src/dist/gr2port.rc)
 endif()
 
 if (NOT MSVC)
-    target_compile_options(shadps4 PRIVATE -Wno-invalid-offsetof)
+    target_compile_options(gr2port PRIVATE -Wno-invalid-offsetof)
 endif()
 
 # Codegen items for the Linux and Windows builds; macOS keeps upstream's defaults.
@@ -1530,27 +1521,27 @@ if (NOT APPLE)
     # dispatch while xxhash is linked as a plain C library. XXH_INLINE_ALL gives every
     # translation unit a private inlined copy with internal linkage; the library stays linked
     # for the externals and the hash values do not change.
-    target_compile_definitions(shadps4 PRIVATE XXH_INLINE_ALL)
+    target_compile_definitions(gr2port PRIVATE XXH_INLINE_ALL)
     # The toolchains emit stack-protector canaries by default, and they sit in most hot
     # video_core prologues and epilogues at 0.3-0.6% of the GPU command thread. Hardening is
     # traded for that time. clang-cl takes the MSVC spelling.
     if (MSVC)
-        target_compile_options(shadps4 PRIVATE /GS-)
+        target_compile_options(gr2port PRIVATE /GS-)
     else()
-        target_compile_options(shadps4 PRIVATE -fno-stack-protector)
+        target_compile_options(gr2port PRIVATE -fno-stack-protector)
     endif()
 endif()
 
 add_compile_definitions(BOOST_ASIO_STANDALONE)
 
-target_include_directories(shadps4 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(gr2port PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Shaders sources
 set(HOST_SHADERS_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/video_core/host_shaders)
 
 add_subdirectory(${HOST_SHADERS_INCLUDE})
-add_dependencies(shadps4 host_shaders)
-target_include_directories(shadps4 PRIVATE ${HOST_SHADERS_INCLUDE})
+add_dependencies(gr2port host_shaders)
+target_include_directories(gr2port PRIVATE ${HOST_SHADERS_INCLUDE})
 include("${CMAKE_CURRENT_SOURCE_DIR}/src/video_core/gr2_fsr3/gr2_fsr3.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/src/video_core/gr2port/gr2port.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/src/core/prompt_packs/prompt_packs.cmake")
@@ -1572,27 +1563,22 @@ cmrc_add_resource_library(embedded-resources
         src/resources/bronze.png
         src/resources/gold.png
         src/resources/platinum.png
-        src/resources/shadps4.png
+        src/resources/gr2port.png
         src/resources/silver.png
         src/resources/trophy.wav)
-target_link_libraries(shadps4 PRIVATE res::embedded)
+target_link_libraries(gr2port PRIVATE res::embedded)
 include("${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/launcher.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/src/core/game_check/game_check.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/src/core/language/language.cmake")
 
 # ImGui resources
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/imgui/renderer)
-add_dependencies(shadps4 ImGui_Resources)
-target_include_directories(shadps4 PRIVATE ${IMGUI_RESOURCES_INCLUDE})
+add_dependencies(gr2port ImGui_Resources)
+target_include_directories(gr2port PRIVATE ${IMGUI_RESOURCES_INCLUDE})
 
-
-# Discord RPC
-if (ENABLE_DISCORD_RPC)
-    target_link_libraries(shadps4 PRIVATE discord-rpc)
-endif()
 
 # Install rules
-install(TARGETS shadps4 BUNDLE DESTINATION .)
+install(TARGETS gr2port BUNDLE DESTINATION .)
 
 else()
     enable_testing()

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright 2019-2026 rpcs3 Project
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -565,18 +566,7 @@ static std::vector<u8> MakeComIdPayload(const std::string& com_id, const std::st
 }
 
 std::string ShadNetClient::BuildVersionString() {
-    const std::string remote_url(Common::g_scm_remote_url);
-    const std::string remote_host = Common::GetRemoteNameFromLink();
-    const bool official = (remote_host == "shadps4-emu" || remote_url.empty());
-
-    if (Common::g_is_release) {
-        return official ? fmt::format("shadPS4 v{}", Common::g_version)
-                        : fmt::format("shadPS4 {}/v{}", remote_host, Common::g_version);
-    }
-    return official ? fmt::format("shadPS4 v{} {} {}", Common::g_version, Common::g_scm_branch,
-                                  Common::g_scm_desc)
-                    : fmt::format("shadPS4 v{} {}/{} {}", Common::g_version, remote_host,
-                                  Common::g_scm_branch, Common::g_scm_desc);
+    return fmt::format("GR2port build {}", Common::g_scm_desc);
 }
 
 u64 ShadNetClient::ReportClientVersion() {

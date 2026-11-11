@@ -182,7 +182,7 @@ void ApplyPatchesFromXML(std::filesystem::path path, std::string_view text = {})
                                            "Failed to parse patch value \"{}\" for \"{}\" in "
                                            "patch \"{}\", error: \"{}\"\n"
                                            "If the patch was working on earlier versions, then it "
-                                           "was using a format that shadPS4 handled incorrectly, "
+                                           "was using a format that GR2port handled incorrectly, "
                                            "and the patch should instead be fixed.",
                                            patchValue, address, currentPatchName, e.what());
                             }

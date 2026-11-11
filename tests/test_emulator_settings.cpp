@@ -25,7 +25,7 @@ class TempDir {
 public:
     TempDir() {
         auto ns = std::chrono::steady_clock::now().time_since_epoch().count();
-        temp_path = fs::temp_directory_path() / ("shadps4_test_" + std::to_string(ns) + "_" +
+        temp_path = fs::temp_directory_path() / ("gr2port_test_" + std::to_string(ns) + "_" +
                                                  std::to_string(reinterpret_cast<uintptr_t>(this)));
         fs::create_directories(temp_path);
     }

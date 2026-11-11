@@ -7,13 +7,13 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>English</string>
     <key>CFBundleExecutable</key>
-    <string>shadps4</string>
+    <string>gr2port</string>
     <key>CFBundleIdentifier</key>
-    <string>com.shadps4-emu.shadps4</string>
+    <string>io.github.junminlee2004.gr2port</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>shadps4</string>
+    <string>GR2port</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

@@ -1,4 +1,5 @@
 # SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+# SPDX-FileCopyrightText: Copyright 2026 GR2port
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 set(BUILD_SHARED_LIBS OFF)
@@ -228,11 +229,6 @@ if (NOT TARGET libusb::usb)
         add_subdirectory(libusb)
         add_library(libusb::usb ALIAS usb-1.0)
     endif()
-endif()
-
-# Discord RPC
-if (ENABLE_DISCORD_RPC)
-    add_subdirectory(discord-rpc)
 endif()
 
 # GCN Headers

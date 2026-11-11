@@ -533,7 +533,7 @@ bool Init(SDL_Window* window) {
     // Setup backend capabilities flags
     SdlData* bd = IM_NEW(SdlData)();
     io.BackendPlatformUserData = (void*)bd;
-    io.BackendPlatformName = "imgui_impl_sdl3_shadps4";
+    io.BackendPlatformName = "imgui_impl_sdl3_gr2port";
     io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors; // We can honor GetMouseCursor() values
     io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos; // We can honor io.WantSetMousePos requests
                                                          // (optional, rarely used)

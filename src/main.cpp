@@ -61,14 +61,14 @@ int main(int argc, char* argv[]) {
     size_t sysctl_size = sizeof(sysctl_ret);
     sysctlbyname("sysctl.proc_translated", &sysctl_ret, &sysctl_size, nullptr, 0);
     if (sysctl_ret != 1) {
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "shadPS4",
-                                 "shadPS4 only supports Apple Silicon Macs.", nullptr);
-        std::cout << "shadPS4 only supports Apple Silicon Macs." << std::endl;
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "GR2port",
+                                 "GR2port only supports Apple Silicon Macs.", nullptr);
+        std::cout << "GR2port only supports Apple Silicon Macs." << std::endl;
         return -1;
     }
 #endif
 
-    CLI::App app{"shadPS4 Emulator CLI"};
+    CLI::App app{"GR2port CLI"};
 
     // ---- CLI state ----
     std::vector<std::string> gameArgs;

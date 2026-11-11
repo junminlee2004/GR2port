@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright 2019-2026 rpcs3 Project
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -153,7 +154,7 @@ void NpHandler::Initialize() {
                 ImGui::ShadNetNotify::Push(
                     ImGui::ShadNetNotify::Kind::Info,
                     fmt::format("shadNet protocol version mismatch (server v{}, emulator v{}). "
-                                "Please update shadPS4. Online features are disabled for this "
+                                "Please update GR2port. Online features are disabled for this "
                                 "session.",
                                 probe.server_version, ShadNet::SHAD_PROTOCOL_VERSION));
                 break;
@@ -291,7 +292,7 @@ bool NpHandler::ConnectUser(s32 user_id, const std::string& host, u16 port, cons
             ImGui::ShadNetNotify::Push(
                 ImGui::ShadNetNotify::Kind::Info,
                 fmt::format("shadNet protocol version mismatch (server v{}, emulator v{}). "
-                            "Please update shadPS4. Online features are disabled for this "
+                            "Please update GR2port. Online features are disabled for this "
                             "session.",
                             server_ver, ShadNet::SHAD_PROTOCOL_VERSION));
         } else {
@@ -780,7 +781,7 @@ void NpHandler::OnClientRejected(s32 user_id, const ShadNet::NotifyClientRejecte
         m_reconnect.erase(user_id);
     }
     const std::string text =
-        n.message.empty() ? std::string("The shadNet server doesn't accept this shadPS4 build. "
+        n.message.empty() ? std::string("The shadNet server doesn't accept this GR2port build. "
                                         "Online features are off for this session.")
                           : n.message + " Online features are off for this session.";
     LOG_ERROR(NpHandler, "user_id={} signed out by the server (reason {}, version '{}'): {}",
