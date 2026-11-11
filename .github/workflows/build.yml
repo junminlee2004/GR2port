@@ -161,3 +161,65 @@ jobs:
         name: gr2port-linux-sdl-${{ needs.get-info.outputs.date }}-${{ needs.get-info.outputs.shorthash }}
         path: ${{github.workspace}}/Gravity Rush 2™.AppImage
         retention-days: 7
+
+  pre-release:
+    if: github.ref == 'refs/heads/main' && github.repository == 'junminlee2004/GR2port'
+    needs: [get-info, windows-sdl, linux-sdl]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      FULLHASH: ${{ needs.get-info.outputs.fullhash }}
+      TAG: Pre-release-GR2port-${{ needs.get-info.outputs.date }}-${{ needs.get-info.outputs.fullhash }}
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v8
+      with:
+        path: ./artifacts
+
+    # Each zip holds the executable, an empty userdata folder and the readme. GitHub puts a dot
+    # for each space of an asset's file name, so the file names carry the dots and the labels
+    # the release page shows carry the spaces.
+    - name: Make the zips
+      run: |
+        chmod a+x ./artifacts/gr2port-linux-sdl-*/*.AppImage
+        for dir in ./artifacts/gr2port-*-sdl-*/; do
+          case "$dir" in
+            *-win64-*) system=Windows ;;
+            *) system=Linux ;;
+          esac
+          mkdir "$dir/userdata"
+          cp src/dist/README.txt "$dir"
+          (cd "$dir" && zip -r "$GITHUB_WORKSPACE/GR2port.build.${FULLHASH:0:8}.$system.zip" .)
+        done
+
+    - name: Create Pre-Release on GitHub
+      run: |
+        assets=()
+        for system in Windows Linux; do
+          assets+=("GR2port.build.${FULLHASH:0:8}.$system.zip#GR2port build ${FULLHASH:0:8} $system.zip")
+        done
+        if gh release view "$TAG" > /dev/null 2>&1; then
+          gh release upload "$TAG" --clobber "${assets[@]}"
+        else
+          gh release create "$TAG" --target "$FULLHASH" --prerelease \
+            --title "Pre-release-GR2port-${{ needs.get-info.outputs.date }}-${{ needs.get-info.outputs.shorthash }}" \
+            --notes "Commit: [$FULLHASH](https://github.com/${{ github.repository }}/commit/$FULLHASH)" \
+            "${assets[@]}"
+        fi
+
+    # The newest pre-release is the only one kept.
+    - name: Delete old pre-releases and tags
+      run: |
+        releases=$(gh release list --limit 100 --json tagName,isPrerelease,publishedAt)
+        newest=$(echo "$releases" | jq -r '[.[] | select(.isPrerelease and (.tagName | startswith("Pre-release-GR2port-")))] | sort_by(.publishedAt) | last | .tagName')
+        echo "$releases" | jq -r '.[] | select(.isPrerelease and (.tagName | startswith("Pre-release-GR2port-"))) | .tagName' | while read -r tag; do
+          if [[ "$tag" != "$newest" ]]; then
+            echo "Deleting old pre-release with tag: $tag"
+            gh release delete "$tag" --cleanup-tag --yes
+          fi
+        done
