@@ -179,5 +179,21 @@ s32 SystemSetup(const OrbisNgs2SystemOption* option, OrbisNgs2ContextBufferInfo*
                 OrbisNgs2BufferFreeHandler hostFree, OrbisNgs2Handle* outHandle);
 s32 RackQueryBufferSize(const OrbisNgs2RackOption* option,
                         OrbisNgs2ContextBufferInfo* outBufferInfo);
+s32 RackSetup(OrbisNgs2Handle systemHandle, u32 rackId, const OrbisNgs2RackOption* option,
+              const OrbisNgs2ContextBufferInfo* hostBufferInfo, OrbisNgs2BufferFreeHandler hostFree,
+              OrbisNgs2Handle* outHandle);
+s32 RackCleanup(OrbisNgs2Handle rackHandle, OrbisNgs2ContextBufferInfo* outInfo);
+s32 RackVoiceHandle(OrbisNgs2Handle rackHandle, u32 voiceIndex, OrbisNgs2Handle* outHandle);
+
+namespace Mixer {
+struct System;
+struct Rack;
+struct Voice;
+} // namespace Mixer
+
+// The system, the rack or the voice a handle of the game names, or nullptr.
+Mixer::System* SystemFromHandle(OrbisNgs2Handle handle);
+Mixer::Rack* RackFromHandle(OrbisNgs2Handle handle);
+Mixer::Voice* VoiceFromHandle(OrbisNgs2Handle handle);
 
 } // namespace Libraries::Ngs2

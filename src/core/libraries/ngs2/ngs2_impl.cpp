@@ -4,7 +4,9 @@
 #include "ngs2.h"
 #include "ngs2_error.h"
 #include "ngs2_impl.h"
+#include "ngs2_mixer.h"
 
+#include "common/alignment.h"
 #include "common/logging/log.h"
 #include "core/libraries/error_codes.h"
 #include "core/libraries/kernel/kernel.h"
@@ -12,6 +14,59 @@
 using namespace Libraries::Kernel;
 
 namespace Libraries::Ngs2 {
+
+// A handle is the address of a slot in the buffer the game gives for a system or a rack. The game
+// keeps a handle in 40 bits, which an address in its own memory fits.
+struct Slot {
+    Slot* self;
+    void* object;
+    u32 type;
+    u32 index;
+};
+
+// The start of the buffer of a system or a rack. The slots of the voices of a rack follow it.
+struct Block {
+    Slot handle;
+    OrbisNgs2ContextBufferInfo buffer;
+    OrbisNgs2BufferFreeHandler free;
+};
+
+static size_t BlockSize(u32 numVoices) {
+    return sizeof(Block) + numVoices * sizeof(Slot) + alignof(Block);
+}
+
+static Block* BlockOf(const OrbisNgs2ContextBufferInfo& buffer) {
+    return reinterpret_cast<Block*>(
+        Common::AlignUp(reinterpret_cast<uintptr_t>(buffer.hostBuffer), alignof(Block)));
+}
+
+static Slot* VoiceSlots(OrbisNgs2Handle rackHandle) {
+    return reinterpret_cast<Slot*>(reinterpret_cast<Block*>(rackHandle) + 1);
+}
+
+static u32 RackVoices(const OrbisNgs2RackOption* option) {
+    return option ? option->maxVoices : 1;
+}
+
+static void* FromHandle(OrbisNgs2Handle handle, OrbisNgs2HandleType type) {
+    const Slot* slot = reinterpret_cast<const Slot*>(handle);
+    if (!slot || slot->self != slot || slot->type != static_cast<u32>(type)) {
+        return nullptr;
+    }
+    return slot->object;
+}
+
+Mixer::System* SystemFromHandle(OrbisNgs2Handle handle) {
+    return static_cast<Mixer::System*>(FromHandle(handle, OrbisNgs2HandleType::System));
+}
+
+Mixer::Rack* RackFromHandle(OrbisNgs2Handle handle) {
+    return static_cast<Mixer::Rack*>(FromHandle(handle, OrbisNgs2HandleType::Rack));
+}
+
+Mixer::Voice* VoiceFromHandle(OrbisNgs2Handle handle) {
+    return static_cast<Mixer::Voice*>(FromHandle(handle, OrbisNgs2HandleType::Voice));
+}
 
 s32 HandleReportInvalid(OrbisNgs2Handle handle, u32 handleType) {
     switch (handleType) {
@@ -63,12 +118,22 @@ s32 StackBufferOpen(StackBuffer* stackBuffer, void* bufferStart, size_t bufferSi
 }
 
 s32 SystemCleanup(OrbisNgs2Handle systemHandle, OrbisNgs2ContextBufferInfo* outInfo) {
-    if (!systemHandle) {
-        return ORBIS_NGS2_ERROR_INVALID_HANDLE;
+    Mixer::System* system = SystemFromHandle(systemHandle);
+    if (!system) {
+        return HandleReportInvalid(systemHandle, 1);
     }
-
-    // TODO
-
+    Block* block = reinterpret_cast<Block*>(systemHandle);
+    OrbisNgs2ContextBufferInfo buffer = block->buffer;
+    const OrbisNgs2BufferFreeHandler hostFree = block->free;
+    Mixer::DestroySystem(system);
+    // The handle names nothing from here on.
+    MemoryClear(block, sizeof(Block));
+    if (hostFree) {
+        hostFree(&buffer);
+    }
+    if (outInfo) {
+        *outInfo = buffer;
+    }
     return ORBIS_OK;
 }
 
@@ -111,30 +176,17 @@ s32 SystemSetupCore(StackBuffer* stackBuffer, const OrbisNgs2SystemOption* optio
 
 s32 SystemSetup(const OrbisNgs2SystemOption* option, OrbisNgs2ContextBufferInfo* hostBufferInfo,
                 OrbisNgs2BufferFreeHandler hostFree, OrbisNgs2Handle* outHandle) {
-    u8 optionFlags = 0;
-    StackBuffer stackBuffer;
-    SystemInternal setupResult;
-    void* systemList = NULL;
-    size_t requiredBufferSize = 0;
-    s32 result = ORBIS_NGS2_ERROR_INVALID_BUFFER_SIZE;
-
-    if (option) {
-        if (option->size != 64) {
-            LOG_ERROR(Lib_Ngs2, "Invalid system option size ({})", option->size);
-            return ORBIS_NGS2_ERROR_INVALID_OPTION_SIZE;
-        }
-        optionFlags = option->flags >> 31;
+    if (option && option->size != 64) {
+        LOG_ERROR(Lib_Ngs2, "Invalid system option size ({})", option->size);
+        return ORBIS_NGS2_ERROR_INVALID_OPTION_SIZE;
     }
 
-    // Init
-    StackBufferOpen(&stackBuffer, NULL, 0, NULL, optionFlags);
-    result = SystemSetupCore(&stackBuffer, option, 0);
-
+    const s32 result = SystemSetupCore(nullptr, option, nullptr);
     if (result < 0) {
         return result;
     }
 
-    StackBufferClose(&stackBuffer, &requiredBufferSize);
+    const size_t requiredBufferSize = BlockSize(0);
 
     // outHandle unprovided
     if (!outHandle) {
@@ -156,33 +208,14 @@ s32 SystemSetup(const OrbisNgs2SystemOption* option, OrbisNgs2ContextBufferInfo*
     }
 
     // Setup
-    StackBufferOpen(&stackBuffer, hostBufferInfo->hostBuffer, hostBufferInfo->hostBufferSize,
-                    &systemList, optionFlags);
-    result = SystemSetupCore(&stackBuffer, option, &setupResult);
-
-    if (result < 0) {
-        return result;
-    }
-
-    StackBufferClose(&stackBuffer, &requiredBufferSize);
-
-    // Copy buffer results
-    setupResult.bufferInfo = *hostBufferInfo;
-    setupResult.hostFree = hostFree;
-    // TODO
-    // setupResult.systemList = systemList;
-
-    OrbisNgs2Handle systemHandle = setupResult.systemHandle;
-    if (hostBufferInfo->hostBufferSize >= requiredBufferSize) {
-        *outHandle = systemHandle;
-        return ORBIS_OK;
-    }
-
-    SystemCleanup(systemHandle, 0);
-
-    LOG_ERROR(Lib_Ngs2, "Invalid system buffer size ({}<{}[byte])", hostBufferInfo->hostBufferSize,
-              requiredBufferSize);
-    return ORBIS_NGS2_ERROR_INVALID_BUFFER_SIZE;
+    Block* block = BlockOf(*hostBufferInfo);
+    Mixer::System* system = Mixer::CreateSystem(option ? option->sampleRate : 48000,
+                                                option ? option->numGrainSamples : 256);
+    block->handle = {&block->handle, system, static_cast<u32>(OrbisNgs2HandleType::System), 0};
+    block->buffer = *hostBufferInfo;
+    block->free = hostFree;
+    *outHandle = reinterpret_cast<OrbisNgs2Handle>(block);
+    return ORBIS_OK;
 }
 
 s32 RackQueryBufferSize(const OrbisNgs2RackOption* option,
@@ -194,15 +227,83 @@ s32 RackQueryBufferSize(const OrbisNgs2RackOption* option,
         return ORBIS_NGS2_ERROR_INVALID_OPTION_SIZE;
     }
 
-    StackBuffer stackBuffer;
-    size_t requiredBufferSize = 0;
-    const u8 optionFlags = option ? static_cast<u8>(option->flags >> 31) : 0;
-    StackBufferOpen(&stackBuffer, nullptr, 0, nullptr, optionFlags);
-    StackBufferClose(&stackBuffer, &requiredBufferSize);
-
     outBufferInfo->hostBuffer = nullptr;
-    outBufferInfo->hostBufferSize = requiredBufferSize;
+    outBufferInfo->hostBufferSize = BlockSize(RackVoices(option));
     MemoryClear(outBufferInfo->reserved, sizeof(outBufferInfo->reserved));
+    return ORBIS_OK;
+}
+
+s32 RackSetup(OrbisNgs2Handle systemHandle, u32 rackId, const OrbisNgs2RackOption* option,
+              const OrbisNgs2ContextBufferInfo* hostBufferInfo, OrbisNgs2BufferFreeHandler hostFree,
+              OrbisNgs2Handle* outHandle) {
+    Mixer::System* system = SystemFromHandle(systemHandle);
+    if (!system) {
+        return HandleReportInvalid(systemHandle, 1);
+    }
+    if (option && option->size < sizeof(OrbisNgs2RackOption)) {
+        return ORBIS_NGS2_ERROR_INVALID_OPTION_SIZE;
+    }
+    if (!hostBufferInfo->hostBuffer) {
+        LOG_ERROR(Lib_Ngs2, "Invalid rack buffer address ({})", hostBufferInfo->hostBuffer);
+        return ORBIS_NGS2_ERROR_INVALID_BUFFER_ADDRESS;
+    }
+    const u32 numVoices = RackVoices(option);
+    if (hostBufferInfo->hostBufferSize < BlockSize(numVoices)) {
+        LOG_ERROR(Lib_Ngs2, "Invalid rack buffer size ({}<{}[byte])",
+                  hostBufferInfo->hostBufferSize, BlockSize(numVoices));
+        return ORBIS_NGS2_ERROR_INVALID_BUFFER_SIZE;
+    }
+
+    Block* block = BlockOf(*hostBufferInfo);
+    Mixer::Rack* rack = Mixer::CreateRack(system, rackId, option);
+    block->handle = {&block->handle, rack, static_cast<u32>(OrbisNgs2HandleType::Rack), 0};
+    block->buffer = *hostBufferInfo;
+    block->free = hostFree;
+    const OrbisNgs2Handle rackHandle = reinterpret_cast<OrbisNgs2Handle>(block);
+    Slot* voices = VoiceSlots(rackHandle);
+    for (u32 i = 0; i < numVoices; ++i) {
+        voices[i] = {&voices[i], Mixer::GetVoice(rack, i),
+                     static_cast<u32>(OrbisNgs2HandleType::Voice), i};
+    }
+    *outHandle = rackHandle;
+    return ORBIS_OK;
+}
+
+s32 RackCleanup(OrbisNgs2Handle rackHandle, OrbisNgs2ContextBufferInfo* outInfo) {
+    Mixer::Rack* rack = RackFromHandle(rackHandle);
+    if (!rack) {
+        return HandleReportInvalid(rackHandle, 2);
+    }
+    Block* block = reinterpret_cast<Block*>(rackHandle);
+    OrbisNgs2ContextBufferInfo buffer = block->buffer;
+    const OrbisNgs2BufferFreeHandler hostFree = block->free;
+    const u32 numVoices = Mixer::NumVoices(rack);
+    Mixer::DestroyRack(rack);
+    // The handles of the rack and of its voices name nothing from here on.
+    MemoryClear(block, sizeof(Block) + numVoices * sizeof(Slot));
+    if (hostFree) {
+        hostFree(&buffer);
+    }
+    if (outInfo) {
+        *outInfo = buffer;
+    }
+    return ORBIS_OK;
+}
+
+s32 RackVoiceHandle(OrbisNgs2Handle rackHandle, u32 voiceIndex, OrbisNgs2Handle* outHandle) {
+    Mixer::Rack* rack = RackFromHandle(rackHandle);
+    if (!rack) {
+        return HandleReportInvalid(rackHandle, 2);
+    }
+    if (!outHandle) {
+        LOG_ERROR(Lib_Ngs2, "Invalid voice handle address ({})", (void*)outHandle);
+        return ORBIS_NGS2_ERROR_INVALID_OUT_ADDRESS;
+    }
+    if (voiceIndex >= Mixer::NumVoices(rack)) {
+        LOG_ERROR(Lib_Ngs2, "Invalid voice index ({})", voiceIndex);
+        return ORBIS_NGS2_ERROR_INVALID_VOICE_INDEX;
+    }
+    *outHandle = reinterpret_cast<OrbisNgs2Handle>(&VoiceSlots(rackHandle)[voiceIndex]);
     return ORBIS_OK;
 }
 
