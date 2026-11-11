@@ -37,6 +37,7 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 | Storage | HDD | HDD | HDD | HDD |
 
 **Included Features for Gravity Rush 2 and Gravity Rush Remastered**
+- Fully bindable gamepad and keyboard bindings and button prompts
 - Fully customizable graphics presets
 - Steam deck preset
 - Impeccable performance, graphical accuracy, and stability
