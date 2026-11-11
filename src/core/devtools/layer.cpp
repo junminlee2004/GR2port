@@ -35,8 +35,6 @@ static bool show_quit_window = false;
 static bool show_volume = false;
 static float volume_start_time;
 
-static float fps_scale = 1.0f;
-
 static Widget::FrameGraph frame_graph;
 
 static float debug_popup_timing = 3.0f;
@@ -132,11 +130,6 @@ void L::DrawSimple() {
 
 static void LoadSettings(const char* line) {
     int i;
-    float f;
-    if (sscanf(line, "fps_scale=%f", &f) == 1) {
-        fps_scale = f;
-        return;
-    }
     if (sscanf(line, "show_advanced_debug=%d", &i) == 1) {
         // The debug menu bar starts hidden at every boot.
         return;
@@ -183,7 +176,6 @@ void L::SetupSettings() {
     };
     handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf) {
         buf->appendf("[%s][Data]\n", handler->TypeName);
-        buf->appendf("fps_scale=%f\n", fps_scale);
         buf->appendf("show_advanced_debug=%d\n", DebugState.IsShowingDebugMenuBar());
         buf->appendf("show_frame_graph=%d\n", frame_graph.is_open);
         buf->appendf("show_memory_map=%d\n", memory_map.open);
@@ -236,20 +228,7 @@ void L::Draw() {
             if (fps_pinned) {
                 SetWindowPos({GetIO().DisplaySize.x - GetCurrentWindowRead()->SizeFull.x, 0.0f});
             }
-            if (BeginPopupContextWindow()) {
-#define M(label, value)                                                                            \
-    if (MenuItem(label, nullptr, fps_scale == value))                                              \
-    fps_scale = value
-                M("0.5x", 0.5f);
-                M("1.0x", 1.0f);
-                M("1.5x", 1.5f);
-                M("2.0x", 2.0f);
-                M("2.5x", 2.5f);
-                EndPopup();
-#undef M
-            }
             KeepWindowInside();
-            SetWindowFontScale(fps_scale);
             DrawSimple();
         }
         End();
