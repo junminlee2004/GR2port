@@ -16,7 +16,7 @@ Screenshot © Sony Interactive Entertainment LLC. Not covered by this project's 
 </b>
 
 **Check out the following playlist if your dump is in .PKG format:**
-https://www.youtube.com/watch?v=O8z6QPOaGDg&list=PLOgHncbXc__M&pp=sAgC
+[https://www.youtube.com/watch?v=O8z6QPOaGDg&list=PLOgHncbXc__M&pp=sAgC](https://www.youtube.com/watch?v=rZ5jZToJVHE&list=PLOgHncbXc__M&index=9)
 
 **Join the GR2fork discord server** (new) here for extended support. Anyone who wants to lurk for general game discussion surrounding gravity rush 1 and 2 are also welcome -> https://discord.gg/hnHRpzxGzG
 
