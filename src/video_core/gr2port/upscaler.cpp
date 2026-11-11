@@ -54,6 +54,8 @@ constexpr auto ResetGap = std::chrono::milliseconds{100};
 constexpr float MaxFrameMs = 200.0f;
 constexpr float FirstFrameMs = 33.3f;
 constexpr u32 InputGroupPixels = 8;
+// DLSS's convolutional model, preset E, in every mode; NGX's default picks the transformer model.
+constexpr Gr2Fsr3::DlssPreset DlssModel = Gr2Fsr3::DlssPreset::E;
 // A camera that moves or turns further than this between frames, or changes its field of view by
 // more, cuts: the game raises its own reset at the same distance.
 constexpr float CutTranslation = 30.0f;
@@ -385,7 +387,7 @@ bool CreateDlss(vk::Extent2D render, vk::Extent2D output) {
     const Gr2Fsr3::DlssMode mode = DlssModeOf(g_quality);
     std::string notice;
     const std::optional<Gr2Fsr3::DlssRange> range =
-        Gr2Fsr3::DlssOptimalRange(mode, Gr2Fsr3::DlssPreset::Default, output, notice);
+        Gr2Fsr3::DlssOptimalRange(mode, DlssModel, output, notice);
     if (!range) {
         TurnOff(notice);
         return false;
@@ -399,12 +401,13 @@ bool CreateDlss(vk::Extent2D render, vk::Extent2D output) {
         return false;
     }
     if (const std::string rejected =
-            Gr2Fsr3::DlssSetOptions(mode, Gr2Fsr3::DlssPreset::Default, output);
+            Gr2Fsr3::DlssSetOptions(mode, DlssModel, output);
         !rejected.empty()) {
         TurnOff(rejected);
         return false;
     }
     g_dlss_ready = true;
+    LOG_INFO(Render_Vulkan, "GR2port upscaler: DLSS runs preset E, the convolutional model");
     return true;
 }
 
