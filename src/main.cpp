@@ -75,7 +75,6 @@ int main(int argc, char* argv[]) {
     std::optional<std::filesystem::path> overrideRoot;
     std::optional<int> waitPid;
     bool waitForDebugger = false;
-    bool userfaultfd = false;
 
     std::optional<std::string> fullscreenStr;
     bool ignoreGamePatch = false;
@@ -102,10 +101,6 @@ int main(int argc, char* argv[]) {
 
     app.add_flag("--wait-for-debugger", waitForDebugger);
     app.add_option("--wait-for-pid", waitPid);
-#ifdef __linux__
-    app.add_flag("--userfaultfd", userfaultfd,
-                 "Enable userfaultfd for tracking memory (Linux only)");
-#endif
 
     app.add_flag("--show-fps", showFps);
     app.add_flag("--config-clean", configClean);
@@ -214,10 +209,6 @@ int main(int argc, char* argv[]) {
 
     if (configGlobal)
         EmulatorSettings.SetConfigMode(ConfigMode::Global);
-
-    if (userfaultfd) {
-        EmulatorSettings.SetUserfaultfdTracking(true);
-    }
 
     auto* emulator = Common::Singleton<Core::Emulator>::Instance();
 #ifdef _WIN32

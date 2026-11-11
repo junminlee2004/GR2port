@@ -60,9 +60,6 @@ void SettingsWindow::LoadSettings(std::string profile) {
     windowHeightSetting = EmulatorSettings.GetWindowHeight();
     windowWidthSetting = EmulatorSettings.GetWindowWidth();
     hdrAllowedSetting = EmulatorSettings.IsHdrAllowed();
-    fsrEnabledSetting = EmulatorSettings.IsFsrEnabled();
-    rcasEnabledSetting = EmulatorSettings.IsRcasEnabled();
-    rcasAttenuationSetting = static_cast<float>(EmulatorSettings.GetRcasAttenuation() * 0.001f);
 
     /////////// Input Tab
     motionControlsSetting = EmulatorSettings.IsMotionControlsEnabled();
@@ -87,17 +84,11 @@ void SettingsWindow::LoadSettings(std::string profile) {
 
     /////////// Experimental Tab
     if (isSpecific) {
-        readbacksModeSetting = EmulatorSettings.GetReadbacksMode();
-        adaptiveSkipCachesSetting = EmulatorSettings.GetAdaptiveSkipCachesMode();
-        readbackLinearImagesSetting = EmulatorSettings.IsReadbackLinearImagesEnabled();
-        directMemoryAccessSetting = EmulatorSettings.IsDirectMemoryAccessEnabled();
         windowsGuestRedZoneProtectionModeSetting = EmulatorSettings.IsRedZonePatchingEnabled();
         devkitConsoleSetting = EmulatorSettings.IsDevKit();
         neoModeSetting = EmulatorSettings.IsNeo();
         shadnetEnabledSetting = EmulatorSettings.IsShadNetEnabledSetting();
         connectedNetworkSetting = EmulatorSettings.IsConnectedToNetwork();
-        pipelineCacheEnabledSetting = EmulatorSettings.IsPipelineCacheEnabled();
-        pipelineCacheArchiveSetting = EmulatorSettings.IsPipelineCacheArchived();
         extraDmemSetting = EmulatorSettings.GetExtraDmemInMBytes();
         vblankFrequencySetting = EmulatorSettings.GetVblankFrequency();
     }
@@ -121,10 +112,6 @@ void SettingsWindow::SaveSettings(std::string profile) {
     EmulatorSettings.SetWindowHeight(windowHeightSetting, isSpecific);
     EmulatorSettings.SetWindowWidth(windowWidthSetting, isSpecific);
     EmulatorSettings.SetHdrAllowed(hdrAllowedSetting, isSpecific);
-    EmulatorSettings.SetFsrEnabled(fsrEnabledSetting, isSpecific);
-    EmulatorSettings.SetRcasEnabled(rcasEnabledSetting, isSpecific);
-    EmulatorSettings.SetRcasAttenuation(static_cast<int>(rcasAttenuationSetting * 1000),
-                                        isSpecific);
 
     /////////// Input Tab
     EmulatorSettings.SetMotionControlsEnabled(motionControlsSetting, isSpecific);
@@ -149,18 +136,12 @@ void SettingsWindow::SaveSettings(std::string profile) {
 
     /////////// Experimental Tab
     if (isSpecific) {
-        EmulatorSettings.SetReadbacksMode(readbacksModeSetting, true);
-        EmulatorSettings.SetAdaptiveSkipCachesMode(adaptiveSkipCachesSetting, true);
-        EmulatorSettings.SetReadbackLinearImagesEnabled(readbackLinearImagesSetting, true);
-        EmulatorSettings.SetDirectMemoryAccessEnabled(directMemoryAccessSetting, true);
         // Windows static guest red-zone protection
         EmulatorSettings.SetRedZonePatchingEnabled(windowsGuestRedZoneProtectionModeSetting, true);
         EmulatorSettings.SetDevKit(devkitConsoleSetting, true);
         EmulatorSettings.SetNeo(neoModeSetting, true);
         EmulatorSettings.SetShadNetEnabled(shadnetEnabledSetting, true);
         EmulatorSettings.SetConnectedToNetwork(connectedNetworkSetting, true);
-        EmulatorSettings.SetPipelineCacheEnabled(pipelineCacheEnabledSetting, true);
-        EmulatorSettings.SetPipelineCacheArchived(pipelineCacheArchiveSetting, true);
         EmulatorSettings.SetExtraDmemInMBytes(extraDmemSetting, true);
         EmulatorSettings.SetVblankFrequency(vblankFrequencySetting, true);
     }
@@ -555,15 +536,6 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
             AddSettingSliderInt("Window Width", windowWidthSetting, 0, 8000);
             AddSettingSliderInt("Window Height", windowHeightSetting, 0, 7000);
             AddSettingCheckbox("Enable HDR", hdrAllowedSetting);
-            AddSettingCheckbox("Enable FSR", fsrEnabledSetting);
-
-            if (fsrEnabledSetting) {
-                AddSettingCheckbox("Enable RCAS", rcasEnabledSetting);
-            }
-
-            if (rcasEnabledSetting && fsrEnabledSetting) {
-                AddSettingSliderFloat("RCAS Attenuation", rcasAttenuationSetting, 0.0f, 3.0f, 3);
-            }
 
             ImGui::EndTable();
         }
@@ -622,11 +594,6 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
 
             AddSettingSliderInt("Additional DMem Allocation", extraDmemSetting, 0, 20000);
             AddSettingSliderInt("Vblank Frequency", vblankFrequencySetting, 30, 360);
-            AddSettingCombo("Readbacks Mode", readbacksModeSetting, readbacksModeOptions);
-            AddSettingCombo("Adaptive Skip Caches (Experimental)", adaptiveSkipCachesSetting,
-                            adaptiveSkipCachesOptions);
-            AddSettingCheckbox("Enable Readback Linear Images", readbackLinearImagesSetting);
-            AddSettingCheckbox("Enable Direct Memory Access", directMemoryAccessSetting);
 #ifdef _WIN32
             // Windows static guest red-zone protection
             AddSettingCheckbox("Windows Guest Red Zone Protection (Requires Restart)",
@@ -636,12 +603,6 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
             AddSettingCheckbox("Enable PS4 Neo Mode", neoModeSetting);
             AddSettingCheckbox("Enable ShadNet", shadnetEnabledSetting);
             AddSettingCheckbox("Set Network Connected to True", connectedNetworkSetting);
-            AddSettingCheckbox("Enable Shader Cache", pipelineCacheEnabledSetting);
-
-            if (pipelineCacheEnabledSetting) {
-                AddSettingCheckbox("Compress Shader Cache to Zip File",
-                                   pipelineCacheArchiveSetting);
-            }
 
             ImGui::EndTable();
         }

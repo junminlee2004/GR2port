@@ -526,21 +526,11 @@ bool EmulatorSettingsImpl::TransferSettings() {
         setFromToml(s.window_height, gpu, "screenHeight");
         setFromToml(s.internal_screen_width, gpu, "internalScreenWidth");
         setFromToml(s.internal_screen_height, gpu, "internalScreenHeight");
-        setFromToml(s.null_gpu, gpu, "nullGpu");
-        setFromToml(s.copy_gpu_buffers, gpu, "copyGPUBuffers");
-        setFromToml(s.readbacks_mode, gpu, "readbacksMode");
-        setFromToml(s.readback_linear_images_enabled, gpu, "readbackLinearImages");
-        setFromToml(s.direct_memory_access_enabled, gpu, "directMemoryAccess");
-        setFromToml(s.dump_shaders, gpu, "dumpShaders");
-        setFromToml(s.patch_shaders, gpu, "patchShaders");
         setFromToml(s.vblank_frequency, gpu, "vblankFrequency");
         setFromToml(s.full_screen, gpu, "Fullscreen");
         setFromToml(s.full_screen_mode, gpu, "FullscreenMode");
         setFromToml(s.present_mode, gpu, "presentMode");
         setFromToml(s.hdr_allowed, gpu, "allowHDR");
-        setFromToml(s.fsr_enabled, gpu, "fsrEnabled");
-        setFromToml(s.rcas_enabled, gpu, "rcasEnabled");
-        setFromToml(s.rcas_attenuation, gpu, "rcasAttenuation");
     }
 
     if (og_data.contains("Vulkan")) {
@@ -554,10 +544,7 @@ bool EmulatorSettingsImpl::TransferSettings() {
         setFromToml(s.vkvalidation_gpu_enabled, vk, "validation_gpu");
         setFromToml(s.vkcrash_diagnostic_enabled, vk, "crashDiagnostic");
         setFromToml(s.vkhost_markers, vk, "hostMarkers");
-        setFromToml(s.vkguest_markers, vk, "guestMarkers");
         setFromToml(s.renderdoc_enabled, vk, "rdocEnable");
-        setFromToml(s.pipeline_cache_enabled, vk, "pipelineCacheEnable");
-        setFromToml(s.pipeline_cache_archived, vk, "pipelineCacheArchive");
     }
 
     if (og_data.contains("Debug")) {
@@ -565,7 +552,6 @@ bool EmulatorSettingsImpl::TransferSettings() {
         auto& s = m_debug;
 
         setFromToml(s.debug_dump, debug, "DebugDump");
-        setFromToml(s.shader_collect, debug, "CollectShader");
         setFromToml(m_general.show_fps_counter, debug, "showFpsCounter");
     }
 
