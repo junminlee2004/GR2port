@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Přejet po dot. panelu vlevo",
     "Flick Right (Touch Pad)": "Přejet vpravo (dotykový panel)",
     "Flick the touch pad right": "Přejet po dot. panelu vpravo",
-    "Lowest": "Nejnižší"
+    "Lowest": "Nejnižší",
+    "Show Trophy Pop-ups": "Zobrazovat oznámení o trofejích",
+    "View Trophies...": "Zobrazit trofeje...",
+    "Progress: {0}% ({1}/{2})": "Postup: {0} % ({1}/{2})",
+    "Show Earned Trophies": "Zobrazit získané trofeje",
+    "Show Not Earned Trophies": "Zobrazit nezískané trofeje",
+    "Show Hidden Trophies": "Zobrazit skryté trofeje",
+    "Trophy": "Trofej",
+    "Name": "Název",
+    "Description": "Popis",
+    "Time Unlocked": "Získáno",
+    "Type": "Typ",
+    "No trophies found.": "Nebyly nalezeny žádné trofeje."
   }
 }

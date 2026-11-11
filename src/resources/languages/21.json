@@ -222,6 +222,18 @@
     "Flick the touch pad left": "‫اسحب لليسار على لوحة اللمس‬",
     "Flick Right (Touch Pad)": "‫سحب لليمين (لوحة اللمس)‬",
     "Flick the touch pad right": "‫اسحب لليمين على لوحة اللمس‬",
-    "Lowest": "‫الأدنى‬"
+    "Lowest": "‫الأدنى‬",
+    "Show Trophy Pop-ups": "‫إظهار إشعارات الجوائز‬",
+    "View Trophies...": "‫عرض الجوائز...‬",
+    "Progress: {0}% ({1}/{2})": "‫التقدم: {0}% ({1}/{2})‬",
+    "Show Earned Trophies": "‫إظهار الجوائز المكتسبة‬",
+    "Show Not Earned Trophies": "‫إظهار الجوائز غير المكتسبة‬",
+    "Show Hidden Trophies": "‫إظهار الجوائز المخفية‬",
+    "Trophy": "‫الجائزة‬",
+    "Name": "‫الاسم‬",
+    "Description": "‫الوصف‬",
+    "Time Unlocked": "‫وقت الحصول‬",
+    "Type": "‫النوع‬",
+    "No trophies found.": "‫لم يُعثر على جوائز.‬"
   }
 }

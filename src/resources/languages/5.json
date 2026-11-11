@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Scorri a sinistra sul touch pad",
     "Flick Right (Touch Pad)": "Scorri a destra (touch pad)",
     "Flick the touch pad right": "Scorri a destra sul touch pad",
-    "Lowest": "Minimo"
+    "Lowest": "Minimo",
+    "Show Trophy Pop-ups": "Mostra notifiche dei trofei",
+    "View Trophies...": "Visualizza trofei...",
+    "Progress: {0}% ({1}/{2})": "Progresso: {0}% ({1}/{2})",
+    "Show Earned Trophies": "Mostra trofei ottenuti",
+    "Show Not Earned Trophies": "Mostra trofei non ottenuti",
+    "Show Hidden Trophies": "Mostra trofei nascosti",
+    "Trophy": "Trofeo",
+    "Name": "Nome",
+    "Description": "Descrizione",
+    "Time Unlocked": "Ottenuto il",
+    "Type": "Tipo",
+    "No trophies found.": "Nessun trofeo trovato."
   }
 }

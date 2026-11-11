@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Glisează la stânga pe touchpad",
     "Flick Right (Touch Pad)": "Glisare la dreapta (touchpad)",
     "Flick the touch pad right": "Glisează la dreapta pe touchpad",
-    "Lowest": "Minim"
+    "Lowest": "Minim",
+    "Show Trophy Pop-ups": "Afișează notificările de trofee",
+    "View Trophies...": "Vezi trofeele...",
+    "Progress: {0}% ({1}/{2})": "Progres: {0}% ({1}/{2})",
+    "Show Earned Trophies": "Afișează trofeele obținute",
+    "Show Not Earned Trophies": "Afișează trofeele neobținute",
+    "Show Hidden Trophies": "Afișează trofeele ascunse",
+    "Trophy": "Trofeu",
+    "Name": "Nume",
+    "Description": "Descriere",
+    "Time Unlocked": "Obținut la",
+    "Type": "Tip",
+    "No trophies found.": "Nu s-a găsit niciun trofeu."
   }
 }

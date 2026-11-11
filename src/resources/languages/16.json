@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Przesuń (szybko) panel w lewo",
     "Flick Right (Touch Pad)": "Przesuń (szybko) w prawo (panel)",
     "Flick the touch pad right": "Przesuń (szybko) panel w prawo",
-    "Lowest": "Najniższe"
+    "Lowest": "Najniższe",
+    "Show Trophy Pop-ups": "Pokazuj powiadomienia o trofeach",
+    "View Trophies...": "Wyświetl trofea...",
+    "Progress: {0}% ({1}/{2})": "Postęp: {0}% ({1}/{2})",
+    "Show Earned Trophies": "Pokaż zdobyte trofea",
+    "Show Not Earned Trophies": "Pokaż niezdobyte trofea",
+    "Show Hidden Trophies": "Pokaż ukryte trofea",
+    "Trophy": "Trofeum",
+    "Name": "Nazwa",
+    "Description": "Opis",
+    "Time Unlocked": "Zdobyto",
+    "Type": "Typ",
+    "No trophies found.": "Nie znaleziono trofeów."
   }
 }

@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Vuốt bàn cảm ứng sang trái",
     "Flick Right (Touch Pad)": "Vuốt phải (bàn cảm ứng)",
     "Flick the touch pad right": "Vuốt bàn cảm ứng sang phải",
-    "Lowest": "Thấp nhất"
+    "Lowest": "Thấp nhất",
+    "Show Trophy Pop-ups": "Hiện thông báo cúp",
+    "View Trophies...": "Xem cúp...",
+    "Progress: {0}% ({1}/{2})": "Tiến độ: {0}% ({1}/{2})",
+    "Show Earned Trophies": "Hiện cúp đã đạt được",
+    "Show Not Earned Trophies": "Hiện cúp chưa đạt được",
+    "Show Hidden Trophies": "Hiện cúp ẩn",
+    "Trophy": "Cúp",
+    "Name": "Tên",
+    "Description": "Mô tả",
+    "Time Unlocked": "Thời gian đạt",
+    "Type": "Loại",
+    "No trophies found.": "Không tìm thấy cúp nào."
   }
 }

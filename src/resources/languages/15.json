@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Sveip til venstre på styreplaten",
     "Flick Right (Touch Pad)": "Sveip høyre (styreplate)",
     "Flick the touch pad right": "Sveip til høyre på styreplaten",
-    "Lowest": "Lavest"
+    "Lowest": "Lavest",
+    "Show Trophy Pop-ups": "Vis trofévarsler",
+    "View Trophies...": "Vis trofeer...",
+    "Progress: {0}% ({1}/{2})": "Fremdrift: {0} % ({1}/{2})",
+    "Show Earned Trophies": "Vis opptjente trofeer",
+    "Show Not Earned Trophies": "Vis ikke opptjente trofeer",
+    "Show Hidden Trophies": "Vis skjulte trofeer",
+    "Trophy": "Trofé",
+    "Name": "Navn",
+    "Description": "Beskrivelse",
+    "Time Unlocked": "Opptjent",
+    "Type": "Type",
+    "No trophies found.": "Ingen trofeer funnet."
   }
 }

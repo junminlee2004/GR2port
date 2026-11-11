@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Pöccintés balra az érintőpadon",
     "Flick Right (Touch Pad)": "Pöccintés jobbra (érintőpad)",
     "Flick the touch pad right": "Pöccintés jobbra az érintőpadon",
-    "Lowest": "Legalacsonyabb"
+    "Lowest": "Legalacsonyabb",
+    "Show Trophy Pop-ups": "Trófeaértesítések megjelenítése",
+    "View Trophies...": "Trófeák megtekintése...",
+    "Progress: {0}% ({1}/{2})": "Előrehaladás: {0}% ({1}/{2})",
+    "Show Earned Trophies": "Megszerzett trófeák mutatása",
+    "Show Not Earned Trophies": "Meg nem szerzett trófeák mutatása",
+    "Show Hidden Trophies": "Rejtett trófeák mutatása",
+    "Trophy": "Trófea",
+    "Name": "Név",
+    "Description": "Leírás",
+    "Time Unlocked": "Megszerezve",
+    "Type": "Típus",
+    "No trophies found.": "Nem található trófea."
   }
 }

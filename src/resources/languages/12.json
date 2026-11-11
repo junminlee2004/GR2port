@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Pyyhkäise kosketuslevyä vas.",
     "Flick Right (Touch Pad)": "Pyyhkäisy oik. (kosketuslevy)",
     "Flick the touch pad right": "Pyyhkäise kosketuslevyä oik.",
-    "Lowest": "Matalin"
+    "Lowest": "Matalin",
+    "Show Trophy Pop-ups": "Näytä trophy-ilmoitukset",
+    "View Trophies...": "Näytä trophyt...",
+    "Progress: {0}% ({1}/{2})": "Edistyminen: {0} % ({1}/{2})",
+    "Show Earned Trophies": "Näytä ansaitut trophyt",
+    "Show Not Earned Trophies": "Näytä ansaitsemattomat trophyt",
+    "Show Hidden Trophies": "Näytä piilotetut trophyt",
+    "Trophy": "Trophy",
+    "Name": "Nimi",
+    "Description": "Kuvaus",
+    "Time Unlocked": "Ansaittu",
+    "Type": "Tyyppi",
+    "No trophies found.": "Trophyja ei löytynyt."
   }
 }

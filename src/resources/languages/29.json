@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Usap panel sentuh ke kiri",
     "Flick Right (Touch Pad)": "Usap ke Kanan (Panel Sentuh)",
     "Flick the touch pad right": "Usap panel sentuh ke kanan",
-    "Lowest": "Terendah"
+    "Lowest": "Terendah",
+    "Show Trophy Pop-ups": "Tampilkan Pop-up Trofi",
+    "View Trophies...": "Lihat Trofi...",
+    "Progress: {0}% ({1}/{2})": "Progres: {0}% ({1}/{2})",
+    "Show Earned Trophies": "Tampilkan Trofi yang Diperoleh",
+    "Show Not Earned Trophies": "Tampilkan Trofi Belum Diperoleh",
+    "Show Hidden Trophies": "Tampilkan Trofi Tersembunyi",
+    "Trophy": "Trofi",
+    "Name": "Nama",
+    "Description": "Deskripsi",
+    "Time Unlocked": "Waktu Diperoleh",
+    "Type": "Jenis",
+    "No trophies found.": "Trofi tidak ditemukan."
   }
 }

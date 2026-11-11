@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Stryg til venstre på touchpad",
     "Flick Right (Touch Pad)": "Stryg til højre (touchpad)",
     "Flick the touch pad right": "Stryg til højre på touchpad",
-    "Lowest": "Lavest"
+    "Lowest": "Lavest",
+    "Show Trophy Pop-ups": "Vis trofæmeddelelser",
+    "View Trophies...": "Vis trofæer...",
+    "Progress: {0}% ({1}/{2})": "Fremskridt: {0} % ({1}/{2})",
+    "Show Earned Trophies": "Vis optjente trofæer",
+    "Show Not Earned Trophies": "Vis ikke-optjente trofæer",
+    "Show Hidden Trophies": "Vis skjulte trofæer",
+    "Trophy": "Trofæ",
+    "Name": "Navn",
+    "Description": "Beskrivelse",
+    "Time Unlocked": "Optjent",
+    "Type": "Type",
+    "No trophies found.": "Ingen trofæer fundet."
   }
 }

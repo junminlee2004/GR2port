@@ -222,6 +222,18 @@
     "Flick the touch pad left": "ปัดทัชแพดไปทางซ้าย",
     "Flick Right (Touch Pad)": "ปัดขวา (ทัชแพด)",
     "Flick the touch pad right": "ปัดทัชแพดไปทางขวา",
-    "Lowest": "ต่ำสุด"
+    "Lowest": "ต่ำสุด",
+    "Show Trophy Pop-ups": "แสดงป๊อปอัปถ้วยรางวัล",
+    "View Trophies...": "ดูถ้วยรางวัล...",
+    "Progress: {0}% ({1}/{2})": "ความคืบหน้า: {0}% ({1}/{2})",
+    "Show Earned Trophies": "แสดงถ้วยรางวัลที่ได้รับแล้ว",
+    "Show Not Earned Trophies": "แสดงถ้วยรางวัลที่ยังไม่ได้รับ",
+    "Show Hidden Trophies": "แสดงถ้วยรางวัลที่ซ่อนอยู่",
+    "Trophy": "ถ้วยรางวัล",
+    "Name": "ชื่อ",
+    "Description": "คำอธิบาย",
+    "Time Unlocked": "เวลาที่ได้รับ",
+    "Type": "ประเภท",
+    "No trophies found.": "ไม่พบถ้วยรางวัล"
   }
 }

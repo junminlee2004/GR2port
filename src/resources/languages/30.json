@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Провести вліво по сенс. панелі",
     "Flick Right (Touch Pad)": "Провести вправо (сенс. панель)",
     "Flick the touch pad right": "Провести вправо по сенс. панелі",
-    "Lowest": "Найнижча"
+    "Lowest": "Найнижча",
+    "Show Trophy Pop-ups": "Показувати сповіщення про призи",
+    "View Trophies...": "Перегляд призів...",
+    "Progress: {0}% ({1}/{2})": "Прогрес: {0}% ({1}/{2})",
+    "Show Earned Trophies": "Показувати отримані призи",
+    "Show Not Earned Trophies": "Показувати неотримані призи",
+    "Show Hidden Trophies": "Показувати приховані призи",
+    "Trophy": "Приз",
+    "Name": "Назва",
+    "Description": "Опис",
+    "Time Unlocked": "Отримано",
+    "Type": "Тип",
+    "No trophies found.": "Призів не знайдено."
   }
 }

@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Σάρωση αριστερά στην επιφ. αφής",
     "Flick Right (Touch Pad)": "Σάρωση δεξιά (επιφ. αφής)",
     "Flick the touch pad right": "Σάρωση δεξιά στην επιφ. αφής",
-    "Lowest": "Ελάχιστο"
+    "Lowest": "Ελάχιστο",
+    "Show Trophy Pop-ups": "Εμφάνιση ειδοποιήσεων τροπαίων",
+    "View Trophies...": "Προβολή τροπαίων...",
+    "Progress: {0}% ({1}/{2})": "Πρόοδος: {0}% ({1}/{2})",
+    "Show Earned Trophies": "Εμφάνιση κερδισμένων τροπαίων",
+    "Show Not Earned Trophies": "Εμφάνιση μη κερδισμένων τροπαίων",
+    "Show Hidden Trophies": "Εμφάνιση κρυφών τροπαίων",
+    "Trophy": "Τρόπαιο",
+    "Name": "Όνομα",
+    "Description": "Περιγραφή",
+    "Time Unlocked": "Απόκτηση",
+    "Type": "Τύπος",
+    "No trophies found.": "Δεν βρέθηκαν τρόπαια."
   }
 }

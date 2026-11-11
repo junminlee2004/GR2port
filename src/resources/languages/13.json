@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Svep åt vänster på styrplattan",
     "Flick Right (Touch Pad)": "Svep åt höger (styrplatta)",
     "Flick the touch pad right": "Svep åt höger på styrplattan",
-    "Lowest": "Lägst"
+    "Lowest": "Lägst",
+    "Show Trophy Pop-ups": "Visa troféaviseringar",
+    "View Trophies...": "Visa troféer...",
+    "Progress: {0}% ({1}/{2})": "Förlopp: {0} % ({1}/{2})",
+    "Show Earned Trophies": "Visa erhållna troféer",
+    "Show Not Earned Trophies": "Visa ej erhållna troféer",
+    "Show Hidden Trophies": "Visa dolda troféer",
+    "Trophy": "Trofé",
+    "Name": "Namn",
+    "Description": "Beskrivning",
+    "Time Unlocked": "Erhållen",
+    "Type": "Typ",
+    "No trophies found.": "Inga troféer hittades."
   }
 }

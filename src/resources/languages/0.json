@@ -222,6 +222,18 @@
     "Flick the touch pad left": "タッチパッドを左フリック",
     "Flick Right (Touch Pad)": "右フリック(タッチパッド)",
     "Flick the touch pad right": "タッチパッドを右フリック",
-    "Lowest": "最低"
+    "Lowest": "最低",
+    "Show Trophy Pop-ups": "トロフィーのポップアップを表示",
+    "View Trophies...": "トロフィーを見る...",
+    "Progress: {0}% ({1}/{2})": "達成率: {0}% ({1}/{2})",
+    "Show Earned Trophies": "獲得済みのトロフィーを表示",
+    "Show Not Earned Trophies": "未獲得のトロフィーを表示",
+    "Show Hidden Trophies": "隠しトロフィーを表示",
+    "Trophy": "トロフィー",
+    "Name": "名前",
+    "Description": "説明",
+    "Time Unlocked": "獲得日時",
+    "Type": "種類",
+    "No trophies found.": "トロフィーが見つかりません。"
   }
 }

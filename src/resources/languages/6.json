@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Op touchpad naar links vegen",
     "Flick Right (Touch Pad)": "Naar rechts vegen (touchpad)",
     "Flick the touch pad right": "Op touchpad naar rechts vegen",
-    "Lowest": "Zeer laag"
+    "Lowest": "Zeer laag",
+    "Show Trophy Pop-ups": "Trofee-pop-ups weergeven",
+    "View Trophies...": "Trofeeën bekijken...",
+    "Progress: {0}% ({1}/{2})": "Voortgang: {0}% ({1}/{2})",
+    "Show Earned Trophies": "Behaalde trofeeën weergeven",
+    "Show Not Earned Trophies": "Niet-behaalde trofeeën weergeven",
+    "Show Hidden Trophies": "Verborgen trofeeën weergeven",
+    "Trophy": "Trofee",
+    "Name": "Naam",
+    "Description": "Beschrijving",
+    "Time Unlocked": "Behaald op",
+    "Type": "Type",
+    "No trophies found.": "Geen trofeeën gevonden."
   }
 }

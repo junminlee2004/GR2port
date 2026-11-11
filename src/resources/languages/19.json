@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Dokunmatik yüzeyde sola kaydır",
     "Flick Right (Touch Pad)": "Sağa Kaydır (Dokunmatik Yüzey)",
     "Flick the touch pad right": "Dokunmatik yüzeyde sağa kaydır",
-    "Lowest": "En Düşük"
+    "Lowest": "En Düşük",
+    "Show Trophy Pop-ups": "Kupa Bildirimlerini Göster",
+    "View Trophies...": "Kupaları Görüntüle...",
+    "Progress: {0}% ({1}/{2})": "İlerleme: %{0} ({1}/{2})",
+    "Show Earned Trophies": "Kazanılan Kupaları Göster",
+    "Show Not Earned Trophies": "Kazanılmayan Kupaları Göster",
+    "Show Hidden Trophies": "Gizli Kupaları Göster",
+    "Trophy": "Kupa",
+    "Name": "Ad",
+    "Description": "Açıklama",
+    "Time Unlocked": "Kazanma Zamanı",
+    "Type": "Tür",
+    "No trophies found.": "Kupa bulunamadı."
   }
 }

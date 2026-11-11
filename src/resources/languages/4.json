@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Touchpad: nach links streichen",
     "Flick Right (Touch Pad)": "Nach rechts streichen (Touchpad)",
     "Flick the touch pad right": "Touchpad: nach rechts streichen",
-    "Lowest": "Sehr niedrig"
+    "Lowest": "Sehr niedrig",
+    "Show Trophy Pop-ups": "Trophäen-Pop-ups anzeigen",
+    "View Trophies...": "Trophäen anzeigen...",
+    "Progress: {0}% ({1}/{2})": "Fortschritt: {0} % ({1}/{2})",
+    "Show Earned Trophies": "Erhaltene Trophäen anzeigen",
+    "Show Not Earned Trophies": "Nicht erhaltene Trophäen anzeigen",
+    "Show Hidden Trophies": "Versteckte Trophäen anzeigen",
+    "Trophy": "Trophäe",
+    "Name": "Name",
+    "Description": "Beschreibung",
+    "Time Unlocked": "Erhalten am",
+    "Type": "Typ",
+    "No trophies found.": "Keine Trophäen gefunden."
   }
 }

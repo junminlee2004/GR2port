@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Pavé tactile : appui rapide gauche",
     "Flick Right (Touch Pad)": "Appui rapide droite (pavé tactile)",
     "Flick the touch pad right": "Pavé tactile : appui rapide droite",
-    "Lowest": "Minimum"
+    "Lowest": "Minimum",
+    "Show Trophy Pop-ups": "Afficher les notifications de trophée",
+    "View Trophies...": "Voir les trophées...",
+    "Progress: {0}% ({1}/{2})": "Progression : {0} % ({1}/{2})",
+    "Show Earned Trophies": "Afficher les trophées obtenus",
+    "Show Not Earned Trophies": "Afficher les trophées non obtenus",
+    "Show Hidden Trophies": "Afficher les trophées cachés",
+    "Trophy": "Trophée",
+    "Name": "Nom",
+    "Description": "Description",
+    "Time Unlocked": "Date d'obtention",
+    "Type": "Type",
+    "No trophies found.": "Aucun trophée trouvé."
   }
 }

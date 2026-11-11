@@ -222,6 +222,18 @@
     "Flick the touch pad left": "Провести влево по сенс. панели",
     "Flick Right (Touch Pad)": "Провести вправо (сенс. панель)",
     "Flick the touch pad right": "Провести вправо по сенс. панели",
-    "Lowest": "Минимальное"
+    "Lowest": "Минимальное",
+    "Show Trophy Pop-ups": "Показывать уведомления о призах",
+    "View Trophies...": "Просмотр призов...",
+    "Progress: {0}% ({1}/{2})": "Прогресс: {0}% ({1}/{2})",
+    "Show Earned Trophies": "Показывать полученные призы",
+    "Show Not Earned Trophies": "Показывать неполученные призы",
+    "Show Hidden Trophies": "Показывать скрытые призы",
+    "Trophy": "Приз",
+    "Name": "Название",
+    "Description": "Описание",
+    "Time Unlocked": "Получен",
+    "Type": "Тип",
+    "No trophies found.": "Призы не найдены."
   }
 }

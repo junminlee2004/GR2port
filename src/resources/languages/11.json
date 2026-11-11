@@ -222,6 +222,18 @@
     "Flick the touch pad left": "向左滑碰触摸板",
     "Flick Right (Touch Pad)": "向右滑碰（触摸板）",
     "Flick the touch pad right": "向右滑碰触摸板",
-    "Lowest": "最低"
+    "Lowest": "最低",
+    "Show Trophy Pop-ups": "显示奖杯通知",
+    "View Trophies...": "查看奖杯...",
+    "Progress: {0}% ({1}/{2})": "进度: {0}% ({1}/{2})",
+    "Show Earned Trophies": "显示已获得的奖杯",
+    "Show Not Earned Trophies": "显示未获得的奖杯",
+    "Show Hidden Trophies": "显示隐藏奖杯",
+    "Trophy": "奖杯",
+    "Name": "名称",
+    "Description": "说明",
+    "Time Unlocked": "获得时间",
+    "Type": "类型",
+    "No trophies found.": "未找到奖杯。"
   }
 }
