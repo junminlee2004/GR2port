@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
+#include <chrono>
 #include <filesystem>
 #include <mutex>
 #include <vector>
@@ -20,6 +21,9 @@ std::filesystem::path PipelineCachePath() {
     return Common::FS::GetUserPath(Common::FS::PathType::ShaderDir) / "gr2port_pipelines.bin";
 }
 std::mutex g_cache_file;
+// Bytes in the cache file as last read or written. The driver's cache data grows with each
+// pipeline it adds, so the same size means the file holds them all.
+size_t g_file_size = 0;
 
 vk::ShaderModule CreateModule(const Device& d, std::span<const u32> code) {
     const vk::ShaderModuleCreateInfo info{
@@ -281,6 +285,8 @@ void LoadPipelineCache(Device& d) {
         nullptr, d.dispatch);
     if (result == vk::Result::eSuccess) {
         d.pipeline_cache = cache;
+        std::scoped_lock lock{g_cache_file};
+        g_file_size = data.size();
     }
     LOG_INFO(Render_Vulkan, "GR2port: pipeline cache of {} bytes from {}", data.size(),
              path.string());
@@ -291,6 +297,13 @@ void SavePipelineCache(const Device& d) {
         return;
     }
     std::scoped_lock lock{g_cache_file};
+    size_t size = 0;
+    if (d.device.getPipelineCacheData(d.pipeline_cache, &size, nullptr, d.dispatch) !=
+            vk::Result::eSuccess ||
+        size == g_file_size) {
+        return;
+    }
+    const auto start = std::chrono::steady_clock::now();
     const auto [result, data] = d.device.getPipelineCacheData(d.pipeline_cache, d.dispatch);
     if (result != vk::Result::eSuccess || data.empty()) {
         return;
@@ -308,8 +321,13 @@ void SavePipelineCache(const Device& d) {
         }
     }
     std::filesystem::rename(written, path, error);
-    LOG_INFO(Render_Vulkan, "GR2port: pipeline cache of {} bytes saved{}", data.size(),
-             error ? ": " + error.message() : "");
+    if (!error) {
+        g_file_size = data.size();
+    }
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start);
+    LOG_INFO(Render_Vulkan, "GR2port: pipeline cache of {} bytes saved in {} ms{}", data.size(),
+             ms.count(), error ? ": " + error.message() : "");
 }
 
 } // namespace Gr2Port

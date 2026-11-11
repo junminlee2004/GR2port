@@ -1659,6 +1659,7 @@ void Thread::PublishStats() {
 
 void Thread::Run() {
     Common::SetCurrentThreadName("GR2port Render");
+    const auto started = std::chrono::steady_clock::now();
     if (!Init()) {
         LOG_ERROR(Render_Vulkan, "GR2port: the renderer did not start");
         return;
@@ -1666,6 +1667,7 @@ void Thread::Run() {
     LogOverlays();
     u64 seen = 0;
     stats.game_frames = Capture::Frames();
+    bool drawn = false;
     for (;;) {
         SceneRing::Packet packet;
         if (!SceneRing::Take(seen, packet)) {
@@ -1673,6 +1675,13 @@ void Thread::Run() {
         }
         seen = packet.frame;
         Frame(packet);
+        if (!drawn && stats.frames > 0) {
+            drawn = true;
+            LOG_INFO(Render_Vulkan, "GR2port: first frame drawn {} ms after the renderer started",
+                     std::chrono::duration_cast<std::chrono::milliseconds>(
+                         std::chrono::steady_clock::now() - started)
+                         .count());
+        }
         PublishStats();
         if (stats.frames >= ReportFrames) {
             Report();

@@ -84,7 +84,8 @@ void DestroyPipeline(const Device& device, Pipeline& pipeline);
 /// After the device is made: creates its pipeline cache from the file an earlier run saved.
 void LoadPipelineCache(Device& device);
 
-/// Any thread: writes the pipeline cache to its file, with every pipeline made so far.
+/// Any thread: writes the pipeline cache to its file, with every pipeline made so far, when the
+/// cache holds pipelines the file does not.
 void SavePipelineCache(const Device& device);
 
 } // namespace Gr2Port
