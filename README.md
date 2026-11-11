@@ -49,10 +49,10 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 - Steam Deck preset
 - Impeccable performance, graphical accuracy, and stability
 - 30-360fps supported
-- 540p-8k resolution supported
-- ultrawide and 16:10 supported
-- Feature complete online mode
-- Feature complete photo mode, photo export and ingame photo gallery
+- 544p-8k resolution supported
+- Ultrawide and 16:10 supported
+- Feature-complete online mode
+- Feature-complete photo mode, photo export, and in-game photo gallery
 - All GR2fork patches
 - GR2fork Halloween items
 - FSR 3.1 + FSR 4.1 support (Windows + Linux) + DLSS support (Windows Only)
@@ -80,7 +80,7 @@ F11 | Fullscreen
 
 ## Controls
 
-The mouse turns the camera (native mouse input). Keys can be changed in Options > Key Bindings.
+The mouse turns the camera (native mouse input). Keys can be changed in the launcher under Setup > Mouse & Keyboard > Key Bindings, and controller buttons under Setup > Controller > Button Bindings.
 
 | Game Function | Controller | Keyboard & Mouse |
 |---|---|---|
