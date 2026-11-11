@@ -5,7 +5,7 @@
 
 #include <imgui.h>
 
-#include "video_core/renderer_vulkan/vk_instance.h"
+#include "graphics/renderer_vulkan/vk_instance.h"
 #include "vulkan/vulkan_handles.hpp"
 
 union SDL_Event;

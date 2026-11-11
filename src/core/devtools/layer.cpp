@@ -15,7 +15,9 @@
 #include "core/emulator_state.h"
 #include "imgui/imgui_std.h"
 #include "imgui_internal.h"
-#include "video_core/gr2port/frame_stats.h"
+
+#include "graphics/gr2port/frame_stats.h"
+
 #include "widget/frame_graph.h"
 #include "widget/gpu_memory.h"
 #include "widget/memory_map.h"

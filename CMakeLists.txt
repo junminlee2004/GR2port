@@ -1034,42 +1034,42 @@ if (ARCHITECTURE STREQUAL "x86_64")
              ${FIBER_LIB})
 endif()
 
-set(VIDEO_CORE src/video_core/amdgpu/pixel_format.cpp
-               src/video_core/amdgpu/pixel_format.h
-               src/video_core/amdgpu/pm4_cmds.h
-               src/video_core/amdgpu/pm4_opcodes.h
-               src/video_core/amdgpu/regs_color.h
-               src/video_core/amdgpu/regs_depth.h
-               src/video_core/amdgpu/regs_primitive.h
-               src/video_core/amdgpu/regs_vertex.h
-               src/video_core/amdgpu/resource.h
-               src/video_core/amdgpu/tiling.cpp
-               src/video_core/amdgpu/tiling.h
-               src/video_core/renderer_vulkan/liverpool_to_vk.cpp
-               src/video_core/renderer_vulkan/liverpool_to_vk.h
-               src/video_core/renderer_vulkan/vk_command_chunk.h
-               src/video_core/renderer_vulkan/vk_command_recorder.cpp
-               src/video_core/renderer_vulkan/vk_command_recorder.h
-               src/video_core/renderer_vulkan/vk_common.cpp
-               src/video_core/renderer_vulkan/vk_common.h
-               src/video_core/renderer_vulkan/vk_instance.cpp
-               src/video_core/renderer_vulkan/vk_instance.h
-               src/video_core/renderer_vulkan/vk_platform.cpp
-               src/video_core/renderer_vulkan/vk_platform.h
-               src/video_core/renderer_vulkan/vk_presenter.cpp
-               src/video_core/renderer_vulkan/vk_presenter.h
-               src/video_core/renderer_vulkan/vk_record_thread.cpp
-               src/video_core/renderer_vulkan/vk_record_thread.h
-               src/video_core/renderer_vulkan/vk_resource_pool.cpp
-               src/video_core/renderer_vulkan/vk_resource_pool.h
-               src/video_core/renderer_vulkan/vk_scheduler.cpp
-               src/video_core/renderer_vulkan/vk_scheduler.h
-               src/video_core/renderer_vulkan/vk_semaphore.cpp
-               src/video_core/renderer_vulkan/vk_semaphore.h
-               src/video_core/renderer_vulkan/vk_swapchain.cpp
-               src/video_core/renderer_vulkan/vk_swapchain.h
-               src/video_core/renderdoc.cpp
-               src/video_core/renderdoc.h
+set(GRAPHICS src/graphics/amdgpu/pixel_format.cpp
+             src/graphics/amdgpu/pixel_format.h
+             src/graphics/amdgpu/pm4_cmds.h
+             src/graphics/amdgpu/pm4_opcodes.h
+             src/graphics/amdgpu/regs_color.h
+             src/graphics/amdgpu/regs_depth.h
+             src/graphics/amdgpu/regs_primitive.h
+             src/graphics/amdgpu/regs_vertex.h
+             src/graphics/amdgpu/resource.h
+             src/graphics/amdgpu/tiling.cpp
+             src/graphics/amdgpu/tiling.h
+             src/graphics/renderer_vulkan/liverpool_to_vk.cpp
+             src/graphics/renderer_vulkan/liverpool_to_vk.h
+             src/graphics/renderer_vulkan/vk_command_chunk.h
+             src/graphics/renderer_vulkan/vk_command_recorder.cpp
+             src/graphics/renderer_vulkan/vk_command_recorder.h
+             src/graphics/renderer_vulkan/vk_common.cpp
+             src/graphics/renderer_vulkan/vk_common.h
+             src/graphics/renderer_vulkan/vk_instance.cpp
+             src/graphics/renderer_vulkan/vk_instance.h
+             src/graphics/renderer_vulkan/vk_platform.cpp
+             src/graphics/renderer_vulkan/vk_platform.h
+             src/graphics/renderer_vulkan/vk_presenter.cpp
+             src/graphics/renderer_vulkan/vk_presenter.h
+             src/graphics/renderer_vulkan/vk_record_thread.cpp
+             src/graphics/renderer_vulkan/vk_record_thread.h
+             src/graphics/renderer_vulkan/vk_resource_pool.cpp
+             src/graphics/renderer_vulkan/vk_resource_pool.h
+             src/graphics/renderer_vulkan/vk_scheduler.cpp
+             src/graphics/renderer_vulkan/vk_scheduler.h
+             src/graphics/renderer_vulkan/vk_semaphore.cpp
+             src/graphics/renderer_vulkan/vk_semaphore.h
+             src/graphics/renderer_vulkan/vk_swapchain.cpp
+             src/graphics/renderer_vulkan/vk_swapchain.h
+             src/graphics/renderdoc.cpp
+             src/graphics/renderdoc.h
 )
 
 set(IMGUI src/imgui/imgui_config.h
@@ -1162,7 +1162,7 @@ add_executable(gr2port
     ${INPUT}
     ${COMMON}
     ${CORE}
-    ${VIDEO_CORE}
+    ${GRAPHICS}
     ${EMULATOR}
     ${SHADNET}
     src/main.cpp
@@ -1294,9 +1294,8 @@ endif()
 
 # Codegen items for the Linux and Windows builds; macOS keeps upstream's defaults.
 if (NOT APPLE)
-    # The toolchains emit stack-protector canaries by default, and they sit in most hot
-    # video_core prologues and epilogues at 0.3-0.6% of the GPU command thread. Hardening is
-    # traded for that time. clang-cl takes the MSVC spelling.
+    # The toolchains emit stack-protector canaries by default, and they sit in hot prologues
+    # and epilogues. Hardening is traded for that time. clang-cl takes the MSVC spelling.
     if (MSVC)
         target_compile_options(gr2port PRIVATE /GS-)
     else()
@@ -1309,13 +1308,13 @@ add_compile_definitions(BOOST_ASIO_STANDALONE)
 target_include_directories(gr2port PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Shaders sources
-set(HOST_SHADERS_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/video_core/host_shaders)
+set(HOST_SHADERS_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/host_shaders)
 
 add_subdirectory(${HOST_SHADERS_INCLUDE})
 add_dependencies(gr2port host_shaders)
 target_include_directories(gr2port PRIVATE ${HOST_SHADERS_INCLUDE})
-include("${CMAKE_CURRENT_SOURCE_DIR}/src/video_core/gr2_fsr3/gr2_fsr3.cmake")
-include("${CMAKE_CURRENT_SOURCE_DIR}/src/video_core/gr2port/gr2port.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/gr2_fsr3/gr2_fsr3.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/gr2port/gr2port.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/src/core/prompt_packs/prompt_packs.cmake")
 
 # embed resources

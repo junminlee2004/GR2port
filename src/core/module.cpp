@@ -18,7 +18,7 @@
 #include "core/module.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/tls.h"
-#include "video_core/gr2port/gr2port.h"
+#include "graphics/gr2port/gr2port.h"
 
 namespace Core {
 

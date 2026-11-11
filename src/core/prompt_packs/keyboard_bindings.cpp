@@ -14,7 +14,8 @@
 #include "core/prompt_packs/keyboard_prompts.h"
 #include "input/game_functions.h"
 #include "input/input_handler.h"
-#include "video_core/gr2port/settings.h"
+
+#include "graphics/gr2port/settings.h"
 
 namespace PromptPacks::Keyboard {
 

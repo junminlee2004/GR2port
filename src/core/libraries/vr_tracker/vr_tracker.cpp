@@ -8,7 +8,7 @@
 #include "core/libraries/vr_tracker/vr_tracker.h"
 #include "core/libraries/vr_tracker/vr_tracker_error.h"
 #include "core/memory.h"
-#include "video_core/gr2port/submits.h"
+#include "graphics/gr2port/submits.h"
 
 namespace Libraries::VrTracker {
 

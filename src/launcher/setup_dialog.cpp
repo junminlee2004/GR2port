@@ -40,7 +40,8 @@
 #include "launcher/avatar.h"
 #include "launcher/key_bindings.h"
 #include "launcher/setup_dialog.h"
-#include "video_core/gr2port/settings.h"
+
+#include "graphics/gr2port/settings.h"
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")

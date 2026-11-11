@@ -47,7 +47,8 @@
 #include "launcher/qt/setup_dialog.h"
 #include "launcher/qt/text.h"
 #include "launcher/qt/video_card.h"
-#include "video_core/gr2port/settings.h"
+
+#include "graphics/gr2port/settings.h"
 
 namespace Gr2Port::Launcher {
 

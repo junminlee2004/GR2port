@@ -14,7 +14,8 @@
 #include "core/emulator_settings.h"
 #include "imgui_impl_vulkan.h"
 #include "texture_manager.h"
-#include "video_core/gr2port/imgui_relay.h"
+
+#include "graphics/gr2port/imgui_relay.h"
 
 namespace ImGui {
 

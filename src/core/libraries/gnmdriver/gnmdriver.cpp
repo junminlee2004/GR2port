@@ -20,9 +20,9 @@
 #include "core/libraries/videoout/video_out.h"
 #include "core/memory.h"
 #include "core/platform.h"
-#include "video_core/amdgpu/pm4_cmds.h"
-#include "video_core/gr2port/submits.h"
-#include "video_core/renderer_vulkan/vk_presenter.h"
+#include "graphics/amdgpu/pm4_cmds.h"
+#include "graphics/gr2port/submits.h"
+#include "graphics/renderer_vulkan/vk_presenter.h"
 
 extern Frontend::WindowSDL* g_window;
 std::unique_ptr<Vulkan::Presenter> presenter;

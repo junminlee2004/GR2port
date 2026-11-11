@@ -1,0 +1,157 @@
+// SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#pragma once
+
+#include <deque>
+#include <mutex>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+#include <boost/container/static_vector.hpp>
+#include <tsl/robin_map.h>
+
+#include "common/types.h"
+#include "graphics/renderer_vulkan/vk_common.h"
+
+namespace Vulkan {
+
+class Instance;
+class Semaphore;
+
+/**
+ * Handles a pool of resources protected by fences. Manages resource overflow allocating more
+ * resources.
+ */
+class ResourcePool {
+public:
+    explicit ResourcePool() = default;
+    explicit ResourcePool(Semaphore* work_semaphore, std::size_t grow_step);
+    virtual ~ResourcePool() = default;
+
+    ResourcePool& operator=(ResourcePool&&) noexcept = default;
+    ResourcePool(ResourcePool&&) noexcept = default;
+
+    ResourcePool& operator=(const ResourcePool&) = default;
+    ResourcePool(const ResourcePool&) = default;
+
+protected:
+    std::size_t CommitResource();
+
+    /// Called when a chunk of resources have to be allocated.
+    virtual void Allocate(std::size_t begin, std::size_t end) = 0;
+
+private:
+    /// Manages pool overflow allocating new resources.
+    std::size_t ManageOverflow();
+
+protected:
+    Semaphore* work_semaphore{};
+    std::size_t grow_step = 0;     ///< Number of new resources created after an overflow
+    std::size_t hint_iterator = 0; ///< Hint to where the next free resources is likely to be found
+    std::vector<u64> ticks;        ///< Ticks for each resource
+};
+
+class CommandPool final : public ResourcePool {
+public:
+    explicit CommandPool(const Instance& instance, Semaphore* work_semaphore);
+    ~CommandPool() override;
+
+    void Allocate(std::size_t begin, std::size_t end) override;
+
+    vk::CommandBuffer Commit();
+
+private:
+    const Instance& instance;
+    vk::UniqueCommandPool cmd_pool;
+    std::vector<vk::CommandBuffer> cmd_buffers;
+};
+
+// One descriptor set layout and pipeline layout per distinct binding list,
+// shared by every pipeline of that shape. Filled by the pipeline preload
+// before the first draw, then by the GPU thread and the graphics pipeline
+// compile workers.
+class PipelineLayoutCache final {
+public:
+    explicit PipelineLayoutCache(const Instance& instance_) : instance{instance_} {}
+
+    struct Layouts {
+        vk::DescriptorSetLayout set;
+        vk::PipelineLayout pipeline;
+    };
+    Layouts Acquire(std::span<const vk::DescriptorSetLayoutBinding> bindings,
+                    vk::DescriptorSetLayoutCreateFlags flags,
+                    const vk::PushConstantRange& push_constants, std::string_view debug_name);
+    size_t NumLayouts() const {
+        std::scoped_lock lock{mutex};
+        return layouts.size();
+    }
+
+private:
+    struct Entry {
+        vk::UniqueDescriptorSetLayout set;
+        vk::UniquePipelineLayout pipeline;
+    };
+    const Instance& instance;
+    mutable std::mutex mutex;
+    tsl::robin_map<std::string, Entry> layouts;
+};
+
+class DescriptorHeap final {
+    static constexpr u32 DescriptorSetBatch = 32;
+
+public:
+    explicit DescriptorHeap(const Instance& instance, Semaphore* work_semaphore,
+                            std::span<const vk::DescriptorPoolSize> pool_sizes,
+                            u32 descriptor_heap_count = 1024);
+    ~DescriptorHeap();
+
+    vk::DescriptorSet Commit(vk::DescriptorSetLayout set_layout);
+    /// Drops every set cached under a layout that is about to be destroyed.
+    void Forget(vk::DescriptorSetLayout set_layout);
+    struct Stats {
+        u64 commits;
+        u64 reused;
+        u64 fresh;
+        u64 live;
+        u64 pools;
+    };
+    /// GPU command thread: returns and resets the recycling census; live and
+    /// pools are gauges.
+    Stats DrainStats();
+
+private:
+    using DescSetBatch = boost::container::static_vector<vk::DescriptorSet, DescriptorSetBatch>;
+    void CreateDescriptorPool();
+    vk::Result AllocateBatch(vk::DescriptorSetLayout set_layout, DescSetBatch& out);
+    vk::DescriptorSet CommitRecycled(vk::DescriptorSetLayout set_layout);
+
+private:
+    vk::Device device;
+    Semaphore* work_semaphore;
+    u32 descriptor_heap_count;
+    std::span<const vk::DescriptorPoolSize> pool_sizes;
+    vk::DescriptorPool curr_pool;
+    std::deque<std::pair<vk::DescriptorPool, u64>> pending_pools;
+    tsl::robin_map<u64, DescSetBatch> descriptor_sets;
+    // desc_heap_recycle: per layout, the sets handed out in tick order; the
+    // front is reused once its tick retired. A pool that filled up moves to
+    // full_pools and stays alive unreset (its unused remainder is stranded,
+    // bounded by the pool count) because rings still point into it.
+    struct RecycledSet {
+        vk::DescriptorSet set;
+        u64 tick;
+    };
+    tsl::robin_map<u64, std::deque<RecycledSet>> recycled;
+    std::vector<vk::DescriptorPool> full_pools;
+    bool recycle{};
+    bool warned_{};
+    u64 commits_{};
+    u64 reused_{};
+    u64 fresh_{};
+    u64 live_{};
+};
+
+} // namespace Vulkan

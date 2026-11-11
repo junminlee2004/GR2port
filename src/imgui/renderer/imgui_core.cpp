@@ -22,8 +22,9 @@
 #include "imgui_internal.h"
 #include "sdl_window.h"
 #include "texture_manager.h"
-#include "video_core/gr2port/imgui_relay.h"
-#include "video_core/renderer_vulkan/vk_presenter.h"
+
+#include "graphics/gr2port/imgui_relay.h"
+#include "graphics/renderer_vulkan/vk_presenter.h"
 
 static void CheckVkResult(const vk::Result err) {
     LOG_ERROR(ImGui, "Vulkan error {}", vk::to_string(err));

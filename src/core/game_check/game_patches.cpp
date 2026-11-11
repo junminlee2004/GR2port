@@ -9,7 +9,7 @@
 #include "core/emulator_settings.h"
 #include "core/game_check/game_check.h"
 #include "core/game_check/game_patches.h"
-#include "video_core/gr2port/settings.h"
+#include "graphics/gr2port/settings.h"
 
 namespace Gr2Port::GamePatches {
 

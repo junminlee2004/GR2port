@@ -13,7 +13,8 @@
 #include "core/libraries/kernel/threads/pthread.h"
 #include "core/signals.h"
 #include "GR2port.h"
-#include "video_core/gr2port/fault_report.h"
+
+#include "graphics/gr2port/fault_report.h"
 
 #ifdef _WIN32
 #include <windows.h>

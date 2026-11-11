@@ -12,7 +12,8 @@
 #include "input/controller.h"
 #include "input/input_handler.h"
 #include "sdl_window.h"
-#include "video_core/gr2port/imgui_relay.h"
+
+#include "graphics/gr2port/imgui_relay.h"
 
 // SDL
 #include <SDL3/SDL.h>

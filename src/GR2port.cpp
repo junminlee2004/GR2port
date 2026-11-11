@@ -46,8 +46,8 @@
 #include "core/memory.h"
 #include "core/user_settings.h"
 #include "GR2port.h"
-#include "video_core/gr2_fsr3/dlss_streamline.h"
-#include "video_core/renderdoc.h"
+#include "graphics/gr2_fsr3/dlss_streamline.h"
+#include "graphics/renderdoc.h"
 
 #ifdef _WIN32
 #include <WinSock2.h>

@@ -15,7 +15,7 @@
 #include "common/io_file.h"
 #include "common/types.h"
 #include "core/debug_state.h"
-#include "video_core/amdgpu/pm4_opcodes.h"
+#include "graphics/amdgpu/pm4_opcodes.h"
 
 #if defined(_WIN32)
 #define popen _popen

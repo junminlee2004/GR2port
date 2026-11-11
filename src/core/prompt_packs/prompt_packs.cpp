@@ -40,7 +40,8 @@
 #include "core/prompt_packs/prompt_packs.h"
 #include "input/input_handler.h"
 #include "input/selected_pad.h"
-#include "video_core/gr2port/settings.h"
+
+#include "graphics/gr2port/settings.h"
 
 CMRC_DECLARE(gr2port_prompt_mods);
 

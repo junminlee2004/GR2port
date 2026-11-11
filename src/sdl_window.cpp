@@ -29,8 +29,9 @@
 #include "input/input_handler.h"
 #include "input/input_mouse.h"
 #include "sdl_window.h"
-#include "video_core/gr2port/window.h"
-#include "video_core/renderdoc.h"
+
+#include "graphics/gr2port/window.h"
+#include "graphics/renderdoc.h"
 
 #ifdef __APPLE__
 #include <SDL3/SDL_metal.h>

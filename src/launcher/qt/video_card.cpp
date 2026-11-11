@@ -6,7 +6,8 @@
 #include <unistd.h>
 
 #include "launcher/qt/video_card.h"
-#include "video_core/renderer_vulkan/vk_common.h"
+
+#include "graphics/renderer_vulkan/vk_common.h"
 
 namespace Gr2Port::Launcher {
 

@@ -10,7 +10,8 @@
 #include <imgui.h>
 
 #include "imgui_impl_vulkan.h"
-#include "video_core/gr2port/imgui_relay.h"
+
+#include "graphics/gr2port/imgui_relay.h"
 
 #ifndef IM_MAX
 #define IM_MAX(A, B) (((A) >= (B)) ? (A) : (B))

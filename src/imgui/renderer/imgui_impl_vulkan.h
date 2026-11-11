@@ -6,7 +6,7 @@
 #pragma once
 
 #include "common/types.h"
-#include "video_core/renderer_vulkan/vk_common.h"
+#include "graphics/renderer_vulkan/vk_common.h"
 
 struct ImDrawData;
 

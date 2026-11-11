@@ -14,7 +14,7 @@
 #include "core/libraries/jpeg/jpeg_error.h"
 #include "core/libraries/jpeg/jpegenc.h"
 #include "core/libraries/libs.h"
-#include "video_core/gr2port/photo.h"
+#include "graphics/gr2port/photo.h"
 
 namespace Libraries::Gr2Photo::JpegEnc {
 
