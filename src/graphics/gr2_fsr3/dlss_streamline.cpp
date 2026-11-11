@@ -249,6 +249,22 @@ sl::Resource ResourceOf(const Fsr4Image& image, vk::Format format, vk::Extent2D 
 
 } // namespace
 
+const char* DlssModeName(DlssMode mode) {
+    switch (mode) {
+    case DlssMode::Performance:
+        return "Performance";
+    case DlssMode::Balanced:
+        return "Balanced";
+    case DlssMode::Quality:
+        return "Quality";
+    case DlssMode::UltraPerformance:
+        return "Ultra Performance";
+    case DlssMode::Dlaa:
+        return "DLAA";
+    }
+    return "";
+}
+
 void StartCudaForDlss() {
     if (!DlssRequested()) {
         return;
