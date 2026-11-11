@@ -86,8 +86,10 @@ constexpr u64 ParamsBytes = 256;
 constexpr auto TickPeriod = std::chrono::milliseconds{125};
 constexpr u32 UsedTicks = 16;
 constexpr u32 ShownTicks = 2;
+// A texture no draw reads for this long, a minute, is parked even when the budget has room.
+constexpr u32 ParkTicks = 480;
 // The largest levels a texture may keep. Out of use, a texture keeps at most Caps[Parked] while
-// the budget asks for it.
+// the budget asks for it, and once no draw has read it for ParkTicks.
 constexpr std::array<u32, 8> Caps{LargeExtent, 4096, 2048, 1024, 512, 256, 128, 64};
 constexpr u8 Parked = 6;
 // The qualities, best first: the caps of the textures in use and of the others.
@@ -95,6 +97,13 @@ struct Quality {
     u8 used;
     u8 unused;
 };
+// The cap a texture last read age ticks ago takes at a quality.
+constexpr u8 CapOf(const Quality& quality, u32 age) {
+    if (age <= UsedTicks) {
+        return quality.used;
+    }
+    return age > ParkTicks ? std::max(quality.unused, Parked) : quality.unused;
+}
 constexpr std::array<Quality, 9> Qualities{{
     {0, 0},
     {0, Parked},
@@ -1438,6 +1447,9 @@ void StartNew() {
 
 // Chooses the best quality whose images fit the textures' budget: what the device's budget leaves
 // beside the rest of the process, the headroom and the spare memory.
+// Textures Plan found out of use for ParkTicks with more than the parked levels.
+u32 g_parkable = 0;
+
 void Plan() {
     const Memory::Budget budget = g_memory->DeviceBudget();
     const u64 other = budget.usage > g_allocated ? budget.usage - g_allocated : 0;
@@ -1450,6 +1462,7 @@ void Plan() {
     u64 used_bytes = 0;
     u64 full_bytes = 0;
     u32 reduced = 0;
+    u32 parkable = 0;
     for (u32 handle = 1; handle < g_high; handle++) {
         const Residency& r = g_residency[handle];
         if (!g_resident[handle].image) {
@@ -1464,12 +1477,13 @@ void Plan() {
             continue;
         }
         reduced += r.first != 0;
-        const bool used =
-            tick - g_textures[handle].used.load(std::memory_order_relaxed) <= UsedTicks;
+        const u32 age = tick - g_textures[handle].used.load(std::memory_order_relaxed);
+        const bool used = age <= UsedTicks;
+        parkable += age > ParkTicks && r.first < r.first_at[Parked];
         used_textures += used;
         used_bytes += used ? r.bytes_from[0] : 0;
         for (u32 q = 0; q < Qualities.size(); q++) {
-            wanted[q] += r.bytes_from[r.first_at[used ? Qualities[q].used : Qualities[q].unused]];
+            wanted[q] += r.bytes_from[r.first_at[CapOf(Qualities[q], age)]];
         }
     }
     // The estimates leave out the driver's alignment and padding.
@@ -1506,13 +1520,14 @@ void Plan() {
     g_stats.used_bytes = used_bytes;
     g_stats.full_bytes = full_bytes;
     g_stats.reduced = reduced;
+    g_parkable = parkable;
 }
 
 // Moves each texture toward the levels the quality gives it: smaller images by copies on the GPU,
 // larger ones by uploads, the textures read most recently first, while the budget has room.
 void Converge(vk::CommandBuffer cmd, u64 frame) {
-    // With every level of every texture, nothing changes.
-    if (!g_streaming || (g_quality == 0 && g_stats.reduced == 0)) {
+    // With every level of every texture and none to park, nothing changes.
+    if (!g_streaming || (g_quality == 0 && g_stats.reduced == 0 && g_parkable == 0)) {
         return;
     }
     static std::vector<Change> shrinks;
@@ -1530,7 +1545,7 @@ void Converge(vk::CommandBuffer cmd, u64 frame) {
         }
         const u32 used = t.used.load(std::memory_order_relaxed);
         const u32 age = tick - used;
-        const u32 first = r.first_at[age <= UsedTicks ? quality.used : quality.unused];
+        const u32 first = r.first_at[CapOf(quality, age)];
         // A texture out of use but not shown gets larger levels only when the others may.
         if (first > r.first && shrinks.size() < ShrinksPerFrame) {
             shrinks.push_back({handle, first, used});
