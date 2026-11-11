@@ -68,6 +68,7 @@
 #include "core/libraries/save_data/savedata.h"
 #include "core/libraries/screenshot/screenshot.h"
 #include "core/libraries/share_play/shareplay.h"
+#include "core/libraries/share_utility/shareutility.h"
 #include "core/libraries/signin_dialog/signindialog.h"
 #include "core/libraries/sysmodule/sysmodule.h"
 #include "core/libraries/system/commondialog.h"
@@ -180,6 +181,7 @@ void InitHLELibs(Core::Loader::SymbolsResolver* sym) {
             {"libSceIme.sprx", Libraries::Ime::RegisterLib},
             {"libSceGameLiveStreaming.sprx", Libraries::GameLiveStreaming::RegisterLib},
             {"libSceSharePlay.sprx", Libraries::SharePlay::RegisterLib},
+            {"libSceShareUtility.sprx", Libraries::ShareUtility::RegisterLib},
             {"libSceRemoteplay.sprx", Libraries::Remoteplay::RegisterLib},
             {"libSceRazorCpu.sprx", Libraries::RazorCpu::RegisterLib},
             {"libSceMove.sprx", Libraries::Move::RegisterLib},

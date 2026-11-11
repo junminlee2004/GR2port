@@ -480,6 +480,8 @@ set(SYSTEM_LIBS src/core/libraries/system/commondialog.cpp
                 src/core/libraries/remote_play/remoteplay.h
                 src/core/libraries/share_play/shareplay.cpp
                 src/core/libraries/share_play/shareplay.h
+                src/core/libraries/share_utility/shareutility.cpp
+                src/core/libraries/share_utility/shareutility.h
                 src/core/libraries/json2/json2.cpp
                 src/core/libraries/json2/json2.h
                 src/core/libraries/razor_cpu/razor_cpu.cpp

@@ -112,6 +112,7 @@ enum class Class {
     Lib_Font,                ///< The libSceFont implementation.
     Lib_FontFt,              ///< The libSceFontFt implementation.
     Lib_Json2,               ///< The libSceJson2 implementation.
+    Lib_ShareUtility,        ///< The libSceShareUtility implementation.
     Frontend,                ///< Emulator UI
     NpHandler,               ///< NpHandler shadNet manager
     Render,                  ///< Video Core

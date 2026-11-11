@@ -206,6 +206,8 @@ std::string_view NameOf(Class log_class) {
         return "Lib.FontFt";
     case Class::Lib_Json2:
         return "Lib.Json2";
+    case Class::Lib_ShareUtility:
+        return "Lib.ShareUtility";
     case Class::Frontend:
         return "Frontend";
     case Class::NpHandler:
