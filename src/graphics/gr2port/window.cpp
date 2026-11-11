@@ -22,7 +22,6 @@ namespace {
 
 SDL_Window* g_window = nullptr;
 std::atomic<SDL_WindowID> g_window_id{0};
-std::atomic<SDL_WindowID> g_game_id{0};
 // The pixel size, width in the high 32 bits.
 std::atomic<u64> g_size{0};
 
@@ -69,12 +68,27 @@ void EnterFullscreen(SDL_DisplayID screen, const Settings::Display& display) {
     }
 }
 
-void SDLCALL CreateOnMainThread(void*) {
-    int count = 0;
-    SDL_Window** windows = SDL_GetWindows(&count);
-    SDL_Window* const game = count > 0 ? windows[0] : nullptr;
-    SDL_free(windows);
+void SDLCALL ShowOnMainThread(void*) {
+    const Settings::Display display = Settings::Get().display;
+    SDL_ShowWindow(g_window);
+    if (display.fullscreen) {
+        EnterFullscreen(ChosenDisplay(display), display);
+    }
+    // The mouse turns the camera: while the window has focus, the cursor is hidden and held. Touch
+    // pad swipes need a free cursor instead.
+    if (!Input::IsTouchpadSwipeEnabled() && !SDL_SetWindowRelativeMouseMode(g_window, true)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the window cannot hold the mouse: {}", SDL_GetError());
+    }
+    SDL_SyncWindow(g_window);
+    int width = 0;
+    int height = 0;
+    SDL_GetWindowSizeInPixels(g_window, &width, &height);
+    StoreSize(width, height);
+}
 
+} // namespace
+
+SDL_Window* Open() {
     const Settings::Display display = Settings::Get().display;
     const SDL_DisplayID screen = ChosenDisplay(display);
     const int initial_width = static_cast<int>(display.width);
@@ -90,42 +104,29 @@ void SDLCALL CreateOnMainThread(void*) {
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, initial_height);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_VULKAN_BOOLEAN, true);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
-    // Wayland shows a child window only after its parent has drawn a frame, and nothing draws in
-    // the game's window. That window never shows there, so there is no window to close but this
-    // one.
-    if (game != nullptr && SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") != 0) {
-        SDL_SetPointerProperty(props, SDL_PROP_WINDOW_CREATE_PARENT_POINTER, game);
-    }
+    // The renderer shows it with its first picture.
+    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIDDEN_BOOLEAN, true);
     g_window = SDL_CreateWindowWithProperties(props);
     SDL_DestroyProperties(props);
     if (g_window == nullptr) {
         LOG_ERROR(Render_Vulkan, "GR2port: no window: {}", SDL_GetError());
-        return;
-    }
-    if (display.fullscreen) {
-        EnterFullscreen(screen, display);
-    }
-    // The mouse turns the camera: while the window has focus, the cursor is hidden and held. Touch
-    // pad swipes need a free cursor instead.
-    if (!Input::IsTouchpadSwipeEnabled() && !SDL_SetWindowRelativeMouseMode(g_window, true)) {
-        LOG_ERROR(Render_Vulkan, "GR2port: the window cannot hold the mouse: {}", SDL_GetError());
+        return nullptr;
     }
     int width = initial_width;
     int height = initial_height;
     SDL_GetWindowSizeInPixels(g_window, &width, &height);
     StoreSize(width, height);
-    if (game != nullptr) {
-        g_game_id.store(SDL_GetWindowID(game), std::memory_order_relaxed);
-    }
     g_window_id.store(SDL_GetWindowID(g_window), std::memory_order_relaxed);
     SDL_AddEventWatch(&WatchEvents, nullptr);
+    return g_window;
 }
 
-} // namespace
-
-SDL_Window* Create() {
-    if (!SDL_RunOnMainThread(&CreateOnMainThread, nullptr, true)) {
-        LOG_ERROR(Render_Vulkan, "GR2port: the main thread did not create the window: {}",
+SDL_Window* Show() {
+    if (g_window == nullptr) {
+        return nullptr;
+    }
+    if (!SDL_RunOnMainThread(&ShowOnMainThread, nullptr, true)) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the main thread did not show the window: {}",
                   SDL_GetError());
         return nullptr;
     }
@@ -141,13 +142,9 @@ u32 Id() {
     return g_window_id.load(std::memory_order_relaxed);
 }
 
-u32 GameId() {
-    return g_game_id.load(std::memory_order_relaxed);
-}
-
-bool ToggleFullscreen() {
+void ToggleFullscreen() {
     if (g_window == nullptr) {
-        return false;
+        return;
     }
     if ((SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) != 0) {
         if (!SDL_SetWindowFullscreen(g_window, false)) {
@@ -156,7 +153,6 @@ bool ToggleFullscreen() {
     } else {
         EnterFullscreen(SDL_GetDisplayForWindow(g_window), Settings::Get().display);
     }
-    return true;
 }
 
 } // namespace Gr2Port::Window

@@ -21,11 +21,11 @@
 #include "core/memory.h"
 #include "core/platform.h"
 #include "graphics/amdgpu/pm4_cmds.h"
+#include "graphics/gr2port/presenter.h"
 #include "graphics/gr2port/submits.h"
-#include "graphics/renderer_vulkan/vk_presenter.h"
 
 extern Frontend::WindowSDL* g_window;
-std::unique_ptr<Vulkan::Presenter> presenter;
+std::unique_ptr<Gr2Port::Presenter> presenter;
 
 namespace Libraries::GnmDriver {
 
@@ -2880,7 +2880,7 @@ int PS4_SYSV_ABI Func_F916890425496553() {
 void RegisterLib(Core::Loader::SymbolsResolver* sym) {
     LOG_INFO(Lib_GnmDriver, "Initializing presenter");
     // GR2port: there is no command processor. Each submit is walked on the thread that makes it.
-    presenter = std::make_unique<Vulkan::Presenter>(*g_window);
+    presenter = std::make_unique<Gr2Port::Presenter>(*g_window);
 
     const s32 result = sceKernelGetCompiledSdkVersion(&sdk_version);
     if (result != ORBIS_OK) {

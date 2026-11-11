@@ -60,6 +60,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/pass_times.cpp
     ${CMAKE_CURRENT_LIST_DIR}/pass_times.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/presenter.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/presenter.h
     ${CMAKE_CURRENT_LIST_DIR}/player_control.cpp
     ${CMAKE_CURRENT_LIST_DIR}/player_control.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.h

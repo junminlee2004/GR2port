@@ -7,8 +7,8 @@
 
 struct SDL_Window;
 
-// The renderer's window. SDL creates and changes windows on the main thread only, so these calls
-// queue their work there.
+// The game's window, the only one: the emulator takes its input from it and the renderer draws in
+// it. SDL creates and changes windows on the main thread only.
 namespace Gr2Port::Window {
 
 struct Size {
@@ -16,20 +16,21 @@ struct Size {
     u32 height;
 };
 
-/// Creates the window, a child of the game's window so that closing the game's window still
-/// quits, and waits until the main thread has done so. On Wayland the window has no parent.
-/// Returns null on failure.
-SDL_Window* Create();
+/// Main thread, at the emulator's start: creates the window, hidden. Returns null on failure.
+SDL_Window* Open();
+
+/// Any thread but the main one: shows the window as the settings choose it, waits until the main
+/// thread has done so, and returns it. Returns null without a window.
+SDL_Window* Show();
 
 /// The window's size in pixels as of its last resize. Any thread.
 Size PixelSize();
 
-/// The SDL ids of the window and of the game's window, or 0 before Create. Any thread.
+/// The window's SDL id, or 0 before Open. Any thread.
 u32 Id();
-u32 GameId();
 
 /// Main thread: switches the window between windowed and fullscreen as the settings choose it, on
-/// the monitor it is on. Returns false before the window exists.
-bool ToggleFullscreen();
+/// the monitor it is on.
+void ToggleFullscreen();
 
 } // namespace Gr2Port::Window

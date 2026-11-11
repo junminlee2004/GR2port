@@ -1,30 +1,24 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #include <imgui.h>
 
-#include "graphics/renderer_vulkan/vk_instance.h"
-#include "vulkan/vulkan_handles.hpp"
+#include "common/types.h"
 
 union SDL_Event;
 
-namespace Vulkan {
-struct Frame;
+namespace Frontend {
+class WindowSDL;
 }
 
 namespace ImGui::Core {
 
-void Initialize(const Vulkan::Instance& instance, const Frontend::WindowSDL& window,
-                u32 image_count, vk::Format surface_format,
-                const vk::AllocationCallbacks* allocator = nullptr);
+void Initialize(const Frontend::WindowSDL& window);
 
-void OnResize();
-
-void OnSurfaceFormatChange(vk::Format surface_format);
-
-void Shutdown(const vk::Device& device);
+void Shutdown();
 
 bool ProcessEvent(SDL_Event* event);
 
@@ -34,8 +28,8 @@ bool IsGamepadInputCaptured();
 
 ImGuiID NewFrame(bool is_reusing_frame = false);
 
-void Render(const vk::CommandBuffer& cmdbuf, const vk::ImageView& image_view,
-            const vk::Extent2D& extent);
+/// Ends ImGui's frame and hands its draw lists and texture requests to GR2port's renderer.
+void Render();
 
 bool MustKeepDrawing(); // Force the emulator redraw
 

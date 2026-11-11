@@ -11,8 +11,6 @@
 #include "common/polyfill_thread.h"
 #include "common/stb.h"
 #include "common/thread.h"
-#include "core/emulator_settings.h"
-#include "imgui_impl_vulkan.h"
 #include "texture_manager.h"
 
 #include "graphics/gr2port/imgui_relay.h"
@@ -26,7 +24,8 @@ struct Inner {
     u32 width = 0;
     u32 height = 0;
 
-    Vulkan::UploadTextureData upload_data;
+    // The texture the worker made, which Submit gives out as texture_id.
+    Texture* texture = nullptr;
 
     ~Inner();
 };
@@ -110,7 +109,8 @@ struct Job {
 
 struct UploadJob {
     Inner* core = nullptr;
-    Vulkan::UploadTextureData data;
+    // A texture to end, in place of core.
+    Texture* gone = nullptr;
     int tick = 0; // Used to skip the first frame when destroying to await the current frame to draw
 };
 
@@ -127,10 +127,10 @@ static std::deque<UploadJob> g_upload_list;
 namespace Core::TextureManager {
 
 Inner::~Inner() {
-    if (upload_data.im_texture != nullptr) {
+    if (texture != nullptr) {
         std::unique_lock lk{g_upload_mtx};
         g_upload_list.emplace_back(UploadJob{
-            .data = this->upload_data,
+            .gone = texture,
             .tick = 2,
         });
     }
@@ -155,11 +155,6 @@ void WorkerLoop() {
             g_job_list.pop_front();
             g_job_list_mtx.unlock();
 
-            if (EmulatorSettings.IsVkCrashDiagnosticEnabled()) {
-                // FIXME: Crash diagnostic hangs when building the command buffer here
-                continue;
-            }
-
             if (!path.empty()) { // Decode PNG from file
                 Common::FS::IOFile file(path, Common::FS::FileAccessMode::Read);
                 if (!file.IsOpen()) {
@@ -176,12 +171,18 @@ void WorkerLoop() {
             const stbi_uc* pixels =
                 stbi_load_from_memory(png_raw.data(), png_raw.size(), &width, &height, nullptr, 4);
 
-            auto texture = Vulkan::UploadTexture(pixels, vk::Format::eR8G8B8A8Unorm, width, height,
-                                                 width * height * 4 * sizeof(stbi_uc));
-            Gr2Port::ImGuiRelay::KeepPixels(texture.im_texture, pixels, width, height);
+            if (pixels == nullptr) {
+                LOG_ERROR(ImGui, "Failed to decode a PNG texture");
+                if (core->count.fetch_sub(1) == 1) {
+                    delete core;
+                }
+                continue;
+            }
+            auto* const texture = new Texture;
+            Gr2Port::ImGuiRelay::KeepPixels(texture, pixels, width, height);
             stbi_image_free((void*)pixels);
 
-            core->upload_data = texture;
+            core->texture = texture;
             core->width = width;
             core->height = height;
 
@@ -244,13 +245,13 @@ void Submit() {
         }
     }
     if (upload.core != nullptr) {
-        upload.core->upload_data.Upload();
-        upload.core->texture_id = upload.core->upload_data.im_texture;
+        upload.core->texture_id = upload.core->texture;
         if (upload.core->count.fetch_sub(1) == 1) {
             delete upload.core;
         }
     } else {
-        upload.data.Destroy();
+        Gr2Port::ImGuiRelay::Forget(upload.gone);
+        delete upload.gone;
     }
 }
 } // namespace Core::TextureManager

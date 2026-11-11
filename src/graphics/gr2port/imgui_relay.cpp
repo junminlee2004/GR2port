@@ -17,7 +17,6 @@
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_video.h>
 #include <imgui.h>
-#include <imgui_internal.h>
 
 #include "common/alignment.h"
 #include "common/logging/log.h"
@@ -29,6 +28,7 @@
 #include "graphics/gr2port/shaders/imgui_relay_vert.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/window.h"
+#include "imgui/imgui_texture.h"
 
 namespace Gr2Port::ImGuiRelay {
 
@@ -40,10 +40,8 @@ static_assert(sizeof(ImDrawVert) == 5 * sizeof(u32));
 // Textures go by address, ImGui's own (the font atlas) with the top bit set.
 constexpr u64 OwnTexture = u64{1} << 63;
 constexpr u32 PixelBytes = 4;
-// The emulator's window the game's picture fills; GR2port draws its own picture there.
-constexpr const char* GameDisplay = "Display##game_display";
 
-// A texture's pixels as the emulator last wrote them.
+// A texture's pixels as they were last written.
 struct Pixels {
     u32 width = 0;
     u32 height = 0;
@@ -63,7 +61,7 @@ struct Command {
     ImVec4 clip;
 };
 
-// One ImGui frame: its draw lists one after another, in the emulator window's coordinates.
+// One ImGui frame: its draw lists one after another, in the canvas's coordinates.
 struct Snapshot {
     ImVec2 position;
     ImVec2 size;
@@ -84,13 +82,12 @@ bool g_fresh = false;
 // Present thread.
 Snapshot g_capturing;
 
-// For the main thread's events: whether the windows show on GR2port's yet, and where. A pixel of
-// GR2port's window is left + x * scale for x in the game window's coordinates.
-std::atomic<bool> g_active{false};
+// For the main thread's events: where ImGui's canvas shows, once it does. A pixel of the window
+// is left + x * scale for x in the canvas's coordinates.
 std::atomic<float> g_view_left{0.0f};
 std::atomic<float> g_view_top{0.0f};
 std::atomic<float> g_view_scale{0.0f};
-// The mouse's last position over GR2port's window, in its coordinates, while it is there.
+// The mouse's last position over the window, in its coordinates, while it is there.
 std::atomic<bool> g_mouse_inside{false};
 std::atomic<float> g_mouse_x{0.0f};
 std::atomic<float> g_mouse_y{0.0f};
@@ -133,7 +130,7 @@ struct Push {
 };
 static_assert(sizeof(Push) == 32);
 
-// As the emulator's backend: colour over the target by alpha, and alpha accumulated.
+// Colour over the target by alpha, and alpha accumulated.
 constexpr vk::PipelineColorBlendAttachmentState Blend{
     .blendEnable = true,
     .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
@@ -193,49 +190,67 @@ Pixels& Make(u64 key, u32 width, u32 height) {
     return pixels;
 }
 
-// Under g_mutex: copies what ImGui asks of the backend for its own textures.
-void TakeOwnTextures(const ImDrawData& draw_data) {
+// The ID of ImGui's own textures: draws name those by their data, so one ID serves them all.
+ImGui::Texture g_own_texture;
+
+// Under g_mutex: copies what one of ImGui's own textures asks of the backend.
+void TakeOwnTexture(const ImTextureData* texture) {
+    const u64 key = KeyOf(*texture);
+    if (texture->Status == ImTextureStatus_WantDestroy) {
+        ForgetKey(key);
+        return;
+    }
+    if (texture->Format != ImTextureFormat_RGBA32 || texture->Pixels == nullptr) {
+        return;
+    }
+    if (texture->Status == ImTextureStatus_WantCreate) {
+        Pixels& pixels =
+            Make(key, static_cast<u32>(texture->Width), static_cast<u32>(texture->Height));
+        pixels.bytes.assign(texture->Pixels, texture->Pixels + texture->GetSizeInBytes());
+        return;
+    }
+    const auto it = g_textures.find(key);
+    if (texture->Status != ImTextureStatus_WantUpdates || it == g_textures.end()) {
+        return;
+    }
+    Pixels& pixels = g_pixels[it->second];
+    const u32 left = texture->UpdateRect.x;
+    const u32 top = texture->UpdateRect.y;
+    const u32 right = left + texture->UpdateRect.w;
+    const u32 bottom = top + texture->UpdateRect.h;
+    if (right <= left || bottom <= top || right > pixels.width || bottom > pixels.height) {
+        return;
+    }
+    for (u32 row = top; row < bottom; row++) {
+        const size_t offset = (size_t{row} * pixels.width + left) * PixelBytes;
+        std::memcpy(pixels.bytes.data() + offset, texture->Pixels + offset,
+                    size_t{right - left} * PixelBytes);
+    }
+    if (!pixels.dirty) {
+        pixels.region = {left, top, right, bottom};
+        pixels.dirty = true;
+    } else {
+        pixels.region = {std::min(pixels.region[0], left), std::min(pixels.region[1], top),
+                         std::max(pixels.region[2], right), std::max(pixels.region[3], bottom)};
+    }
+}
+
+// Under g_mutex: takes ImGui's requests for its own textures and tells it they are done, as a
+// renderer backend does. A texture ends once no frame in flight draws it.
+void TakeOwnTextures(ImDrawData& draw_data) {
     if (draw_data.Textures == nullptr) {
         return;
     }
-    for (const ImTextureData* texture : *draw_data.Textures) {
-        const u64 key = KeyOf(*texture);
-        if (texture->Status == ImTextureStatus_WantDestroy) {
-            ForgetKey(key);
-            continue;
-        }
-        if (texture->Format != ImTextureFormat_RGBA32 || texture->Pixels == nullptr) {
-            continue;
-        }
+    for (ImTextureData* texture : *draw_data.Textures) {
+        TakeOwnTexture(texture);
         if (texture->Status == ImTextureStatus_WantCreate) {
-            Pixels& pixels =
-                Make(key, static_cast<u32>(texture->Width), static_cast<u32>(texture->Height));
-            pixels.bytes.assign(texture->Pixels, texture->Pixels + texture->GetSizeInBytes());
-            continue;
-        }
-        const auto it = g_textures.find(key);
-        if (texture->Status != ImTextureStatus_WantUpdates || it == g_textures.end()) {
-            continue;
-        }
-        Pixels& pixels = g_pixels[it->second];
-        const u32 left = texture->UpdateRect.x;
-        const u32 top = texture->UpdateRect.y;
-        const u32 right = left + texture->UpdateRect.w;
-        const u32 bottom = top + texture->UpdateRect.h;
-        if (right <= left || bottom <= top || right > pixels.width || bottom > pixels.height) {
-            continue;
-        }
-        for (u32 row = top; row < bottom; row++) {
-            const size_t offset = (size_t{row} * pixels.width + left) * PixelBytes;
-            std::memcpy(pixels.bytes.data() + offset, texture->Pixels + offset,
-                        size_t{right - left} * PixelBytes);
-        }
-        if (!pixels.dirty) {
-            pixels.region = {left, top, right, bottom};
-            pixels.dirty = true;
-        } else {
-            pixels.region = {std::min(pixels.region[0], left), std::min(pixels.region[1], top),
-                             std::max(pixels.region[2], right), std::max(pixels.region[3], bottom)};
+            texture->SetTexID(&g_own_texture);
+            texture->SetStatus(ImTextureStatus_OK);
+        } else if (texture->Status == ImTextureStatus_WantUpdates) {
+            texture->SetStatus(ImTextureStatus_OK);
+        } else if (texture->Status == ImTextureStatus_WantDestroy && texture->UnusedFrames > 0) {
+            texture->SetTexID(ImTextureID_Invalid);
+            texture->SetStatus(ImTextureStatus_Destroyed);
         }
     }
 }
@@ -335,30 +350,16 @@ void Upload(vk::CommandBuffer cmd, u64 frame, u32 texture, Pixels& pixels) {
 
 } // namespace
 
-void Capture(const ImDrawData& draw_data) {
-    // The windows show on GR2port's from the first snapshot.
-    g_active.store(true, std::memory_order_relaxed);
+void Capture(ImDrawData& draw_data) {
     Snapshot& snapshot = g_capturing;
     snapshot.position = draw_data.DisplayPos;
     snapshot.size = draw_data.DisplaySize;
     snapshot.vertices.clear();
     snapshot.indices.clear();
     snapshot.commands.clear();
-    // The game's display window, and the dock host that draws its background.
-    const ImDrawList* display = nullptr;
-    const ImDrawList* host = nullptr;
-    if (const ImGuiWindow* window = ImGui::FindWindowByName(GameDisplay); window != nullptr) {
-        display = window->DrawList;
-        if (window->DockNode != nullptr && window->DockNode->HostWindow != nullptr) {
-            host = window->DockNode->HostWindow->DrawList;
-        }
-    }
     std::scoped_lock lock{g_mutex};
     TakeOwnTextures(draw_data);
     for (const ImDrawList* list : draw_data.CmdLists) {
-        if (list == display || list == host) {
-            continue;
-        }
         const u32 vertex_base = static_cast<u32>(snapshot.vertices.size());
         const u32 index_base = static_cast<u32>(snapshot.indices.size());
         snapshot.vertices.insert(snapshot.vertices.end(), list->VtxBuffer.begin(),
@@ -399,66 +400,40 @@ void Forget(const ImGui::Texture* texture) {
 }
 
 const SDL_Event* ForImGui(const SDL_Event* event, SDL_Event& copy) {
-    const u32 own = Window::Id();
-    const u32 game = Window::GameId();
-    SDL_Window* const window = own != 0 && game != 0 ? SDL_GetWindowFromEvent(event) : nullptr;
-    if (window == nullptr) {
-        return event;
-    }
-    // Set again below while the mouse moves over GR2port's window.
+    // Set again below while the mouse moves over the window.
     if (event->type == SDL_EVENT_MOUSE_MOTION || event->type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
         g_mouse_inside.store(false, std::memory_order_relaxed);
     }
-    if (SDL_GetWindowID(window) != own || !g_active.load(std::memory_order_relaxed)) {
-        return event;
-    }
-    copy = *event;
-    switch (event->type) {
-    case SDL_EVENT_KEY_DOWN:
-    case SDL_EVENT_KEY_UP:
-        copy.key.windowID = game;
-        return &copy;
-    case SDL_EVENT_TEXT_INPUT:
-        copy.text.windowID = game;
-        return &copy;
-    case SDL_EVENT_WINDOW_MOUSE_ENTER:
-    case SDL_EVENT_WINDOW_MOUSE_LEAVE:
-        copy.window.windowID = game;
-        return &copy;
-    default:
-        break;
-    }
     const float scale = g_view_scale.load(std::memory_order_relaxed);
-    if (scale <= 0.0f) {
+    SDL_Window* const window = scale > 0.0f ? SDL_GetWindowFromEvent(event) : nullptr;
+    if (window == nullptr) {
         return event;
     }
-    // Window coordinates to GR2port's pixels, then to the game window's coordinates.
+    // Window coordinates to the window's pixels, then to the canvas's coordinates.
     float density = SDL_GetWindowPixelDensity(window);
     if (density <= 0.0f) {
         density = 1.0f;
     }
     const float left = g_view_left.load(std::memory_order_relaxed);
     const float top = g_view_top.load(std::memory_order_relaxed);
-    const auto to_game = [&](float& x, float& y) {
+    const auto to_canvas = [&](float& x, float& y) {
         x = (x * density - left) / scale;
         y = (y * density - top) / scale;
     };
+    copy = *event;
     switch (event->type) {
     case SDL_EVENT_MOUSE_MOTION:
         g_mouse_x.store(event->motion.x, std::memory_order_relaxed);
         g_mouse_y.store(event->motion.y, std::memory_order_relaxed);
         g_mouse_inside.store(true, std::memory_order_relaxed);
-        copy.motion.windowID = game;
-        to_game(copy.motion.x, copy.motion.y);
+        to_canvas(copy.motion.x, copy.motion.y);
         return &copy;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
     case SDL_EVENT_MOUSE_BUTTON_UP:
-        copy.button.windowID = game;
-        to_game(copy.button.x, copy.button.y);
+        to_canvas(copy.button.x, copy.button.y);
         return &copy;
     case SDL_EVENT_MOUSE_WHEEL:
-        copy.wheel.windowID = game;
-        to_game(copy.wheel.mouse_x, copy.wheel.mouse_y);
+        to_canvas(copy.wheel.mouse_x, copy.wheel.mouse_y);
         return &copy;
     default:
         return event;
@@ -566,7 +541,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
     slot.indices = indices;
     g_slot = &slot;
     if (!g_logged_drawing) {
-        LOG_INFO(Render_Vulkan, "GR2port: drawing the emulator's ImGui windows");
+        LOG_INFO(Render_Vulkan, "GR2port: drawing ImGui's windows");
         g_logged_drawing = true;
     }
 }
@@ -578,7 +553,7 @@ void Record(vk::CommandBuffer cmd, vk::Extent2D extent) {
     }
     const float width = static_cast<float>(extent.width);
     const float height = static_cast<float>(extent.height);
-    // The emulator's window scaled to fit the renderer's, centred: a pixel is left + x * scale.
+    // ImGui's canvas scaled to fit the window, centred: a pixel is left + x * scale.
     const float scale = std::min(width / drawn.size.x, height / drawn.size.y);
     const float left = (width - drawn.size.x * scale) * 0.5f - drawn.position.x * scale;
     const float top = (height - drawn.size.y * scale) * 0.5f - drawn.position.y * scale;

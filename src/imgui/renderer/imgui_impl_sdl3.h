@@ -16,7 +16,6 @@ bool Init(SDL_Window* window);
 void Shutdown();
 void NewFrame(bool is_reusing);
 bool ProcessEvent(const SDL_Event* event);
-void OnResize();
 
 // Gamepad selection automatically starts in AutoFirst mode, picking first available SDL_Gamepad.
 // You may override this. When using manual mode, caller is responsible for opening/closing gamepad.

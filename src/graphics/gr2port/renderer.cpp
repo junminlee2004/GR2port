@@ -323,7 +323,7 @@ void Barrier(const Device& d, vk::CommandBuffer cmd, vk::Image image, vk::ImageL
 }
 
 bool Thread::Init() {
-    SDL_Window* const window = Window::Create();
+    SDL_Window* const window = Window::Show();
     if (window == nullptr || !CreateDevice(window, d)) {
         return false;
     }

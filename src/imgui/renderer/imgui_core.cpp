@@ -18,17 +18,17 @@
 #include "imgui/imgui_layer.h"
 #include "imgui_core.h"
 #include "imgui_impl_sdl3.h"
-#include "imgui_impl_vulkan.h"
 #include "imgui_internal.h"
 #include "sdl_window.h"
 #include "texture_manager.h"
 
 #include "graphics/gr2port/imgui_relay.h"
-#include "graphics/renderer_vulkan/vk_presenter.h"
 
-static void CheckVkResult(const vk::Result err) {
-    LOG_ERROR(ImGui, "Vulkan error {}", vk::to_string(err));
-}
+// The font atlas grows to this size at most, which every GPU the renderer runs on can make.
+constexpr int AtlasMaxSize = 8192;
+// ImGui lays its windows out on a canvas of this size, which the renderer scales to fit the
+// window and centres.
+constexpr ImVec2 CanvasSize{1280.0f, 720.0f};
 
 static std::vector<ImGui::Layer*> layers;
 
@@ -64,9 +64,7 @@ bool IsGamepadInputCaptured() {
     return force_gamepad_input_capture_count.load(std::memory_order_relaxed) > 0;
 }
 
-void Initialize(const ::Vulkan::Instance& instance, const Frontend::WindowSDL& window,
-                const u32 image_count, vk::Format surface_format,
-                const vk::AllocationCallbacks* allocator) {
+void Initialize(const Frontend::WindowSDL& window) {
 
     const auto config_path = GetUserPath(Common::FS::PathType::UserDir) / "imgui.ini";
     const auto log_path = GetUserPath(Common::FS::PathType::LogDir) / "imgui_log.txt";
@@ -76,7 +74,7 @@ void Initialize(const ::Vulkan::Instance& instance, const Frontend::WindowSDL& w
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.DisplaySize = ImVec2((float)window.GetWidth(), (float)window.GetHeight());
+    io.DisplaySize = CanvasSize;
     PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f); // Makes the window edges rounded
 
     auto path = config_path.u8string();
@@ -107,12 +105,8 @@ void Initialize(const ::Vulkan::Instance& instance, const Frontend::WindowSDL& w
     FontStack::AddPrimaryUiFont(ImGui::GetIO().Fonts, 64.0f, EmulatorSettings.GetConsoleLanguage(),
                                 font_cfg, true);
 
-    // Let the atlas size grow to the largest image the device can create,
-    // floored to the power of two the packer requires.
-    const u32 max_dim = instance.GetPhysicalDevice().getProperties().limits.maxImageDimension2D;
-    const int atlas_max = static_cast<int>(std::bit_floor(std::max<u32>(max_dim, 512u)));
-    io.Fonts->TexMaxWidth = atlas_max;
-    io.Fonts->TexMaxHeight = atlas_max;
+    io.Fonts->TexMaxWidth = AtlasMaxSize;
+    io.Fonts->TexMaxHeight = AtlasMaxSize;
 
     io.FontGlobalScale = 0.5f;
 
@@ -121,22 +115,10 @@ void Initialize(const ::Vulkan::Instance& instance, const Frontend::WindowSDL& w
     ::Core::Devtools::Layer::SetupSettings();
     Sdl::Init(window.GetSDLWindow());
 
-    const Vulkan::InitInfo vk_info{
-        .instance = instance.GetInstance(),
-        .physical_device = instance.GetPhysicalDevice(),
-        .device = instance.GetDevice(),
-        .queue_family = instance.GetPresentQueueFamilyIndex(),
-        .queue = instance.GetPresentQueue(),
-        .image_count = image_count,
-        .min_allocation_size = 1024 * 1024,
-        .pipeline_rendering_create_info{
-            .colorAttachmentCount = 1,
-            .pColorAttachmentFormats = &surface_format,
-        },
-        .allocator = allocator,
-        .check_vk_result_fn = &CheckVkResult,
-    };
-    Vulkan::Init(vk_info);
+    // GR2port's renderer draws the frames: it takes vertex offsets and ImGui's texture requests.
+    io.BackendRendererName = "GR2port";
+    io.BackendFlags |=
+        ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_RendererHasTextures;
 
     TextureManager::StartWorker();
 
@@ -151,28 +133,23 @@ void Initialize(const ::Vulkan::Instance& instance, const Frontend::WindowSDL& w
     std::at_quick_exit([] { SaveIniSettingsToDisk(GetIO().IniFilename); });
 }
 
-void OnResize() {
-    Sdl::OnResize();
-}
-
-void OnSurfaceFormatChange(vk::Format surface_format) {
-    Vulkan::OnSurfaceFormatChange(surface_format);
-}
-
-void Shutdown(const vk::Device& device) {
-    auto result = device.waitIdle();
-    if (result != vk::Result::eSuccess) {
-        LOG_WARNING(ImGui, "Failed to wait for Vulkan device idle on shutdown: {}",
-                    vk::to_string(result));
-    }
-
+void Shutdown() {
     TextureManager::StopWorker();
 
-    const ImGuiIO& io = GetIO();
+    ImGuiIO& io = GetIO();
     const auto ini_filename = (void*)io.IniFilename;
     const auto log_filename = (void*)io.LogFilename;
 
-    Vulkan::Shutdown();
+    // ImGui's own textures end with the backend that took their requests.
+    for (ImTextureData* texture : GetPlatformIO().Textures) {
+        if (texture->RefCount == 1) {
+            texture->SetTexID(ImTextureID_Invalid);
+            texture->SetStatus(ImTextureStatus_Destroyed);
+        }
+    }
+    io.BackendRendererName = nullptr;
+    io.BackendFlags &=
+        ~(ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_RendererHasTextures);
     Sdl::Shutdown();
     DestroyContext();
 
@@ -257,46 +234,10 @@ ImGuiID NewFrame(bool is_reusing_frame) {
     return dockId;
 }
 
-void Render(const vk::CommandBuffer& cmdbuf, const vk::ImageView& image_view,
-            const vk::Extent2D& extent) {
+void Render() {
     ImGui::Render();
-    ImDrawData* draw_data = GetDrawData();
-    Gr2Port::ImGuiRelay::Capture(*draw_data);
-    // Font atlas uploads are recorded ahead of the render pass that samples them.
-    Vulkan::UpdateTextures(*draw_data, cmdbuf);
-    // GR2port: with no image view the frame only updates its textures.
-    if (draw_data->CmdListsCount == 0 || !image_view) {
-        return;
-    }
-
-    if (EmulatorSettings.IsVkHostMarkersEnabled()) {
-        cmdbuf.beginDebugUtilsLabelEXT(vk::DebugUtilsLabelEXT{
-            .pLabelName = "ImGui Render",
-        });
-    }
-
-    vk::RenderingAttachmentInfo color_attachments[1]{
-        {
-            .imageView = image_view,
-            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .loadOp = vk::AttachmentLoadOp::eClear,
-            .storeOp = vk::AttachmentStoreOp::eStore,
-        },
-    };
-    vk::RenderingInfo render_info{};
-    render_info.renderArea = vk::Rect2D{
-        .offset = {0, 0},
-        .extent = extent,
-    };
-    render_info.layerCount = 1;
-    render_info.colorAttachmentCount = 1;
-    render_info.pColorAttachments = color_attachments;
-    cmdbuf.beginRendering(render_info);
-    Vulkan::RenderDrawData(*draw_data, cmdbuf);
-    cmdbuf.endRendering();
-    if (EmulatorSettings.IsVkHostMarkersEnabled()) {
-        cmdbuf.endDebugUtilsLabelEXT();
-    }
+    TextureManager::Submit();
+    Gr2Port::ImGuiRelay::Capture(*GetDrawData());
 }
 
 bool MustKeepDrawing() {

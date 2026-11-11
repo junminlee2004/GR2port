@@ -11,7 +11,7 @@
 #include <mutex>
 #include <queue>
 
-namespace Vulkan {
+namespace Gr2Port {
 struct Frame;
 }
 
@@ -94,7 +94,7 @@ public:
 
 private:
     struct Request {
-        Vulkan::Frame* frame;
+        Gr2Port::Frame* frame;
         VideoOutPort* port;
         s64 flip_arg;
         s32 index;

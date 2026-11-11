@@ -32,9 +32,6 @@
 #include "graphics/gr2port/window.h"
 #include "graphics/renderdoc.h"
 
-#ifdef __APPLE__
-#include <SDL3/SDL_metal.h>
-#endif
 #include <core/emulator_settings.h>
 #include "core/libraries/keyboard/keyboard.h"
 #include "core/libraries/mouse/sdl_mouse.h"
@@ -97,9 +94,7 @@ static Uint32 SDLCALL PollControllerLightColour(void* userdata, SDL_TimerID time
     return interval;
 }
 
-WindowSDL::WindowSDL(s32 width_, s32 height_, Input::GameControllers* controllers_,
-                     std::string_view window_title)
-    : width{width_}, height{height_}, controllers{*controllers_} {
+WindowSDL::WindowSDL(Input::GameControllers* controllers_) : controllers{*controllers_} {
     if (!SDL_SetHint(SDL_HINT_APP_NAME, "GR2port")) {
         UNREACHABLE_MSG("Failed to set SDL window hint: {}", SDL_GetError());
     }
@@ -115,74 +110,17 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, Input::GameControllers* controller
 #endif
     SDL_InitSubSystem(SDL_INIT_AUDIO);
 
-    SDL_PropertiesID props = SDL_CreateProperties();
-    SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING,
-                          std::string(window_title).c_str());
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, SDL_WINDOWPOS_CENTERED);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, SDL_WINDOWPOS_CENTERED);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, width);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, height);
-    SDL_SetNumberProperty(props, "flags", SDL_WINDOW_VULKAN);
-    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
-    // Creating the window directly in fullscreen avoids a visible windowed -> fullscreen
-    // transition on startup. SDL sizes the window to the display and keeps the requested
-    // width/height as the windowed size to restore when leaving fullscreen.
-    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN,
-                           EmulatorSettings.IsFullScreen());
-    window = SDL_CreateWindowWithProperties(props);
-    SDL_DestroyProperties(props);
+    // GR2port: the game is played in one window, which the renderer shows when it starts.
+    window = Gr2Port::Window::Open();
     if (window == nullptr) {
         UNREACHABLE_MSG("Failed to create window handle: {}", SDL_GetError());
     }
 
     SDL_SetWindowMinimumSize(window, 640, 360);
-
-    bool error = false;
-    const SDL_DisplayID displayIndex = SDL_GetDisplayForWindow(window);
-    if (displayIndex == 0) {
-        LOG_ERROR(Frontend, "Error getting display index: {}", SDL_GetError());
-        error = true;
-    }
-    const SDL_DisplayMode* displayMode;
-    if ((displayMode = SDL_GetCurrentDisplayMode(displayIndex)) == 0) {
-        LOG_ERROR(Frontend, "Error getting display mode: {}", SDL_GetError());
-        error = true;
-    }
-    if (!error) {
-        SDL_SetWindowFullscreenMode(
-            window, EmulatorSettings.GetFullScreenMode() == "Fullscreen" ? displayMode : NULL);
-    }
-    SDL_SetWindowFullscreen(window, EmulatorSettings.IsFullScreen());
-    SDL_SyncWindow(window);
-    // The window geometry is only final once the fullscreen transition has settled; refresh
-    // the cached size so the first swapchain and the splashscreen use the real drawable size.
     SDL_GetWindowSizeInPixels(window, &width, &height);
 
     SDL_InitSubSystem(SDL_INIT_GAMEPAD);
 
-#if defined(SDL_PLATFORM_WIN32)
-    window_info.type = WindowSystemType::Windows;
-    window_info.render_surface = SDL_GetPointerProperty(SDL_GetWindowProperties(window),
-                                                        SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
-#elif defined(SDL_PLATFORM_LINUX) || defined(__FreeBSD__)
-    // SDL doesn't have a platform define for FreeBSD AAAAAAAAAA
-    if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
-        window_info.type = WindowSystemType::X11;
-        window_info.display_connection = SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
-        window_info.render_surface = (void*)SDL_GetNumberProperty(
-            SDL_GetWindowProperties(window), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
-    } else if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
-        window_info.type = WindowSystemType::Wayland;
-        window_info.display_connection = SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
-        window_info.render_surface = SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
-    }
-#elif defined(SDL_PLATFORM_MACOS)
-    window_info.type = WindowSystemType::Metal;
-    window_info.render_surface = SDL_Metal_GetLayer(SDL_Metal_CreateView(window));
-#endif
     // input handler init-s
     Input::ControllerOutput::LinkJoystickAxes();
     Input::ParseInputConfig(std::string(Common::ElfInfo::Instance().GameSerial()));
@@ -260,28 +198,16 @@ void WindowSDL::WaitEvent() {
     case SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
         OnGamepadEvent(&event);
         break;
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
     case SDL_EVENT_QUIT:
         is_open = false;
-        break;
-    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-        // GR2port: its window is not SDL's last one, so closing it quits here.
-        if (event.window.windowID == Gr2Port::Window::Id()) {
-            is_open = false;
-        }
         break;
     case SDL_EVENT_QUIT_DIALOG:
         Overlay::ToggleQuitWindow();
         break;
     case SDL_EVENT_TOGGLE_FULLSCREEN: {
-        // GR2port: the game is played in GR2port's window.
-        if (Gr2Port::Window::ToggleFullscreen()) {
-            break;
-        }
-        if (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) {
-            SDL_SetWindowFullscreen(window, 0);
-        } else {
-            SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
-        }
+        // GR2port: the display settings choose the fullscreen mode.
+        Gr2Port::Window::ToggleFullscreen();
         break;
     }
     case SDL_EVENT_TOGGLE_PAUSE:
@@ -317,9 +243,6 @@ void WindowSDL::WaitEvent() {
         Input::EnableTouchpadSwipe(swipe);
         Input::SetMouseMode(swipe ? Input::MouseMode::Off : Input::MouseMode::Joystick);
         SDL_SetWindowRelativeMouseMode(this->GetSDLWindow(), !swipe);
-        if (SDL_Window* const window = SDL_GetWindowFromID(Gr2Port::Window::Id())) {
-            SDL_SetWindowRelativeMouseMode(window, !swipe);
-        }
         break;
     }
     case SDL_EVENT_ADD_VIRTUAL_USER:
@@ -390,7 +313,6 @@ void WindowSDL::ReleaseKeyboard() {
 
 void WindowSDL::OnResize() {
     SDL_GetWindowSizeInPixels(window, &width, &height);
-    ImGui::Core::OnResize();
 }
 
 Uint32 wheelOffCallback(void* og_event, Uint32 timer_id, Uint32 interval) {

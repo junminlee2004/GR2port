@@ -11,6 +11,9 @@
 
 namespace ImGui {
 
+/// What an ImTextureID points at: GR2port's renderer knows a texture by this address.
+struct Texture {};
+
 namespace Core::TextureManager {
 struct Inner;
 } // namespace Core::TextureManager

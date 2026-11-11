@@ -1047,27 +1047,8 @@ set(GRAPHICS src/graphics/amdgpu/pixel_format.cpp
              src/graphics/amdgpu/tiling.h
              src/graphics/renderer_vulkan/liverpool_to_vk.cpp
              src/graphics/renderer_vulkan/liverpool_to_vk.h
-             src/graphics/renderer_vulkan/vk_command_chunk.h
-             src/graphics/renderer_vulkan/vk_command_recorder.cpp
-             src/graphics/renderer_vulkan/vk_command_recorder.h
              src/graphics/renderer_vulkan/vk_common.cpp
              src/graphics/renderer_vulkan/vk_common.h
-             src/graphics/renderer_vulkan/vk_instance.cpp
-             src/graphics/renderer_vulkan/vk_instance.h
-             src/graphics/renderer_vulkan/vk_platform.cpp
-             src/graphics/renderer_vulkan/vk_platform.h
-             src/graphics/renderer_vulkan/vk_presenter.cpp
-             src/graphics/renderer_vulkan/vk_presenter.h
-             src/graphics/renderer_vulkan/vk_record_thread.cpp
-             src/graphics/renderer_vulkan/vk_record_thread.h
-             src/graphics/renderer_vulkan/vk_resource_pool.cpp
-             src/graphics/renderer_vulkan/vk_resource_pool.h
-             src/graphics/renderer_vulkan/vk_scheduler.cpp
-             src/graphics/renderer_vulkan/vk_scheduler.h
-             src/graphics/renderer_vulkan/vk_semaphore.cpp
-             src/graphics/renderer_vulkan/vk_semaphore.h
-             src/graphics/renderer_vulkan/vk_swapchain.cpp
-             src/graphics/renderer_vulkan/vk_swapchain.h
              src/graphics/renderdoc.cpp
              src/graphics/renderdoc.h
 )
@@ -1090,8 +1071,6 @@ set(IMGUI src/imgui/imgui_config.h
           src/imgui/renderer/imgui_core.h
           src/imgui/renderer/imgui_impl_sdl3.cpp
           src/imgui/renderer/imgui_impl_sdl3.h
-          src/imgui/renderer/imgui_impl_vulkan.cpp
-          src/imgui/renderer/imgui_impl_vulkan.h
           src/imgui/renderer/font_data.cpp
           src/imgui/renderer/font_data.h
           src/imgui/renderer/font_stack.cpp

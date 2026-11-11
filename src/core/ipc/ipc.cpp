@@ -21,10 +21,6 @@
 #include "sdl_window.h"
 #include "src/core/libraries/usbd/usbd.h"
 
-#include "graphics/renderer_vulkan/vk_presenter.h"
-
-extern std::unique_ptr<Vulkan::Presenter> presenter;
-
 /**
  * Protocol summary:
  * - IPC is enabled by setting the GR2PORT_ENABLE_IPC environment variable to "true"

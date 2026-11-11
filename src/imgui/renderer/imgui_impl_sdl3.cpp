@@ -628,28 +628,8 @@ static void UpdateMouseData() {
         if (io.WantSetMousePos)
             SDL_WarpMouseInWindow(bd->window, io.MousePos.x, io.MousePos.y);
 
-        // (Optional) Fallback to provide mouse position when focused (SDL_EVENT_MOUSE_MOTION
-        // already provides this when hovered or captured)
-        if (bd->mouse_buttons_down == 0) {
-            // Single-viewport mode: mouse position in client window coordinates (io.MousePos is
-            // (0,0) when the mouse is on the upper-left corner of the app window)
-            float mouse_x_global, mouse_y_global;
-            int window_x, window_y;
-            SDL_GetGlobalMouseState(&mouse_x_global, &mouse_y_global);
-            SDL_GetWindowPosition(focused_window, &window_x, &window_y);
-            mouse_x_global -= (float)window_x;
-            mouse_y_global -= (float)window_y;
-            io.AddMousePosEvent(mouse_x_global, mouse_y_global);
-            // SDL_EVENT_MOUSE_MOTION isn't triggered before the first frame is rendered
-            // force update the prev_cursor coords
-            if (mouse_x_global != bd->prev_mouse_pos.x || mouse_y_global != bd->prev_mouse_pos.y &&
-                                                              bd->prev_mouse_pos.y == 0 &&
-                                                              bd->prev_mouse_pos.x == 0) {
-                bd->prev_mouse_pos.x = mouse_x_global;
-                bd->prev_mouse_pos.y = mouse_y_global;
-                bd->lastCursorMoveTime = bd->time;
-            }
-        }
+        // GR2port: the mouse's place comes from the window's events alone, which reach ImGui in
+        // its canvas's coordinates; the global mouse state is in the window's.
     }
 }
 
@@ -857,23 +837,6 @@ void NewFrame(bool is_reusing_frame) {
 
     // Update game controllers (if enabled and available)
     UpdateGamepads();
-}
-
-void OnResize() {
-    SdlData* bd = GetBackendData();
-    ImGuiIO& io = ImGui::GetIO();
-
-    int w, h;
-    int display_w, display_h;
-    SDL_GetWindowSize(bd->window, &w, &h);
-    if (SDL_GetWindowFlags(bd->window) & SDL_WINDOW_MINIMIZED) {
-        w = h = 0;
-    }
-    SDL_GetWindowSizeInPixels(bd->window, &display_w, &display_h);
-    io.DisplaySize = ImVec2((float)w, (float)h);
-    if (w > 0 && h > 0) {
-        io.DisplayFramebufferScale = {(float)display_w / (float)w, (float)display_h / (float)h};
-    }
 }
 
 } // namespace ImGui::Sdl

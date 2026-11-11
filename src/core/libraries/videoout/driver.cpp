@@ -12,9 +12,9 @@
 #include "core/libraries/videoout/videoout_error.h"
 #include "imgui/renderer/imgui_core.h"
 
-#include "graphics/renderer_vulkan/vk_presenter.h"
+#include "graphics/gr2port/presenter.h"
 
-extern std::unique_ptr<Vulkan::Presenter> presenter;
+extern std::unique_ptr<Gr2Port::Presenter> presenter;
 
 namespace Libraries::VideoOut {
 
@@ -316,7 +316,7 @@ void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_
                    "Trying to flip an unregistered buffer!");
     }
     // GR2port: nothing draws into the buffers, so the frame only paces the flip.
-    Vulkan::Frame* const frame = presenter->PrepareBlankFrame(false);
+    Gr2Port::Frame* const frame = presenter->PrepareBlankFrame(false);
 
     std::scoped_lock lock{mutex};
     requests.push({

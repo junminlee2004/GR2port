@@ -11,9 +11,9 @@
 #include "core/libraries/videoout/video_out.h"
 #include "core/libraries/videoout/videoout_error.h"
 #include "core/platform.h"
-#include "graphics/renderer_vulkan/vk_presenter.h"
+#include "graphics/gr2port/presenter.h"
 
-extern std::unique_ptr<Vulkan::Presenter> presenter;
+extern std::unique_ptr<Gr2Port::Presenter> presenter;
 
 namespace Libraries::VideoOut {
 
