@@ -768,6 +768,21 @@ std::chrono::steady_clock::duration g_rate_longest{};
 // When the last frame's capture began.
 std::chrono::steady_clock::time_point g_last_frame_start;
 
+// The low word of the frame being captured, which tells what the capture copied this frame from
+// what it copied in an earlier one.
+u32 g_known_frame = 0;
+
+// The palettes the frame's packet holds, by the game's palette and its bones: an object's casters,
+// draws and outlines name one palette, apart in the lists.
+struct KnownPalette {
+    VAddr palette;
+    u32 bones;
+    u32 frame;
+    u64 address;
+};
+constexpr u32 KnownPaletteBits = 10;
+alignas(64) std::array<KnownPalette, 1u << KnownPaletteBits> g_known_palettes{};
+
 // The frame's commands, which reach the packet in one go. Written item by item, they would leave
 // half-full write-combined lines in several places for the reads between items to evict.
 alignas(64) std::array<std::array<Scene::Command, Scene::MaxDraws>,
@@ -2798,21 +2813,22 @@ private:
         return ++header.characters;
     }
 
-    // Copies a palette into the packet once for each run of users that share it.
+    // Copies a palette into the packet once for the users that share it.
     bool CopyPalette(VAddr palette, u32 bones, u64& address) {
-        if (palette != last_palette || bones != last_bones) {
+        KnownPalette& known = g_known_palettes[((palette ^ bones) * 0x9e3779b97f4a7c15ull) >>
+                                               (64 - KnownPaletteBits)];
+        if (known.palette != palette || known.bones != bones || known.frame != g_known_frame) {
             const u32 rows = bones * 3;
             if (header.palette_rows + rows > Scene::MaxPaletteRows) {
                 return false;
             }
             std::memcpy(palettes + u64{header.palette_rows} * 16,
                         reinterpret_cast<const void*>(palette), bones * BoneBytes);
-            last_palette = palette;
-            last_bones = bones;
-            last_address = palettes_address + u64{header.palette_rows} * 16;
+            known = {palette, bones, g_known_frame,
+                     palettes_address + u64{header.palette_rows} * 16};
             header.palette_rows += rows;
         }
-        address = last_address;
+        address = known.address;
         return true;
     }
 
@@ -2906,9 +2922,6 @@ private:
     u32 grass_record_count = 0;
     float grass_advance = 0.0f;
     u32 hatching = 0;
-    VAddr last_palette = 0;
-    u32 last_bones = 0;
-    u64 last_address = 0;
 };
 
 // Items are scattered through the pool and point at scattered objects. The loops prefetch the
@@ -3638,6 +3651,11 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     if (packet == nullptr) {
         g_skipped_frame = true;
         return;
+    }
+    g_known_frame = static_cast<u32>(frame);
+    if (g_known_frame == 0) {
+        // The low word came round: the entries of 2^32 frames ago go.
+        g_known_palettes.fill({});
     }
     Writer writer{packet, SceneRing::Address(packet), frame, start};
     WriteShadows(view, packet, writer);
