@@ -496,6 +496,34 @@ void SetBox(const Source& source, u32 vertex_count, Mesh& mesh) {
     std::copy(high.begin(), high.end(), mesh.box_high);
 }
 
+// Sets the greatest sum of a vertex's four weights over a skinned shape, when no weight is below
+// 0, for the box of a caster the shader skins.
+void SetWeightSum(const Source& source, Mesh& mesh) {
+    mesh.weight_sum = std::numeric_limits<double>::infinity();
+    const u32 vertices = source.skin != 0 ? source.skin_bytes / SkinStride : 0;
+    if (vertices == 0) {
+        return;
+    }
+    const u8* record = reinterpret_cast<const u8*>(source.skin);
+    double greatest = 0.0;
+    for (u32 i = 0; i < vertices; i++, record += SkinStride) {
+        std::array<u16, 4> weights;
+        std::memcpy(weights.data(), record, sizeof(weights));
+        // Four halves add up exactly in a double.
+        double sum = 0.0;
+        for (const u16 weight : weights) {
+            const float value = FromHalf(weight);
+            // A NaN fails the test too.
+            if (!(value >= 0.0f)) {
+                return;
+            }
+            sum += value;
+        }
+        greatest = std::max(greatest, sum);
+    }
+    mesh.weight_sum = greatest;
+}
+
 // The tree of boxes around the positions that each chunk of a shape's indices names, for
 // Mesh::chunk_tree, and the chunks. None for a shape whose mesh has no box, or with one chunk.
 std::unique_ptr<ChunkBox[]> BuildChunks(const Source& source, const Mesh& mesh, u32& chunks) {
@@ -900,6 +928,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             mesh.tangent = source.tangent;
             mesh.vertex_color = source.vertex_color;
             SetBox(source, vertex_count, mesh);
+            SetWeightSum(source, mesh);
             std::unique_ptr<ChunkBox[]> chunk_tree = BuildChunks(source, mesh, mesh.chunks);
             mesh.chunk_tree = chunk_tree.get();
             mesh.skin = source.skin != 0 ? vertices.address + skin_offset : 0;

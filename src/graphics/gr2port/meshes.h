@@ -76,6 +76,9 @@ struct Mesh {
     /// The device address of the skin stream (four RGBA16 FLOAT weights, then four RGBA16 SINT
     /// bone indices, 16 bytes a vertex), 0 when the shape is not skinned.
     u64 skin = 0;
+    /// The greatest sum of a vertex's four skin weights. Infinity when the shape is not skinned,
+    /// or has a weight that is below 0 or not a number.
+    double weight_sum = std::numeric_limits<double>::infinity();
     /// Shapes with cloth: the device addresses of the SoftBody particle records (8 bytes each),
     /// constraints (4 bytes each) and vertex to particle map (a u16 per vertex), and the particle
     /// count; 0 for other shapes.

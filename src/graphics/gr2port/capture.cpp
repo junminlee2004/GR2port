@@ -2127,9 +2127,14 @@ public:
         // A caster that is neither deformed nor skinned draws its mesh's positions as they are.
         const bool boxed = vertices == mesh->vertices && skin.bones == 0;
         u32 within = 0;
-        const u32 held = boxed ? CascadesHolding(mask, table, reinterpret_cast<const float*>(world),
-                                                 *mesh, within)
-                               : mask;
+        u32 held = mask;
+        if (boxed) {
+            held = CascadesHolding(mask, table, reinterpret_cast<const float*>(world),
+                                   MeshBox(*mesh), within);
+        } else if (skin.bones != 0) {
+            held = CascadesHolding(mask, table, reinterpret_cast<const float*>(world),
+                                   SkinnedBox(*mesh, skin.source, skin.bones), within);
+        }
         // Chunks hold whole triangles of a caster that starts on one.
         const bool chunked = boxed && mesh->chunks != 0 && first % 3 == 0;
         if (held == 0) {
@@ -2413,7 +2418,76 @@ private:
         u64 stream = 0;
         u64 palette = 0;
         u32 bones = 0;
+        // The game's palette, which the packet's copies.
+        VAddr source = 0;
     };
+
+    // A box around a caster's positions before its world matrix, and the largest magnitudes the
+    // terms of each coordinate take.
+    struct CasterBox {
+        std::array<double, 3> low;
+        std::array<double, 3> high;
+        std::array<double, 3> size;
+    };
+
+    static CasterBox MeshBox(const Meshes::Mesh& mesh) {
+        CasterBox box;
+        for (u32 k = 0; k < 3; k++) {
+            box.low[k] = mesh.box_low[k];
+            box.high[k] = mesh.box_high[k];
+            box.size[k] = std::max(std::abs(box.low[k]), std::abs(box.high[k]));
+        }
+        return box;
+    }
+
+    // The box of a caster the shader skins. A skinned position is the sum over its four bones
+    // of a weight times the bone's image of the position, and a bone past the palette is all
+    // zeros. With no weight below 0, each coordinate lies between the mesh's greatest sum of
+    // weights times the least and times the greatest value that zero or a bone of the palette
+    // gives it over the mesh's box.
+    static CasterBox SkinnedBox(const Meshes::Mesh& mesh, VAddr palette, u32 bones) {
+        constexpr double Unbounded = std::numeric_limits<double>::infinity();
+        const CasterBox unskinned = MeshBox(mesh);
+        std::array<double, 3> middle;
+        std::array<double, 3> reach;
+        for (u32 k = 0; k < 3; k++) {
+            middle[k] = 0.5 * (unskinned.low[k] + unskinned.high[k]);
+            reach[k] = 0.5 * (unskinned.high[k] - unskinned.low[k]);
+        }
+        const auto* rows = reinterpret_cast<const float*>(palette);
+        CasterBox box;
+        for (u32 r = 0; r < 3; r++) {
+            double least = 0.0;
+            double most = 0.0;
+            double size = 0.0;
+            for (u32 bone = 0; bone < bones; bone++) {
+                const float* row = rows + (bone * 3 + r) * 4;
+                const double centre =
+                    row[0] * middle[0] + row[1] * middle[1] + row[2] * middle[2] + row[3];
+                const double half = std::abs(double{row[0]}) * reach[0] +
+                                    std::abs(double{row[1]}) * reach[1] +
+                                    std::abs(double{row[2]}) * reach[2];
+                const double terms = std::abs(double{row[0]}) * unskinned.size[0] +
+                                     std::abs(double{row[1]}) * unskinned.size[1] +
+                                     std::abs(double{row[2]}) * unskinned.size[2] +
+                                     std::abs(double{row[3]});
+                // A row, a box or a sum of weights that is not finite leaves no bounds.
+                if (!std::isfinite(mesh.weight_sum * terms)) {
+                    box.low.fill(-Unbounded);
+                    box.high.fill(Unbounded);
+                    box.size.fill(Unbounded);
+                    return box;
+                }
+                least = std::min(least, centre - half);
+                most = std::max(most, centre + half);
+                size = std::max(size, terms);
+            }
+            box.low[r] = mesh.weight_sum * least;
+            box.high[r] = mesh.weight_sum * most;
+            box.size[r] = mesh.weight_sum * size;
+        }
+        return box;
+    }
 
     // A cascade's side planes for a caster table, over a world position (x, y, z, 1): x - w,
     // -x - w, y - w and -y - w of its clip position, each above 0 outside the cascade. Then, for
@@ -2424,12 +2498,12 @@ private:
     };
 
     // The cascades of mask a caster can draw into, when its world matrix is affine and its
-    // positions lie in mesh's box: not those with the whole box past one side plane. Float
-    // arithmetic leaves the shader's clip position within 2^-21 of the sum of its terms'
-    // magnitudes; a box counts as past a plane only by more than 32 times that. The depth planes
-    // are not tested: the shader clamps the depth. within gets the cascades whose side planes hold
-    // the whole box.
-    u32 CascadesHolding(u32 mask, u32 table, const float* world, const Meshes::Mesh& mesh,
+    // positions before that matrix lie in box: not those with the whole box past one side plane.
+    // Float arithmetic leaves the shader's clip position within 2^-20 of the sum of its terms'
+    // magnitudes, the skinning's among them; a box counts as past a plane only by more than 16
+    // times that. The depth planes are not tested: the shader clamps the depth. within gets the
+    // cascades whose side planes hold the whole box.
+    u32 CascadesHolding(u32 mask, u32 table, const float* world, const CasterBox& box,
                         u32& within) const {
         constexpr double Rounding = 0x1p-16;
         within = 0;
@@ -2446,11 +2520,11 @@ private:
             magnitude[i] = std::abs(world[12 + i]);
             for (u32 k = 0; k < 3; k++) {
                 const double entry = world[4 * k + i];
-                const double middle = 0.5 * (double{mesh.box_low[k]} + double{mesh.box_high[k]});
-                const double reach = 0.5 * (double{mesh.box_high[k]} - double{mesh.box_low[k]});
+                const double middle = 0.5 * (box.low[k] + box.high[k]);
+                const double reach = 0.5 * (box.high[k] - box.low[k]);
                 centre[i] += entry * middle;
                 half[i] += std::abs(entry) * reach;
-                magnitude[i] += std::abs(entry) * (std::abs(middle) + reach);
+                magnitude[i] += std::abs(entry) * box.size[k];
             }
         }
         for (u32 c = 0; c < Scene::Cascades; c++) {
@@ -2760,7 +2834,7 @@ private:
         if (!CopyPalette(palette, bones, address)) {
             return false;
         }
-        skin = {.stream = mesh.skin, .palette = address, .bones = bones};
+        skin = {.stream = mesh.skin, .palette = address, .bones = bones, .source = palette};
         return true;
     }
 
