@@ -121,11 +121,6 @@ void InitHLELibs(Core::Loader::SymbolsResolver* sym) {
     Gr2Photo::RegisterLib(sym);
     Gr2Online::RegisterLib(sym);
 
-    auto* game_info = Common::Singleton<Common::ElfInfo>::Instance();
-    const auto& sys_module_path = EmulatorSettings.GetSysModulesDir();
-    const auto& game_specific_modules_path =
-        sys_module_path /
-        (game_info->GameSerial().empty() ? std::string_view("no_serial") : game_info->GameSerial());
     {
         constexpr auto ModulesToLoad = std::to_array<Core::SysModules>({
             {"libkernel.sprx", Libraries::Kernel::RegisterLib},
@@ -211,20 +206,8 @@ void InitHLELibs(Core::Loader::SymbolsResolver* sym) {
             // {"libSceSsl.sprx", Libraries::Ssl::RegisterLib},
         });
 
-        for (auto mod : ModulesToLoad) {
-            if (mod.module_name == "libSceGnmDriver.sprx") {
-                auto lle_file = Kernel::sceKernelIsNeoMode() ? "libSceGnmDriverForNeoMode.sprx"
-                                                             : mod.module_name;
-                if (std::filesystem::exists(game_specific_modules_path / lle_file)) {
-                    LOG_WARNING(Loader, "{} LLEd", lle_file);
-                } else {
-                    mod.callback(sym);
-                }
-            } else if (std::filesystem::exists(game_specific_modules_path / mod.module_name)) {
-                LOG_WARNING(Loader, "{} LLEd", mod.module_name);
-            } else {
-                mod.callback(sym);
-            }
+        for (const auto& mod : ModulesToLoad) {
+            mod.callback(sym);
         }
     }
 }

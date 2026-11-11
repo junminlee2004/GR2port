@@ -26,7 +26,6 @@ using EntryFunc = PS4_SYSV_ABI int (*)(size_t args, const void* argp, void* para
 
 static constexpr u64 ExecutableLoadBase = 0x400000;
 static constexpr u64 GameModuleLoadBase = 0x80000000;
-static constexpr u64 SystemModuleLoadBase = 0x800000000;
 
 static u64 GetAlignedSize(const elf_program_header& phdr) {
     return (phdr.p_align != 0 ? (phdr.p_memsz + (phdr.p_align - 1)) & ~(phdr.p_align - 1)
@@ -121,9 +120,7 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
     // Reserve memory area for module
     const bool is_executable =
         elf_header.e_type == ET_SCE_EXEC || elf_header.e_type == ET_SCE_DYNEXEC;
-    const u64 load_base = is_executable   ? ExecutableLoadBase
-                          : IsSystemLib() ? SystemModuleLoadBase
-                                          : GameModuleLoadBase;
+    const u64 load_base = is_executable ? ExecutableLoadBase : GameModuleLoadBase;
     void** out_addr = reinterpret_cast<void**>(&base_virtual_addr);
     s32 result =
         memory->MapMemory(out_addr, load_base, aligned_base_size + TrampolineSize,
@@ -165,9 +162,8 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
             }
 
             // Map module segments
-            const auto memory_type = IsSystemLib() ? VMAType::Code : VMAType::Flexible;
             s32 result = memory->MapMemory(&segment_addr, segment_vaddr, segment_size, segment_prot,
-                                           MemoryMapFlags::Fixed, memory_type, name);
+                                           MemoryMapFlags::Fixed, VMAType::Flexible, name);
             ASSERT_MSG(result == ORBIS_OK, "Failed to map segment at {:#x} for module {}",
                        segment_vaddr, name);
             elf.LoadSegment(segment_vaddr, phdr.p_offset, phdr.p_filesz);

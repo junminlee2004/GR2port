@@ -192,7 +192,6 @@ struct GeneralSettings {
     Setting<std::vector<GameInstallDir>> install_dirs;
     Setting<std::filesystem::path> addon_install_dir;
     Setting<std::filesystem::path> home_dir;
-    Setting<std::filesystem::path> sys_modules_dir;
     Setting<std::filesystem::path> font_dir;
 
     Setting<int> volume_slider{100};
@@ -232,12 +231,11 @@ struct GeneralSettings {
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GeneralSettings, install_dirs, addon_install_dir, home_dir,
-                                   sys_modules_dir, font_dir, volume_slider, neo_mode, dev_kit_mode,
+                                   font_dir, volume_slider, neo_mode, dev_kit_mode,
                                    extra_dmem_in_mbytes, extra_fmem_in_mbytes,
                                    trophy_popup_disabled, trophy_notification_duration, show_splash,
-                                   trophy_notification_side, show_fps_counter,
-                                   console_language, settings_window_scale, redzone_patches,
-                                   legacy_cpu_patches)
+                                   trophy_notification_side, show_fps_counter, console_language,
+                                   settings_window_scale, redzone_patches, legacy_cpu_patches)
 
 // -------------------------------
 // Network settings
@@ -961,8 +959,6 @@ public:
     const std::vector<bool> GetGameInstallDirsEnabled();
     const std::vector<GameInstallDir>& GetAllGameInstallDirs() const;
 
-    std::filesystem::path GetSysModulesDir();
-    void SetSysModulesDir(const std::filesystem::path& dir);
     /// The folder the settings name for dumped system fonts, or empty.
     std::filesystem::path GetFontsDir();
     void SetFontsDir(const std::filesystem::path& dir);

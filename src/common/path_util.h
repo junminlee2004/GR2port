@@ -16,7 +16,6 @@ enum class PathType {
     ScreenshotsDir, // Where screenshots are stored.
     ShaderDir,      // Where shaders are stored.
     GameDataDir,    // Where game data is stored.
-    SysModuleDir,   // Where system modules are stored.
     CapturesDir,    // Where rdoc captures are stored.
     CacheDir,       // Where pipeline and shader cache is stored.
     TrophyDir,      // Where trophy metadata and the player's trophy progress are stored.
@@ -30,7 +29,6 @@ constexpr auto LOG_DIR = "log";
 constexpr auto SCREENSHOTS_DIR = "screenshots";
 constexpr auto SHADER_DIR = "shader";
 constexpr auto GAMEDATA_DIR = "data";
-constexpr auto SYSMODULES_DIR = "sys_modules";
 constexpr auto CAPTURES_DIR = "captures";
 constexpr auto CACHE_DIR = "cache";
 constexpr auto TROPHY_DIR = "trophy";

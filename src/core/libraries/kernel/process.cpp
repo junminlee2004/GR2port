@@ -247,9 +247,6 @@ s32 PS4_SYSV_ABI sceKernelGetModuleInfo2(s32 handle, Core::OrbisKernelModuleInfo
     if (module == nullptr) {
         return ORBIS_KERNEL_ERROR_ESRCH;
     }
-    if (module->IsSystemLib()) {
-        return ORBIS_KERNEL_ERROR_EPERM;
-    }
     *info = module->GetModuleInfo();
     return ORBIS_OK;
 }
@@ -303,9 +300,7 @@ s32 PS4_SYSV_ABI sceKernelGetModuleList2(s32* handles, u64 num_array, u64* out_c
     u64 index = 0;
     auto* module = linker->GetModule(id);
     while (module != nullptr && index < num_array) {
-        if (!module->IsSystemLib()) {
-            handles[index++] = id;
-        }
+        handles[index++] = id;
         id++;
         module = linker->GetModule(id);
     }

@@ -165,14 +165,6 @@ public:
         return elf.IsSharedLib();
     }
 
-    bool IsSystemLib() {
-        auto system_path = EmulatorSettings.GetSysModulesDir();
-        if (file.string().starts_with(system_path.string().c_str())) {
-            return true;
-        }
-        return false;
-    }
-
     template <typename T = VAddr>
     T GetProcParam() const noexcept {
         return reinterpret_cast<T>(proc_param_virtual_addr);

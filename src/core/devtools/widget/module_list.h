@@ -10,7 +10,6 @@
 #include <vector>
 #include "common/elf_info.h"
 #include "common/path_util.h"
-#include "core/emulator_settings.h"
 
 namespace Core::Devtools::Widget {
 
@@ -22,18 +21,6 @@ public:
     void Draw();
     bool open = false;
 
-    static bool IsSystemModule(const std::filesystem::path& path) {
-        const auto sys_modules_path = EmulatorSettings.GetSysModulesDir();
-
-        const auto abs_path = std::filesystem::absolute(path).lexically_normal();
-        const auto abs_sys_path = std::filesystem::absolute(sys_modules_path).lexically_normal();
-
-        const auto path_str = abs_path.string();
-        const auto sys_path_str = abs_sys_path.string();
-
-        return path_str.starts_with(sys_path_str);
-    }
-
     static bool IsSystemModule(const std::string& name) {
         const auto game_modules_path = Common::ElfInfo::Instance().GetGameFolder() / "sce_module";
         const auto prx_path = game_modules_path / name;
@@ -44,12 +31,13 @@ public:
         return false;
     }
 
-    static void AddModule(const std::string& name, std::filesystem::path path) {
+    // Adds a module loaded from the game's own files.
+    static void AddGameModule(const std::string& name) {
         if (name == "eboot.bin") {
             return;
         }
         std::scoped_lock lock(modules_mutex);
-        modules.push_back({name, IsSystemModule(path), true});
+        modules.push_back({name, false, true});
     }
 
     static void AddModule(std::string name) {

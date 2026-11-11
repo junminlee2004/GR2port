@@ -125,7 +125,6 @@ u32 validateModuleId(s32 id) {
 
 s32 loadModuleInternal(s32 index, s32 argc, const void* argv, s32* res_out) {
     auto* linker = Common::Singleton<Core::Linker>::Instance();
-    auto* game_info = Common::Singleton<Common::ElfInfo>::Instance();
 
     // If the module is already loaded, increment is_loaded and return ORBIS_OK.
     OrbisSysmoduleModuleInternal& mod = g_modules_array[index];
@@ -190,30 +189,8 @@ s32 loadModuleInternal(s32 index, s32 argc, const void* argv, s32* res_out) {
         // Append .sprx extension.
         mod_name.append(".sprx");
 
-        // Now we need to check if the requested library is allowed to LLE.
-        // First, we allow all modules from game-specific sys_modules
-        const auto& sys_module_path = EmulatorSettings.GetSysModulesDir();
-        if (!game_info->GameSerial().empty()) {
-            const auto& game_specific_module_path =
-                sys_module_path / game_info->GameSerial() / mod_name;
-            if (std::filesystem::exists(game_specific_module_path)) {
-                // The requested module is present in the game-specific sys_modules, load it.
-                LOG_INFO(Loader, "Loading {} from game serial file {}", mod_name,
-                         game_info->GameSerial());
-                s32 handle = linker->LoadAndStartModule(game_specific_module_path, argc, argv,
-                                                        &start_result);
-                ASSERT_MSG(handle >= 0, "Failed to load module {}", mod_name);
-                mod.handle = handle;
-                mod.is_loaded++;
-                if (res_out != nullptr) {
-                    *res_out = start_result;
-                }
-                return ORBIS_OK;
-            }
-        }
-
-        // We need to check a few things here.
-        // First, check if this is a module we allow LLE for.
+        // The modules whose HLE library registers when the game loads them. An entry without a
+        // library is a module the game loads and imports nothing from.
         static s32 stub_handle = 100;
         constexpr auto ModulesToLoad = std::to_array<Core::SysModules>(
             {{"libSceNgs2.sprx", &Libraries::Ngs2::RegisterLib},
@@ -256,7 +233,7 @@ s32 loadModuleInternal(s32 index, s32 argc, const void* argv, s32* res_out) {
         const auto it = std::ranges::find_if(
             ModulesToLoad, [&](Core::SysModules module) { return mod_name == module.module_name; });
         if (it == ModulesToLoad.end()) {
-            // Not an allowed LLE, stub success without warning.
+            // Not a listed module, stub success without warning.
             mod.is_loaded++;
             // Some internal checks rely on a handle, stub a valid one.
             mod.handle = stub_handle++;
@@ -266,28 +243,18 @@ s32 loadModuleInternal(s32 index, s32 argc, const void* argv, s32* res_out) {
             return ORBIS_OK;
         }
 
-        // Allowed module, check if it exists
-        const auto& module_path = sys_module_path / mod_name;
-        if (std::filesystem::exists(module_path)) {
-            LOG_INFO(Loader, "Loading {}", mod_name);
-            s32 handle = linker->LoadAndStartModule(module_path, argc, argv, &start_result);
-            ASSERT_MSG(handle >= 0, "Failed to load module {}", mod_name);
-            mod.handle = handle;
-        } else {
-            // Allowed LLE that isn't present, log message
-            auto& [name, init_func] = *it;
-            if (init_func) {
-                LOG_INFO(Loader, "Can't Load {} switching to HLE", mod_name);
-                init_func(&linker->GetHLESymbols());
+        auto& [name, init_func] = *it;
+        if (init_func) {
+            LOG_INFO(Loader, "Registering the HLE library of {}", mod_name);
+            init_func(&linker->GetHLESymbols());
 
-                // When loading HLEs, we need to relocate imports
-                // This ensures later module loads can see our HLE functions.
-                linker->RelocateAllImports();
-            } else {
-                LOG_INFO(Loader, "No HLE available for {} module", mod_name);
-            }
-            mod.handle = stub_handle++;
+            // When loading HLEs, we need to relocate imports
+            // This ensures later module loads can see our HLE functions.
+            linker->RelocateAllImports();
+        } else {
+            LOG_INFO(Loader, "No HLE available for {} module", mod_name);
         }
+        mod.handle = stub_handle++;
 
         // Mark module as loaded.
         mod.is_loaded++;

@@ -177,17 +177,6 @@ const std::vector<bool> EmulatorSettingsImpl::GetGameInstallDirsEnabled() {
     return enabled_dirs;
 }
 
-std::filesystem::path EmulatorSettingsImpl::GetSysModulesDir() {
-    if (m_general.sys_modules_dir.value.empty()) {
-        return Common::FS::GetUserPath(Common::FS::PathType::SysModuleDir);
-    }
-    return m_general.sys_modules_dir.value;
-}
-
-void EmulatorSettingsImpl::SetSysModulesDir(const std::filesystem::path& dir) {
-    m_general.sys_modules_dir.value = dir;
-}
-
 std::filesystem::path EmulatorSettingsImpl::GetFontsDir() {
     return m_general.font_dir.value;
 }
@@ -455,7 +444,6 @@ bool EmulatorSettingsImpl::TransferSettings() {
         setFromToml(s.show_splash, general, "showSplash");
         setFromToml(s.trophy_notification_side, general, "sideTrophy");
         setFromToml(m_network.connected_to_network, general, "isConnectedToNetwork");
-        setFromToml(s.sys_modules_dir, general, "sysModulesPath");
         setFromToml(s.font_dir, general, "fontsPath");
         // setFromToml(, general, "userName");
         // setFromToml(s.defaultControllerID, general, "defaultControllerID");
@@ -637,22 +625,6 @@ bool EmulatorSettingsImpl::TransferSettings() {
     if (og_data.contains("General")) {
         const toml::value& general = og_data.at("General");
         auto& s = m_general;
-        // Transfer sysmodules install directory
-        try {
-            std::string sysmodules_install_dir_str;
-            if (general.contains("sysModulesPath")) {
-                const auto& sysmodule_value = general.at("sysModulesPath");
-                if (sysmodule_value.is_string()) {
-                    sysmodules_install_dir_str = toml::get<std::string>(sysmodule_value);
-                    if (!sysmodules_install_dir_str.empty()) {
-                        s.sys_modules_dir.value = std::filesystem::path{sysmodules_install_dir_str};
-                    }
-                }
-            }
-        } catch (const std::exception& e) {
-            LOG_WARNING(Config, "Failed to transfer sysmodules install directory: {}", e.what());
-        }
-
         // Transfer font install directory
         try {
             std::string font_install_dir_str;

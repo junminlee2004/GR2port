@@ -78,39 +78,10 @@ void Linker::Execute(const std::vector<std::string>& args) {
     Module* module = m_modules[0].get();
     static_tls_size = module->tls.offset = module->tls.image_size;
 
-    // Map libSceLibcInternal
-    const auto& libc_internal_path =
-        EmulatorSettings.GetSysModulesDir() / "libSceLibcInternal.sprx";
-    bool has_libcinternal = false;
-    if (std::filesystem::exists(libc_internal_path)) {
-        LoadModule(libc_internal_path);
-        has_libcinternal = true;
-    } else {
-        // Need to load HLE, LLE isn't present
-        LOG_INFO(Core_Linker, "Can't Load libSceLibcInternal.sprx switching to HLE");
-        Libraries::LibcInternal::RegisterLib(&GetHLESymbols());
-    }
+    Libraries::LibcInternal::RegisterLib(&GetHLESymbols());
 
     // Relocate all modules
     RelocateAllImports();
-
-    // libkernel entry is responsible for initializing malloc-related elements of libSceLibcInternal
-    // this is done through calling _malloc_init, and sceLibcInternalMemoryMutexEnable.
-    static PS4_SYSV_ABI s32 (*malloc_init)() = nullptr;
-    static PS4_SYSV_ABI void (*sceLibcInternalMemoryMutexEnable)() = nullptr;
-
-    if (has_libcinternal) {
-        for (const auto& m : m_modules) {
-            const auto& mod = m.get();
-            if (mod->name.contains("libSceLibcInternal.sprx")) {
-                malloc_init =
-                    reinterpret_cast<PS4_SYSV_ABI s32 (*)()>(mod->FindByName("_malloc_init"));
-                sceLibcInternalMemoryMutexEnable = reinterpret_cast<PS4_SYSV_ABI void (*)()>(
-                    mod->FindByName("sceLibcInternalMemoryMutexEnable"));
-                break;
-            }
-        }
-    }
 
     // Configure the direct and flexible memory regions.
     u64 fmem_size = ORBIS_KERNEL_FLEXIBLE_MEMORY_SIZE;
@@ -147,7 +118,7 @@ void Linker::Execute(const std::vector<std::string>& args) {
 
     memory->SetupMemoryRegions(fmem_size, use_extended_mem1, use_extended_mem2);
 
-    main_thread.Run([this, module, &args, has_libcinternal](std::stop_token) {
+    main_thread.Run([this, module, &args](std::stop_token) {
         Common::SetCurrentThreadName("Game:Main");
 
 #ifndef _WIN32 // Clear any existing signal mask for game threads.
@@ -157,18 +128,6 @@ void Linker::Execute(const std::vector<std::string>& args) {
 #endif
         if (auto& ipc = IPC::Instance()) {
             ipc.WaitForStart();
-        }
-
-        // Load libSceLibcInternal, run malloc_init.
-        if (has_libcinternal) {
-            LoadLibcInternal();
-
-            if (malloc_init && sceLibcInternalMemoryMutexEnable) {
-                // Call _malloc_init
-                s32 ret = malloc_init();
-                ASSERT_MSG(ret == 0, "malloc_init failed");
-                sceLibcInternalMemoryMutexEnable();
-            }
         }
 
         // Have libSceSysmodule preload our libraries.
@@ -232,7 +191,7 @@ s32 Linker::LoadModule(const std::filesystem::path& elf_name, bool is_dynamic) {
     num_static_modules += !is_dynamic;
     m_modules.emplace_back(std::move(module));
 
-    Core::Devtools::Widget::ModuleList::AddModule(elf_name.filename().string(), elf_name);
+    Core::Devtools::Widget::ModuleList::AddGameModule(elf_name.filename().string());
 
     return mod_id;
 }
