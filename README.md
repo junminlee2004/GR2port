@@ -50,9 +50,10 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 - 30-360fps supported
 - 540p-8k resolution supported
 - ultrawide and 16:10 supported
-- Feature complete online modes
+- Feature complete online mode
 - Feature complete photo mode, photo export and ingame photo gallery
 - All GR2fork patches
+- GR2fork Halloween items
 - FSR 3.1 + FSR 4.1 support (Windows + Linux) + DLSS support (Windows Only)
 - Keyboard, XBOX, NINTENDO and STEAM (Steam Deck, Steam Controller) button prompts for GR2
 
