@@ -32,10 +32,13 @@
 #include "common/singleton.h"
 #include "common/string_util.h"
 #include "common/types.h"
+#include "core/emulator_settings.h"
 #include "core/file_sys/fs.h"
 #include "core/game_check/game_patches.h"
 #include "core/prompt_packs/keyboard_prompts.h"
+#include "core/prompt_packs/pad_prompts.h"
 #include "core/prompt_packs/prompt_packs.h"
+#include "input/input_handler.h"
 #include "input/selected_pad.h"
 #include "video_core/gr2port/settings.h"
 
@@ -112,6 +115,10 @@ struct Pack {
 struct PackSet {
     std::vector<Pack> packs;
     std::optional<std::size_t> layout;
+    // The keyboard pack's blank textures, when the pad's prompts follow changed button bindings,
+    // and the pad whose names they show.
+    std::optional<Pack> pad_blank;
+    std::string pad_layout;
 };
 
 // A mod pack of Gravity Rush 2 and the GR2Fork setting that turns it off. Mods are on unless the
@@ -220,6 +227,13 @@ std::string ConnectedPadLayout() {
     }
     SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
     return layout.empty() ? "off" : layout;
+}
+
+// The pad bindings of the player's input config.
+Input::PadBindings::Map PlayerPadBindings() {
+    const std::string serial{Common::ElfInfo::Instance().GameSerial()};
+    return Input::PadBindings::Read(Input::GetInputConfigFile(
+        EmulatorSettings.IsUseUnifiedInputConfig() ? "default" : serial));
 }
 
 // The layout GR2 starts with: the launcher's choice, else the connected pad's. "playstation" is the
@@ -599,6 +613,13 @@ PackSet LoadPacks() {
     if (!is_gr2) {
         return set;
     }
+    // Pad prompts follow the player's button bindings; the keyboard's follow its keys already.
+    if (layout != "keyboard" && !Pad::Changed(PlayerPadBindings()).empty()) {
+        if (auto blank = LoadPack(game, "keyboard", "layout"); blank && blank->has_slots) {
+            set.pad_blank = std::move(*blank);
+            set.pad_layout = layout == "off" ? "playstation" : layout;
+        }
+    }
     const auto mods = Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "prompt_mods" / game;
     for (const ModPack& mod : Gr2ModPacks) {
         // GR2port's launcher holds the Halloween items' switch.
@@ -672,10 +693,11 @@ const Pack* LayoutPack() {
 }
 
 bool HasArchive(const PackSet& set, const std::string& name) {
-    return std::ranges::any_of(set.packs, [&](const Pack& pack) {
+    const auto in = [&](const Pack& pack) {
         return std::ranges::any_of(pack.members,
                                    [&](const Member& member) { return member.archive == name; });
-    });
+    };
+    return std::ranges::any_of(set.packs, in) || (set.pad_blank && in(*set.pad_blank));
 }
 
 bool ReadAt(IFile& file, u64 offset, std::span<u8> dst) {
@@ -1025,6 +1047,13 @@ std::unordered_map<std::string, std::shared_ptr<const Overlay>> BuildOverlays(
         }
         entry.entries.emplace(path, 0);
     };
+    if (set.pad_blank) {
+        for (const Member& member : set.pad_blank->members) {
+            want(member.archive, member.archive_name, member.path);
+        }
+        want(std::string(KeyFontArchive), std::string(KeyFontArchiveName),
+             std::string(KeyFontPath));
+    }
     for (const Pack& pack : set.packs) {
         for (const Member& member : pack.members) {
             want(member.archive, member.archive_name, member.path);
@@ -1077,6 +1106,28 @@ std::unordered_map<std::string, std::shared_ptr<const Overlay>> BuildOverlays(
             if (font) {
                 Keyboard::Compose(pack.dir / "slots.json", *font, Keyboard::BoundLabels(), members);
             }
+        }
+    }
+    if (set.pad_blank) {
+        std::map<MemberKey, std::vector<u8>> blank;
+        std::vector<MemberKey> blank_order;
+        const auto font =
+            ReadOriginal(archives, std::string(KeyFontArchive), std::string(KeyFontPath));
+        if (font && ApplyPack(*set.pad_blank, archives, blank, blank_order)) {
+            // The prompts are drawn into the members as the layout left them, the game's own
+            // where it left them alone.
+            for (const MemberKey& key : blank_order) {
+                if (!members.contains(key)) {
+                    if (auto original = ReadOriginal(archives, key.first, key.second)) {
+                        members.emplace(key, std::move(*original));
+                        order.push_back(key);
+                    }
+                }
+            }
+            const auto bindings = PlayerPadBindings();
+            const std::set<std::string> changed = Pad::Changed(bindings);
+            Keyboard::Compose(set.pad_blank->dir / "slots.json", *font,
+                              Pad::Labels(set.pad_layout, bindings), members, &changed, &blank);
         }
     }
 

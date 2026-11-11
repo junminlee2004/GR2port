@@ -3,8 +3,11 @@
 
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <map>
+#include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <utility>
@@ -23,6 +26,9 @@ namespace PromptPacks::Keyboard {
 struct Label {
     std::string text;
     std::string symbol;
+    // The colour of a letter that the pad colours, as the Xbox face buttons; it replaces the
+    // slot's own on the face buttons' prompts.
+    std::optional<std::array<u8, 3>> rgb;
 };
 
 /// The label of each slot button ("cross", "R2", "Lstick", "touchpad", "swipe_up", ...) from the
@@ -32,8 +38,13 @@ std::map<std::string, Label> BoundLabels();
 /// Draws labels, by slot button, into the members of the keyboard pack, keyed by lower-case
 /// archive and member path, as slots_json describes; font is the game's DIN Round Bold. Members the
 /// slots name that are missing are left out, and buttons without a label show a dash.
+///
+/// With only, just the textures with a slot of those buttons are drawn, each on its copy in blank
+/// (the keyboard pack's members); the other textures of members stay as they are.
 void Compose(const std::filesystem::path& slots_json, std::span<const u8> font,
              const std::map<std::string, Label>& labels,
-             std::map<std::pair<std::string, std::string>, std::vector<u8>>& members);
+             std::map<std::pair<std::string, std::string>, std::vector<u8>>& members,
+             const std::set<std::string>* only = nullptr,
+             const std::map<std::pair<std::string, std::string>, std::vector<u8>>* blank = nullptr);
 
 } // namespace PromptPacks::Keyboard

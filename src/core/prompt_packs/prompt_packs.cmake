@@ -8,5 +8,7 @@ target_sources(shadps4 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/keyboard_prompts.cpp
     ${CMAKE_CURRENT_LIST_DIR}/keyboard_prompts.h
     ${CMAKE_CURRENT_LIST_DIR}/keyboard_symbols.h
+    ${CMAKE_CURRENT_LIST_DIR}/pad_prompts.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/pad_prompts.h
     ${CMAKE_CURRENT_LIST_DIR}/prompt_packs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/prompt_packs.h)

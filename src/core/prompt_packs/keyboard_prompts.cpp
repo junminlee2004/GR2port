@@ -324,8 +324,15 @@ std::array<float, 3> Color(const nlohmann::json& value) {
     return {value.at(0).get<float>(), value.at(1).get<float>(), value.at(2).get<float>()};
 }
 
+// The recipes whose letters an Xbox pad colours.
+bool TakesLetterColour(const nlohmann::json& slot) {
+    const std::string recipe = slot.value("recipe", "");
+    return recipe == "face_key" || recipe == "qte_face" || recipe == "button_disc" ||
+           recipe == "rekey_word";
+}
+
 // Draws one slot's label into the image in the slot's style.
-void DrawSlot(Image& image, const nlohmann::json& slot, const Coverage& cv) {
+void DrawSlot(Image& image, const nlohmann::json& slot, const Label& label, const Coverage& cv) {
     const u32 width = image.width;
     const u32 height = image.height;
     const std::string style = slot.value("style", "color");
@@ -429,9 +436,29 @@ void DrawSlot(Image& image, const nlohmann::json& slot, const Coverage& cv) {
             paint(extrusion, slot.at("side_rows"));
         }
         paint(cv, slot.at("rows"));
+    } else if (label.rgb && TakesLetterColour(slot)) {
+        const auto& rgb = *label.rgb;
+        Over(image, cv, {float(rgb[0]), float(rgb[1]), float(rgb[2])}, 1.0f);
     } else {
         Over(image, cv, Color(slot.value("rgb", nlohmann::json::array({255, 255, 255}))), 1.0f);
     }
+}
+
+// Copies the texture at offset in from over the same texture in to. False when to has no texture
+// of that size there.
+bool CopyTexture(const std::vector<u8>& from, std::vector<u8>& to, u64 offset) {
+    if (offset + 16 > from.size() || offset + 16 > to.size()) {
+        return false;
+    }
+    u32 from_size;
+    u32 to_size;
+    std::memcpy(&from_size, from.data() + offset + 12, sizeof(from_size));
+    std::memcpy(&to_size, to.data() + offset + 12, sizeof(to_size));
+    if (from_size != to_size || offset + from_size > from.size() || offset + to_size > to.size()) {
+        return false;
+    }
+    std::memcpy(to.data() + offset, from.data() + offset, from_size);
+    return true;
 }
 
 float NumberOr(const nlohmann::json& slot, const char* key, float fallback) {
@@ -449,7 +476,9 @@ std::string Lower(std::string text) {
 
 void Compose(const std::filesystem::path& slots_json, std::span<const u8> font,
              const std::map<std::string, Label>& labels,
-             std::map<std::pair<std::string, std::string>, std::vector<u8>>& members) {
+             std::map<std::pair<std::string, std::string>, std::vector<u8>>& members,
+             const std::set<std::string>* only,
+             const std::map<std::pair<std::string, std::string>, std::vector<u8>>* blank) {
     std::ifstream in{slots_json};
     const nlohmann::json root = nlohmann::json::parse(in, nullptr, false);
     if (!root.is_object() || !root.contains("slots") || !root.at("slots").is_array()) {
@@ -470,12 +499,35 @@ void Compose(const std::filesystem::path& slots_json, std::span<const u8> font,
             .push_back(&slot);
     }
     u32 drawn = 0;
+    u32 drawn_textures = 0;
     for (const auto& [where, slots] : textures) {
         const auto& [archive, path, offset] = where;
+        if (only != nullptr && std::ranges::none_of(slots, [&](const nlohmann::json* slot) {
+                return only->contains(slot->value("button", ""));
+            })) {
+            continue;
+        }
         const auto member = members.find({archive, path});
+        if (only != nullptr) {
+            if (blank == nullptr || member == members.end()) {
+                continue;
+            }
+            const auto source = blank->find({archive, path});
+            if (source == blank->end()) {
+                continue;
+            }
+            if (!CopyTexture(source->second, member->second, offset)) {
+                LOG_WARNING(Loader,
+                            "Prompt packs: {} differs from the blank texture; its pad "
+                            "prompts stay as they are",
+                            path);
+                continue;
+            }
+        }
         if (member == members.end() || offset + 16 > member->second.size()) {
             continue;
         }
+        ++drawn_textures;
         u32 stream_size;
         std::memcpy(&stream_size, member->second.data() + offset + 12, sizeof(stream_size));
         if (offset + stream_size > member->second.size()) {
@@ -498,13 +550,13 @@ void Compose(const std::filesystem::path& slots_json, std::span<const u8> font,
                 painter.Draw(shown, center.at(0).get<float>(), center.at(1).get<float>(),
                              NumberOr(*slot, "cap", 20.0f), NumberOr(*slot, "max_width", 0.0f),
                              texture->width, texture->height);
-            DrawSlot(image, *slot, cv);
+            DrawSlot(image, *slot, shown, cv);
             ++drawn;
         }
         Gnf::Encode(file, *texture, ToRgba8(image));
     }
-    LOG_INFO(Loader, "Prompt packs: drew {} keyboard prompts in {} textures", drawn,
-             textures.size());
+    LOG_INFO(Loader, "Prompt packs: drew {} {} prompts in {} textures", drawn,
+             only != nullptr ? "pad" : "keyboard", drawn_textures);
 }
 
 } // namespace PromptPacks::Keyboard
