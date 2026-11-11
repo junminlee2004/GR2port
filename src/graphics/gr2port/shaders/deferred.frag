@@ -186,13 +186,17 @@ void main() {
                                                                   : 2u;
     const float shadow_fade =
         1.0 - clamp((distance_to_eye - light.shadow_fade_start) * ShadowFadeRange, 0.0, 1.0);
-    const float visible = 1.0 - shadow_fade * (1.0 - KeyShadow(cascade, position));
 
     // Key light: GGX and Schlick for the highlight, Lambert for the rest.
     const vec3 to_point = normalize(position);
     const vec3 travel = light.light_direction.xyz;
     const float light_on_normal = dot(travel, normal);
     const float n_dot_l = min(max(-light_on_normal, 0.0), 1.0);
+    // The shadow maps are read only where their result shows: every use of it is multiplied by
+    // n_dot_l, and past the fade it is 1 whatever the maps hold.
+    const float visible = n_dot_l > 0.0 && shadow_fade > 0.0
+                              ? 1.0 - shadow_fade * (1.0 - KeyShadow(cascade, position))
+                              : 1.0;
     const vec3 halfway = normalize(-to_point - travel);
     const float n_dot_h = clamp(dot(normal, halfway), 0.0, 1.0);
     const float n_dot_v = min(max(-dot(to_point, normal), 0.0), 1.0);
@@ -225,9 +229,10 @@ void main() {
         const float key_reach = 1.0 + light.shadow_influence * (n_dot_l * visible - 1.0);
         const float view_term = n_dot_v + sqrt(a2 + (1.0 - a2) * n_dot_v * n_dot_v);
         // ShadowTrace's screen-space shadow, which each light takes by its share.
-        const float traced =
-            light.shadow_trace != 0u ? texelFetch(traced_shadow, ivec2(gl_FragCoord.xy), 0).x
-                                     : 0.0;
+        // A cell without lights reads nothing of it.
+        const float traced = light.shadow_trace != 0u && grid.light_indices[first] != ~0u
+                                 ? texelFetch(traced_shadow, ivec2(gl_FragCoord.xy), 0).x
+                                 : 0.0;
         for (uint i = 0u; i < light.point_lights; i++) {
             const uint index = grid.light_indices[first + i];
             if (index == ~0u) {
