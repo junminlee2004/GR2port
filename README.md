@@ -51,7 +51,7 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 - Feature complete photo mode, photo export and ingame photo gallery
 - All GR2fork patches
 - FSR 3.1 + FSR 4.1 support (Windows + Linux) + DLSS support (Windows Only)
-- Keyboard, XBOX, NINTENDO and STEAM (Steam Deck, Steam Controller) button prompts for GR2 and GRR
+- Keyboard, XBOX, NINTENDO and STEAM (Steam Deck, Steam Controller) button prompts for GR2
 
 # Keyboard and Mouse + Controller Mappings
 
