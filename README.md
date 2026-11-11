@@ -29,17 +29,20 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 
 **System Requirements**
 
-| | 720p 60 (locked) LOW PRESET | 1080p 60 (locked) MEDIUM PRESET | 4K 60 (locked) PS4 ORIGINAL PRESET | 4K 120 (locked) PS4 ORIGINAL PRESET |
+| | 720p 60 (locked) LOW PRESET | 800p 60 (locked) STEAM DECK PRESET | 4K 60 (locked) PS4 ORIGINAL PRESET | 4K 120 (locked) PS4 ORIGINAL PRESET |
 |---|---|---|---|---|
-| CPU | intel i5 3470 | intel i7 4790 | Ryzen 5 1600 | Ryzen 5 3600 |
-| GPU | GTX 1050 2 GB | RX 570 4 GB | RTX 3060 8 GB | RTX 3080 Ti 12 GB |
-| RAM | 8 GB | 12 GB | 12 GB | 12 GB |
-| Storage | HDD | HDD | HDD | HDD |
+| CPU | intel i5 3470 | STEAM DECK | Ryzen 5 1600 | Ryzen 5 3600 |
+| GPU | GTX 1050 2 GB | STEAM DECK | RTX 3060 8 GB | RTX 3080 Ti 12 GB |
+| RAM | 8 GB | 16 GB | 12 GB | 12 GB |
+| Storage | HDD | SSD | HDD | HDD |
+
+> [!NOTE]
+> Upscaling is NOT considered for these fps targets but may be used to optionally improve fps further.
 
 **Included Features for Gravity Rush 2 and Gravity Rush Remastered**
 - Fully bindable gamepad and keyboard bindings and button prompts
 - Fully customizable graphics presets
-- Steam deck preset
+- Steam Deck preset
 - Impeccable performance, graphical accuracy, and stability
 - 30-360fps supported
 - 540p-8k resolution supported
