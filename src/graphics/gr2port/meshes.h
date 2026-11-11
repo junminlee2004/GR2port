@@ -24,6 +24,15 @@ namespace Gr2Port::Meshes {
 
 inline constexpr u32 Capacity = 1u << 16;
 
+/// The indices of a chunk of a mesh's index data: whole triangles, from a multiple of 3 on.
+inline constexpr u32 ChunkIndices = 384;
+
+/// The box around the positions that a run of a mesh's chunks names.
+struct ChunkBox {
+    float low[3];
+    float high[3];
+};
+
 struct Mesh {
     std::atomic<VAddr> shape{0};
     std::atomic<bool> ready{false};
@@ -58,6 +67,12 @@ struct Mesh {
     float box_high[3]{std::numeric_limits<float>::infinity(),
                       std::numeric_limits<float>::infinity(),
                       std::numeric_limits<float>::infinity()};
+    /// The boxes of the mesh's chunks as a tree, and the chunks; none for a mesh without a box or
+    /// with one chunk. The node of chunks low to high comes first. Over more than one chunk, the
+    /// nodes of its first half, up to middle = (low + high) / 2, follow it, and those of its
+    /// second half start 2 * (middle - low) nodes after it.
+    const ChunkBox* chunk_tree = nullptr;
+    u32 chunks = 0;
     /// The device address of the skin stream (four RGBA16 FLOAT weights, then four RGBA16 SINT
     /// bone indices, 16 bytes a vertex), 0 when the shape is not skinned.
     u64 skin = 0;

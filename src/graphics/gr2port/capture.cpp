@@ -772,8 +772,8 @@ std::chrono::steady_clock::time_point g_last_frame_start;
 // half-full write-combined lines in several places for the reads between items to evict.
 alignas(64) std::array<std::array<Scene::Command, Scene::MaxDraws>,
                        static_cast<u32>(Scene::DrawList::Count)> g_commands;
-alignas(64) std::array<Scene::Command,
-                       Scene::Cascades * Scene::CasterLists * Scene::MaxCasters> g_caster_commands;
+alignas(64) std::array<Scene::Command, Scene::Cascades * Scene::CasterLists *
+                                           Scene::MaxCasterCommands> g_caster_commands;
 alignas(64) std::array<Scene::Command, Scene::MaxContours> g_contour_commands;
 alignas(64) std::array<Scene::VertexCommand, Scene::MaxLeaves> g_leaf_commands;
 alignas(
@@ -923,7 +923,7 @@ public:
         }
         for (u32 c = 0; c < Scene::Cascades; c++) {
             for (u32 list = 0; list < Scene::CasterLists; list++) {
-                const u32 first = (c * Scene::CasterLists + list) * Scene::MaxCasters;
+                const u32 first = (c * Scene::CasterLists + list) * Scene::MaxCasterCommands;
                 std::memcpy(packet + Scene::CasterCommandsOffset + first * Bytes,
                             g_caster_commands.data() + first,
                             header.caster_commands[c][list] * Bytes);
@@ -2125,10 +2125,13 @@ public:
         const bool alpha_tested = alpha_reference >= 0.0f && texture != 0;
         const u32 list = (alpha_tested ? 2 : 0) + ((flags & 0x08) != 0 ? 0 : 1);
         // A caster that is neither deformed nor skinned draws its mesh's positions as they are.
-        const u32 held =
-            vertices == mesh->vertices && skin.bones == 0
-                ? CascadesHolding(mask, table, reinterpret_cast<const float*>(world), *mesh)
-                : mask;
+        const bool boxed = vertices == mesh->vertices && skin.bones == 0;
+        u32 within = 0;
+        const u32 held = boxed ? CascadesHolding(mask, table, reinterpret_cast<const float*>(world),
+                                                 *mesh, within)
+                               : mask;
+        // Chunks hold whole triangles of a caster that starts on one.
+        const bool chunked = boxed && mesh->chunks != 0 && first % 3 == 0;
         if (held == 0) {
             return;
         }
@@ -2149,16 +2152,148 @@ public:
             if ((held >> c & 1) == 0) {
                 continue;
             }
+            // The chunks outside a cascade that does not hold the whole caster are left out.
+            if (chunked && (within >> c & 1) == 0 &&
+                AddCasterChunks(c, list, table, reinterpret_cast<const float*>(world), *mesh, first,
+                                count, i)) {
+                continue;
+            }
             header.caster_indices[c] += count;
-            u32& n = header.caster_commands[c][list];
-            g_caster_commands[(c * Scene::CasterLists + list) * Scene::MaxCasters + n++] = {
-                .index_count = count,
-                .instance_count = 1,
-                .first_index = mesh->first_index + first,
-                .vertex_offset = 0,
-                .first_instance = i,
-            };
+            AddCasterCommand(c, list, mesh->first_index + first, count, i);
         }
+    }
+
+    void AddCasterCommand(u32 c, u32 list, u32 first_index, u32 count, u32 caster) {
+        u32& n = header.caster_commands[c][list];
+        g_caster_commands[(c * Scene::CasterLists + list) * Scene::MaxCasterCommands + n++] = {
+            .index_count = count,
+            .instance_count = 1,
+            .first_index = first_index,
+            .vertex_offset = 0,
+            .first_instance = caster,
+        };
+    }
+
+    // Writes the commands of a cascade for a caster whose mesh has chunks: its runs of chunks
+    // that are not wholly past one of the cascade's side planes, by CascadesHolding's test over
+    // the mesh's own positions. A chunk past a plane holds only triangles past it, which draw
+    // nothing. False, with nothing written, when the world matrix is not affine.
+    bool AddCasterChunks(u32 c, u32 list, u32 table, const float* world, const Meshes::Mesh& mesh,
+                         u32 first, u32 count, u32 caster) {
+        constexpr double Rounding = 0x1p-16;
+        constexpr u32 MaxRuns = 64;
+        if (world[3] != 0.0f || world[7] != 0.0f || world[11] != 0.0f || world[15] != 1.0f) {
+            return false;
+        }
+        // The largest magnitudes the terms of a world position take over the mesh.
+        std::array<double, 3> magnitude{};
+        for (u32 i = 0; i < 3; i++) {
+            magnitude[i] = std::abs(world[12 + i]);
+            for (u32 k = 0; k < 3; k++) {
+                const double middle = 0.5 * (double{mesh.box_low[k]} + double{mesh.box_high[k]});
+                const double reach = 0.5 * (double{mesh.box_high[k]} - double{mesh.box_low[k]});
+                magnitude[i] += std::abs(double{world[4 * k + i]}) * (std::abs(middle) + reach);
+            }
+        }
+        // Each side plane over the mesh's own positions, its normal's magnitudes, and the
+        // rounding its value at a vertex can carry.
+        struct Plane {
+            std::array<double, 3> normal;
+            std::array<double, 3> size;
+            double offset;
+            double rounding;
+        };
+        const CasterClip& clip = caster_clips[c * Scene::CasterTables + table];
+        std::array<Plane, 4> planes;
+        for (u32 p = 0; p < planes.size(); p++) {
+            const std::array<double, 4>& plane = clip.planes[p];
+            const std::array<double, 4>& sizes = clip.sizes[p / 2];
+            for (u32 k = 0; k < 3; k++) {
+                planes[p].normal[k] = plane[0] * world[4 * k] + plane[1] * world[4 * k + 1] +
+                                      plane[2] * world[4 * k + 2];
+                planes[p].size[k] = std::abs(planes[p].normal[k]);
+            }
+            planes[p].offset =
+                plane[0] * world[12] + plane[1] * world[13] + plane[2] * world[14] + plane[3];
+            planes[p].rounding = Rounding * (sizes[0] * magnitude[0] + sizes[1] * magnitude[1] +
+                                             sizes[2] * magnitude[2] + sizes[3]);
+        }
+        // The chunks the caster's indices touch, and the tree's nodes left to look at: the
+        // first half of a node is looked at before its second, so the runs come in order.
+        const u32 first_chunk = first / Meshes::ChunkIndices;
+        const u32 end_chunk = std::min(
+            (first + count + Meshes::ChunkIndices - 1) / Meshes::ChunkIndices, mesh.chunks);
+        struct Node {
+            u32 index;
+            u32 low;
+            u32 high;
+        };
+        std::array<Node, 64> stack;
+        u32 depth = 0;
+        stack[depth++] = {0, 0, mesh.chunks};
+        std::array<std::array<u32, 2>, MaxRuns> runs;
+        u32 run_count = 0;
+        while (depth != 0) {
+            const Node node = stack[--depth];
+            if (node.high <= first_chunk || node.low >= end_chunk) {
+                continue;
+            }
+            const Meshes::ChunkBox& box = mesh.chunk_tree[node.index];
+            std::array<double, 3> centre;
+            std::array<double, 3> half;
+            for (u32 k = 0; k < 3; k++) {
+                centre[k] = 0.5 * (double{box.low[k]} + double{box.high[k]});
+                half[k] = 0.5 * (double{box.high[k]} - double{box.low[k]});
+            }
+            bool outside = false;
+            bool inside = true;
+            for (const Plane& plane : planes) {
+                const double middle = plane.normal[0] * centre[0] + plane.normal[1] * centre[1] +
+                                      plane.normal[2] * centre[2] + plane.offset;
+                const double reach =
+                    plane.size[0] * half[0] + plane.size[1] * half[1] + plane.size[2] * half[2];
+                // A box without bounds compares false and stays.
+                if (middle - reach > plane.rounding) {
+                    outside = true;
+                    break;
+                }
+                inside = inside && middle + reach <= 0.0;
+            }
+            if (outside) {
+                continue;
+            }
+            if (!inside && node.high - node.low > 1) {
+                const u32 middle = (node.low + node.high) / 2;
+                stack[depth++] = {node.index + 2 * (middle - node.low), middle, node.high};
+                stack[depth++] = {node.index + 1, node.low, middle};
+                continue;
+            }
+            const u32 low = std::max(node.low, first_chunk);
+            const u32 high = std::min(node.high, end_chunk);
+            if (run_count != 0 && (runs[run_count - 1][1] == low || run_count == MaxRuns)) {
+                // The next chunks, or with no room for a run, the chunks between too.
+                runs[run_count - 1][1] = high;
+            } else {
+                runs[run_count++] = {low, high};
+            }
+        }
+        if (run_count == 0) {
+            return true;
+        }
+        // Past the list's room for runs, one command draws from the first run to the last.
+        u32& extra = caster_runs[c][list];
+        if (extra + run_count - 1 > Scene::MaxCasters) {
+            runs[0][1] = runs[run_count - 1][1];
+            run_count = 1;
+        }
+        extra += run_count - 1;
+        for (u32 run = 0; run < run_count; run++) {
+            const u32 start = std::max(first, runs[run][0] * Meshes::ChunkIndices);
+            const u32 end = std::min(first + count, runs[run][1] * Meshes::ChunkIndices);
+            header.caster_indices[c] += end - start;
+            AddCasterCommand(c, list, mesh.first_index + start, end - start, caster);
+        }
+        return true;
     }
 
     // A Skin deformer record: the renderer skins the instance's copy as the game's Skin program
@@ -2292,9 +2427,12 @@ private:
     // positions lie in mesh's box: not those with the whole box past one side plane. Float
     // arithmetic leaves the shader's clip position within 2^-21 of the sum of its terms'
     // magnitudes; a box counts as past a plane only by more than 32 times that. The depth planes
-    // are not tested: the shader clamps the depth.
-    u32 CascadesHolding(u32 mask, u32 table, const float* world, const Meshes::Mesh& mesh) const {
+    // are not tested: the shader clamps the depth. within gets the cascades whose side planes hold
+    // the whole box.
+    u32 CascadesHolding(u32 mask, u32 table, const float* world, const Meshes::Mesh& mesh,
+                        u32& within) const {
         constexpr double Rounding = 0x1p-16;
+        within = 0;
         if (world[3] != 0.0f || world[7] != 0.0f || world[11] != 0.0f || world[15] != 1.0f) {
             return mask;
         }
@@ -2320,22 +2458,26 @@ private:
                 continue;
             }
             const CasterClip& clip = caster_clips[c * Scene::CasterTables + table];
+            bool inside = true;
             for (u32 p = 0; p < clip.planes.size(); p++) {
                 const std::array<double, 4>& plane = clip.planes[p];
                 const std::array<double, 4>& sizes = clip.sizes[p / 2];
-                const double least = plane[0] * centre[0] + plane[1] * centre[1] +
-                                     plane[2] * centre[2] + plane[3] -
-                                     (std::abs(plane[0]) * half[0] + std::abs(plane[1]) * half[1] +
-                                      std::abs(plane[2]) * half[2]);
+                const double middle =
+                    plane[0] * centre[0] + plane[1] * centre[1] + plane[2] * centre[2] + plane[3];
+                const double reach = std::abs(plane[0]) * half[0] + std::abs(plane[1]) * half[1] +
+                                     std::abs(plane[2]) * half[2];
                 const double rounding =
                     Rounding * (sizes[0] * magnitude[0] + sizes[1] * magnitude[1] +
                                 sizes[2] * magnitude[2] + sizes[3]);
                 // A box without bounds compares false and stays.
-                if (least > rounding) {
+                if (middle - reach > rounding) {
                     mask &= ~(1u << c);
+                    inside = false;
                     break;
                 }
+                inside = inside && middle + reach <= 0.0;
             }
+            within |= (inside ? 1u : 0u) << c;
         }
         return mask;
     }
@@ -2663,6 +2805,8 @@ private:
     }
 
     std::array<CasterClip, Scene::Cascades * Scene::CasterTables> caster_clips{};
+    // The commands each cascade's list holds beyond one per caster.
+    std::array<std::array<u32, Scene::CasterLists>, Scene::Cascades> caster_runs{};
     Scene::Header header{};
     u64 frame;
     std::chrono::steady_clock::time_point part_start;

@@ -10,6 +10,9 @@ namespace Gr2Port::Scene {
 
 inline constexpr u32 MaxDraws = 32768;
 inline constexpr u32 MaxCasters = 4096;
+/// The commands of a cascade's list: one per caster, and up to MaxCasters more for the casters
+/// drawn as several runs of their indices.
+inline constexpr u32 MaxCasterCommands = 2 * MaxCasters;
 inline constexpr u32 Cascades = 3;
 /// The view-projections of each cascade: the plain one, and two that push casters along the light
 /// (item flags 0x10 and 0x20).
@@ -1354,11 +1357,12 @@ inline constexpr u64 ShadowsOffset = 1024;
 inline constexpr u64 DrawsOffset = 2048;
 inline constexpr u64 CommandsOffset = DrawsOffset + MaxDraws * sizeof(Draw);
 inline constexpr u64 CastersOffset = CommandsOffset + MaxDraws * sizeof(Command);
-/// MaxCasters commands per cascade and list, at (cascade * CasterLists + list) * MaxCasters.
+/// MaxCasterCommands commands per cascade and list, at
+/// (cascade * CasterLists + list) * MaxCasterCommands.
 inline constexpr u64 CasterCommandsOffset = CastersOffset + MaxCasters * sizeof(Caster);
 /// MaxPaletteRows rows of 16 bytes.
 inline constexpr u64 PalettesOffset =
-    CasterCommandsOffset + Cascades * CasterLists * MaxCasters * sizeof(Command);
+    CasterCommandsOffset + Cascades * CasterLists * MaxCasterCommands * sizeof(Command);
 inline constexpr u64 SkinJobsOffset = PalettesOffset + MaxPaletteRows * 16;
 inline constexpr u64 EffectorsOffset = SkinJobsOffset + MaxSkinJobs * sizeof(SkinJob);
 inline constexpr u64 SoftBodyJobsOffset = EffectorsOffset + sizeof(Effectors);

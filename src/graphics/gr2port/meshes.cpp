@@ -5,10 +5,12 @@
 #include <array>
 #include <bit>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <deque>
 #include <limits>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -138,6 +140,8 @@ struct Resident {
     u32 indices = 0;
     bool skinned = false;
     bool cloth = false;
+    // Mesh::chunk_tree, which lives as long as the mesh's buffers.
+    std::unique_ptr<ChunkBox[]> chunk_tree;
 };
 struct Retiring {
     u32 handle;
@@ -492,6 +496,82 @@ void SetBox(const Source& source, u32 vertex_count, Mesh& mesh) {
     std::copy(high.begin(), high.end(), mesh.box_high);
 }
 
+// The tree of boxes around the positions that each chunk of a shape's indices names, for
+// Mesh::chunk_tree, and the chunks. None for a shape whose mesh has no box, or with one chunk.
+std::unique_ptr<ChunkBox[]> BuildChunks(const Source& source, const Mesh& mesh, u32& chunks) {
+    chunks = 0;
+    const u32 indices = source.index_bytes / 2;
+    const auto finite = [](float value) { return std::isfinite(value); };
+    if (indices <= ChunkIndices || !std::all_of(mesh.box_low, mesh.box_low + 3, finite) ||
+        !std::all_of(mesh.box_high, mesh.box_high + 3, finite)) {
+        return nullptr;
+    }
+    const u32 count = (indices + ChunkIndices - 1) / ChunkIndices;
+    const bool halves = (source.position >> 8) == FormatRgba16Float;
+    const auto* index = reinterpret_cast<const u16*>(source.indices);
+    const u8* positions = reinterpret_cast<const u8*>(source.vertices) + (source.position & 0xff);
+    std::vector<ChunkBox> leaves(count);
+    for (u32 chunk = 0; chunk < count; chunk++) {
+        const u32 end = std::min(indices, (chunk + 1) * ChunkIndices);
+        ChunkBox& box = leaves[chunk];
+        if (halves) {
+            // Halves order as their sign and magnitude do.
+            std::array<s32, 3> low;
+            std::array<s32, 3> high;
+            low.fill(std::numeric_limits<s32>::max());
+            high.fill(std::numeric_limits<s32>::min());
+            for (u32 i = chunk * ChunkIndices; i < end; i++) {
+                std::array<u16, 3> position;
+                std::memcpy(position.data(), positions + u64{index[i]} * source.stride,
+                            sizeof(position));
+                for (u32 k = 0; k < 3; k++) {
+                    const s32 magnitude = position[k] & 0x7fff;
+                    const s32 key = (position[k] & 0x8000) != 0 ? -magnitude : magnitude;
+                    low[k] = std::min(low[k], key);
+                    high[k] = std::max(high[k], key);
+                }
+            }
+            const auto value = [](s32 key) {
+                return FromHalf(key < 0 ? 0x8000u | static_cast<u32>(-key) : static_cast<u32>(key));
+            };
+            for (u32 k = 0; k < 3; k++) {
+                box.low[k] = value(low[k]);
+                box.high[k] = value(high[k]);
+            }
+            continue;
+        }
+        std::fill_n(box.low, 3, std::numeric_limits<float>::infinity());
+        std::fill_n(box.high, 3, -std::numeric_limits<float>::infinity());
+        for (u32 i = chunk * ChunkIndices; i < end; i++) {
+            std::array<float, 3> position;
+            std::memcpy(position.data(), positions + u64{index[i]} * source.stride,
+                        sizeof(position));
+            for (u32 k = 0; k < 3; k++) {
+                box.low[k] = position[k] < box.low[k] ? position[k] : box.low[k];
+                box.high[k] = position[k] > box.high[k] ? position[k] : box.high[k];
+            }
+        }
+    }
+    auto tree = std::make_unique<ChunkBox[]>(2 * count - 1);
+    const auto build = [&](const auto& self, u32 node, u32 low, u32 high) -> void {
+        if (high - low == 1) {
+            tree[node] = leaves[low];
+            return;
+        }
+        const u32 middle = (low + high) / 2;
+        const u32 second = node + 2 * (middle - low);
+        self(self, node + 1, low, middle);
+        self(self, second, middle, high);
+        for (u32 k = 0; k < 3; k++) {
+            tree[node].low[k] = std::min(tree[node + 1].low[k], tree[second].low[k]);
+            tree[node].high[k] = std::max(tree[node + 1].high[k], tree[second].high[k]);
+        }
+    };
+    build(build, 0, 0, count);
+    chunks = count;
+    return tree;
+}
+
 // Reads a shape's streams; false when the shaders cannot draw it. A shape without indices, as the
 // game's Branch shapes, which it draws as patches of their vertices, gets no indices.
 bool ReadShape(VAddr shape, Source& source) {
@@ -820,6 +900,8 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             mesh.tangent = source.tangent;
             mesh.vertex_color = source.vertex_color;
             SetBox(source, vertex_count, mesh);
+            std::unique_ptr<ChunkBox[]> chunk_tree = BuildChunks(source, mesh, mesh.chunks);
+            mesh.chunk_tree = chunk_tree.get();
             mesh.skin = source.skin != 0 ? vertices.address + skin_offset : 0;
             mesh.particles = valid_cloth ? vertices.address + particles_offset : 0;
             mesh.constraints = valid_cloth ? vertices.address + constraints_offset : 0;
@@ -842,6 +924,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
                 .indices = source.index_bytes / 2,
                 .skinned = source.skin != 0,
                 .cloth = valid_cloth,
+                .chunk_tree = std::move(chunk_tree),
             };
             g_staging.push_back(staging);
             g_stats.meshes++;
