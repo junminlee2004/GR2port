@@ -451,24 +451,11 @@ set(SYSTEM_LIBS src/core/libraries/system/commondialog.cpp
                 src/core/libraries/ngs2/ngs2_error.h
                 src/core/libraries/ngs2/ngs2_impl.cpp
                 src/core/libraries/ngs2/ngs2_impl.h
-                src/core/libraries/ngs2/ngs2_custom.cpp
                 src/core/libraries/ngs2/ngs2_custom.h
-                src/core/libraries/ngs2/ngs2_reverb.cpp
                 src/core/libraries/ngs2/ngs2_reverb.h
-                src/core/libraries/ngs2/ngs2_geom.cpp
                 src/core/libraries/ngs2/ngs2_geom.h
-                src/core/libraries/ngs2/ngs2_pan.cpp
                 src/core/libraries/ngs2/ngs2_pan.h
-                src/core/libraries/ngs2/ngs2_report.cpp
                 src/core/libraries/ngs2/ngs2_report.h
-                src/core/libraries/ngs2/ngs2_eq.cpp
-                src/core/libraries/ngs2/ngs2_eq.h
-                src/core/libraries/ngs2/ngs2_mastering.cpp
-                src/core/libraries/ngs2/ngs2_mastering.h
-                src/core/libraries/ngs2/ngs2_sampler.cpp
-                src/core/libraries/ngs2/ngs2_sampler.h
-                src/core/libraries/ngs2/ngs2_submixer.cpp
-                src/core/libraries/ngs2/ngs2_submixer.h
                 src/core/libraries/ngs2/ngs2_mixer.cpp
                 src/core/libraries/ngs2/ngs2_mixer.h
                 src/core/libraries/ngs2/ngs2_vag_coefs.h
