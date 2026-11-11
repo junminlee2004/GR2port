@@ -55,6 +55,12 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 - FSR 3.1 + FSR 4.1 support (Windows + Linux) + DLSS support (Windows Only)
 - Keyboard, XBOX, NINTENDO and STEAM (Steam Deck, Steam Controller) button prompts for GR2
 
+<img width="789" height="443" alt="image" src="https://github.com/user-attachments/assets/8e14748f-c228-42f1-9b4b-33822427d86b" />
+> [!NOTE]
+> You can launch Gravity Rush 2 without the launcher by using the -nolauncher launch option.
+
+
+
 # Keyboard and Mouse + Controller Mappings
 
 | Button | Function |
