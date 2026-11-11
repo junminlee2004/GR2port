@@ -10,8 +10,8 @@
 layout(local_size_x = 32) in;
 
 layout(set = 0, binding = 0) uniform sampler3D noise;
-layout(set = 0, binding = 1) uniform sampler3D density;
-layout(set = 0, binding = 2) uniform sampler3D darkness;
+// The clouds' density in red and darkness in green.
+layout(set = 0, binding = 1) uniform sampler3D clouds;
 layout(set = 0, binding = 3) uniform sampler3D shadow;
 layout(set = 0, binding = 4, rgba16f) uniform writeonly image3D scattered;
 
@@ -64,11 +64,11 @@ void main() {
             clamp((1.0 - length(position) * inverse_reach) * inverse_sustain, 0.0, 1.0);
         const float smooth_fade = fade * fade * (3.0 - 2.0 * fade);
         const ivec3 cell = ivec3(column, i);
-        const float extinction =
-            max(fog.light_color.w, texelFetch(density, cell, 0).r * smooth_fade * DensityScale);
+        const vec2 cloud_cell = texelFetch(clouds, cell, 0).rg;
+        const float extinction = max(fog.light_color.w, cloud_cell.r * smooth_fade * DensityScale);
         const float step_depth = path * extinction;
         const float sun = pow(texelFetch(shadow, cell, 0).r, 4.0);
-        const float visible = exp(-fog.darkness_scale * texelFetch(darkness, cell, 0).r);
+        const float visible = exp(-fog.darkness_scale * cloud_cell.g);
         const float air_visible = min(visible, 1.0 + fog.shadow_darkness * (sun - 1.0));
         const float cloud_visible = min(visible, 1.0 + fog.cloud_shadow * (sun - 1.0));
         light_in += shown * (air * slice * air_visible + cloud * step_depth * cloud_visible);

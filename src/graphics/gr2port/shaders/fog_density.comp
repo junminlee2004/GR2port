@@ -10,14 +10,13 @@
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
-layout(set = 0, binding = 0) uniform sampler3D last_density;
-layout(set = 0, binding = 1) uniform sampler3D last_darkness;
+// The clouds' density in red and darkness in green.
+layout(set = 0, binding = 0) uniform sampler3D last_clouds;
 layout(set = 0, binding = 2) uniform sampler3D stratus;
 layout(set = 0, binding = 3) uniform sampler3D stratus_darkness;
 layout(set = 0, binding = 4) uniform sampler3D region;
 layout(set = 0, binding = 5) uniform sampler3D region_darkness;
-layout(set = 0, binding = 6, r8) uniform writeonly image3D density_out;
-layout(set = 0, binding = 7, r8) uniform writeonly image3D darkness_out;
+layout(set = 0, binding = 6, rg8) uniform writeonly image3D clouds_out;
 layout(set = 1, binding = 0) uniform texture2D textures[];
 layout(set = 1, binding = 1) uniform sampler texture_sampler;
 
@@ -92,9 +91,8 @@ void main() {
     // The history follows the cell's centre without the jitter.
     const vec3 centre = FogPosition(FogNdc(cell, 0.0), 0.5 * (a * a + b * b), fog.projection);
     const vec3 last = FogLastCell(centre, light.view_to_previous, fog.projection);
-    const float kept_density = textureLod(last_density, last, 0.0).r;
-    const float kept_darkness = textureLod(last_darkness, last, 0.0).r;
-    imageStore(density_out, cell,
-               vec4(mix(kept_density, min(1.0, DensityScale * density), DensityBlend)));
-    imageStore(darkness_out, cell, vec4(mix(kept_darkness, darkness, DarknessBlend)));
+    const vec2 kept = textureLod(last_clouds, last, 0.0).rg;
+    imageStore(clouds_out, cell,
+               vec4(mix(kept.r, min(1.0, DensityScale * density), DensityBlend),
+                    mix(kept.g, darkness, DarknessBlend), 0.0, 0.0));
 }

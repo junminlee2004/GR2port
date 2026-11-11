@@ -36,6 +36,8 @@ constexpr vk::Extent3D MapExtent{128, 128, 32};
 constexpr vk::Extent3D NoiseExtent{64, 64, 64};
 constexpr u64 NoiseBytes = 64 * 64 * 64;
 constexpr vk::Format CellFormat = vk::Format::eR8Unorm;
+// The clouds' density in red and darkness in green.
+constexpr vk::Format CloudFormat = vk::Format::eR8G8Unorm;
 constexpr vk::Format ScatterFormat = vk::Format::eR16G16B16A16Sfloat;
 // The stratus and region maps; the Perlin and fbm noise.
 constexpr u32 Layers = 2;
@@ -68,8 +70,7 @@ vk::Sampler g_wrap_sampler;
 vk::Sampler g_map_sampler;
 vk::Sampler g_nearest_sampler;
 // Two of each: one the frame writes, the other the last frame's.
-std::array<Image, 2> g_density;
-std::array<Image, 2> g_darkness;
+std::array<Image, 2> g_clouds;
 std::array<Image, 2> g_shadow;
 Image g_scattered;
 std::array<Image, Layers> g_maps;
@@ -166,10 +167,9 @@ bool CreateVolumes() {
     const vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eStorage |
                                       vk::ImageUsageFlagBits::eSampled |
                                       vk::ImageUsageFlagBits::eTransferDst;
-    for (auto* volumes : {&g_density, &g_darkness, &g_shadow}) {
-        for (Image& image : *volumes) {
-            image = g_memory->CreateVolume(CellFormat, g_cells_extent, usage);
-        }
+    for (u32 i = 0; i < 2; i++) {
+        g_clouds[i] = g_memory->CreateVolume(CloudFormat, g_cells_extent, usage);
+        g_shadow[i] = g_memory->CreateVolume(CellFormat, g_cells_extent, usage);
     }
     g_scattered = g_memory->CreateVolume(ScatterFormat, g_cells_extent, usage);
     for (u32 i = 0; i < Layers; i++) {
@@ -183,7 +183,7 @@ bool CreateVolumes() {
     }
     g_staging = g_memory->CreateBuffer(Noises * NoiseBytes, vk::BufferUsageFlagBits::eTransferSrc,
                                        Placement::Staging);
-    for (const auto* volumes : {&g_density, &g_darkness, &g_shadow}) {
+    for (const auto* volumes : {&g_clouds, &g_shadow}) {
         for (const Image& image : *volumes) {
             if (!image.image) {
                 return false;
@@ -205,22 +205,18 @@ bool CreateSets() {
         {0, Combined, 1, Compute},
         {1, Storage, 1, Compute},
     }};
-    // The last frame's density and darkness, each map and its darkness, the frame's density and
-    // darkness.
-    const std::array<vk::DescriptorSetLayoutBinding, 8> cells{{
+    // The last frame's clouds, each map and its darkness, the frame's clouds.
+    const std::array<vk::DescriptorSetLayoutBinding, 6> cells{{
         {0, Combined, 1, Compute},
-        {1, Combined, 1, Compute},
         {2, Combined, 1, Compute},
         {3, Combined, 1, Compute},
         {4, Combined, 1, Compute},
         {5, Combined, 1, Compute},
         {6, Storage, 1, Compute},
-        {7, Storage, 1, Compute},
     }};
-    const std::array<vk::DescriptorSetLayoutBinding, 5> scatter{{
+    const std::array<vk::DescriptorSetLayoutBinding, 4> scatter{{
         {0, Combined, 1, Compute},
         {1, Combined, 1, Compute},
-        {2, Combined, 1, Compute},
         {3, Combined, 1, Compute},
         {4, Storage, 1, Compute},
     }};
@@ -237,8 +233,8 @@ bool CreateSets() {
     // Bakes 2, darkness 2, cells 2, shadows 2, scattering 4, apply 1.
     constexpr u32 Sets = 13;
     const std::array<vk::DescriptorPoolSize, 2> sizes{{
-        {Combined, 2 + 2 + 2 * 6 + 2 + 4 * 4 + 2},
-        {Storage, 2 + 2 + 2 * 2 + 2 + 4},
+        {Combined, 2 + 2 + 2 * 5 + 2 + 4 * 3 + 2},
+        {Storage, 2 + 2 + 2 + 2 + 4},
     }};
     g_pool = d.device
                  .createDescriptorPool({.maxSets = Sets,
@@ -278,21 +274,18 @@ bool CreateSets() {
     }
     for (u32 i = 0; i < 2; i++) {
         const u32 last = 1 - i;
-        Write(g_cell_sets[i], 0, 0, Combined, g_density[last], g_clamp_sampler);
-        Write(g_cell_sets[i], 1, 0, Combined, g_darkness[last], g_clamp_sampler);
+        Write(g_cell_sets[i], 0, 0, Combined, g_clouds[last], g_clamp_sampler);
         for (u32 k = 0; k < Layers; k++) {
             Write(g_cell_sets[i], 2 + 2 * k, 0, Combined, g_maps[k], g_map_sampler);
             Write(g_cell_sets[i], 3 + 2 * k, 0, Combined, g_map_darkness[k], g_map_sampler);
         }
-        Write(g_cell_sets[i], 6, 0, Storage, g_density[i], {});
-        Write(g_cell_sets[i], 7, 0, Storage, g_darkness[i], {});
+        Write(g_cell_sets[i], 6, 0, Storage, g_clouds[i], {});
         Write(g_shadow_sets[i], 0, 0, Combined, g_shadow[last], g_clamp_sampler);
         Write(g_shadow_sets[i], 1, 0, Storage, g_shadow[i], {});
         for (u32 s = 0; s < 2; s++) {
             const vk::DescriptorSet set = g_scatter_sets[i][s];
             Write(set, 0, 0, Combined, g_noise[PerlinNoise], g_wrap_sampler);
-            Write(set, 1, 0, Combined, g_density[i], g_nearest_sampler);
-            Write(set, 2, 0, Combined, g_darkness[i], g_nearest_sampler);
+            Write(set, 1, 0, Combined, g_clouds[i], g_nearest_sampler);
             Write(set, 3, 0, Combined, g_shadow[s], g_nearest_sampler);
             Write(set, 4, 0, Storage, g_scattered, {});
         }
@@ -306,7 +299,7 @@ bool CreateSets() {
 void Clear(vk::CommandBuffer cmd) {
     const auto& dl = g_device->dispatch;
     std::vector<const Image*> volumes{&g_scattered};
-    for (const auto* set : {&g_density, &g_darkness, &g_shadow, &g_maps, &g_map_darkness}) {
+    for (const auto* set : {&g_clouds, &g_shadow, &g_maps, &g_map_darkness}) {
         for (const Image& image : *set) {
             volumes.push_back(&image);
         }
@@ -336,8 +329,7 @@ void Clear(vk::CommandBuffer cmd) {
                             range, dl);
     };
     for (u32 i = 0; i < 2; i++) {
-        clear(g_density[i], 0.0f, 0.0f);
-        clear(g_darkness[i], 0.0f, 0.0f);
+        clear(g_clouds[i], 0.0f, 0.0f);
         clear(g_shadow[i], 1.0f, 1.0f);
     }
     clear(g_scattered, 0.0f, 1.0f);
