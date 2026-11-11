@@ -6,6 +6,8 @@
 #include <chrono>
 #include <cstring>
 #include <memory>
+#include <mutex>
+#include <vector>
 
 #include <fmt/ranges.h>
 
@@ -67,6 +69,9 @@ constexpr u32 CropTop = 6;
 constexpr u32 KeptSurfaces = 8;
 // The bytes of a surface's copy: AvPlayer's NV12 frame of up to 1920x1088, luma and chroma.
 constexpr u64 FrameBytes = 1920 * 1088 * 3 / 2;
+// A frame buffer goes back once its slot is unwritten this long, and is deleted GraceSeconds later.
+constexpr u32 IdleSeconds = 30;
+constexpr u32 GraceSeconds = 5;
 constexpr u32 LoggedJobs = 4;
 constexpr u32 LoggedKeeps = 8;
 
@@ -84,9 +89,21 @@ struct Slot {
     std::atomic<u32> published{0};
     std::array<std::atomic<u32>, 7> constants{};
     std::array<std::unique_ptr<u8[]>, 2> pixels;
+    /// Seconds since the start at the last copy into the slot.
+    std::atomic<u32> written{0};
+};
+
+// A frame buffer the collector took, deleted once no reader can still hold it.
+struct Freed {
+    std::unique_ptr<u8[]> buffer;
+    u32 at;
 };
 
 VAddr g_base = 0;
+// The copies, the publishes and the collector take this; readers use the published buffer only.
+std::mutex g_buffers;
+std::vector<Freed> g_freed;
+const auto g_start = std::chrono::steady_clock::now();
 std::array<Slot, Surfaces> g_slots;
 std::array<Slot, KeptSurfaces> g_kept;
 u32 g_next = 0;
@@ -110,11 +127,38 @@ Slot& SlotOf(Slots& slots, u32& next, VAddr surface) {
     return slot;
 }
 
+u32 Seconds() {
+    return static_cast<u32>(
+        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - g_start)
+            .count());
+}
+
+// Under g_buffers: gives the collector the back buffer of a slot unwritten for IdleSeconds, and
+// both buffers of a slot no surface owns.
+template <typename Slots>
+void CollectSlots(Slots& slots, u32 now) {
+    for (Slot& slot : slots) {
+        const bool owned = slot.surface.load(std::memory_order_relaxed) != 0;
+        const u32 published = slot.published.load(std::memory_order_relaxed);
+        if (owned && now - slot.written.load(std::memory_order_relaxed) < IdleSeconds) {
+            continue;
+        }
+        for (u32 i = 0; i < slot.pixels.size(); i++) {
+            if ((owned && i == published) || !slot.pixels[i]) {
+                continue;
+            }
+            g_freed.push_back({std::move(slot.pixels[i]), now});
+        }
+    }
+}
+
 // Copies bytes from data into the buffer of slot readers do not read; false when they do not fit.
 bool CopyFrame(Slot& slot, const void* data, u64 bytes) {
     if (data == nullptr || bytes == 0 || bytes > FrameBytes) {
         return false;
     }
+    std::scoped_lock lock{g_buffers};
+    slot.written.store(Seconds(), std::memory_order_relaxed);
     auto& buffer = slot.pixels[slot.published.load(std::memory_order_relaxed) ^ 1];
     if (!buffer) {
         buffer = std::make_unique<u8[]>(FrameBytes);
@@ -133,6 +177,7 @@ bool CopyFrame(Slot& slot, const void* data, u64 bytes) {
 
 void Publish(Slot& slot, VAddr surface, VAddr source, bool copied,
              const std::array<u32, 7>& values) {
+    std::scoped_lock lock{g_buffers};
     const u32 sequence = slot.sequence.load(std::memory_order_relaxed);
     slot.sequence.store(sequence + 1, std::memory_order_relaxed);
     std::atomic_thread_fence(std::memory_order_release);
@@ -367,6 +412,14 @@ Kept FindKept(VAddr surface) {
         return kept.source != 0 ? kept : Kept{};
     }
     return {};
+}
+
+void Collect() {
+    const u32 now = Seconds();
+    std::scoped_lock lock{g_buffers};
+    CollectSlots(g_slots, now);
+    CollectSlots(g_kept, now);
+    std::erase_if(g_freed, [now](const Freed& f) { return now - f.at >= GraceSeconds; });
 }
 
 Frame Find(VAddr surface) {

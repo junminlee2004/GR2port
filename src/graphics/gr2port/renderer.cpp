@@ -38,6 +38,7 @@
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/motion_blur.h"
+#include "graphics/gr2port/movies.h"
 #include "graphics/gr2port/overlays.h"
 #include "graphics/gr2port/particles.h"
 #include "graphics/gr2port/pass_times.h"
@@ -1204,6 +1205,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
     Textures::Refresh(cmd, frame,
                       std::span{header.dynamic}.first(
                           std::min(header.dynamic_textures, Scene::MaxDynamicTextures)));
+    Movies::Collect();
     PassTimes::Mark(cmd, PassTimes::Pass::Uploads);
     if (timestamps) {
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, timestamps,

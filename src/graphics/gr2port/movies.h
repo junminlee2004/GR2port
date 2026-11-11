@@ -43,6 +43,10 @@ struct Frame {
 /// Any thread: the last copy into the surface at address.
 Frame Find(VAddr surface);
 
+/// Render thread, once a frame: frees the frame copies of movie slots left unwritten, keeping
+/// each published frame a surface still shows.
+void Collect();
+
 /// A slot's surface and the generation of its last job; a surface of 0 for an empty slot.
 struct Job {
     VAddr surface;
