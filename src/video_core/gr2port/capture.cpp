@@ -964,6 +964,23 @@ public:
         header.depth_bias[cascade][1] = slope;
     }
 
+    // Keeps the side planes of a cascade's view-projection for a caster table: matrix as the
+    // shader multiplies it, clip = matrix * world.
+    void SetCasterClip(u32 cascade, u32 table, const float* matrix) {
+        CasterClip& clip = caster_clips[cascade * Scene::CasterTables + table];
+        for (u32 j = 0; j < 4; j++) {
+            const double x = matrix[4 * j];
+            const double y = matrix[4 * j + 1];
+            const double w = matrix[4 * j + 3];
+            clip.planes[0][j] = x - w;
+            clip.planes[1][j] = -x - w;
+            clip.planes[2][j] = y - w;
+            clip.planes[3][j] = -y - w;
+            clip.sizes[0][j] = std::abs(x) + std::abs(w);
+            clip.sizes[1][j] = std::abs(y) + std::abs(w);
+        }
+    }
+
     const Scene::Header& Header() const {
         return header;
     }
@@ -2080,6 +2097,14 @@ public:
         }
         const bool alpha_tested = alpha_reference >= 0.0f && texture != 0;
         const u32 list = (alpha_tested ? 2 : 0) + ((flags & 0x08) != 0 ? 0 : 1);
+        // A caster that is neither deformed nor skinned draws its mesh's positions as they are.
+        const u32 held =
+            vertices == mesh->vertices && skin.bones == 0
+                ? CascadesHolding(mask, table, reinterpret_cast<const float*>(world), *mesh)
+                : mask;
+        if (held == 0) {
+            return;
+        }
         const u32 i = header.casters++;
         Scene::Caster& caster = casters[i];
         std::memcpy(caster.world, reinterpret_cast<const void*>(world), MatrixBytes);
@@ -2094,7 +2119,7 @@ public:
         caster.palette = skin.palette;
         caster.bones = skin.bones;
         for (u32 c = 0; c < Scene::Cascades; c++) {
-            if ((mask >> c & 1) == 0) {
+            if ((held >> c & 1) == 0) {
                 continue;
             }
             header.caster_indices[c] += count;
@@ -2227,6 +2252,66 @@ private:
         u64 palette = 0;
         u32 bones = 0;
     };
+
+    // A cascade's side planes for a caster table, over a world position (x, y, z, 1): x - w,
+    // -x - w, y - w and -y - w of its clip position, each above 0 outside the cascade. Then, for
+    // the x planes and for the y planes, the magnitudes of the matrix entries a plane takes.
+    struct CasterClip {
+        std::array<std::array<double, 4>, 4> planes;
+        std::array<std::array<double, 4>, 2> sizes;
+    };
+
+    // The cascades of mask a caster can draw into, when its world matrix is affine and its
+    // positions lie in mesh's box: not those with the whole box past one side plane. Float
+    // arithmetic leaves the shader's clip position within 2^-21 of the sum of its terms'
+    // magnitudes; a box counts as past a plane only by more than 32 times that. The depth planes
+    // are not tested: the shader clamps the depth.
+    u32 CascadesHolding(u32 mask, u32 table, const float* world, const Meshes::Mesh& mesh) const {
+        constexpr double Rounding = 0x1p-16;
+        if (world[3] != 0.0f || world[7] != 0.0f || world[11] != 0.0f || world[15] != 1.0f) {
+            return mask;
+        }
+        // The box in world space: its centre, its half sizes along the world's axes, and the
+        // largest magnitudes the terms of a world position take.
+        std::array<double, 3> centre{};
+        std::array<double, 3> half{};
+        std::array<double, 3> magnitude{};
+        for (u32 i = 0; i < 3; i++) {
+            centre[i] = world[12 + i];
+            magnitude[i] = std::abs(world[12 + i]);
+            for (u32 k = 0; k < 3; k++) {
+                const double entry = world[4 * k + i];
+                const double middle = 0.5 * (double{mesh.box_low[k]} + double{mesh.box_high[k]});
+                const double reach = 0.5 * (double{mesh.box_high[k]} - double{mesh.box_low[k]});
+                centre[i] += entry * middle;
+                half[i] += std::abs(entry) * reach;
+                magnitude[i] += std::abs(entry) * (std::abs(middle) + reach);
+            }
+        }
+        for (u32 c = 0; c < Scene::Cascades; c++) {
+            if ((mask >> c & 1) == 0) {
+                continue;
+            }
+            const CasterClip& clip = caster_clips[c * Scene::CasterTables + table];
+            for (u32 p = 0; p < clip.planes.size(); p++) {
+                const std::array<double, 4>& plane = clip.planes[p];
+                const std::array<double, 4>& sizes = clip.sizes[p / 2];
+                const double least = plane[0] * centre[0] + plane[1] * centre[1] +
+                                     plane[2] * centre[2] + plane[3] -
+                                     (std::abs(plane[0]) * half[0] + std::abs(plane[1]) * half[1] +
+                                      std::abs(plane[2]) * half[2]);
+                const double rounding =
+                    Rounding * (sizes[0] * magnitude[0] + sizes[1] * magnitude[1] +
+                                sizes[2] * magnitude[2] + sizes[3]);
+                // A box without bounds compares false and stays.
+                if (least > rounding) {
+                    mask &= ~(1u << c);
+                    break;
+                }
+            }
+        }
+        return mask;
+    }
 
     void DropSoftBody(Scene::SoftBodyDrop reason) {
         header.dropped_soft_bodies[static_cast<u32>(reason)]++;
@@ -2550,6 +2635,7 @@ private:
         return true;
     }
 
+    std::array<CasterClip, Scene::Cascades * Scene::CasterTables> caster_clips{};
     Scene::Header header{};
     u64 frame;
     std::chrono::steady_clock::time_point part_start;
@@ -2643,6 +2729,7 @@ void WriteShadows(VAddr view, u8* packet, Writer& writer) {
             }
             std::memcpy(shadows->view_projection[c * Scene::CasterTables + table],
                         reinterpret_cast<const void*>(matrix), MatrixBytes);
+            writer.SetCasterClip(c, table, reinterpret_cast<const float*>(matrix));
         }
     }
     writer.SetCascades(mask);

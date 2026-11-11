@@ -3,8 +3,10 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstring>
 #include <deque>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <string>
@@ -390,6 +392,77 @@ u32 ReadTexcoord(VAddr vb, u32 skip = 0) {
     return texcoord;
 }
 
+// The game's vertex format table: RGBA16 FLOAT.
+constexpr u32 FormatRgba16Float = 7;
+
+// A half float's value.
+float FromHalf(u32 half) {
+    const u32 sign = (half & 0x8000) << 16;
+    const u32 exponent = half >> 10 & 0x1f;
+    const u32 fraction = half & 0x3ff;
+    if (exponent == 0) {
+        // Zero or a subnormal.
+        const float value = static_cast<float>(fraction) * 0x1p-24f;
+        return sign != 0 ? -value : value;
+    }
+    const u32 wide = exponent == 0x1f ? 0xff : exponent + 112;
+    return std::bit_cast<float>(sign | wide << 23 | fraction << 13);
+}
+
+// Sets mesh's box around the positions LoadPosition of vertex.glsl reads from the shape's vertex
+// data, which every index names. A NaN is no bound of a float position and, with a half
+// position, leaves the box without that bound.
+void SetBox(const Source& source, u32 vertex_count, Mesh& mesh) {
+    constexpr float Unbounded = std::numeric_limits<float>::infinity();
+    const u32 offset = source.position & 0xff;
+    const bool halves = (source.position >> 8) == FormatRgba16Float;
+    std::fill_n(mesh.box_low, 3, -Unbounded);
+    std::fill_n(mesh.box_high, 3, Unbounded);
+    if (vertex_count == 0 || offset + (halves ? 6 : 12) > source.stride) {
+        return;
+    }
+    const u8* vertex = reinterpret_cast<const u8*>(source.vertices) + offset;
+    if (halves) {
+        // Halves order as their sign and magnitude do.
+        std::array<s32, 3> low;
+        std::array<s32, 3> high;
+        low.fill(std::numeric_limits<s32>::max());
+        high.fill(std::numeric_limits<s32>::min());
+        for (u32 i = 0; i < vertex_count; i++, vertex += source.stride) {
+            std::array<u16, 3> position;
+            std::memcpy(position.data(), vertex, sizeof(position));
+            for (u32 k = 0; k < 3; k++) {
+                const s32 magnitude = position[k] & 0x7fff;
+                const s32 key = (position[k] & 0x8000) != 0 ? -magnitude : magnitude;
+                low[k] = std::min(low[k], key);
+                high[k] = std::max(high[k], key);
+            }
+        }
+        const auto value = [](s32 key) {
+            return FromHalf(key < 0 ? 0x8000u | static_cast<u32>(-key) : static_cast<u32>(key));
+        };
+        for (u32 k = 0; k < 3; k++) {
+            mesh.box_low[k] = value(low[k]);
+            mesh.box_high[k] = value(high[k]);
+        }
+        return;
+    }
+    std::array<float, 3> low;
+    std::array<float, 3> high;
+    low.fill(Unbounded);
+    high.fill(-Unbounded);
+    for (u32 i = 0; i < vertex_count; i++, vertex += source.stride) {
+        std::array<float, 3> position;
+        std::memcpy(position.data(), vertex, sizeof(position));
+        for (u32 k = 0; k < 3; k++) {
+            low[k] = position[k] < low[k] ? position[k] : low[k];
+            high[k] = position[k] > high[k] ? position[k] : high[k];
+        }
+    }
+    std::copy(low.begin(), low.end(), mesh.box_low);
+    std::copy(high.begin(), high.end(), mesh.box_high);
+}
+
 // Reads a shape's streams; false when the shaders cannot draw it. A shape without indices, as the
 // game's Branch shapes, which it draws as patches of their vertices, gets no indices.
 bool ReadShape(VAddr shape, Source& source) {
@@ -653,6 +726,7 @@ void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
             mesh.normal = source.normal;
             mesh.tangent = source.tangent;
             mesh.vertex_color = source.vertex_color;
+            SetBox(source, vertex_count, mesh);
             mesh.skin = source.skin != 0 ? vertices.address + skin_offset : 0;
             mesh.particles = valid_cloth ? vertices.address + particles_offset : 0;
             mesh.constraints = valid_cloth ? vertices.address + constraints_offset : 0;

@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <limits>
 
 #include "video_core/gr2port/device.h"
 
@@ -45,6 +46,14 @@ struct Mesh {
     u32 normal = 0;
     u32 tangent = 0;
     u32 vertex_color = 0;
+    /// The box around the positions the shaders load from the vertex data, in the shape's own
+    /// space. A shape whose positions the box cannot hold has one without bounds.
+    float box_low[3]{-std::numeric_limits<float>::infinity(),
+                     -std::numeric_limits<float>::infinity(),
+                     -std::numeric_limits<float>::infinity()};
+    float box_high[3]{std::numeric_limits<float>::infinity(),
+                      std::numeric_limits<float>::infinity(),
+                      std::numeric_limits<float>::infinity()};
     /// The device address of the skin stream (four RGBA16 FLOAT weights, then four RGBA16 SINT
     /// bone indices, 16 bytes a vertex), 0 when the shape is not skinned.
     u64 skin = 0;
