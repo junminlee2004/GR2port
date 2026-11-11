@@ -38,13 +38,6 @@ function(add_host_shader FILENAME SHADER_NAME)
     set(SHADER_FILES ${SHADER_FILES} ${FILENAME} PARENT_SCOPE)
 endfunction()
 
-add_host_shader(color_to_ms_depth.frag color_to_ms_depth_frag)
-add_host_shader(ms_image_blit.frag ms_image_blit_frag)
-add_host_shader(ms_image_blit.frag ms_image_blit_msaa_frag SRC_MSAA=1)
-add_host_shader(fault_buffer_process.comp fault_buffer_process_comp)
-add_host_shader(fs_tri.vert fs_tri_vert)
-add_host_shader(post_process.frag post_process_frag)
-
 foreach(BPP IN ITEMS 8 16 32 64 96 128)
     add_host_shader(tiling.comp tiling_micro_${BPP}_comp BITS_PER_PIXEL=${BPP} IS_MACRO_TILED=0)
     add_host_shader(tiling.comp tiling_macro_${BPP}_comp BITS_PER_PIXEL=${BPP} IS_MACRO_TILED=1)

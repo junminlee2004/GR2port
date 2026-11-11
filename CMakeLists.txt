@@ -804,13 +804,11 @@ set(COMPANION_LIBS  src/core/libraries/companion/companion_httpd.cpp
 )
 set(DEV_TOOLS src/core/devtools/layer.cpp
               src/core/devtools/layer.h
-              src/core/devtools/layer_extra.cpp
               src/core/devtools/widget/common.h
               src/core/devtools/widget/frame_graph.cpp
               src/core/devtools/widget/frame_graph.h
               src/core/devtools/widget/gpu_memory.cpp
               src/core/devtools/widget/gpu_memory.h
-              src/core/devtools/widget/imgui_memory_editor.h
               src/core/devtools/widget/memory_map.cpp
               src/core/devtools/widget/memory_map.h
               src/core/devtools/widget/module_list.cpp
@@ -831,7 +829,6 @@ set(COMMON src/common/logging/classes.cpp
            src/common/bit_field.h
            src/common/bounded_threadsafe_queue.h
            src/common/concepts.h
-           src/common/cpu_pause.h
            src/common/cstring.h
            src/common/debug.h
            src/common/decoder.cpp
@@ -839,15 +836,12 @@ set(COMMON src/common/logging/classes.cpp
            src/common/elf_info.h
            src/common/endian.h
            src/common/enum.h
-           src/common/incremental_id.h
            src/common/interval_set.h
            src/common/io_file.cpp
            src/common/io_file.h
-           src/common/lru_cache.h
            src/common/error.cpp
            src/common/error.h
            src/common/fixed_value.h
-           src/common/func_traits.h
            src/common/gravity_rush.h
            src/common/native_clock.cpp
            src/common/native_clock.h
@@ -857,10 +851,7 @@ set(COMMON src/common/logging/classes.cpp
            src/common/polyfill_thread.h
            src/common/rdtsc.cpp
            src/common/rdtsc.h
-           src/common/recursive_lock.cpp
-           src/common/recursive_lock.h
            src/common/scope_exit.h
-           src/common/serdes.h
            src/common/sha1.h
            src/common/shared_first_mutex.h
            src/common/signal_context.h
@@ -876,7 +867,6 @@ set(COMMON src/common/logging/classes.cpp
            src/common/stb.h
            src/common/string_literal.h
            src/common/string_util.cpp
-           src/common/stream_copy.h
            src/common/string_util.h
            src/common/thread.cpp
            src/common/thread.h
