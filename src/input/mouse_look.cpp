@@ -22,16 +22,20 @@ Clock::time_point g_taken{};
 
 } // namespace
 
-bool Add(float dx, float dy) {
+void Add(float dx, float dy) {
     std::scoped_lock lock{g_mutex};
     if (Clock::now() - g_taken > Stale) {
         g_dx = 0.0f;
         g_dy = 0.0f;
-        return false;
+        return;
     }
     g_dx += dx;
     g_dy += dy;
-    return true;
+}
+
+bool Taken() {
+    std::scoped_lock lock{g_mutex};
+    return Clock::now() - g_taken <= Stale;
 }
 
 std::pair<float, float> Take() {

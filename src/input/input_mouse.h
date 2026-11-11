@@ -53,6 +53,10 @@ void EmulateGyro(GameController* controller, u32 interval);
 
 void ApplyMouseInputBlockers();
 
+// GR2port, main thread: a mouse event's movement in counts, for the cameras the mouse turns. They
+// take it as it comes; MousePolling's interval is too long to turn a camera smoothly.
+void OnMouseMotion(float dx, float dy);
+
 // Polls the mouse for changes
 Uint32 MousePolling(void* param, Uint32 id, Uint32 interval);
 

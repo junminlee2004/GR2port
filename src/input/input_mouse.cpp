@@ -234,7 +234,7 @@ void EmulateJoystick(GameController* controller, u32 interval) {
     // GR2port: a still mouse centres the stick once, so a pad's stick keeps working beside it.
     // While a camera takes the mouse directly, the mouse does not move the stick.
     static bool moved = false;
-    if (MouseLook::Add(d_x, d_y)) {
+    if (MouseLook::Taken()) {
         d_x = 0;
         d_y = 0;
     }
@@ -355,6 +355,16 @@ void ApplyMouseInputBlockers() {
     default:
         break;
     }
+}
+
+void OnMouseMotion(float dx, float dy) {
+    Axis axis_x, axis_y;
+    if (mouse_mode != MouseMode::Joystick || mouse_gyro_hold ||
+        !GetMouseJoystickAxes(axis_x, axis_y)) {
+        return;
+    }
+    MouseLook::Add(dx * mouse_sensitivity * mouse_sensitivity_x,
+                   dy * mouse_sensitivity * mouse_sensitivity_y);
 }
 
 Uint32 MousePolling(void* param, Uint32 id, Uint32 interval) {

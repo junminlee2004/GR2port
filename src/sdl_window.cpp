@@ -177,6 +177,9 @@ void WindowSDL::WaitEvent() {
         is_shown = event.type == SDL_EVENT_WINDOW_EXPOSED;
         OnResize();
         break;
+    case SDL_EVENT_MOUSE_MOTION:
+        Input::OnMouseMotion(event.motion.xrel, event.motion.yrel);
+        break;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
     case SDL_EVENT_MOUSE_BUTTON_UP:
     case SDL_EVENT_MOUSE_WHEEL:
