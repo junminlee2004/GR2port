@@ -122,7 +122,7 @@ Each key keeps its function in every type.
 
 # Contributing
 
-If you want to contribute, please feel free :)
+If you want to contribute, please feel free to do so :)
 
 # Special Thanks
 
