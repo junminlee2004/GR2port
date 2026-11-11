@@ -1,13 +1,18 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <array>
 #include <system_error>
 
 #include "common/aes.h"
-#include "common/key_manager.h"
 #include "common/logging/log.h"
 #include "common/path_util.h"
 #include "core/file_format/trp.h"
+
+// The key of the PS4's trophy files, the same on every console.
+constexpr std::array<u8, 16> TrophyKey{
+    0x21, 0xf4, 0x1a, 0x6b, 0xad, 0x8a, 0x1d, 0x3e, 0xca, 0x7a, 0xd5, 0x86, 0xc1, 0x01, 0xb7, 0xa9,
+};
 
 static void DecryptEFSM(std::span<const u8, 16> trophyKey, std::span<const u8, 16> NPcommID,
                         std::span<const u8, 16> efsmIv, std::span<const u8> ciphertext,
@@ -39,18 +44,6 @@ static void removePadding(std::vector<u8>& vec) {
 
 bool TRP::Extract(const std::filesystem::path& trophyPath, std::string npCommId,
                   const std::filesystem::path& outputPath) {
-    // Retrieve trophy key
-    const auto& user_key_vec =
-        KeyManager::GetInstance()->GetAllKeys().TrophyKeySet.ReleaseTrophyKey;
-
-    if (user_key_vec.size() != 16) {
-        LOG_INFO(Common_Filesystem, "Trophy decryption key is not specified");
-        return false;
-    }
-
-    std::array<u8, 16> user_key{};
-    std::copy(user_key_vec.begin(), user_key_vec.end(), user_key.begin());
-
     s32 trpFileIndex = 0;
     bool success = true;
     const auto cleanupOnFailure = [&outputPath] {
@@ -119,7 +112,7 @@ bool TRP::Extract(const std::filesystem::path& trophyPath, std::string npCommId,
             } else if (entry.flag == ENTRY_FLAG_ENCRYPTED_XML) {
                 // Check if we have a valid NPCommID for decryption
                 if (npCommId.size() >= 12 && npCommId[0] == 'N' && npCommId[1] == 'P') {
-                    if (!ProcessEncryptedXmlEntry(file, entry, outputPath, name, user_key,
+                    if (!ProcessEncryptedXmlEntry(file, entry, outputPath, name, TrophyKey,
                                                   npCommId)) {
                         success = false;
                         // Continue with next entry

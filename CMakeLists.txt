@@ -869,8 +869,6 @@ set(COMMON src/common/logging/classes.cpp
            src/common/multi_level_page_table.h
            ${CMAKE_CURRENT_BINARY_DIR}/src/common/scm_rev.cpp
            src/common/scm_rev.h
-           src/common/key_manager.cpp
-           src/common/key_manager.h
 )
 
 set(NET_CORE  src/core/net/guest_net.cpp

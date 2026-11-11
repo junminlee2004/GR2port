@@ -16,7 +16,6 @@
 
 #include "GR2port.h"
 #include "common/arch.h"
-#include "common/key_manager.h"
 #include "common/logging/log.h"
 #include "common/memory_patcher.h"
 #include "common/path_util.h"
@@ -147,9 +146,6 @@ int main(int argc, char* argv[]) {
     LOG_INFO(Debug, "Run: {}", fmt::join(std::span(argv, argc), " "));
 
     IPC::Instance().Init();
-
-    // Initialize key manager
-    KeyManager::GetInstance()->LoadFromFile();
 
     // Load configurations
     EmulatorSettings.Load();
