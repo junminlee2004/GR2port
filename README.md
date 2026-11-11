@@ -39,7 +39,7 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 > [!NOTE]
 > Upscaling is NOT considered for these fps targets but may be used to optionally improve fps further.
 
-**Included Features for Gravity Rush 2 and Gravity Rush Remastered**
+**Included Features for Gravity Rush 2**
 - Fully bindable gamepad and keyboard bindings and button prompts
 - Fully customizable graphics presets
 - Steam Deck preset
