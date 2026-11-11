@@ -52,9 +52,11 @@ void PS4_SYSV_ABI OnParticleList(u32, const Hooks::Arguments* arguments, u64) {
 // FUN_0142ec00(T + 0xa0, view, ...): rdi is the frame graph, rsi the view the frame draws.
 void PS4_SYSV_ABI OnFrameGraph(u32, const Hooks::Registers* registers, u64) {
     Capture::OnFrame(registers->rdi, registers->rsi);
+    EmulatedGpu::SetFrameGraphRunning(true);
 }
 
 void PS4_SYSV_ABI OnFrameGraphEnd(u32, const Hooks::Arguments*, u64) {
+    EmulatedGpu::SetFrameGraphRunning(false);
     UiCapture::OnFrameGraphEnd();
 }
 
@@ -109,7 +111,7 @@ void Install(VAddr module_base) {
     if (!Movies::Install(module_base, c, StubAreaSize)) {
         LOG_ERROR(Render_Vulkan, "GR2port: the movie update is not the expected code");
     }
-    EmulatedGpu::Install(module_base);
+    EmulatedGpu::Install(module_base, c, StubAreaSize);
     Renderer::Start();
     LOG_INFO(Render_Vulkan, "GR2port: renderer started");
 }
