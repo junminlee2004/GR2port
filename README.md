@@ -127,7 +127,7 @@ Each key keeps its function in every type.
 
 # Contributing
 
-If you want to contribute, please feel free to do so :)
+If you want to contribute, please feel free to do so by reporting issues or submitting pull requests :)
 
 # Special Thanks
 
