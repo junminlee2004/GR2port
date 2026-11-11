@@ -1886,4 +1886,8 @@ Stats TakeStats() {
     return stats;
 }
 
+bool Squeezed() {
+    return g_streaming && Qualities[g_quality].used != 0;
+}
+
 } // namespace Gr2Port::Textures

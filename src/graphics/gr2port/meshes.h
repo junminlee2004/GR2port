@@ -27,6 +27,10 @@ inline constexpr u32 Capacity = 1u << 16;
 struct Mesh {
     std::atomic<VAddr> shape{0};
     std::atomic<bool> ready{false};
+    /// The collector's state: kept, evicting (no new draws, buffers live), evicted (buffers
+    /// freed) or wanted again while evicting. Draws that ask for it set used to the second.
+    std::atomic<u8> eviction{0};
+    std::atomic<u32> used{0};
     /// The device address of the vertex data.
     u64 vertices = 0;
     /// The first index of the shape's index data in the shared index buffer, and its count.

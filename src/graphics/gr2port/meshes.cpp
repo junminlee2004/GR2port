@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <chrono>
 #include <cstring>
 #include <deque>
 #include <limits>
@@ -18,6 +19,7 @@
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/meshes.h"
+#include "graphics/gr2port/textures.h"
 
 namespace Gr2Port::Meshes {
 
@@ -102,6 +104,16 @@ constexpr u32 LoggedCloth = 4;
 constexpr u64 IndexCapacity = 64ull << 20;
 constexpr u64 SmallIndexCapacity = 48ull << 20;
 constexpr u64 SmallBudget = 3_GB;
+// While the textures are squeezed, a static mesh no draw has asked for in EvictSeconds gives its
+// memory back; the collector looks every ScanFrames frames and evicts at most EvictsPerScan.
+constexpr u32 EvictSeconds = 60;
+constexpr u64 ScanFrames = 64;
+constexpr u32 EvictsPerScan = 256;
+// Mesh::eviction.
+constexpr u8 Kept = 0;
+constexpr u8 Evicting = 1;
+constexpr u8 Evicted = 2;
+constexpr u8 Rescued = 3;
 
 template <typename T>
 T Load(VAddr address) {
@@ -136,6 +148,12 @@ struct Staging {
     Buffer buffer;
     u64 frame;
 };
+struct Eviction {
+    u32 handle;
+    // The last frame that can draw the mesh, and the memory it held then.
+    u64 frame;
+    VmaAllocation allocation;
+};
 const Device* g_device = nullptr;
 Memory* g_memory = nullptr;
 Buffer g_index_buffer;
@@ -144,6 +162,10 @@ std::array<Resident, Capacity> g_resident;
 std::vector<Retiring> g_retiring;
 std::vector<Staging> g_staging;
 Stats g_stats{};
+std::vector<Eviction> g_evictions;
+// Seconds since the start, which draws stamp into the meshes they ask for.
+std::atomic<u32> g_seconds{0};
+const auto g_start = std::chrono::steady_clock::now();
 
 bool AllocateIndices(u32 count, u32& first) {
     if (count == 0) {
@@ -231,6 +253,9 @@ void PS4_SYSV_ABI OnBuilt(u32, const Hooks::Arguments*, u64 model) {
             return;
         }
         g_meshes[handle].ready.store(false, std::memory_order_relaxed);
+        g_meshes[handle].eviction.store(Kept, std::memory_order_relaxed);
+        g_meshes[handle].used.store(g_seconds.load(std::memory_order_relaxed),
+                                    std::memory_order_relaxed);
         g_meshes[handle].shape.store(shape, std::memory_order_release);
         g_pending.push_back(handle);
     });
@@ -547,6 +572,32 @@ void Retire(u64 frame, u64 completed) {
         g_free.push_back(r.handle);
         return true;
     });
+    // An evicted mesh gives its memory back once no frame can draw it, unless a draw wanted it
+    // again meanwhile.
+    std::erase_if(g_evictions, [completed](const Eviction& e) {
+        if (completed < e.frame) {
+            return false;
+        }
+        Mesh& mesh = g_meshes[e.handle];
+        Resident& resident = g_resident[e.handle];
+        u8 state = Evicting;
+        if (resident.vertices.allocation != e.allocation) {
+            return true;
+        }
+        if (!mesh.eviction.compare_exchange_strong(state, Evicted, std::memory_order_acq_rel)) {
+            if (state == Rescued) {
+                mesh.eviction.store(Kept, std::memory_order_relaxed);
+                mesh.ready.store(true, std::memory_order_release);
+            }
+            return true;
+        }
+        g_stats.resident_bytes -= resident.vertices.size + 2ull * resident.indices;
+        g_memory->Destroy(resident.vertices);
+        FreeIndices(resident.first_index, resident.indices);
+        g_stats.meshes--;
+        resident = {};
+        return true;
+    });
     std::erase_if(g_staging, [completed](Staging& s) {
         if (s.frame > completed) {
             return false;
@@ -584,12 +635,23 @@ const Mesh* Get(VAddr shape) {
     if (handle >= Capacity) {
         return nullptr;
     }
-    const Mesh& mesh = g_meshes[handle];
-    if (!mesh.ready.load(std::memory_order_acquire) ||
-        mesh.shape.load(std::memory_order_relaxed) != shape) {
+    Mesh& mesh = g_meshes[handle];
+    if (mesh.shape.load(std::memory_order_relaxed) != shape) {
         return nullptr;
     }
-    return &mesh;
+    mesh.used.store(g_seconds.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    if (mesh.ready.load(std::memory_order_acquire)) {
+        return &mesh;
+    }
+    // A draw wants an evicted mesh: keep one being evicted, and upload one evicted again.
+    u8 state = Evicting;
+    if (!mesh.eviction.compare_exchange_strong(state, Rescued, std::memory_order_acq_rel) &&
+        state == Evicted &&
+        mesh.eviction.compare_exchange_strong(state, Kept, std::memory_order_acq_rel)) {
+        std::scoped_lock lock{g_mutex};
+        g_pending.push_back(handle);
+    }
+    return nullptr;
 }
 
 bool Start(const Device& device, Memory& memory) {
@@ -610,6 +672,31 @@ bool Start(const Device& device, Memory& memory) {
 
 void Update(vk::CommandBuffer cmd, u64 frame, u64 completed) {
     Retire(frame, completed);
+    const u32 seconds = static_cast<u32>(
+        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - g_start)
+            .count());
+    g_seconds.store(seconds, std::memory_order_relaxed);
+    if (frame % ScanFrames == 0 && Textures::Squeezed()) {
+        u32 evicts = 0;
+        const u32 high = [] {
+            std::scoped_lock lock{g_mutex};
+            return g_unused;
+        }();
+        for (u32 handle = 0; handle < high && evicts < EvictsPerScan; handle++) {
+            Mesh& mesh = g_meshes[handle];
+            const Resident& resident = g_resident[handle];
+            if (!mesh.ready.load(std::memory_order_relaxed) || resident.skinned || resident.cloth ||
+                resident.vertices.allocation == nullptr ||
+                seconds - mesh.used.load(std::memory_order_relaxed) < EvictSeconds) {
+                continue;
+            }
+            mesh.ready.store(false, std::memory_order_relaxed);
+            mesh.eviction.store(Evicting, std::memory_order_release);
+            // The packet of this frame, or the one the capture is writing, can still draw it.
+            g_evictions.push_back({handle, frame + 1, resident.vertices.allocation});
+            evicts++;
+        }
+    }
 
     std::vector<u32> uploaded;
     u64 budget = UploadBudget;

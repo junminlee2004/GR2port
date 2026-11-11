@@ -101,4 +101,8 @@ struct Stats {
 };
 Stats TakeStats();
 
+/// Render thread: whether the textures in use have fewer levels than they hold, for the memory
+/// budget's sake.
+bool Squeezed();
+
 } // namespace Gr2Port::Textures
