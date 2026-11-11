@@ -144,13 +144,6 @@ if (NOT TARGET toml11::toml11)
     endif()
 endif()
 
-# xxHash
-if (NOT TARGET xxHash::xxhash)
-    add_library(xxhash xxhash/xxhash.h xxhash/xxhash.c)
-    target_include_directories(xxhash PUBLIC xxhash)
-    add_library(xxHash::xxhash ALIAS xxhash)
-endif()
-
 # Zydis
 if (NOT TARGET Zydis::Zydis)
     option(ZYDIS_BUILD_TOOLS "" OFF)
@@ -158,11 +151,8 @@ if (NOT TARGET Zydis::Zydis)
     add_subdirectory(zydis)
 endif()
 
-# sirit
-add_subdirectory(sirit)
-if (WIN32)
-    target_compile_options(sirit PRIVATE $<$<CXX_COMPILER_ID:Clang>:-Wno-error=unused-command-line-argument>)
-endif()
+# sirit: only the SPIR-V headers that come with it are used, so its library is not built.
+add_subdirectory(sirit EXCLUDE_FROM_ALL)
 
 # half
 if (NOT TARGET half::half)
@@ -229,9 +219,6 @@ if (NOT TARGET libusb::usb)
         add_library(libusb::usb ALIAS usb-1.0)
     endif()
 endif()
-
-# GCN Headers
-add_subdirectory(gcn)
 
 # stb
 if (NOT TARGET stb::headers)

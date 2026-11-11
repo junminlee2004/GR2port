@@ -255,7 +255,6 @@ if (ENABLE_SYSTEM_LIBRARIES)
     find_package(VulkanHeaders 1.4.330 CONFIG)
     find_package(VulkanMemoryAllocator 3.1.0 CONFIG)
     find_package(xbyak 7.07 CONFIG)
-    find_package(xxHash 0.8.2 MODULE)
     find_package(ZArchive 0.1.2 MODULE)
     find_package(ZLIB 1.3 MODULE)
     find_package(Zydis 5.0.0 MODULE)
@@ -1189,8 +1188,8 @@ add_executable(gr2port
 create_target_directory_groups(gr2port)
 
 target_link_libraries(gr2port PRIVATE spdlog::spdlog)
-target_link_libraries(gr2port PRIVATE magic_enum::magic_enum fmt::fmt toml11::toml11 tsl::robin_map xbyak::xbyak Tracy::TracyClient RenderDoc::API FFmpeg::ffmpeg Dear_ImGui ImGuiFileDialog gcn half::half ZLIB::ZLIB PNG::PNG minimp3 dr_flac)
-target_link_libraries(gr2port PRIVATE Boost::headers GPUOpen::VulkanMemoryAllocator LibAtrac9 sirit Vulkan::Headers xxHash::xxhash Zydis::Zydis SDL3::SDL3 pugixml::pugixml)
+target_link_libraries(gr2port PRIVATE magic_enum::magic_enum fmt::fmt toml11::toml11 tsl::robin_map xbyak::xbyak Tracy::TracyClient RenderDoc::API FFmpeg::ffmpeg Dear_ImGui ImGuiFileDialog half::half ZLIB::ZLIB PNG::PNG minimp3 dr_flac)
+target_link_libraries(gr2port PRIVATE Boost::headers GPUOpen::VulkanMemoryAllocator LibAtrac9 SPIRV-Headers::SPIRV-Headers Vulkan::Headers Zydis::Zydis SDL3::SDL3 pugixml::pugixml)
 target_link_libraries(gr2port PRIVATE stb::headers lfreist-hwinfo::hwinfo nlohmann_json::nlohmann_json miniz::miniz fdk-aac CLI11::CLI11 OpenAL::OpenAL Cpp_Httplib miniupnpc::miniupnpc)
 target_link_libraries(gr2port PRIVATE Freetype::Freetype)
 target_link_libraries(gr2port PRIVATE libprotobuf)
@@ -1308,12 +1307,6 @@ endif()
 
 # Codegen items for the Linux and Windows builds; macOS keeps upstream's defaults.
 if (NOT APPLE)
-    # Many small XXH3 calls per draw (user data words per stage, per-sharp specialization
-    # fingerprints, sampler keys, image hashes) each pay a cross-library call and a length
-    # dispatch while xxhash is linked as a plain C library. XXH_INLINE_ALL gives every
-    # translation unit a private inlined copy with internal linkage; the library stays linked
-    # for the externals and the hash values do not change.
-    target_compile_definitions(gr2port PRIVATE XXH_INLINE_ALL)
     # The toolchains emit stack-protector canaries by default, and they sit in most hot
     # video_core prologues and epilogues at 0.3-0.6% of the GPU command thread. Hardening is
     # traded for that time. clang-cl takes the MSVC spelling.
