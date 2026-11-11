@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -47,6 +48,11 @@ constexpr u64 PadInput = 0x710;
 
 // Radians the camera turns per mouse count at the default sensitivity, about 0.023 degrees.
 constexpr float RadiansPerCount = 0.0004f;
+
+// The mouse pitches the camera at most this far from the frame's horizon, about 85 degrees, as the
+// stick stops short of looking straight up or down. Past the pole the camera's up points down and
+// a yaw about the frame's up turns it against the mouse.
+constexpr float MaxPitch = 1.48f;
 
 struct Quaternion {
     float x;
@@ -117,13 +123,27 @@ bool TurnByMouse(VAddr orientation, const Quaternion& frame, const Speeds& speed
         return false;
     }
     const float scale = RadiansPerCount * Read<float>(Sensitivity);
-    const float yaw = -dx * scale * speeds.horizontal * (Read<u8>(YawInverted) != 0 ? -1.0f : 1.0f);
-    const float pitch =
-        -dy * scale * speeds.vertical * (Read<u8>(PitchInverted) != 0 ? -1.0f : 1.0f);
+    float yaw = -dx * scale * speeds.horizontal * (Read<u8>(YawInverted) != 0 ? -1.0f : 1.0f);
+    float pitch = -dy * scale * speeds.vertical * (Read<u8>(PitchInverted) != 0 ? -1.0f : 1.0f);
 
     Quaternion q;
     std::memcpy(&q, reinterpret_cast<const void*>(orientation), sizeof(q));
     Quaternion local = Multiply(Conjugate(frame), q);
+
+    // The frame's Y components of the camera's Y and Z axes give its pitch, in the sense the pitch
+    // below turns it. A camera the game left upside down yaws the other way, so the view still
+    // follows the mouse.
+    const float up_y = 1.0f - 2.0f * (local.x * local.x + local.z * local.z);
+    const float z_y = 2.0f * (local.y * local.z - local.x * local.w);
+    const float current = std::atan2(-z_y, up_y);
+    if (pitch > 0.0f) {
+        pitch = std::min(pitch, std::max(0.0f, MaxPitch - current));
+    } else {
+        pitch = std::max(pitch, std::min(0.0f, -MaxPitch - current));
+    }
+    if (up_y < 0.0f) {
+        yaw = -yaw;
+    }
     local = Multiply(AboutAxis(0.0f, 1.0f, 0.0f, yaw), local);
     local = Multiply(local, AboutAxis(1.0f, 0.0f, 0.0f, pitch));
     Quaternion result = Multiply(frame, local);
