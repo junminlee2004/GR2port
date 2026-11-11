@@ -4,6 +4,7 @@
 #pragma once
 
 #include "common/types.h"
+#include "graphics/gr2port/scene.h"
 
 // The slots the game's draw thread writes each frame's scene into and the render thread draws
 // from. The GPU reads a slot in place. The draw thread never waits: when no slot is free, its
@@ -12,7 +13,8 @@
 namespace Gr2Port::SceneRing {
 
 inline constexpr u32 Slots = 5;
-inline constexpr u64 SlotBytes = 36_MB;
+// A slot holds one packet, rounded up to whole megabytes.
+inline constexpr u64 SlotBytes = (Scene::PacketBytes + 1_MB - 1) / 1_MB * 1_MB;
 
 /// Hands the ring's memory to the draw thread: base holds Slots slots of SlotBytes, mapped at
 /// cpu and at address on the GPU.
