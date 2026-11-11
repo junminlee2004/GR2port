@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
+#include <span>
+#include <vector>
 
 #include "video_core/gr2port/fog.h"
 #include "video_core/gr2port/glass.h"
@@ -9,6 +11,7 @@
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/meshes.h"
 #include "video_core/gr2port/pipeline.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/gr2port/shaders/glass_frag.h"
 #include "video_core/gr2port/shaders/glass_vert.h"
 #include "video_core/gr2port/shadows.h"
@@ -28,6 +31,27 @@ struct GlassPush {
 constexpr vk::ImageSubresourceRange ColorRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
 constexpr vk::ImageSubresourceRange DepthRange{vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1};
 
+constexpr vk::PipelineStageFlags2 Output = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+constexpr vk::PipelineStageFlags2 Copy = vk::PipelineStageFlagBits2::eCopy;
+constexpr vk::PipelineStageFlags2 Fragment = vk::PipelineStageFlagBits2::eFragmentShader;
+constexpr vk::PipelineStageFlags2 DepthTests = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                                               vk::PipelineStageFlagBits2::eLateFragmentTests;
+constexpr vk::AccessFlags2 ColorWrite = vk::AccessFlagBits2::eColorAttachmentWrite;
+constexpr vk::AccessFlags2 ColorAccess =
+    vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite;
+constexpr vk::AccessFlags2 DepthAccess = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                                         vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+constexpr auto ColorLayout = vk::ImageLayout::eColorAttachmentOptimal;
+constexpr auto SourceLayout = vk::ImageLayout::eTransferSrcOptimal;
+constexpr auto TargetLayout = vk::ImageLayout::eTransferDstOptimal;
+constexpr auto DepthLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+constexpr auto DepthReadLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+
+// Values of glass.frag's GlassOutput, constant id 0: the share of the scene that shows through,
+// and the panes' light.
+constexpr u32 ThroughOutput = 1;
+constexpr u32 LightOutput = 2;
+
 const Device* g_device = nullptr;
 Memory* g_memory = nullptr;
 // The scene's colour under the fog, which the panes refract.
@@ -37,7 +61,38 @@ vk::Sampler g_sampler;
 vk::DescriptorSetLayout g_layout;
 vk::DescriptorPool g_pool;
 vk::DescriptorSet g_set;
-Pipeline g_pipeline;
+// With refraction, one pass over the copy; without, the pass that multiplies the scene by what
+// shows through, then the one that adds the panes' light.
+bool g_refraction = true;
+std::array<Pipeline, 2> g_pipelines;
+u32 g_passes = 0;
+
+// The program with its constant id 0 set to value, as a specialization sets it; the graphics
+// pipeline helper takes none. Empty when the program has no such 32-bit constant.
+std::vector<u32> Specialized(std::span<const u32> code, u32 value) {
+    constexpr u32 OpDecorate = 71;
+    constexpr u32 OpSpecConstant = 50;
+    constexpr u32 SpecId = 1;
+    constexpr std::size_t HeaderWords = 5;
+    std::vector<u32> result(code.begin(), code.end());
+    u32 target = 0;
+    for (std::size_t i = HeaderWords; i < result.size();) {
+        const u32 words = result[i] >> 16;
+        const u32 opcode = result[i] & 0xffff;
+        if (words == 0 || i + words > result.size()) {
+            break;
+        }
+        if (opcode == OpDecorate && words == 4 && result[i + 2] == SpecId && result[i + 3] == 0) {
+            target = result[i + 1];
+        } else if (opcode == OpSpecConstant && words == 4 && target != 0 &&
+                   result[i + 2] == target) {
+            result[i + 3] = value;
+            return result;
+        }
+        i += words;
+    }
+    return {};
+}
 
 } // namespace
 
@@ -76,18 +131,54 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
     }
     g_set = sets[0];
     const std::array set_layouts{Textures::SetLayout(), Shadows::SetLayout(), g_layout};
-    g_pipeline = CreateGraphicsPipeline(device, {
-                                                    .vertex = GLASS_VERT,
-                                                    .fragment = GLASS_FRAG,
-                                                    .color = scene_format,
-                                                    .depth = depth_format,
-                                                    .cull = vk::CullModeFlagBits::eBack,
-                                                    .depth_test = true,
-                                                    .keep_target_alpha = true,
-                                                    .push_constant_bytes = sizeof(GlassPush),
-                                                    .set_layouts = set_layouts,
-                                                });
-    return !!g_pipeline.pipeline;
+    GraphicsPipelineInfo info{
+        .vertex = GLASS_VERT,
+        .fragment = GLASS_FRAG,
+        .color = scene_format,
+        .depth = depth_format,
+        .cull = vk::CullModeFlagBits::eBack,
+        .depth_test = true,
+        .keep_target_alpha = true,
+        .push_constant_bytes = sizeof(GlassPush),
+        .set_layouts = set_layouts,
+    };
+    g_refraction = Settings::Get().graphics.glass_refraction;
+    if (g_refraction) {
+        g_pipelines[0] = CreateGraphicsPipeline(device, info);
+        g_passes = 1;
+        return !!g_pipelines[0].pipeline;
+    }
+    // Without refraction the scene in the target is what shows through: the first pass multiplies
+    // it by the panes' share and writes their depth, the second adds their light on that depth.
+    const std::vector<u32> through = Specialized(GLASS_FRAG, ThroughOutput);
+    const std::vector<u32> light = Specialized(GLASS_FRAG, LightOutput);
+    if (through.empty() || light.empty()) {
+        return false;
+    }
+    const vk::PipelineColorBlendAttachmentState multiply{
+        .blendEnable = true,
+        .srcColorBlendFactor = vk::BlendFactor::eZero,
+        .dstColorBlendFactor = vk::BlendFactor::eSrcColor,
+        .colorBlendOp = vk::BlendOp::eAdd,
+        .srcAlphaBlendFactor = vk::BlendFactor::eZero,
+        .dstAlphaBlendFactor = vk::BlendFactor::eOne,
+        .alphaBlendOp = vk::BlendOp::eAdd,
+        .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                          vk::ColorComponentFlagBits::eB,
+    };
+    vk::PipelineColorBlendAttachmentState add = multiply;
+    add.srcColorBlendFactor = vk::BlendFactor::eOne;
+    add.dstColorBlendFactor = vk::BlendFactor::eOne;
+    info.fragment = through;
+    info.blend = &multiply;
+    g_pipelines[0] = CreateGraphicsPipeline(device, info);
+    info.fragment = light;
+    info.blend = &add;
+    info.depth_write = false;
+    info.depth_compare = vk::CompareOp::eGreaterOrEqual;
+    g_pipelines[1] = CreateGraphicsPipeline(device, info);
+    g_passes = 2;
+    return g_pipelines[0].pipeline && g_pipelines[1].pipeline;
 }
 
 bool Resize(vk::Extent2D extent) {
@@ -126,7 +217,6 @@ void Prepare(vk::CommandBuffer cmd) {
     }
     g_behind_ready = true;
     const auto& dl = g_device->dispatch;
-    constexpr vk::PipelineStageFlags2 Copy = vk::PipelineStageFlagBits2::eCopy;
     const vk::ImageMemoryBarrier2 to_clear{
         .dstStageMask = Copy,
         .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
@@ -152,29 +242,12 @@ void Prepare(vk::CommandBuffer cmd) {
     cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &to_read}, dl);
 }
 
-void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
-            u64 offset, const Image& depth, vk::Extent2D extent) {
-    constexpr Scene::DrawList List = Scene::DrawList::Glass;
-    const u32 count = header.draw_commands[static_cast<u32>(List)];
-    if (count == 0 && header.effects.background == 0 && header.effects.water_draws == 0) {
-        return;
-    }
+namespace {
+
+// Copies the scene's colour and draws the fog over the copy, as the game's BackupColorBuffer2
+// does. Leaves the copy readable and the scene's colour and depth as attachments.
+void RecordCopy(vk::CommandBuffer cmd, u64 address, const Image& depth, vk::Extent2D extent) {
     const auto& dl = g_device->dispatch;
-    constexpr vk::PipelineStageFlags2 Output = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-    constexpr vk::PipelineStageFlags2 Copy = vk::PipelineStageFlagBits2::eCopy;
-    constexpr vk::PipelineStageFlags2 Fragment = vk::PipelineStageFlagBits2::eFragmentShader;
-    constexpr vk::PipelineStageFlags2 DepthTests = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
-                                                   vk::PipelineStageFlagBits2::eLateFragmentTests;
-    constexpr vk::AccessFlags2 ColorWrite = vk::AccessFlagBits2::eColorAttachmentWrite;
-    constexpr vk::AccessFlags2 ColorAccess =
-        vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite;
-    constexpr vk::AccessFlags2 DepthAccess = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
-                                             vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
-    constexpr auto ColorLayout = vk::ImageLayout::eColorAttachmentOptimal;
-    constexpr auto SourceLayout = vk::ImageLayout::eTransferSrcOptimal;
-    constexpr auto TargetLayout = vk::ImageLayout::eTransferDstOptimal;
-    constexpr auto DepthLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-    constexpr auto DepthReadLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
     const vk::Image scene = Look::SceneImage();
 
     // The scene so far to the copy. The fog reads the depth, and the last frame's panes sampled
@@ -270,6 +343,32 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
     cmd.pipelineBarrier2({.imageMemoryBarrierCount = static_cast<u32>(to_panes.size()),
                           .pImageMemoryBarriers = to_panes.data()},
                          dl);
+}
+
+} // namespace
+
+void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
+            u64 offset, const Image& depth, vk::Extent2D extent) {
+    constexpr Scene::DrawList List = Scene::DrawList::Glass;
+    const u32 count = header.draw_commands[static_cast<u32>(List)];
+    const bool readers = header.effects.background != 0 || header.effects.water_draws != 0;
+    if (count == 0 && !readers) {
+        return;
+    }
+    const auto& dl = g_device->dispatch;
+    // Without refraction the panes read no copy; the water and the effects' programs still do.
+    if (g_refraction || readers) {
+        RecordCopy(cmd, address, depth, extent);
+    } else {
+        // The panes blend over the scene's colour and test its depth.
+        const vk::MemoryBarrier2 written{
+            .srcStageMask = Output | DepthTests,
+            .srcAccessMask = ColorWrite | vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+            .dstStageMask = Output | DepthTests,
+            .dstAccessMask = ColorAccess | DepthAccess,
+        };
+        cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &written}, dl);
+    }
     if (count == 0) {
         return;
     }
@@ -301,15 +400,17 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
         .materials = address + Scene::GlassMaterialsOffset,
         .light = address + Scene::LightOffset,
     };
-    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_pipeline.pipeline, dl);
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_pipeline.layout, 0, sets, {}, dl);
-    cmd.pushConstants(g_pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
-                      &push, dl);
-    cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
-    cmd.drawIndexedIndirect(buffer,
-                            offset + Scene::CommandsOffset +
-                                u64{Scene::FirstCommand(header, List)} * sizeof(Scene::Command),
-                            count, sizeof(Scene::Command), dl);
+    const u64 commands = offset + Scene::CommandsOffset +
+                         u64{Scene::FirstCommand(header, List)} * sizeof(Scene::Command);
+    for (u32 pass = 0; pass < g_passes; pass++) {
+        const Pipeline& pipeline = g_pipelines[pass];
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, sets, {}, dl);
+        cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(push),
+                          &push, dl);
+        cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
+        cmd.drawIndexedIndirect(buffer, commands, count, sizeof(Scene::Command), dl);
+    }
     cmd.endRendering(dl);
 }
 

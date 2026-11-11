@@ -51,6 +51,8 @@ layout(set = 0, binding = 6) uniform texture2D character_depth;
 layout(push_constant) uniform Constants {
     uint64_t constants_address;
 };
+// Motion blur Low: one reconstruction instead of the game's two, its taps twice as far apart.
+layout(constant_id = 0) const bool DoubleStep = false;
 layout(location = 0) in vec4 attr0;
 layout(location = 0) out vec4 color0;
 void main() {
@@ -128,6 +130,10 @@ void main() {
         s21 = pixel_constants.w[5];
         s22 = pixel_constants.w[6];
         s23 = pixel_constants.w[7];
+        if (DoubleStep) {
+            s22 = u(2.0 * f(s22));
+            s23 = u(2.0 * f(s23));
+        }
         if (exec_lo != 0u) {
             v11 = u(f(v11) * f(v6));
             v6 = 0x0u;

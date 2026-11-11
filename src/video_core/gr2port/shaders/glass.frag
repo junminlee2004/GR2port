@@ -28,6 +28,13 @@ layout(location = 4) flat in uint draw_index;
 
 layout(location = 0) out vec4 color;
 
+// What the program writes: the pane over the refracted copy of the scene, as the game draws it;
+// or, for the two blends that need no copy, the share of the scene that shows through the pane,
+// then the pane's own light.
+layout(constant_id = 0) const uint GlassOutput = 0u;
+const uint RefractedOutput = 0u;
+const uint ThroughOutput = 1u;
+
 const float Pi = 3.14159265;
 
 // How much of the key light reaches the point: one tap of its cascade.
@@ -65,23 +72,33 @@ void main() {
     const vec3 surface_normal = normalize(vec3(normal_scale * (2.0 * texel.xy - 1.0), texel.z));
     const vec3 n = normalize(surface_normal.x * face_tangent + surface_normal.y * face_bitangent +
                              surface_normal.z * face_normal);
+    const float n_dot_v = min(max(-dot(ray, n), 0.0), 1.0);
+    const vec3 reflectance = materials.materials[index].reflectance.rgb;
+    const vec3 share = reflectance + (1.0 - reflectance) * pow(max(1.0 - n_dot_v, 0.0), 5.0);
+    if (GlassOutput == ThroughOutput) {
+        // What the reflection leaves of the scene, tinted.
+        color = vec4((1.0 - share) * materials.materials[index].translucency.rgb, 1.0);
+        return;
+    }
 
-    const vec4 refraction = materials.materials[index].refraction;
-    const vec2 projection = materials.materials[index].projection;
-    vec3 behind;
-    if (refraction.w > 0.0) {
-        // Each colour bends by its own ratio.
-        behind.r = textureLod(behind_glass, Refracted(ray, n, refraction.r, projection), 0.0).r;
-        behind.g = textureLod(behind_glass, Refracted(ray, n, refraction.g, projection), 0.0).g;
-        behind.b = textureLod(behind_glass, Refracted(ray, n, refraction.b, projection), 0.0).b;
-    } else {
-        behind = textureLod(behind_glass, Refracted(ray, n, refraction.r, projection), 0.0).rgb;
+    // In the light pass the target already holds the scene through the pane, so nothing is read.
+    vec3 behind = vec3(0.0);
+    if (GlassOutput == RefractedOutput) {
+        const vec4 refraction = materials.materials[index].refraction;
+        const vec2 projection = materials.materials[index].projection;
+        if (refraction.w > 0.0) {
+            // Each colour bends by its own ratio.
+            behind.r = textureLod(behind_glass, Refracted(ray, n, refraction.r, projection), 0.0).r;
+            behind.g = textureLod(behind_glass, Refracted(ray, n, refraction.g, projection), 0.0).g;
+            behind.b = textureLod(behind_glass, Refracted(ray, n, refraction.b, projection), 0.0).b;
+        } else {
+            behind = textureLod(behind_glass, Refracted(ray, n, refraction.r, projection), 0.0).rgb;
+        }
     }
 
     // Key light: GGX and Schlick.
     const vec3 travel = materials.materials[index].light_direction.xyz;
     const vec3 halfway = normalize(-travel - ray);
-    const float n_dot_v = min(max(-dot(ray, n), 0.0), 1.0);
     const float n_dot_l = min(max(-dot(travel, n), 0.0), 1.0);
     const float n_dot_h = clamp(dot(n, halfway), 0.0, 1.0);
     const float rough = max(materials.materials[index].roughness, 1e-6);
@@ -91,7 +108,6 @@ void main() {
     const float visibility =
         1.0 / ((n_dot_v + sqrt(a2 + (1.0 - a2) * n_dot_v * n_dot_v)) *
                (n_dot_l + sqrt(a2 + (1.0 - a2) * n_dot_l * n_dot_l)));
-    const vec3 reflectance = materials.materials[index].reflectance.rgb;
     const float highlight_fresnel = pow(clamp(1.0 + dot(ray, halfway), 0.0, 1.0), 5.0);
     const vec3 highlight = (reflectance + (1.0 - reflectance) * highlight_fresnel) * ggx *
                            visibility * n_dot_l * KeyShadow() *
@@ -114,6 +130,5 @@ void main() {
     }
 
     const vec3 seen = materials.materials[index].translucency.rgb * behind;
-    const vec3 share = reflectance + (1.0 - reflectance) * pow(max(1.0 - n_dot_v, 0.0), 5.0);
     color = vec4(seen + share * (radiance * env + highlight - seen), 1.0);
 }

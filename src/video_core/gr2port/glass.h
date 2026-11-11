@@ -13,9 +13,11 @@ struct Image;
 
 // The game's G2_BG_Glass, after the scene's forward draws and before its fog. A copy of the scene's
 // colour takes the fog, as the game's BackupColorBuffer2 does, and each pane refracts that copy.
+// Without glass refraction the panes blend over the scene in two passes and read no copy.
 namespace Gr2Port::Glass {
 
-/// After Textures::Start and Shadows::Start: creates the pipeline.
+/// After Textures::Start and Shadows::Start: creates the pipelines the glass refraction setting
+/// chooses.
 bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Format depth_format);
 
 /// With the GPU idle: creates the scene's copy at extent.
@@ -28,8 +30,9 @@ vk::ImageView BehindView();
 void Prepare(vk::CommandBuffer cmd);
 
 /// Outside rendering, with the scene's colour and depth as attachments: when the packet at address,
-/// which is at offset in buffer, has glass or water or an effect that reads the copy, copies the
-/// scene, and draws the panes into it. Leaves the scene's colour and depth as attachments.
+/// which is at offset in buffer, has water or an effect that reads the copy, or glass with
+/// refraction, copies the scene; then draws the panes into it. Leaves the scene's colour and depth
+/// as attachments.
 void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::Buffer buffer,
             u64 offset, const Image& depth, vk::Extent2D extent);
 

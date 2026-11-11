@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <utility>
 
 #include "common/logging/log.h"
 #include "video_core/gr2port/memory.h"
@@ -12,6 +13,7 @@
 #include "video_core/gr2port/pass_times.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/point_lights.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/gr2port/shaders/deferred_frag.h"
 #include "video_core/gr2port/shaders/fullscreen_vert.h"
 #include "video_core/gr2port/shaders/occlusion_comp.h"
@@ -73,6 +75,10 @@ constexpr u32 DecalBoxVertices = 36;
 
 const Device* g_device = nullptr;
 Memory* g_memory = nullptr;
+// Below Original, the occlusion images are half the scene's size and the light pass filters them
+// up; the occlusion computes every second pixel along each axis.
+bool g_half_occlusion = false;
+bool g_draw_decals = true;
 std::array<Image, SurfaceFormats.size()> g_surfaces;
 vk::Extent2D g_extent;
 vk::Sampler g_sampler;
@@ -148,6 +154,9 @@ bool CreateSet(const Device& d) {
     std::array<vk::DescriptorSetLayoutBinding, 4 + SurfaceFormats.size()> bindings;
     for (u32 i = 0; i < bindings.size(); i++) {
         bindings[i] = {i, Combined, 1, vk::ShaderStageFlagBits::eFragment, &g_sampler};
+    }
+    if (g_half_occlusion) {
+        bindings[5].pImmutableSamplers = &g_linear_sampler;
     }
     const std::array<vk::DescriptorSetLayoutBinding, 4> line_bindings{{
         {0, Combined, 1, Compute, &g_sampler},
@@ -282,11 +291,57 @@ void RecordDecals(vk::CommandBuffer cmd, u32 decals, u64 address, vk::Image dept
                          dl);
 }
 
+// The first frame after Resize clears the lines and occlusion and readies the depth levels, for
+// the passes that write them and the light pass that reads them. Each frame then turns to its
+// output image and to the next frame of the game's cycle.
+void StartHistories(vk::CommandBuffer cmd) {
+    const auto& dl = g_device->dispatch;
+    if (!g_lines_cleared) {
+        g_lines_cleared = true;
+        const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        const std::array histories{g_lines[0].image, g_lines[1].image, g_occlusion[0].image,
+                                   g_occlusion[1].image};
+        std::array<vk::ImageMemoryBarrier2, histories.size() + 1> barriers;
+        for (u32 i = 0; i < barriers.size(); i++) {
+            barriers[i] = {
+                .dstStageMask = vk::PipelineStageFlagBits2::eClear,
+                .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+                .oldLayout = vk::ImageLayout::eUndefined,
+                .newLayout = vk::ImageLayout::eGeneral,
+                .image = i < histories.size() ? histories[i] : g_depth_levels.image,
+                .subresourceRange = range,
+            };
+        }
+        barriers.back().subresourceRange.levelCount = DepthLevels;
+        cmd.pipelineBarrier2({.imageMemoryBarrierCount = static_cast<u32>(barriers.size()),
+                              .pImageMemoryBarriers = barriers.data()},
+                             dl);
+        for (const vk::Image image : histories) {
+            cmd.clearColorImage(image, vk::ImageLayout::eGeneral,
+                                vk::ClearColorValue{.float32 = std::array<float, 4>{}}, range, dl);
+        }
+        const vk::MemoryBarrier2 cleared{
+            .srcStageMask = vk::PipelineStageFlagBits2::eClear,
+            .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            .dstStageMask = vk::PipelineStageFlagBits2::eComputeShader |
+                            vk::PipelineStageFlagBits2::eFragmentShader,
+            .dstAccessMask =
+                vk::AccessFlagBits2::eShaderSampledRead | vk::AccessFlagBits2::eShaderStorageWrite,
+        };
+        cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &cleared}, dl);
+    }
+    g_lines_image = (g_lines_image + 1) % LineImages;
+    g_lines_frame = (g_lines_frame + 1) % LineFrames;
+}
+
 } // namespace
 
 bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Format scene_format) {
     g_device = &device;
     g_memory = &memory;
+    const Settings::Graphics graphics = Settings::Get().graphics;
+    g_half_occlusion = graphics.ambient_occlusion != Settings::Quality::Original;
+    g_draw_decals = graphics.decals;
     if (!CreateSet(device)) {
         LOG_ERROR(Render_Vulkan, "GR2port: the surfaces' set failed");
         return false;
@@ -298,16 +353,18 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
                            CreateSurfacePipeline(device, depth_format, WORLD_ALPHA_FRAG, Back),
                            CreateSurfacePipeline(device, depth_format, WORLD_ALPHA_FRAG, None)};
     const std::array decal_sets{Textures::SetLayout(), g_set_layout};
-    g_decals = CreateGraphicsPipeline(device, {
-                                                  .vertex = WORLD_DECAL_VERT,
-                                                  .fragment = WORLD_DECAL_FRAG,
-                                                  .colors = SurfaceFormats,
-                                                  .cull = vk::CullModeFlagBits::eFront,
-                                                  .alpha_blend = true,
-                                                  .keep_target_alpha = true,
-                                                  .push_constant_bytes = sizeof(DecalPush),
-                                                  .set_layouts = decal_sets,
-                                              });
+    if (g_draw_decals) {
+        g_decals = CreateGraphicsPipeline(device, {
+                                                      .vertex = WORLD_DECAL_VERT,
+                                                      .fragment = WORLD_DECAL_FRAG,
+                                                      .colors = SurfaceFormats,
+                                                      .cull = vk::CullModeFlagBits::eFront,
+                                                      .alpha_blend = true,
+                                                      .keep_target_alpha = true,
+                                                      .push_constant_bytes = sizeof(DecalPush),
+                                                      .set_layouts = decal_sets,
+                                                  });
+    }
     const std::array light_sets{Textures::SetLayout(), Shadows::SetLayout(), g_set_layout};
     g_light = CreateGraphicsPipeline(device, {
                                                  .vertex = FULLSCREEN_VERT,
@@ -320,14 +377,23 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
     g_lines_pipeline =
         CreateComputePipeline(device, WORLD_LINES_COMP, sizeof(FramePush), line_sets);
     const std::array occlusion_sets{g_occlusion_layout};
-    g_occlusion_pipeline =
-        CreateComputePipeline(device, OCCLUSION_COMP, sizeof(FramePush), occlusion_sets);
+    // The scene's pixels per occlusion texel along each axis.
+    const s32 occlusion_scale = g_half_occlusion ? 2 : 1;
+    const vk::SpecializationMapEntry scale_entry{.constantID = 0, .offset = 0, .size = sizeof(s32)};
+    const vk::SpecializationInfo scale_info{
+        .mapEntryCount = 1,
+        .pMapEntries = &scale_entry,
+        .dataSize = sizeof(occlusion_scale),
+        .pData = &occlusion_scale,
+    };
+    g_occlusion_pipeline = CreateComputePipeline(device, OCCLUSION_COMP, sizeof(FramePush),
+                                                 occlusion_sets, &scale_info);
     const std::array depth_level_sets{g_depth_level_layout};
     g_depth_level_pipeline =
         CreateComputePipeline(device, OCCLUSION_DEPTH_COMP, sizeof(s32), depth_level_sets);
     return std::ranges::all_of(g_surface_pipelines,
                                [](const Pipeline& pipeline) { return !!pipeline.pipeline; }) &&
-           g_decals.pipeline && g_light.pipeline && g_lines_pipeline.pipeline &&
+           (g_decals.pipeline || !g_draw_decals) && g_light.pipeline && g_lines_pipeline.pipeline &&
            g_occlusion_pipeline.pipeline && g_depth_level_pipeline.pipeline &&
            Metaballs::Start(device, memory, depth_format);
 }
@@ -345,10 +411,17 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_de
         }
     }
     const auto& dl = g_device->dispatch;
-    for (auto* images : {&g_lines, &g_occlusion}) {
+    // Half the scene's size rounds up, for a texel at each second pixel.
+    const vk::Extent2D occlusion_extent =
+        g_half_occlusion ? vk::Extent2D{(extent.width + 1) / 2, (extent.height + 1) / 2} : extent;
+    const std::array<std::pair<std::array<Image, LineImages>*, vk::Extent2D>, 2> histories{{
+        {&g_lines, extent},
+        {&g_occlusion, occlusion_extent},
+    }};
+    for (const auto& [images, images_extent] : histories) {
         for (Image& image : *images) {
             g_memory->Destroy(image);
-            image = g_memory->CreateImage(LinesFormat, extent,
+            image = g_memory->CreateImage(LinesFormat, images_extent,
                                           vk::ImageUsageFlagBits::eStorage |
                                               vk::ImageUsageFlagBits::eSampled |
                                               vk::ImageUsageFlagBits::eTransferDst,
@@ -467,6 +540,9 @@ vk::ImageView AlbedoView() {
 void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet,
                     bool drawn, u64 address, vk::Buffer buffer, u64 offset, const Image& depth) {
     const auto& dl = g_device->dispatch;
+    if (drawn) {
+        StartHistories(cmd);
+    }
     std::array<vk::ImageMemoryBarrier2, SurfaceFormats.size()> barriers;
     std::array<vk::RenderingAttachmentInfo, SurfaceFormats.size()> colors;
     for (u32 i = 0; i < SurfaceFormats.size(); i++) {
@@ -534,7 +610,7 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
     }
     PassTimes::Mark(cmd, PassTimes::Pass::WorldOpaque);
     // The game's stencil keeps vegetation out of its decals: here, the vegetation draws after them.
-    if (drawn && header.world_decals != 0) {
+    if (drawn && g_draw_decals && header.world_decals != 0) {
         cmd.endRendering(dl);
         for (vk::RenderingAttachmentInfo& color : colors) {
             color.loadOp = vk::AttachmentLoadOp::eLoad;
@@ -607,41 +683,6 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
 
 void RecordLines(vk::CommandBuffer cmd, u64 address) {
     const auto& dl = g_device->dispatch;
-    if (!g_lines_cleared) {
-        g_lines_cleared = true;
-        const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-        const std::array histories{g_lines[0].image, g_lines[1].image, g_occlusion[0].image,
-                                   g_occlusion[1].image};
-        std::array<vk::ImageMemoryBarrier2, histories.size() + 1> barriers;
-        for (u32 i = 0; i < barriers.size(); i++) {
-            barriers[i] = {
-                .dstStageMask = vk::PipelineStageFlagBits2::eClear,
-                .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
-                .oldLayout = vk::ImageLayout::eUndefined,
-                .newLayout = vk::ImageLayout::eGeneral,
-                .image = i < histories.size() ? histories[i] : g_depth_levels.image,
-                .subresourceRange = range,
-            };
-        }
-        barriers.back().subresourceRange.levelCount = DepthLevels;
-        cmd.pipelineBarrier2({.imageMemoryBarrierCount = static_cast<u32>(barriers.size()),
-                              .pImageMemoryBarriers = barriers.data()},
-                             dl);
-        for (const vk::Image image : histories) {
-            cmd.clearColorImage(image, vk::ImageLayout::eGeneral,
-                                vk::ClearColorValue{.float32 = std::array<float, 4>{}}, range, dl);
-        }
-        const vk::MemoryBarrier2 cleared{
-            .srcStageMask = vk::PipelineStageFlagBits2::eClear,
-            .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-            .dstStageMask = vk::PipelineStageFlagBits2::eComputeShader,
-            .dstAccessMask =
-                vk::AccessFlagBits2::eShaderSampledRead | vk::AccessFlagBits2::eShaderStorageWrite,
-        };
-        cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &cleared}, dl);
-    }
-    g_lines_image = (g_lines_image + 1) % LineImages;
-    g_lines_frame = (g_lines_frame + 1) % LineFrames;
     const FramePush push{
         .light = address + Scene::LightOffset,
         .frame = g_lines_frame,
@@ -687,7 +728,8 @@ void RecordOcclusion(vk::CommandBuffer cmd, u64 address) {
                            g_occlusion_sets[g_lines_image], {}, dl);
     cmd.pushConstants(g_occlusion_pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0,
                       sizeof(push), &push, dl);
-    cmd.dispatch(groups(g_extent.width), groups(g_extent.height), 1, dl);
+    const vk::Extent2D occlusion_extent = g_occlusion[g_lines_image].extent;
+    cmd.dispatch(groups(occlusion_extent.width), groups(occlusion_extent.height), 1, dl);
     WrittenBarrier(cmd);
 }
 

@@ -89,6 +89,10 @@ enum Control : int {
     IdAspect,
     IdRenderSizeLabel,
     IdRenderSize,
+    IdUpscalerLabel,
+    IdUpscaler,
+    IdUpscaleQualityLabel,
+    IdUpscaleQuality,
     IdLanguageLabel,
     IdLanguage,
     IdDlc,
@@ -164,6 +168,8 @@ enum Control : int {
     IdShadows,
     IdFogLabel,
     IdFog,
+    IdFogShadowsLabel,
+    IdFogShadows,
     IdOcclusionLabel,
     IdOcclusion,
     IdMotionBlurLabel,
@@ -172,10 +178,16 @@ enum Control : int {
     IdAntialias,
     IdBloomLabel,
     IdBloom,
-    IdUpscalerLabel,
-    IdUpscaler,
-    IdUpscaleQualityLabel,
-    IdUpscaleQuality,
+    IdOutlinesLabel,
+    IdOutlines,
+    IdDecalsLabel,
+    IdDecals,
+    IdGlassLabel,
+    IdGlass,
+    IdParticlesLabel,
+    IdParticles,
+    IdAnisotropyLabel,
+    IdAnisotropy,
     IdTextureStreamingLabel,
     IdTextureStreaming,
     IdGraphicsNote,
@@ -364,26 +376,36 @@ struct Row {
     int top;
 };
 
-// Rows 29 to 30 pixels apart, the original's spacing.
+// Rows 28 pixels apart, which fits ten below the check boxes.
 constexpr std::array Rows{
-    Row{IdMonitorLabel, IdMonitor, L"Monitor", 182},
-    Row{IdResolutionLabel, IdResolution, L"Monitor Resolution", 211},
-    Row{IdRefreshLabel, IdRefresh, L"Refresh Rate", 241},
-    Row{IdVSyncLabel, IdVSync, L"VSync", 270},
-    Row{IdFrameRateLabel, IdFrameRate, L"FPS Cap", 299},
-    Row{IdAspectLabel, IdAspect, L"Aspect Ratio", 328},
-    Row{IdRenderSizeLabel, IdRenderSize, L"Render Resolution", 357},
-    Row{IdLanguageLabel, IdLanguage, L"Language", 386},
+    Row{IdMonitorLabel, IdMonitor, L"Monitor", 140},
+    Row{IdResolutionLabel, IdResolution, L"Monitor Resolution", 168},
+    Row{IdRefreshLabel, IdRefresh, L"Refresh Rate", 196},
+    Row{IdVSyncLabel, IdVSync, L"VSync", 224},
+    Row{IdFrameRateLabel, IdFrameRate, L"FPS Cap", 252},
+    Row{IdAspectLabel, IdAspect, L"Aspect Ratio", 280},
+    Row{IdRenderSizeLabel, IdRenderSize, L"Render Resolution", 308},
+    Row{IdUpscalerLabel, IdUpscaler, L"Upscaler", 336},
+    Row{IdUpscaleQualityLabel, IdUpscaleQuality, L"Upscaler Quality", 364},
+    Row{IdLanguageLabel, IdLanguage, L"Language", 392},
 };
 
 // In the order of Settings::VSync.
 constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
+// Indexed by Settings::Upscaler and Settings::UpscaleQuality.
+constexpr std::array<const wchar_t*, 4> UpscalerChoices{L"Off", L"FSR 3.1", L"FSR 4", L"DLSS"};
+constexpr std::array<const wchar_t*, 5> UpscaleQualityChoices{L"Native AA", L"Quality", L"Balanced",
+                                                              L"Performance", L"Ultra Performance"};
 
-// The Graphics tab: the preset, then each pass's choice. Quality choices are in the order of
-// Settings::Quality; switches put On first.
+// The Graphics tab: the preset across the top, each pass's choice in two columns of rows 28
+// pixels apart, then the note. Quality choices are in the order of Settings::Quality; switches
+// put On first.
 constexpr int PresetTop = 88;
-constexpr int TextureStreamingTop = 313;
-constexpr int GraphicsNoteTop = 342;
+constexpr int PassTop = 118;
+constexpr int PassStep = 28;
+constexpr int GraphicsNoteTop = 322;
+// The Texture Streaming list is wider than its combo box, to show the GPU's name.
+constexpr int TextureStreamingListWidth = 280;
 // The Texture Streaming choices after Auto, in MB. One at least the GPU's memory keeps within the
 // driver's budget, as Auto does.
 constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  4096,  6144, 8192,
@@ -391,29 +413,58 @@ constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  
 constexpr std::array<const wchar_t*, 4> QualityChoices{L"PS4 Original", L"Medium", L"Low", L"Off"};
 constexpr std::array<const wchar_t*, 3> FogChoices{L"PS4 Original", L"Medium", L"Low"};
 constexpr std::array<const wchar_t*, 2> SwitchChoices{L"On", L"Off"};
-// Indexed by Settings::Upscaler and Settings::UpscaleQuality.
-constexpr std::array<const wchar_t*, 4> UpscalerChoices{L"Off", L"FSR 3.1", L"FSR 4", L"DLSS"};
-constexpr std::array<const wchar_t*, 5> UpscaleQualityChoices{L"Native AA", L"Quality", L"Balanced",
-                                                              L"Performance", L"Ultra Performance"};
+// Ambient occlusion and motion blur offer three qualities each, in the order of their choices.
+constexpr std::array<const wchar_t*, 3> OcclusionChoices{L"PS4 Original", L"Half Resolution",
+                                                         L"Off"};
+constexpr std::array OcclusionQualities{Settings::Quality::Original, Settings::Quality::Medium,
+                                        Settings::Quality::Off};
+constexpr std::array<const wchar_t*, 3> MotionBlurChoices{L"PS4 Original", L"Low", L"Off"};
+constexpr std::array MotionBlurQualities{Settings::Quality::Original, Settings::Quality::Low,
+                                         Settings::Quality::Off};
+constexpr std::array<const wchar_t*, 2> ParticleChoices{L"Full Resolution", L"Half Resolution"};
+// The most anisotropic filtering samples of each choice; 2 is the game's.
+constexpr std::array<const wchar_t*, 5> AnisotropyChoices{L"Off", L"2x (PS4)", L"4x", L"8x",
+                                                          L"16x"};
+constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
+
+struct GraphicsColumn {
+    int label_left;
+    int label_width;
+    int combo_left;
+    int combo_width;
+};
+
+// Each column's labels fit their longest translation, 130 and 170 pixels.
+constexpr GraphicsColumn LeftColumn{LabelLeft, 130, 152, 122};
+constexpr GraphicsColumn RightColumn{280, 170, 454, 123};
 
 struct GraphicsRow {
     int label;
     int combo;
     const wchar_t* text;
-    int top;
+    GraphicsColumn column;
+    int row;
     std::span<const wchar_t* const> choices;
 };
 
+// The left column, then the right; Texture Streaming's choices come from the GPU.
 constexpr std::array GraphicsRows{
-    GraphicsRow{IdShadowsLabel, IdShadows, L"Shadows", 113, QualityChoices},
-    GraphicsRow{IdFogLabel, IdFog, L"Volumetric Fog", 138, FogChoices},
-    GraphicsRow{IdOcclusionLabel, IdOcclusion, L"Ambient Occlusion", 163, SwitchChoices},
-    GraphicsRow{IdMotionBlurLabel, IdMotionBlur, L"Motion Blur", 188, SwitchChoices},
-    GraphicsRow{IdAntialiasLabel, IdAntialias, L"Anti-Aliasing", 213, SwitchChoices},
-    GraphicsRow{IdBloomLabel, IdBloom, L"Bloom", 238, SwitchChoices},
-    GraphicsRow{IdUpscalerLabel, IdUpscaler, L"Upscaler", 263, UpscalerChoices},
-    GraphicsRow{IdUpscaleQualityLabel, IdUpscaleQuality, L"Upscaler Quality", 288,
-                UpscaleQualityChoices},
+    GraphicsRow{IdShadowsLabel, IdShadows, L"Shadows", LeftColumn, 0, QualityChoices},
+    GraphicsRow{IdFogLabel, IdFog, L"Volumetric Fog", LeftColumn, 1, FogChoices},
+    GraphicsRow{IdFogShadowsLabel, IdFogShadows, L"Fog Shadows", LeftColumn, 2, SwitchChoices},
+    GraphicsRow{IdOcclusionLabel, IdOcclusion, L"Ambient Occlusion", LeftColumn, 3,
+                OcclusionChoices},
+    GraphicsRow{IdMotionBlurLabel, IdMotionBlur, L"Motion Blur", LeftColumn, 4, MotionBlurChoices},
+    GraphicsRow{IdAntialiasLabel, IdAntialias, L"Anti-Aliasing", LeftColumn, 5, SwitchChoices},
+    GraphicsRow{IdBloomLabel, IdBloom, L"Bloom", LeftColumn, 6, SwitchChoices},
+    GraphicsRow{IdOutlinesLabel, IdOutlines, L"Outlines", RightColumn, 0, SwitchChoices},
+    GraphicsRow{IdDecalsLabel, IdDecals, L"Decals", RightColumn, 1, SwitchChoices},
+    GraphicsRow{IdGlassLabel, IdGlass, L"Glass Refraction", RightColumn, 2, SwitchChoices},
+    GraphicsRow{IdParticlesLabel, IdParticles, L"Particles", RightColumn, 3, ParticleChoices},
+    GraphicsRow{IdAnisotropyLabel, IdAnisotropy, L"Anisotropic Filtering", RightColumn, 4,
+                AnisotropyChoices},
+    GraphicsRow{
+        IdTextureStreamingLabel, IdTextureStreaming, L"Texture Streaming", RightColumn, 5, {}},
 };
 
 struct Monitor {
@@ -1184,14 +1235,38 @@ Settings::Game ReadGame(const Dialog& dialog) {
     return game;
 }
 
+// The index of value in values, or fallback when it is none of them.
+template <typename Value, size_t Count>
+int IndexOf(const std::array<Value, Count>& values, Value value, int fallback) {
+    const auto found = std::ranges::find(values, value);
+    return found != values.end() ? static_cast<int>(found - values.begin()) : fallback;
+}
+
+// Sets value to the entry of values that the combo box shows, when it shows one.
+template <typename Value, size_t Count>
+void ReadChoice(HWND combo, const std::array<Value, Count>& values, Value& value) {
+    const int index = Selected(combo);
+    if (index >= 0 && index < static_cast<int>(Count)) {
+        value = values[index];
+    }
+}
+
+// A value the choices lack shows as the choice the renderer draws it as.
 void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     Select(Item(dialog, IdShadows), static_cast<int>(graphics.shadows));
     Select(Item(dialog, IdFog),
            std::min(static_cast<int>(graphics.fog), static_cast<int>(FogChoices.size()) - 1));
-    Select(Item(dialog, IdOcclusion), graphics.ambient_occlusion ? 0 : 1);
-    Select(Item(dialog, IdMotionBlur), graphics.motion_blur ? 0 : 1);
+    Select(Item(dialog, IdFogShadows), graphics.fog_shadows ? 0 : 1);
+    Select(Item(dialog, IdOcclusion), IndexOf(OcclusionQualities, graphics.ambient_occlusion, 1));
+    Select(Item(dialog, IdMotionBlur), IndexOf(MotionBlurQualities, graphics.motion_blur, 0));
     Select(Item(dialog, IdAntialias), graphics.antialiasing ? 0 : 1);
     Select(Item(dialog, IdBloom), graphics.bloom ? 0 : 1);
+    Select(Item(dialog, IdOutlines), graphics.outlines ? 0 : 1);
+    Select(Item(dialog, IdDecals), graphics.decals ? 0 : 1);
+    Select(Item(dialog, IdGlass), graphics.glass_refraction ? 0 : 1);
+    Select(Item(dialog, IdParticles), graphics.half_resolution_particles ? 1 : 0);
+    Select(Item(dialog, IdAnisotropy),
+           IndexOf(AnisotropyLevels, graphics.anisotropic_filtering, 1));
 }
 
 // The upscaler and its quality, which presets leave.
@@ -1211,10 +1286,16 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     if (fog >= 0 && fog < static_cast<int>(FogChoices.size())) {
         graphics.fog = static_cast<Settings::Quality>(fog);
     }
-    graphics.ambient_occlusion = Selected(Item(dialog, IdOcclusion)) != 1;
-    graphics.motion_blur = Selected(Item(dialog, IdMotionBlur)) != 1;
+    graphics.fog_shadows = Selected(Item(dialog, IdFogShadows)) != 1;
+    ReadChoice(Item(dialog, IdOcclusion), OcclusionQualities, graphics.ambient_occlusion);
+    ReadChoice(Item(dialog, IdMotionBlur), MotionBlurQualities, graphics.motion_blur);
     graphics.antialiasing = Selected(Item(dialog, IdAntialias)) != 1;
     graphics.bloom = Selected(Item(dialog, IdBloom)) != 1;
+    graphics.outlines = Selected(Item(dialog, IdOutlines)) != 1;
+    graphics.decals = Selected(Item(dialog, IdDecals)) != 1;
+    graphics.glass_refraction = Selected(Item(dialog, IdGlass)) != 1;
+    graphics.half_resolution_particles = Selected(Item(dialog, IdParticles)) == 1;
+    ReadChoice(Item(dialog, IdAnisotropy), AnisotropyLevels, graphics.anisotropic_filtering);
     const int upscaler = Selected(Item(dialog, IdUpscaler));
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
         graphics.upscaler = static_cast<Settings::Upscaler>(upscaler);
@@ -1581,32 +1662,29 @@ void Build(HWND window, Dialog& dialog) {
 
     const HWND graphics_page = dialog.pages[GraphicsPage];
     std::vector<HWND> graphics_order;
-    graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_STATICW, L"Preset",
-                                         SS_LEFT | SS_CENTERIMAGE, IdPresetLabel, LabelLeft,
-                                         PresetTop, LabelWidth, ComboHeight));
+    graphics_order.push_back(MakeControl(
+        dialog, graphics_page, page_origin, WC_STATICW, L"Preset", SS_LEFT | SS_CENTERIMAGE,
+        IdPresetLabel, LeftColumn.label_left, PresetTop, LeftColumn.label_width, ComboHeight));
     graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_COMBOBOXW, L"",
                                          CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, IdPreset,
-                                         ComboLeft, PresetTop, ComboWidth, ComboListHeight));
+                                         LeftColumn.combo_left, PresetTop, ComboWidth,
+                                         ComboListHeight));
     for (const GraphicsRow& row : GraphicsRows) {
-        graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_STATICW,
-                                             row.text, SS_LEFT | SS_CENTERIMAGE, row.label,
-                                             LabelLeft, row.top, LabelWidth, ComboHeight));
+        const int top = PassTop + row.row * PassStep;
+        graphics_order.push_back(MakeControl(
+            dialog, graphics_page, page_origin, WC_STATICW, row.text, SS_LEFT | SS_CENTERIMAGE,
+            row.label, row.column.label_left, top, row.column.label_width, ComboHeight));
         graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_COMBOBOXW, L"",
                                              CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, row.combo,
-                                             ComboLeft, row.top, ComboWidth, ComboListHeight));
+                                             row.column.combo_left, top, row.column.combo_width,
+                                             ComboListHeight));
         for (const wchar_t* choice : row.choices) {
             AddText(Item(dialog, row.combo), choice);
         }
     }
-    graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_STATICW,
-                                         L"Texture Streaming", SS_LEFT | SS_CENTERIMAGE,
-                                         IdTextureStreamingLabel, LabelLeft, TextureStreamingTop,
-                                         LabelWidth, ComboHeight));
-    graphics_order.push_back(MakeControl(dialog, graphics_page, page_origin, WC_COMBOBOXW, L"",
-                                         CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,
-                                         IdTextureStreaming, ComboLeft, TextureStreamingTop,
-                                         ComboWidth, ComboListHeight));
     FillTextureStreaming(dialog, dialog.values.graphics.texture_streaming_mb);
+    SendMessageW(Item(dialog, IdTextureStreaming), CB_SETDROPPEDWIDTH,
+                 Scaled(dialog, TextureStreamingListWidth), 0);
     graphics_order.push_back(MakeControl(
         dialog, graphics_page, page_origin, WC_STATICW,
         L"Steam Deck also sets Aspect Ratio to 16:10, Render Resolution to 720p (1280 x 800) and "
@@ -1840,6 +1918,12 @@ void Build(HWND window, Dialog& dialog) {
     for (const GamePatches::RenderSize& size : GamePatches::RenderSizes) {
         AddText(Item(dialog, IdRenderSize), Wide(size.name));
     }
+    for (const wchar_t* name : UpscalerChoices) {
+        AddText(Item(dialog, IdUpscaler), name);
+    }
+    for (const wchar_t* name : UpscaleQualityChoices) {
+        AddText(Item(dialog, IdUpscaleQuality), name);
+    }
     // Each language is named in itself, whatever the language in use.
     for (const int language : Language::Listed()) {
         AddText(Item(dialog, IdLanguage), Phrase{L"{0}", {Language::WideName(language)}});
@@ -1899,10 +1983,16 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         break;
     case IdShadows:
     case IdFog:
+    case IdFogShadows:
     case IdOcclusion:
     case IdMotionBlur:
     case IdAntialias:
     case IdBloom:
+    case IdOutlines:
+    case IdDecals:
+    case IdGlass:
+    case IdParticles:
+    case IdAnisotropy:
     case IdAspect:
     case IdRenderSize:
     case IdTextureStreaming:

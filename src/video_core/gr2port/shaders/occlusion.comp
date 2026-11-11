@@ -8,6 +8,10 @@
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
+// The scene's pixels per occlusion texel along each axis: 1 at the scene's size, 2 at half size,
+// where a texel holds the occlusion of the first pixel of its block.
+layout(constant_id = 0) const int Scale = 1;
+
 layout(set = 0, binding = 0) uniform sampler2D scene_depth;
 layout(set = 0, binding = 1) uniform sampler2D depth_levels;
 layout(set = 0, binding = 2) uniform sampler2D surface_normal;
@@ -50,19 +54,29 @@ bool WorldAt(ivec2 pixel, float depth) {
     return depth > 0.0 && texelFetch(character_depth, pixel, 0).r <= depth;
 }
 
+// The history's coordinate of a place in scene pixels. At half size a texel's value belongs to its
+// first pixel's centre, a quarter texel before the texel's own centre.
+vec2 HistoryCoord(vec2 place, vec2 inverse_size) {
+    if (Scale == 1) {
+        return place * inverse_size;
+    }
+    return (place + 0.5 * float(Scale - 1)) / (float(Scale) * vec2(textureSize(history, 0)));
+}
+
 // The game's SSAO (CS 0x1c31e4c above occlusion_select 0.9, else 0x1c32a8c): four samples on a
 // disk that turns per pixel and frame, read from depth levels that grow with the disk, averaged
-// over frames with the camera's reprojection. A pixel holds its occlusion, its distance over the
-// depth range and the samples it has averaged. The samples see the characters' depth too.
+// over frames with the camera's reprojection. A texel holds its pixel's occlusion, distance over
+// the depth range and the samples averaged. The samples see the characters' depth too.
 void main() {
-    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 pixel = texel * Scale;
     const ivec2 size = textureSize(scene_depth, 0);
     if (any(greaterThanEqual(pixel, size))) {
         return;
     }
     const float depth = texelFetch(scene_depth, pixel, 0).r;
     if (!WorldAt(pixel, depth)) {
-        imageStore(occlusion, pixel, vec4(0.0, 1.0, 0.0, 0.0));
+        imageStore(occlusion, texel, vec4(0.0, 1.0, 0.0, 0.0));
         return;
     }
     const vec2 inverse_size = 1.0 / vec2(size);
@@ -120,16 +134,16 @@ void main() {
     const float scaled_distance = distance_to_eye / light.depth_range;
     const vec4 restart = vec4(occluded, scaled_distance, SamplesPerFrame, 0.0);
     if (any(lessThan(history_pixel, vec2(0.0))) || any(greaterThan(history_pixel, vec2(size)))) {
-        imageStore(occlusion, pixel, restart);
+        imageStore(occlusion, texel, restart);
         return;
     }
-    const vec3 past = textureLod(history, history_pixel * inverse_size, 0.0).rgb;
+    const vec3 past = textureLod(history, HistoryCoord(history_pixel, inverse_size), 0.0).rgb;
     if (abs(1.0 - scaled_distance / max(past.g, 1e-6)) >= DepthThreshold) {
-        imageStore(occlusion, pixel, restart);
+        imageStore(occlusion, texel, restart);
         return;
     }
     const float samples = past.b + SamplesPerFrame;
-    imageStore(occlusion, pixel,
+    imageStore(occlusion, texel,
                vec4(clamp((past.b * past.r + SamplesPerFrame * occluded) / samples, 0.0, 1.0),
                     scaled_distance, min(samples, SamplesPerFrame * MaxFrames), 0.0));
 }

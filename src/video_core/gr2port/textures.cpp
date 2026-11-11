@@ -26,6 +26,7 @@
 #include "video_core/gr2port/movies.h"
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/scene_ring.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/gr2port/textures.h"
 #include "video_core/gr2port/upscaler.h"
 #include "video_core/host_shaders/tiling_macro_128_comp.h"
@@ -868,6 +869,7 @@ bool CreateSet(const Device& d) {
                     Descriptors);
     }
     const u32 descriptors = g_streaming ? Descriptors : Capacity;
+    const u32 anisotropy = Settings::Get().graphics.anisotropic_filtering;
     vk::SamplerCreateInfo sampler_info{
         .magFilter = vk::Filter::eLinear,
         .minFilter = vk::Filter::eLinear,
@@ -878,8 +880,10 @@ bool CreateSet(const Device& d) {
         // The game's loader sets this bias and ratio on every texture it loads. A scene drawn
         // below the picture's size for the upscaler takes the upscaler's bias too.
         .mipLodBias = -51.0f / 256.0f + Upscaler::LodBias(),
-        .anisotropyEnable = true,
-        .maxAnisotropy = 2.0f,
+        // The game's ratio is 2; the graphics settings choose another or none.
+        .anisotropyEnable = anisotropy != 0,
+        .maxAnisotropy = std::min(static_cast<float>(anisotropy),
+                                  d.gpu.getProperties(dl).limits.maxSamplerAnisotropy),
         .maxLod = VK_LOD_CLAMP_NONE,
     };
     g_sampler = d.device.createSampler(sampler_info, nullptr, dl).value;

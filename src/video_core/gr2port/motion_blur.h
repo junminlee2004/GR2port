@@ -12,7 +12,8 @@ class Memory;
 // MotionBlur: the game's blur along the screen's motion, after the bloom, with its own programs.
 namespace Gr2Port::MotionBlur {
 
-/// Creates the sets and the pipelines; scene_format is the scene's colour.
+/// Creates the sets and the pipelines; scene_format is the scene's colour. With motion blur Low,
+/// one reconstruction from a copy of the scene, its taps twice as far apart, replaces the two.
 bool Start(const Device& device, Memory& memory, vk::Format scene_format);
 
 /// With the GPU idle: creates the images at extent. velocity is read in the general layout, the

@@ -37,16 +37,17 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_de
 vk::ImageView AlbedoView();
 
 /// Outside rendering, with depth ready as an attachment: clears the surfaces and depth and, when
-/// drawn, draws the world's draws and decals of the packet at address, which is at offset in
-/// buffer. Leaves the surfaces readable and depth an attachment.
+/// drawn, starts the frame's lines and occlusion images and draws the world's draws and decals of
+/// the packet at address, which is at offset in buffer. Leaves the surfaces readable and depth an
+/// attachment.
 void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet,
                     bool drawn, u64 address, vk::Buffer buffer, u64 offset, const Image& depth);
 
 /// Outside rendering, with the surfaces and depth readable: draws the world's ink lines from them.
 void RecordLines(vk::CommandBuffer cmd, u64 address);
 
-/// After RecordLines, which starts the frame's history images, with the characters' depth
-/// readable: draws the world's ambient occlusion from the depths and normals.
+/// After RecordSurfaces when drawn, with the characters' depth readable: draws the world's ambient
+/// occlusion from the depths and normals, at the scene's size or below Original at half its size.
 void RecordOcclusion(vk::CommandBuffer cmd, u64 address);
 
 /// Inside a rendering into the scene's colour, after RecordOcclusion: lights the surfaces.

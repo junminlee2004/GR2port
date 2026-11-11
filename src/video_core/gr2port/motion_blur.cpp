@@ -9,6 +9,7 @@
 #include "video_core/gr2port/motion_blur.h"
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/scene.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/gr2port/shaders/motion_blur_compress_comp.h"
 #include "video_core/gr2port/shaders/motion_blur_frag.h"
 #include "video_core/gr2port/shaders/motion_blur_neighbor_comp.h"
@@ -55,6 +56,38 @@ Image g_neighbor_max;
 Image g_second;
 vk::Image g_scene;
 vk::ImageView g_scene_view;
+// Motion blur Low: the scene's copy in the second image, then one reconstruction back into the
+// scene, its taps twice as far apart.
+bool g_low = false;
+
+// The SPIR-V code with its boolean specialization constant id made true by default, or none when
+// the code has no such constant.
+std::vector<u32> WithConstantTrue(std::span<const u32> code, u32 id) {
+    constexpr size_t HeaderWords = 5;
+    constexpr u32 OpDecorate = 71;
+    constexpr u32 DecorationSpecId = 1;
+    constexpr u32 OpSpecConstantTrue = 48;
+    constexpr u32 OpSpecConstantFalse = 49;
+    std::vector<u32> words(code.begin(), code.end());
+    u32 constant = 0;
+    for (size_t i = HeaderWords; i < words.size();) {
+        const u32 count = words[i] >> 16;
+        const u32 opcode = words[i] & 0xffffu;
+        if (count == 0 || i + count > words.size()) {
+            break;
+        }
+        if (opcode == OpDecorate && count == 4 && words[i + 2] == DecorationSpecId &&
+            words[i + 3] == id) {
+            constant = words[i + 1];
+        } else if (opcode == OpSpecConstantFalse && count == 3 && constant != 0 &&
+                   words[i + 2] == constant) {
+            words[i] = (count << 16) | OpSpecConstantTrue;
+            return words;
+        }
+        i += count;
+    }
+    return {};
+}
 
 vk::DescriptorSetLayout CreateLayout(std::span<const vk::DescriptorSetLayoutBinding> bindings) {
     return g_device->device
@@ -190,9 +223,20 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
         CreateComputePipeline(device, MOTION_BLUR_COMPRESS_COMP, sizeof(u64), compress_sets);
     g_tile = CreateComputePipeline(device, MOTION_BLUR_TILE_COMP, sizeof(u64), max_sets);
     g_neighbor = CreateComputePipeline(device, MOTION_BLUR_NEIGHBOR_COMP, 0, max_sets);
+    g_low = Settings::Get().graphics.motion_blur == Settings::Quality::Low;
+    std::vector<u32> low_code;
+    if (g_low) {
+        // The reconstruction's constant id 0, DoubleStep.
+        low_code = WithConstantTrue(MOTION_BLUR_FRAG, 0);
+        if (low_code.empty()) {
+            return false;
+        }
+    }
+    const std::span<const u32> fragment =
+        g_low ? std::span<const u32>{low_code} : std::span<const u32>{MOTION_BLUR_FRAG};
     g_blur = CreateGraphicsPipeline(device, {
                                                 .vertex = MOTION_BLUR_VERT,
-                                                .fragment = MOTION_BLUR_FRAG,
+                                                .fragment = fragment,
                                                 .color = scene_format,
                                                 .push_constant_bytes = sizeof(u64),
                                                 .set_layouts = blur_sets,
@@ -210,9 +254,12 @@ bool Resize(vk::Extent2D extent, vk::ImageView velocity, vk::ImageView depth,
     g_compressed = g_memory->CreateImage(WorkFormat, extent, Work, Color);
     g_tile_max = g_memory->CreateImage(WorkFormat, Tiles, Work, Color);
     g_neighbor_max = g_memory->CreateImage(WorkFormat, Tiles, Work, Color);
-    g_second = g_memory->CreateImage(
-        g_scene_format, extent,
-        vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled, Color);
+    vk::ImageUsageFlags second_usage =
+        vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
+    if (g_low) {
+        second_usage |= vk::ImageUsageFlagBits::eTransferDst;
+    }
+    g_second = g_memory->CreateImage(g_scene_format, extent, second_usage, Color);
     if (!g_compressed.image || !g_tile_max.image || !g_neighbor_max.image || !g_second.image) {
         return false;
     }
@@ -301,14 +348,37 @@ void Record(vk::CommandBuffer cmd, u64 address) {
     for (const Image* image : {&g_compressed, &g_neighbor_max}) {
         ImageBarrier(cmd, image->image, General, General, Compute, Write, Fragment, Read);
     }
-    // Into the second image, then back into the scene.
-    ImageBarrier(cmd, g_second.image, vk::ImageLayout::eUndefined, Attachment, Fragment,
-                 vk::AccessFlagBits2::eNone, Output, AttachmentWrite);
-    Reconstruct(cmd, g_blur_sets[0], g_second.view, address);
-    ImageBarrier(cmd, g_second.image, Attachment, ShaderRead, Output, AttachmentWrite, Fragment,
-                 Read);
-    ImageBarrier(cmd, g_scene, ShaderRead, Attachment, Fragment | Compute, Read, Output,
-                 AttachmentWrite);
+    if (g_low) {
+        // The scene's copy into the second image.
+        constexpr auto Copy = vk::PipelineStageFlagBits2::eCopy;
+        constexpr auto Source = vk::ImageLayout::eTransferSrcOptimal;
+        constexpr auto Target = vk::ImageLayout::eTransferDstOptimal;
+        constexpr auto CopyWrite = vk::AccessFlagBits2::eTransferWrite;
+        ImageBarrier(cmd, g_scene, ShaderRead, Source, Fragment | Compute,
+                     vk::AccessFlagBits2::eNone, Copy, vk::AccessFlagBits2::eTransferRead);
+        ImageBarrier(cmd, g_second.image, vk::ImageLayout::eUndefined, Target, Fragment,
+                     vk::AccessFlagBits2::eNone, Copy, CopyWrite);
+        const vk::Extent2D second = g_second.extent;
+        const vk::ImageCopy region{
+            .srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+            .dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+            .extent = vk::Extent3D{second.width, second.height, 1},
+        };
+        cmd.copyImage(g_scene, Source, g_second.image, Target, region, dl);
+        ImageBarrier(cmd, g_second.image, Target, ShaderRead, Copy, CopyWrite, Fragment, Read);
+        ImageBarrier(cmd, g_scene, Source, Attachment, Copy, vk::AccessFlagBits2::eNone, Output,
+                     AttachmentWrite);
+    } else {
+        // The reconstruction into the second image.
+        ImageBarrier(cmd, g_second.image, vk::ImageLayout::eUndefined, Attachment, Fragment,
+                     vk::AccessFlagBits2::eNone, Output, AttachmentWrite);
+        Reconstruct(cmd, g_blur_sets[0], g_second.view, address);
+        ImageBarrier(cmd, g_second.image, Attachment, ShaderRead, Output, AttachmentWrite, Fragment,
+                     Read);
+        ImageBarrier(cmd, g_scene, ShaderRead, Attachment, Fragment | Compute, Read, Output,
+                     AttachmentWrite);
+    }
+    // From the second image back into the scene.
     Reconstruct(cmd, g_blur_sets[1], g_scene_view, address);
     ImageBarrier(cmd, g_scene, Attachment, ShaderRead, Output, AttachmentWrite, Fragment | Compute,
                  Read);

@@ -897,7 +897,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                   vk::PipelineStageFlagBits2::eFragmentShader |
                       vk::PipelineStageFlagBits2::eComputeShader,
                   vk::AccessFlagBits2::eShaderSampledRead);
-    if (drawn) {
+    if (drawn && graphics.outlines) {
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Lines);
         World::RecordLines(cmd, packet.address);
     }
@@ -941,7 +941,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         PassTimes::Mark(cmd, PassTimes::Pass::CharacterDepth);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Occlusion);
         // Without ambient occlusion its images keep their clear: nothing is occluded.
-        if (graphics.ambient_occlusion) {
+        if (graphics.ambient_occlusion != Settings::Quality::Off) {
             World::RecordOcclusion(cmd, packet.address);
         }
     }
@@ -1049,7 +1049,9 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                                extent);
         PassTimes::Mark(cmd, PassTimes::Pass::CharacterGlass);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Contours);
-        Contours::Record(cmd, header, packet.address, scene_ring.buffer, offset, extent);
+        if (graphics.outlines) {
+            Contours::Record(cmd, header, packet.address, scene_ring.buffer, offset, extent);
+        }
     }
     cmd.endRendering(dl);
     PassTimes::Mark(cmd, PassTimes::Pass::Contours);
@@ -1170,7 +1172,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                             Timestamps * slot_index + BloomTimestamp, dl);
     }
 
-    if (drawn && graphics.motion_blur) {
+    if (drawn && graphics.motion_blur != Settings::Quality::Off) {
         MotionBlur::Record(cmd, packet.address);
     }
     PassTimes::Mark(cmd, PassTimes::Pass::MotionBlur);

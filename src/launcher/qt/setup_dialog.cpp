@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -230,32 +231,32 @@ struct Pad {
     std::string guid;
 };
 
-// The Display tab's rows, 29 to 30 pixels apart, the original's spacing.
-constexpr int MonitorTop = 182;
-constexpr int ResolutionTop = 211;
-constexpr int RefreshTop = 241;
-constexpr int VSyncTop = 270;
-constexpr int FrameRateTop = 299;
-constexpr int AspectTop = 328;
-constexpr int RenderSizeTop = 357;
-constexpr int LanguageTop = 386;
+// The Display tab's rows, 28 pixels apart, which fits ten below the check boxes.
+constexpr int MonitorTop = 140;
+constexpr int ResolutionTop = 168;
+constexpr int RefreshTop = 196;
+constexpr int VSyncTop = 224;
+constexpr int FrameRateTop = 252;
+constexpr int AspectTop = 280;
+constexpr int RenderSizeTop = 308;
+constexpr int UpscalerTop = 336;
+constexpr int UpscaleQualityTop = 364;
+constexpr int LanguageTop = 392;
 
 // In the order of Settings::VSync.
 constexpr std::array<std::string_view, 3> VSyncNames{"Off", "Double Buffered", "Triple Buffered"};
+// Indexed by Settings::Upscaler and Settings::UpscaleQuality.
+constexpr std::array<std::string_view, 4> UpscalerChoices{"Off", "FSR 3.1", "FSR 4", "DLSS"};
+constexpr std::array<std::string_view, 5> UpscaleQualityChoices{"Native AA", "Quality", "Balanced",
+                                                                "Performance", "Ultra Performance"};
 
-// The Graphics tab: the preset, then each pass's choice. Quality choices are in the order of
-// Settings::Quality; switches put On first.
+// The Graphics tab: the preset across the top, each pass's choice in two columns of rows 28
+// pixels apart, then the note. Quality choices are in the order of Settings::Quality; switches
+// put On first.
 constexpr int PresetTop = 88;
-constexpr int ShadowsTop = 113;
-constexpr int FogTop = 138;
-constexpr int OcclusionTop = 163;
-constexpr int MotionBlurTop = 188;
-constexpr int AntialiasTop = 213;
-constexpr int BloomTop = 238;
-constexpr int UpscalerTop = 263;
-constexpr int UpscaleQualityTop = 288;
-constexpr int TextureStreamingTop = 313;
-constexpr int GraphicsNoteTop = 342;
+constexpr int PassTop = 118;
+constexpr int PassStep = 28;
+constexpr int GraphicsNoteTop = 322;
 // The Texture Streaming choices after Auto, in MB. One at least the GPU's memory keeps within the
 // driver's budget, as Auto does.
 constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  4096,  6144, 8192,
@@ -263,10 +264,29 @@ constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  
 constexpr std::array<std::string_view, 4> QualityChoices{"PS4 Original", "Medium", "Low", "Off"};
 constexpr std::array<std::string_view, 3> FogChoices{"PS4 Original", "Medium", "Low"};
 constexpr std::array<std::string_view, 2> SwitchChoices{"On", "Off"};
-// Indexed by Settings::Upscaler and Settings::UpscaleQuality.
-constexpr std::array<std::string_view, 4> UpscalerChoices{"Off", "FSR 3.1", "FSR 4", "DLSS"};
-constexpr std::array<std::string_view, 5> UpscaleQualityChoices{"Native AA", "Quality", "Balanced",
-                                                                "Performance", "Ultra Performance"};
+// Ambient occlusion and motion blur offer three qualities each, in the order of their choices.
+constexpr std::array<std::string_view, 3> OcclusionChoices{"PS4 Original", "Half Resolution",
+                                                           "Off"};
+constexpr std::array OcclusionQualities{Settings::Quality::Original, Settings::Quality::Medium,
+                                        Settings::Quality::Off};
+constexpr std::array<std::string_view, 3> MotionBlurChoices{"PS4 Original", "Low", "Off"};
+constexpr std::array MotionBlurQualities{Settings::Quality::Original, Settings::Quality::Low,
+                                         Settings::Quality::Off};
+constexpr std::array<std::string_view, 2> ParticleChoices{"Full Resolution", "Half Resolution"};
+// The most anisotropic filtering samples of each choice; 2 is the game's.
+constexpr std::array<std::string_view, 5> AnisotropyChoices{"Off", "2x (PS4)", "4x", "8x", "16x"};
+constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
+
+struct GraphicsColumn {
+    int label_left;
+    int label_width;
+    int combo_left;
+    int combo_width;
+};
+
+// Each column's labels fit their longest translation, 130 and 170 pixels.
+constexpr GraphicsColumn LeftColumn{LabelLeft, 130, 152, 122};
+constexpr GraphicsColumn RightColumn{280, 170, 454, 123};
 
 // English text and the values its {N} markers name, shown in the language in use.
 struct Phrase {
@@ -347,16 +367,22 @@ struct Dialog {
     QComboBox* frame_rate = nullptr;
     QComboBox* aspect = nullptr;
     QComboBox* render_size = nullptr;
+    QComboBox* upscaler = nullptr;
+    QComboBox* upscale_quality = nullptr;
     QComboBox* language = nullptr;
     QComboBox* preset = nullptr;
     QComboBox* shadows = nullptr;
     QComboBox* fog = nullptr;
+    QComboBox* fog_shadows = nullptr;
     QComboBox* occlusion = nullptr;
     QComboBox* motion_blur = nullptr;
     QComboBox* antialias = nullptr;
     QComboBox* bloom = nullptr;
-    QComboBox* upscaler = nullptr;
-    QComboBox* upscale_quality = nullptr;
+    QComboBox* outlines = nullptr;
+    QComboBox* decals = nullptr;
+    QComboBox* glass_refraction = nullptr;
+    QComboBox* particles = nullptr;
+    QComboBox* anisotropy = nullptr;
     QComboBox* texture_streaming_list = nullptr;
     std::array<QCheckBox*, Toggles.size()> toggles{};
     QComboBox* active_pad = nullptr;
@@ -778,14 +804,38 @@ Settings::Game ReadGame(const Dialog& dialog) {
     return game;
 }
 
+// The index of value in values, or fallback when it is none of them.
+template <typename Value, size_t Count>
+int IndexOf(const std::array<Value, Count>& values, Value value, int fallback) {
+    const auto found = std::ranges::find(values, value);
+    return found != values.end() ? static_cast<int>(found - values.begin()) : fallback;
+}
+
+// Sets value to the entry of values that the combo box shows, when it shows one.
+template <typename Value, size_t Count>
+void ReadChoice(const QComboBox* combo, const std::array<Value, Count>& values, Value& value) {
+    const int index = combo->currentIndex();
+    if (index >= 0 && index < static_cast<int>(Count)) {
+        value = values[index];
+    }
+}
+
+// A value the choices lack shows as the choice the renderer draws it as.
 void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.shadows->setCurrentIndex(static_cast<int>(graphics.shadows));
     dialog.fog->setCurrentIndex(
         std::min(static_cast<int>(graphics.fog), static_cast<int>(FogChoices.size()) - 1));
-    dialog.occlusion->setCurrentIndex(graphics.ambient_occlusion ? 0 : 1);
-    dialog.motion_blur->setCurrentIndex(graphics.motion_blur ? 0 : 1);
+    dialog.fog_shadows->setCurrentIndex(graphics.fog_shadows ? 0 : 1);
+    dialog.occlusion->setCurrentIndex(IndexOf(OcclusionQualities, graphics.ambient_occlusion, 1));
+    dialog.motion_blur->setCurrentIndex(IndexOf(MotionBlurQualities, graphics.motion_blur, 0));
     dialog.antialias->setCurrentIndex(graphics.antialiasing ? 0 : 1);
     dialog.bloom->setCurrentIndex(graphics.bloom ? 0 : 1);
+    dialog.outlines->setCurrentIndex(graphics.outlines ? 0 : 1);
+    dialog.decals->setCurrentIndex(graphics.decals ? 0 : 1);
+    dialog.glass_refraction->setCurrentIndex(graphics.glass_refraction ? 0 : 1);
+    dialog.particles->setCurrentIndex(graphics.half_resolution_particles ? 1 : 0);
+    dialog.anisotropy->setCurrentIndex(
+        IndexOf(AnisotropyLevels, graphics.anisotropic_filtering, 1));
 }
 
 // The upscaler and its quality, which presets leave.
@@ -805,10 +855,16 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     if (fog >= 0 && fog < static_cast<int>(FogChoices.size())) {
         graphics.fog = static_cast<Settings::Quality>(fog);
     }
-    graphics.ambient_occlusion = dialog.occlusion->currentIndex() != 1;
-    graphics.motion_blur = dialog.motion_blur->currentIndex() != 1;
+    graphics.fog_shadows = dialog.fog_shadows->currentIndex() != 1;
+    ReadChoice(dialog.occlusion, OcclusionQualities, graphics.ambient_occlusion);
+    ReadChoice(dialog.motion_blur, MotionBlurQualities, graphics.motion_blur);
     graphics.antialiasing = dialog.antialias->currentIndex() != 1;
     graphics.bloom = dialog.bloom->currentIndex() != 1;
+    graphics.outlines = dialog.outlines->currentIndex() != 1;
+    graphics.decals = dialog.decals->currentIndex() != 1;
+    graphics.glass_refraction = dialog.glass_refraction->currentIndex() != 1;
+    graphics.half_resolution_particles = dialog.particles->currentIndex() == 1;
+    ReadChoice(dialog.anisotropy, AnisotropyLevels, graphics.anisotropic_filtering);
     const int upscaler = dialog.upscaler->currentIndex();
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
         graphics.upscaler = static_cast<Settings::Upscaler>(upscaler);
@@ -1039,7 +1095,7 @@ QPushButton* MakeButton(Dialog& dialog, QWidget* page, const Phrase& text, const
     return button;
 }
 
-// A row of the Display and Graphics tabs: a label and its combo box.
+// A label and its combo box in a row, at the Display tab's places.
 QComboBox* MakeRow(Dialog& dialog, QWidget* page, const Phrase& text, int top,
                    QLabel** label = nullptr) {
     QLabel* const made = MakeLabel(dialog, page, text, Qt::AlignLeft | Qt::AlignVCenter,
@@ -1116,27 +1172,43 @@ void BuildDisplay(Dialog& dialog, QWidget* page) {
     dialog.frame_rate = MakeRow(dialog, page, "FPS Cap", FrameRateTop);
     dialog.aspect = MakeRow(dialog, page, "Aspect Ratio", AspectTop);
     dialog.render_size = MakeRow(dialog, page, "Render Resolution", RenderSizeTop);
+    dialog.upscaler = MakeRow(dialog, page, "Upscaler", UpscalerTop);
+    dialog.upscale_quality = MakeRow(dialog, page, "Upscaler Quality", UpscaleQualityTop);
     dialog.language = MakeRow(dialog, page, "Language", LanguageTop);
 }
 
+// Tab order follows creation: the left column's rows, then the right's.
 void BuildGraphics(Dialog& dialog, QWidget* page) {
-    dialog.preset = MakeRow(dialog, page, "Preset", PresetTop);
-    const auto row = [&](const Phrase& text, int top, std::span<const std::string_view> choices) {
-        QComboBox* const combo = MakeRow(dialog, page, text, top);
+    MakeLabel(dialog, page, "Preset", Qt::AlignLeft | Qt::AlignVCenter,
+              Place(page, LeftColumn.label_left, PresetTop, LeftColumn.label_width, ComboHeight));
+    dialog.preset =
+        MakeCombo(page, Place(page, LeftColumn.combo_left, PresetTop, ComboWidth, ComboHeight));
+    const auto row = [&](const Phrase& text, const GraphicsColumn& column, int index,
+                         std::span<const std::string_view> choices) {
+        const int top = PassTop + index * PassStep;
+        MakeLabel(dialog, page, text, Qt::AlignLeft | Qt::AlignVCenter,
+                  Place(page, column.label_left, top, column.label_width, ComboHeight));
+        QComboBox* const combo =
+            MakeCombo(page, Place(page, column.combo_left, top, column.combo_width, ComboHeight));
         for (const std::string_view choice : choices) {
             AddText(dialog, combo, choice);
         }
         return combo;
     };
-    dialog.shadows = row("Shadows", ShadowsTop, QualityChoices);
-    dialog.fog = row("Volumetric Fog", FogTop, FogChoices);
-    dialog.occlusion = row("Ambient Occlusion", OcclusionTop, SwitchChoices);
-    dialog.motion_blur = row("Motion Blur", MotionBlurTop, SwitchChoices);
-    dialog.antialias = row("Anti-Aliasing", AntialiasTop, SwitchChoices);
-    dialog.bloom = row("Bloom", BloomTop, SwitchChoices);
-    dialog.upscaler = row("Upscaler", UpscalerTop, UpscalerChoices);
-    dialog.upscale_quality = row("Upscaler Quality", UpscaleQualityTop, UpscaleQualityChoices);
-    dialog.texture_streaming_list = MakeRow(dialog, page, "Texture Streaming", TextureStreamingTop);
+    dialog.shadows = row("Shadows", LeftColumn, 0, QualityChoices);
+    dialog.fog = row("Volumetric Fog", LeftColumn, 1, FogChoices);
+    dialog.fog_shadows = row("Fog Shadows", LeftColumn, 2, SwitchChoices);
+    dialog.occlusion = row("Ambient Occlusion", LeftColumn, 3, OcclusionChoices);
+    dialog.motion_blur = row("Motion Blur", LeftColumn, 4, MotionBlurChoices);
+    dialog.antialias = row("Anti-Aliasing", LeftColumn, 5, SwitchChoices);
+    dialog.bloom = row("Bloom", LeftColumn, 6, SwitchChoices);
+    dialog.outlines = row("Outlines", RightColumn, 0, SwitchChoices);
+    dialog.decals = row("Decals", RightColumn, 1, SwitchChoices);
+    dialog.glass_refraction = row("Glass Refraction", RightColumn, 2, SwitchChoices);
+    dialog.particles = row("Particles", RightColumn, 3, ParticleChoices);
+    dialog.anisotropy = row("Anisotropic Filtering", RightColumn, 4, AnisotropyChoices);
+    // Its choices come from the GPU.
+    dialog.texture_streaming_list = row("Texture Streaming", RightColumn, 5, {});
     FillTextureStreaming(dialog, dialog.values.graphics.texture_streaming_mb);
     MakeNote(dialog, page,
              "Steam Deck also sets Aspect Ratio to 16:10, Render Resolution to 720p (1280 x 800) "
@@ -1423,6 +1495,12 @@ void Build(Dialog& dialog) {
     for (const GamePatches::RenderSize& size : GamePatches::RenderSizes) {
         AddText(dialog, dialog.render_size, size.name);
     }
+    for (const std::string_view name : UpscalerChoices) {
+        AddText(dialog, dialog.upscaler, name);
+    }
+    for (const std::string_view name : UpscaleQualityChoices) {
+        AddText(dialog, dialog.upscale_quality, name);
+    }
     // Each language is named in itself, whatever the language in use.
     for (const int language : Language::Listed()) {
         AddText(dialog, dialog.language, Phrase{"{0}", {Language::Name(language)}});
@@ -1473,8 +1551,10 @@ void Build(Dialog& dialog) {
         ShowPreset(dialog);
     });
     for (QComboBox* const combo :
-         {dialog.shadows, dialog.fog, dialog.occlusion, dialog.motion_blur, dialog.antialias,
-          dialog.bloom, dialog.aspect, dialog.render_size, dialog.texture_streaming_list}) {
+         {dialog.shadows, dialog.fog, dialog.fog_shadows, dialog.occlusion, dialog.motion_blur,
+          dialog.antialias, dialog.bloom, dialog.outlines, dialog.decals, dialog.glass_refraction,
+          dialog.particles, dialog.anisotropy, dialog.aspect, dialog.render_size,
+          dialog.texture_streaming_list}) {
         QObject::connect(combo, &QComboBox::activated, window, [&dialog] { ShowPreset(dialog); });
     }
     QObject::connect(defaults, &QPushButton::clicked, window, [&dialog] { SetDefaults(dialog); });

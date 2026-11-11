@@ -79,6 +79,9 @@ Buffer g_staging;
 // The guest addresses the noise volumes came from; 0 until copied.
 std::array<u64, Noises> g_noise_source{};
 bool g_cleared = false;
+// Without the sun shadow setting the shadow pass never runs: the scattering reads shadow volume 0,
+// which the first clear leaves all sunlit.
+bool g_sun_shadow = true;
 u32 g_cells = 0;
 u32 g_shadows = 0;
 // The header's counts of map changes when the maps were last made.
@@ -429,7 +432,9 @@ vk::ImageView ScatteredView() {
 bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     g_device = &device;
     g_memory = &memory;
-    g_cells_extent = CellExtents[std::min(static_cast<u32>(Settings::Get().graphics.fog), 2u)];
+    const Settings::Graphics& graphics = Settings::Get().graphics;
+    g_cells_extent = CellExtents[std::min(static_cast<u32>(graphics.fog), 2u)];
+    g_sun_shadow = graphics.fog_shadows;
     if (!device.storage_extended_formats) {
         LOG_WARNING(Render_Vulkan, "GR2port: no 8-bit storage images, so no fog");
         return true;
@@ -473,8 +478,10 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
     };
     g_cells_pipeline =
         CreateComputePipeline(device, FOG_DENSITY_COMP, sizeof(CellPush), cell_sets, &grid_info);
-    g_shadow_pipeline =
-        CreateComputePipeline(device, FOG_SHADOW_COMP, sizeof(CellPush), shadow_sets, &grid_info);
+    if (g_sun_shadow) {
+        g_shadow_pipeline = CreateComputePipeline(device, FOG_SHADOW_COMP, sizeof(CellPush),
+                                                  shadow_sets, &grid_info);
+    }
     g_scatter =
         CreateComputePipeline(device, FOG_SCATTER_COMP, sizeof(FogPush), scatter_sets, &grid_info);
     g_apply = CreateGraphicsPipeline(device, {
@@ -486,7 +493,8 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format) {
                                                  .set_layouts = apply_sets,
                                              });
     g_enabled = g_bake.pipeline && g_darkness_pipeline.pipeline && g_cells_pipeline.pipeline &&
-                g_shadow_pipeline.pipeline && g_scatter.pipeline && g_apply.pipeline;
+                (!g_sun_shadow || g_shadow_pipeline.pipeline) && g_scatter.pipeline &&
+                g_apply.pipeline;
     return g_enabled;
 }
 
@@ -532,7 +540,7 @@ void RecordVolumes(vk::CommandBuffer cmd, const Scene::Header& header, u64 addre
     cmd.dispatch(Groups(g_cells_extent.width, GroupSize), Groups(g_cells_extent.height, GroupSize),
                  g_cells_extent.depth, dl);
     PassTimes::Mark(cmd, PassTimes::Pass::FogDensity);
-    if ((header.fog & Scene::FogShadow) != 0) {
+    if (g_sun_shadow && (header.fog & Scene::FogShadow) != 0) {
         g_shadows ^= 1;
         const std::array shadow_sets{g_shadow_sets[g_shadows], Shadows::Set()};
         cmd.bindPipeline(compute, g_shadow_pipeline.pipeline, dl);

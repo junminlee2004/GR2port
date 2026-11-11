@@ -118,6 +118,15 @@ std::string NameOf(Value value, const std::pair<Value, std::string_view> (&names
     return std::string(names[0].second);
 }
 
+// A quality that older files hold as a switch: true is Original, false Off.
+Quality ReadSwitchedQuality(const json& section, const char* key, Quality fallback) {
+    const auto it = section.find(key);
+    if (it != section.end() && it->is_boolean()) {
+        return it->get<bool>() ? Quality::Original : Quality::Off;
+    }
+    return ReadQuality(section, key, fallback);
+}
+
 void ReadGraphics(const json& section, Graphics& graphics) {
     if (const auto preset = section.find("graphics_preset");
         preset != section.end() && preset->is_string()) {
@@ -128,10 +137,23 @@ void ReadGraphics(const json& section, Graphics& graphics) {
     if (graphics.fog == Quality::Off) {
         graphics.fog = Quality::Low;
     }
-    graphics.ambient_occlusion = ReadBool(section, "ambient_occlusion", graphics.ambient_occlusion);
-    graphics.motion_blur = ReadBool(section, "motion_blur", graphics.motion_blur);
+    graphics.ambient_occlusion =
+        ReadSwitchedQuality(section, "ambient_occlusion", graphics.ambient_occlusion);
+    graphics.motion_blur = ReadSwitchedQuality(section, "motion_blur", graphics.motion_blur);
     graphics.antialiasing = ReadBool(section, "antialiasing", graphics.antialiasing);
     graphics.bloom = ReadBool(section, "bloom", graphics.bloom);
+    graphics.outlines = ReadBool(section, "outlines", graphics.outlines);
+    graphics.decals = ReadBool(section, "decals", graphics.decals);
+    graphics.glass_refraction = ReadBool(section, "glass_refraction", graphics.glass_refraction);
+    graphics.fog_shadows = ReadBool(section, "fog_shadows", graphics.fog_shadows);
+    graphics.half_resolution_particles =
+        ReadBool(section, "half_resolution_particles", graphics.half_resolution_particles);
+    const u32 anisotropy =
+        ReadU32(section, "anisotropic_filtering", graphics.anisotropic_filtering);
+    if (anisotropy == 0 || anisotropy == 2 || anisotropy == 4 || anisotropy == 8 ||
+        anisotropy == 16) {
+        graphics.anisotropic_filtering = anisotropy;
+    }
     graphics.upscaler = ReadName(section, "upscaler", graphics.upscaler, UpscalerNames);
     graphics.upscale_quality =
         ReadName(section, "upscale_quality", graphics.upscale_quality, UpscaleQualityNames);
@@ -245,10 +267,16 @@ json ToJson(const Values& values) {
         {"graphics_preset", values.graphics.preset},
         {"shadow_quality", QualityName(values.graphics.shadows)},
         {"fog_quality", QualityName(values.graphics.fog)},
-        {"ambient_occlusion", values.graphics.ambient_occlusion},
-        {"motion_blur", values.graphics.motion_blur},
+        {"ambient_occlusion", QualityName(values.graphics.ambient_occlusion)},
+        {"motion_blur", QualityName(values.graphics.motion_blur)},
         {"antialiasing", values.graphics.antialiasing},
         {"bloom", values.graphics.bloom},
+        {"outlines", values.graphics.outlines},
+        {"decals", values.graphics.decals},
+        {"glass_refraction", values.graphics.glass_refraction},
+        {"fog_shadows", values.graphics.fog_shadows},
+        {"half_resolution_particles", values.graphics.half_resolution_particles},
+        {"anisotropic_filtering", values.graphics.anisotropic_filtering},
         {"upscaler", NameOf(values.graphics.upscaler, UpscalerNames)},
         {"upscale_quality", NameOf(values.graphics.upscale_quality, UpscaleQualityNames)},
         {"texture_streaming_mb", values.graphics.texture_streaming_mb},
@@ -292,6 +320,12 @@ Graphics FromPreset(const Preset& preset) {
         .motion_blur = preset.motion_blur,
         .antialiasing = preset.antialiasing,
         .bloom = preset.bloom,
+        .outlines = preset.outlines,
+        .decals = preset.decals,
+        .glass_refraction = preset.glass_refraction,
+        .fog_shadows = preset.fog_shadows,
+        .half_resolution_particles = preset.half_resolution_particles,
+        .anisotropic_filtering = preset.anisotropic_filtering,
     };
 }
 
@@ -302,7 +336,14 @@ std::string_view MatchPreset(const Game& game, const Graphics& graphics) {
                                  passes.ambient_occlusion == graphics.ambient_occlusion &&
                                  passes.motion_blur == graphics.motion_blur &&
                                  passes.antialiasing == graphics.antialiasing &&
-                                 passes.bloom == graphics.bloom;
+                                 passes.bloom == graphics.bloom &&
+                                 passes.outlines == graphics.outlines &&
+                                 passes.decals == graphics.decals &&
+                                 passes.glass_refraction == graphics.glass_refraction &&
+                                 passes.fog_shadows == graphics.fog_shadows &&
+                                 passes.half_resolution_particles ==
+                                     graphics.half_resolution_particles &&
+                                 passes.anisotropic_filtering == graphics.anisotropic_filtering;
         const bool same_size = preset.aspect.empty() || (preset.aspect == game.aspect &&
                                                          preset.render_size == game.render_size);
         const bool same_streaming = preset.texture_streaming_mb == 0 ||

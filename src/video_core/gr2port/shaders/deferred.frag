@@ -161,9 +161,9 @@ void main() {
     const vec4 surface = texelFetch(surface_material, pixel, 0);
     const float translucency = surface.b;
     // What the ambient occlusion leaves of the key light, where thin surfaces lose less, and of
-    // the ambient light.
+    // the ambient light. At the scene's size its sampler is nearest, at half size linear.
     const float occluded =
-        texelFetch(occlusion, pixel, 0).r *
+        textureLod(occlusion, uv, 0.0).r *
         (1.0 - clamp((distance_to_eye - OcclusionStart) * OcclusionRange, 0.0, 1.0));
     const float key_open = 1.0 - min(occluded * max(1.0 - 4.0 * translucency, 0.0), 1.0);
     const float ambient_open = 1.0 - min(occluded, 1.0);

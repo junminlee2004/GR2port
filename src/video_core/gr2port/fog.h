@@ -16,7 +16,8 @@ class Memory;
 namespace Gr2Port::Fog {
 
 /// After Textures::Start and Shadows::Start: creates the volumes, sets and pipelines. Without
-/// storage images of 8-bit formats the fog stays off.
+/// storage images of 8-bit formats the fog stays off. Without the fog_shadows setting the sun's
+/// shadow pass is not made and the sun lights every cell.
 bool Start(const Device& device, Memory& memory, vk::Format scene_format);
 
 /// With the GPU idle: points the apply pass at the scene's depth.

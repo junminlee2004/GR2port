@@ -111,10 +111,25 @@ struct Graphics {
     Quality shadows{Quality::Original};
     /// The fog's grid of cells: Original 160 x 90 x 128, Medium 120 x 68 x 96, Low 80 x 45 x 64.
     Quality fog{Quality::Original};
-    bool ambient_occlusion{true};
-    bool motion_blur{true};
+    /// Ambient occlusion: Original at the scene's size, Medium at half its size, or Off.
+    Quality ambient_occlusion{Quality::Original};
+    /// Motion blur: Original with the game's samples, Low with fewer, or Off.
+    Quality motion_blur{Quality::Original};
     bool antialiasing{true};
     bool bloom{true};
+    /// The world's lines and the characters' contours, the comic look's outlines.
+    bool outlines{true};
+    /// The world's decals: dirt, markings and posters.
+    bool decals{true};
+    /// Glass bends the scene behind it; without, it draws over it unbent. Water and effects bend it
+    /// either way.
+    bool glass_refraction{true};
+    /// The volumetric fog's shafts of light from the sun's shadow.
+    bool fog_shadows{true};
+    /// Particles and effects draw at half the scene's size and blend into it.
+    bool half_resolution_particles{false};
+    /// The material textures' anisotropic filtering: 0 off, else the most samples, 2 as the game.
+    u32 anisotropic_filtering{2};
     /// The upscaler and its quality. Presets leave them.
     Upscaler upscaler{Upscaler::Off};
     UpscaleQuality upscale_quality{UpscaleQuality::Quality};
@@ -142,10 +157,16 @@ struct Preset {
     std::string_view name;
     Quality shadows;
     Quality fog;
-    bool ambient_occlusion;
-    bool motion_blur;
+    Quality ambient_occlusion;
+    Quality motion_blur;
     bool antialiasing;
     bool bloom;
+    bool outlines;
+    bool decals;
+    bool glass_refraction;
+    bool fog_shadows;
+    bool half_resolution_particles;
+    u32 anisotropic_filtering;
     /// The aspect and render size the preset also sets, or empty to leave them.
     std::string_view aspect;
     std::string_view render_size;
@@ -158,21 +179,80 @@ struct Preset {
 
 /// From the cheapest to the game's own.
 inline constexpr std::array Presets{
-    Preset{"lowest", "Lowest", Quality::Off, Quality::Low, false, false, false, false, {}, {}},
-    Preset{"low", "Low", Quality::Low, Quality::Low, false, false, false, true, {}, {}},
-    Preset{"steamdeck", "Steam Deck", Quality::Low, Quality::Low, true, false, false, true, "16:10",
-           "720p", true, 4096},
-    Preset{"medium", "Medium", Quality::Medium, Quality::Medium, true, true, false, true, {}, {}},
-    Preset{"ps4",
-           "PS4 Original",
-           Quality::Original,
-           Quality::Original,
-           true,
-           true,
-           true,
-           true,
-           {},
-           {}},
+    Preset{.key = "lowest",
+           .name = "Lowest",
+           .shadows = Quality::Off,
+           .fog = Quality::Low,
+           .ambient_occlusion = Quality::Off,
+           .motion_blur = Quality::Off,
+           .antialiasing = false,
+           .bloom = false,
+           .outlines = false,
+           .decals = false,
+           .glass_refraction = false,
+           .fog_shadows = false,
+           .half_resolution_particles = true,
+           .anisotropic_filtering = 0},
+    Preset{.key = "low",
+           .name = "Low",
+           .shadows = Quality::Low,
+           .fog = Quality::Low,
+           .ambient_occlusion = Quality::Off,
+           .motion_blur = Quality::Off,
+           .antialiasing = false,
+           .bloom = true,
+           .outlines = true,
+           .decals = true,
+           .glass_refraction = false,
+           .fog_shadows = false,
+           .half_resolution_particles = true,
+           .anisotropic_filtering = 2},
+    Preset{.key = "steamdeck",
+           .name = "Steam Deck",
+           .shadows = Quality::Low,
+           .fog = Quality::Low,
+           .ambient_occlusion = Quality::Medium,
+           .motion_blur = Quality::Off,
+           .antialiasing = false,
+           .bloom = true,
+           .outlines = true,
+           .decals = true,
+           .glass_refraction = true,
+           .fog_shadows = false,
+           .half_resolution_particles = true,
+           .anisotropic_filtering = 2,
+           .aspect = "16:10",
+           .render_size = "720p",
+           .handheld = true,
+           .texture_streaming_mb = 4096},
+    Preset{.key = "medium",
+           .name = "Medium",
+           .shadows = Quality::Medium,
+           .fog = Quality::Medium,
+           .ambient_occlusion = Quality::Medium,
+           .motion_blur = Quality::Low,
+           .antialiasing = false,
+           .bloom = true,
+           .outlines = true,
+           .decals = true,
+           .glass_refraction = true,
+           .fog_shadows = true,
+           .half_resolution_particles = false,
+           .anisotropic_filtering = 2},
+    Preset{.key = "ps4",
+           .name = "PS4 Original",
+           .shadows = Quality::Original,
+           .fog = Quality::Original,
+           .ambient_occlusion = Quality::Original,
+           .motion_blur = Quality::Original,
+           .antialiasing = true,
+           .bloom = true,
+           .outlines = true,
+           .decals = true,
+           .glass_refraction = true,
+           .fog_shadows = true,
+           .half_resolution_particles = false,
+           .anisotropic_filtering = 2},
 };
 
 /// The preset's passes, with its key.

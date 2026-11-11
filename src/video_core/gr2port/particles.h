@@ -73,7 +73,8 @@ bool HasDraws(const Scene::Header& header, const u8* packet, Group group);
 
 /// Outside rendering, with the scene's colour an attachment and depth readable: draws the items
 /// of the packet at offset in buffer of group's passes, pass by pass in the game's order, and
-/// leaves depth readable.
+/// leaves depth readable. With half_resolution_particles, AfterFog's draws that leave the depth
+/// alone draw at half the scene's size and blend into it.
 void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet, u64 address,
                  vk::Buffer buffer, u64 offset, vk::ImageView scene, const Image& depth,
                  vk::Extent2D extent, Group group);

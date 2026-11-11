@@ -22,9 +22,11 @@
 #include "video_core/gr2port/pipeline.h"
 #include "video_core/gr2port/point_lights.h"
 #include "video_core/gr2port/self_translucent.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/gr2port/shaders/collision_backup_comp.h"
 #include "video_core/gr2port/shaders/color_backup_comp.h"
 #include "video_core/gr2port/shaders/emitter_color_comp.h"
+#include "video_core/gr2port/shaders/fullscreen_vert.h"
 #include "video_core/gr2port/shaders/gpu_emitter_spawn_comp.h"
 #include "video_core/gr2port/shaders/gpu_object_update_comp.h"
 #include "video_core/gr2port/shaders/gpu_particle_clear_comp.h"
@@ -55,6 +57,7 @@
 #include "video_core/gr2port/shaders/particle_gem_frag.h"
 #include "video_core/gr2port/shaders/particle_gem_shadow_vert.h"
 #include "video_core/gr2port/shaders/particle_gem_vert.h"
+#include "video_core/gr2port/shaders/particle_half_frag.h"
 #include "video_core/gr2port/shaders/particle_mesh_shadow_frag.h"
 #include "video_core/gr2port/shaders/particle_surface_color_frag.h"
 #include "video_core/gr2port/shaders/particle_surface_color_vert.h"
@@ -295,6 +298,26 @@ vk::DescriptorSet g_draw_set;
 // As g_draw_set, with the copy of the depth, for draws while the scene's depth is written.
 vk::DescriptorSet g_copy_set;
 
+// With half_resolution_particles, the passes after the fog draw at half the scene's size: the
+// draws blend premultiplied colour into g_half_color, whose alpha keeps the share of the scene that
+// shows through, tested against g_half_depth; then one draw blends the target over the scene.
+bool g_half = false;
+std::array<Pipeline, ShapeCount * ProgramCount> g_half_draws;
+Pipeline g_half_effect;
+// The particle_half program's two passes, chosen by its push constant.
+constexpr u32 HalfDownsample = 0;
+constexpr u32 HalfComposite = 1;
+Pipeline g_half_downsample;
+Pipeline g_half_composite;
+vk::DescriptorSetLayout g_half_layout;
+vk::DescriptorPool g_half_pool;
+// As g_draw_set, with the half depth; and the scene's depth and the half colour for the passes.
+vk::DescriptorSet g_half_set;
+vk::DescriptorSet g_downsample_set;
+vk::DescriptorSet g_composite_set;
+Image g_half_color;
+Image g_half_depth;
+
 Image g_curves;
 Image g_background;
 Image g_depth_copy;
@@ -390,26 +413,47 @@ void Build() {
                  g_move.pipeline && g_spawn.pipeline && g_sample.pipeline &&
                  g_sample_skinned.pipeline && g_emitter_color.pipeline && g_color_backup.pipeline &&
                  g_collision_backup.pipeline;
+    constexpr vk::ColorComponentFlags AllComponents =
+        vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+        vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+    // The half target's blend: colour as over the scene, and alpha, the share of the scene that
+    // shows through, scaled by one minus the fragment's alpha.
+    constexpr vk::PipelineColorBlendAttachmentState Over{
+        .blendEnable = true,
+        .srcColorBlendFactor = vk::BlendFactor::eOne,
+        .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+        .colorBlendOp = vk::BlendOp::eAdd,
+        .srcAlphaBlendFactor = vk::BlendFactor::eZero,
+        .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+        .alphaBlendOp = vk::BlendOp::eAdd,
+        .colorWriteMask = AllComponents,
+    };
     for (u32 shape = 0; shape < ShapeCount; shape++) {
         for (u32 program = 0; program < ProgramCount; program++) {
             Pipeline& pipeline = g_draws[shape * ProgramCount + program];
-            pipeline =
-                CreateGraphicsPipeline(d, {
-                                              .vertex = shapes[shape].vertex,
-                                              .fragment = shapes[shape].pixels[program],
-                                              .color = g_scene_format,
-                                              .depth = g_depth_format,
-                                              .topology = shapes[shape].topology,
-                                              .depth_test = true,
-                                              .depth_write = false,
-                                              .depth_compare = vk::CompareOp::eGreaterOrEqual,
-                                              .premultiplied_blend = true,
-                                              .clear_target_alpha = true,
-                                              .dynamic_depth_and_cull = true,
-                                              .push_constant_bytes = sizeof(DrawPush),
-                                              .set_layouts = draw_sets,
-                                          });
+            GraphicsPipelineInfo info{
+                .vertex = shapes[shape].vertex,
+                .fragment = shapes[shape].pixels[program],
+                .color = g_scene_format,
+                .depth = g_depth_format,
+                .topology = shapes[shape].topology,
+                .depth_test = true,
+                .depth_write = false,
+                .depth_compare = vk::CompareOp::eGreaterOrEqual,
+                .premultiplied_blend = true,
+                .clear_target_alpha = true,
+                .dynamic_depth_and_cull = true,
+                .push_constant_bytes = sizeof(DrawPush),
+                .set_layouts = draw_sets,
+            };
+            pipeline = CreateGraphicsPipeline(d, info);
             built = built && pipeline.pipeline;
+            if (g_half) {
+                Pipeline& half = g_half_draws[shape * ProgramCount + program];
+                info.blend = &Over;
+                half = CreateGraphicsPipeline(d, info);
+                built = built && half.pipeline;
+            }
         }
     }
     constexpr vk::PipelineColorBlendAttachmentState Replace{
@@ -466,6 +510,45 @@ void Build() {
     g_effect = CreateGraphicsPipeline(d, effect);
     g_effect_opaque = CreateGraphicsPipeline(d, effect_opaque);
     built = built && g_effect.pipeline && g_effect_opaque.pipeline;
+    if (g_half) {
+        // Pass 1's pipelines draw into the half target as they are, since it has the scene's
+        // format: they replace its colour and zero its alpha, so none of the scene shows through.
+        GraphicsPipelineInfo half_effect = effect;
+        half_effect.blend = &Over;
+        g_half_effect = CreateGraphicsPipeline(d, half_effect);
+        // The scene takes the target's colour plus its own times the target's alpha, and its
+        // alpha turns 0 as under any particle.
+        constexpr vk::PipelineColorBlendAttachmentState Composite{
+            .blendEnable = true,
+            .srcColorBlendFactor = vk::BlendFactor::eOne,
+            .dstColorBlendFactor = vk::BlendFactor::eSrcAlpha,
+            .colorBlendOp = vk::BlendOp::eAdd,
+            .srcAlphaBlendFactor = vk::BlendFactor::eZero,
+            .dstAlphaBlendFactor = vk::BlendFactor::eZero,
+            .alphaBlendOp = vk::BlendOp::eAdd,
+            .colorWriteMask = AllComponents,
+        };
+        const std::array half_sets{g_half_layout};
+        g_half_downsample = CreateGraphicsPipeline(d, {
+                                                          .vertex = FULLSCREEN_VERT,
+                                                          .fragment = PARTICLE_HALF_FRAG,
+                                                          .depth = g_depth_format,
+                                                          .depth_test = true,
+                                                          .depth_compare = vk::CompareOp::eAlways,
+                                                          .push_constant_bytes = sizeof(u32),
+                                                          .set_layouts = half_sets,
+                                                      });
+        g_half_composite = CreateGraphicsPipeline(d, {
+                                                         .vertex = FULLSCREEN_VERT,
+                                                         .fragment = PARTICLE_HALF_FRAG,
+                                                         .color = g_scene_format,
+                                                         .blend = &Composite,
+                                                         .push_constant_bytes = sizeof(u32),
+                                                         .set_layouts = half_sets,
+                                                     });
+        built = built && g_half_effect.pipeline && g_half_downsample.pipeline &&
+                g_half_composite.pipeline;
+    }
     for (u32 program = 0; program < SelfTranslucentPrograms; program++) {
         for (u32 tested = 0; tested < 2; tested++) {
             Pipeline& inside = g_self_translucent[program * 2 + tested];
@@ -1100,6 +1183,189 @@ void CopyScene(vk::CommandBuffer cmd, vk::Extent2D extent) {
                          dl);
 }
 
+void WriteCombinedImage(vk::DescriptorSet set, vk::ImageView view, vk::ImageLayout layout) {
+    const vk::DescriptorImageInfo info{.imageView = view, .imageLayout = layout};
+    const vk::WriteDescriptorSet write{
+        .dstSet = set,
+        .dstBinding = 0,
+        .descriptorCount = 1,
+        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+        .pImageInfo = &info,
+    };
+    g_device->device.updateDescriptorSets(write, {}, g_device->dispatch);
+}
+
+// Runs one of particle_half's passes at extent, inside a rendering.
+void DrawHalfPass(vk::CommandBuffer cmd, const Pipeline& pipeline, vk::DescriptorSet set, u32 pass,
+                  vk::Extent2D extent) {
+    const auto& dl = g_device->dispatch;
+    const vk::Viewport viewport{
+        .width = static_cast<float>(extent.width),
+        .height = static_cast<float>(extent.height),
+        .maxDepth = 1.0f,
+    };
+    cmd.setViewport(0, viewport, dl);
+    cmd.setScissor(0, vk::Rect2D{{0, 0}, extent}, dl);
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, set, {}, dl);
+    cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(pass),
+                      &pass, dl);
+    cmd.draw(3, 1, 0, 0, dl);
+}
+
+// Outside rendering: writes the half depth from the scene's depth, which is readable, or an
+// attachment when attached is set and is left one.
+void DownsampleDepth(vk::CommandBuffer cmd, const Image& depth, bool attached) {
+    const auto& dl = g_device->dispatch;
+    constexpr auto Fragment = vk::PipelineStageFlagBits2::eFragmentShader;
+    constexpr auto Tests = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                           vk::PipelineStageFlagBits2::eLateFragmentTests;
+    constexpr auto ReadOnly = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+    constexpr auto Attachment = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+    constexpr auto Writes = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                            vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+    // The last half draws tested and sampled the half depth.
+    const std::array<vk::ImageMemoryBarrier2, 2> before{{
+        {.srcStageMask = Tests | Fragment,
+         .dstStageMask = Tests,
+         .dstAccessMask = Writes,
+         .oldLayout = vk::ImageLayout::eUndefined,
+         .newLayout = Attachment,
+         .image = g_half_depth.image,
+         .subresourceRange = DepthRange},
+        {.srcStageMask = Tests,
+         .srcAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+         .dstStageMask = Fragment,
+         .dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead,
+         .oldLayout = Attachment,
+         .newLayout = ReadOnly,
+         .image = depth.image,
+         .subresourceRange = DepthRange},
+    }};
+    cmd.pipelineBarrier2(
+        {.imageMemoryBarrierCount = attached ? 2u : 1u, .pImageMemoryBarriers = before.data()}, dl);
+    const vk::RenderingAttachmentInfo target{
+        .imageView = g_half_depth.view,
+        .imageLayout = Attachment,
+        .loadOp = vk::AttachmentLoadOp::eDontCare,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+    };
+    const vk::Extent2D extent = g_half_depth.extent;
+    cmd.beginRendering(
+        {.renderArea = {{0, 0}, extent}, .layerCount = 1, .pDepthAttachment = &target}, dl);
+    DrawHalfPass(cmd, g_half_downsample, g_downsample_set, HalfDownsample, extent);
+    cmd.endRendering(dl);
+    const std::array<vk::ImageMemoryBarrier2, 2> after{{
+        {.srcStageMask = Tests,
+         .srcAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+         .dstStageMask = Tests | Fragment,
+         .dstAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                          vk::AccessFlagBits2::eShaderSampledRead,
+         .oldLayout = Attachment,
+         .newLayout = ReadOnly,
+         .image = g_half_depth.image,
+         .subresourceRange = DepthRange},
+        {.srcStageMask = Fragment,
+         .dstStageMask = Tests,
+         .dstAccessMask = Writes,
+         .oldLayout = ReadOnly,
+         .newLayout = Attachment,
+         .image = depth.image,
+         .subresourceRange = DepthRange},
+    }};
+    cmd.pipelineBarrier2(
+        {.imageMemoryBarrierCount = attached ? 2u : 1u, .pImageMemoryBarriers = after.data()}, dl);
+}
+
+// Outside rendering: clears the half target and begins its rendering, tested against the half
+// depth, with the scene's viewport at half its size.
+void BeginHalf(vk::CommandBuffer cmd, vk::Extent2D extent) {
+    const auto& dl = g_device->dispatch;
+    // The last composite sampled the target.
+    const vk::ImageMemoryBarrier2 to_target{
+        .srcStageMask = vk::PipelineStageFlagBits2::eFragmentShader,
+        .dstStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        .dstAccessMask =
+            vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite,
+        .oldLayout = vk::ImageLayout::eUndefined,
+        .newLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .image = g_half_color.image,
+        .subresourceRange = ColorRange,
+    };
+    cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &to_target}, dl);
+    // No colour yet, and all of the scene shows through.
+    const vk::RenderingAttachmentInfo color{
+        .imageView = g_half_color.view,
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eClear,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+        .clearValue = {.color = vk::ClearColorValue{.float32 = std::array<float, 4>{0, 0, 0, 1}}},
+    };
+    const vk::RenderingAttachmentInfo depth{
+        .imageView = g_half_depth.view,
+        .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+        .loadOp = vk::AttachmentLoadOp::eLoad,
+        .storeOp = vk::AttachmentStoreOp::eNone,
+    };
+    const vk::Extent2D half = g_half_color.extent;
+    cmd.beginRendering({.renderArea = {{0, 0}, half},
+                        .layerCount = 1,
+                        .colorAttachmentCount = 1,
+                        .pColorAttachments = &color,
+                        .pDepthAttachment = &depth},
+                       dl);
+    // Half pixel x covers the scene's pixels 2x and 2x + 1, jitter included.
+    vk::Viewport viewport = Upscaler::SceneViewport(extent);
+    viewport.x *= 0.5f;
+    viewport.y *= 0.5f;
+    viewport.width *= 0.5f;
+    viewport.height *= 0.5f;
+    cmd.setViewport(0, viewport, dl);
+    cmd.setScissor(0, vk::Rect2D{{0, 0}, half}, dl);
+    cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
+}
+
+// Outside rendering, after the half target's rendering: blends the target over the scene.
+void CompositeHalf(vk::CommandBuffer cmd, vk::ImageView scene, vk::Extent2D extent) {
+    const auto& dl = g_device->dispatch;
+    constexpr auto Output = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+    const vk::ImageMemoryBarrier2 to_read{
+        .srcStageMask = Output,
+        .srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
+        .dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader,
+        .dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead,
+        .oldLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+        .image = g_half_color.image,
+        .subresourceRange = ColorRange,
+    };
+    const vk::MemoryBarrier2 colors{
+        .srcStageMask = Output,
+        .srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
+        .dstStageMask = Output,
+        .dstAccessMask =
+            vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite,
+    };
+    cmd.pipelineBarrier2({.memoryBarrierCount = 1,
+                          .pMemoryBarriers = &colors,
+                          .imageMemoryBarrierCount = 1,
+                          .pImageMemoryBarriers = &to_read},
+                         dl);
+    const vk::RenderingAttachmentInfo color{
+        .imageView = scene,
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eLoad,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+    };
+    cmd.beginRendering({.renderArea = {{0, 0}, extent},
+                        .layerCount = 1,
+                        .colorAttachmentCount = 1,
+                        .pColorAttachments = &color},
+                       dl);
+    DrawHalfPass(cmd, g_half_composite, g_composite_set, HalfComposite, extent);
+    cmd.endRendering(dl);
+}
+
 } // namespace
 
 void QueueCurve(u32 destination, u32 columns, VAddr texels, u32 pitch) {
@@ -1210,6 +1476,41 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
     WriteSampledImage(g_compute_curve_set, 0, g_curves.view, vk::ImageLayout::eGeneral);
     WriteSampledImage(g_draw_set, 0, g_curves.view, vk::ImageLayout::eGeneral);
     WriteSampledImage(g_copy_set, 0, g_curves.view, vk::ImageLayout::eGeneral);
+    g_half = Settings::Get().graphics.half_resolution_particles;
+    if (g_half) {
+        const vk::DescriptorSetLayoutBinding half_binding{
+            0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment,
+            &g_depth_sampler};
+        g_half_layout = CreateLayout(device, std::span{&half_binding, 1});
+        const std::array<vk::DescriptorPoolSize, 3> half_sizes{{
+            {Sampled, 4},
+            {Sampler, 2},
+            {vk::DescriptorType::eCombinedImageSampler, 2},
+        }};
+        g_half_pool =
+            device.device
+                .createDescriptorPool({.maxSets = 3,
+                                       .poolSizeCount = static_cast<u32>(half_sizes.size()),
+                                       .pPoolSizes = half_sizes.data()},
+                                      nullptr, dl)
+                .value;
+        if (!g_half_layout || !g_half_pool) {
+            return false;
+        }
+        const std::array half_layouts{g_draw_layout, g_half_layout, g_half_layout};
+        const auto [half_result, half_sets] = device.device.allocateDescriptorSets(
+            {.descriptorPool = g_half_pool,
+             .descriptorSetCount = static_cast<u32>(half_layouts.size()),
+             .pSetLayouts = half_layouts.data()},
+            dl);
+        if (half_result != vk::Result::eSuccess) {
+            return false;
+        }
+        g_half_set = half_sets[0];
+        g_downsample_set = half_sets[1];
+        g_composite_set = half_sets[2];
+        WriteSampledImage(g_half_set, 0, g_curves.view, vk::ImageLayout::eGeneral);
+    }
     g_builder = std::thread{Build};
     g_builder.detach();
     return true;
@@ -1241,6 +1542,33 @@ bool Resize(vk::ImageView depth, vk::ImageView albedo, vk::Extent2D extent) {
         WriteSampledImage(g_draw_set, 4, fog, vk::ImageLayout::eGeneral);
         WriteSampledImage(g_copy_set, 4, fog, vk::ImageLayout::eGeneral);
         g_fog_ready = true;
+    }
+    if (g_half) {
+        // Half pixel x covers the scene's pixels 2x and 2x + 1.
+        const vk::Extent2D half{(extent.width + 1) / 2, (extent.height + 1) / 2};
+        g_memory->Destroy(g_half_color);
+        g_half_color = g_memory->CreateImage(g_scene_format, half,
+                                             vk::ImageUsageFlagBits::eColorAttachment |
+                                                 vk::ImageUsageFlagBits::eSampled,
+                                             vk::ImageAspectFlagBits::eColor);
+        g_memory->Destroy(g_half_depth);
+        g_half_depth = g_memory->CreateImage(g_depth_format, half,
+                                             vk::ImageUsageFlagBits::eDepthStencilAttachment |
+                                                 vk::ImageUsageFlagBits::eSampled,
+                                             vk::ImageAspectFlagBits::eDepth);
+        if (!g_half_color.image || !g_half_depth.image) {
+            return false;
+        }
+        WriteSampledImage(g_half_set, 2, g_half_depth.view,
+                          vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+        WriteSampledImage(g_half_set, 5, g_background.view,
+                          vk::ImageLayout::eShaderReadOnlyOptimal);
+        if (fog) {
+            WriteSampledImage(g_half_set, 4, fog, vk::ImageLayout::eGeneral);
+        }
+        WriteCombinedImage(g_downsample_set, depth, vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+        WriteCombinedImage(g_composite_set, g_half_color.view,
+                           vk::ImageLayout::eShaderReadOnlyOptimal);
     }
     g_depth_ready_frame = g_frames + FramesInFlight;
     // A quarter of the render size, as the game's copy, which its extraction's constants name.
@@ -1645,12 +1973,45 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
     }
     const vk::DescriptorSet set = writes_depth ? g_copy_set : g_draw_set;
     u32 bound = ~0u;
+    // At half size, the draws that leave the depth alone go to the half target, which is blended
+    // over the scene before a draw at full size and before the scene's copy, keeping the order.
+    const bool half = g_half && group == Group::AfterFog;
+    bool half_begun = false;
+    // The half depth is made before the first half draw, and again after a draw writes the depth.
+    bool half_depth_stale = true;
+    const auto composite_half = [&] {
+        if (half_begun) {
+            cmd.endRendering(dl);
+            half_begun = false;
+            CompositeHalf(cmd, scene, extent);
+            bound = ~0u;
+        }
+    };
     const auto draw_run = [&](const Scene::ParticleRun& run) {
         const u32 program = run.pipeline % ProgramCount;
         if (program >= FogFirstProgram && program < FogEndProgram && !g_fog_ready) {
             return;
         }
-        if (!begun) {
+        const bool depth_write = run.write != 0 && run.tested != 0;
+        const bool to_half = half && !depth_write;
+        if (to_half && !half_begun) {
+            if (begun) {
+                cmd.endRendering(dl);
+                begun = false;
+            }
+            if (half_depth_stale) {
+                half_depth_stale = false;
+                DownsampleDepth(cmd, depth, writes_depth);
+            }
+            half_begun = true;
+            BeginHalf(cmd, extent);
+            bound = ~0u;
+        }
+        if (!to_half) {
+            composite_half();
+            half_depth_stale = half_depth_stale || depth_write;
+        }
+        if (!to_half && !begun) {
             begun = true;
             const vk::MemoryBarrier2 colors{
                 .srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
@@ -1688,22 +2049,26 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
         }
         const bool effect = run.pipeline == Scene::ParticleEffectPipeline;
         const bool opaque = run.mode == OpaqueMode && (effect || program < OpaquePrograms);
-        // Pass 1's pipelines take keys after all the others.
-        const u32 key = run.pipeline + (opaque ? Scene::ParticleEffectPipeline + 1 : 0);
+        // Pass 1's pipelines take keys after all the others, and the half target's after those.
+        constexpr u32 Keys = Scene::ParticleEffectPipeline + 1;
+        const u32 key = run.pipeline + (opaque ? Keys : 0) + (to_half ? 2 * Keys : 0);
         if (key != bound) {
             bound = key;
             const Pipeline& pipeline =
-                effect   ? (opaque ? g_effect_opaque : g_effect)
-                : opaque ? g_opaque[run.pipeline / ProgramCount * OpaquePrograms + program]
-                         : g_draws[run.pipeline];
-            const std::array sets{Textures::Set(), set};
+                effect    ? (opaque    ? g_effect_opaque
+                             : to_half ? g_half_effect
+                                       : g_effect)
+                : opaque  ? g_opaque[run.pipeline / ProgramCount * OpaquePrograms + program]
+                : to_half ? g_half_draws[run.pipeline]
+                          : g_draws[run.pipeline];
+            const std::array sets{Textures::Set(), to_half ? g_half_set : set};
             cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, sets, {},
                                    dl);
             cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
                               sizeof(push), &push, dl);
         }
-        SetRunState(cmd, run, writes_depth);
+        SetRunState(cmd, run, writes_depth && !to_half);
         DrawRun(cmd, run, buffer, offset);
     };
     const auto draw_modes = [&](std::span<const u32> modes) {
@@ -1726,6 +2091,7 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
             cmd.endRendering(dl);
             begun = false;
         }
+        composite_half();
         CopyScene(cmd, extent);
     }
     draw_modes(modes.of_copy);
@@ -1733,6 +2099,7 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
     if (begun) {
         cmd.endRendering(dl);
     }
+    composite_half();
     if (writes_depth) {
         constexpr auto Tests = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
                                vk::PipelineStageFlagBits2::eLateFragmentTests;
