@@ -18,7 +18,6 @@
 #include <fmt/format.h>
 
 #include "common/logging/log.h"
-#include "video_core/gr2port/emulated_gpu.h"
 #include "video_core/gr2port/memory.h"
 #include "video_core/gr2port/settings.h"
 
@@ -29,10 +28,10 @@ namespace Gr2Port {
 
 namespace {
 
-// Device-local memory the renderer leaves free for the emulated GPU's renderer, which allocates
-// more when the game opens its pause menu while it runs, and less while it is off.
-constexpr u64 ForkHeadroom = 512_MB;
+// Device-local memory the renderer leaves free for the driver and the emulator.
 constexpr u64 OffHeadroom = 64_MB;
+// A device-local heap at most this size beside the main one is the host-visible BAR window.
+constexpr u64 MaxBarHeap = 512_MB;
 // Small blocks keep the memory the allocator holds close to what the renderer uses.
 constexpr u64 BlockSize = 32_MB;
 // Device-local allocations at least this large are logged with the code that made them.
@@ -158,9 +157,24 @@ void Memory::Refresh(u64 frame) {
     std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> budgets{};
     vmaGetHeapBudgets(allocator, budgets.data());
     device_budget = {};
+    u32 main_heap = 0;
     for (u32 i = 0; i < properties->memoryHeapCount; i++) {
-        if (!integrated &&
-            (properties->memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0) {
+        if (properties->memoryHeaps[i].size > properties->memoryHeaps[main_heap].size) {
+            main_heap = i;
+        }
+    }
+    const VmaBudget& main = budgets[main_heap];
+    for (u32 i = 0; i < properties->memoryHeapCount; i++) {
+        const VkMemoryHeap& heap = properties->memoryHeaps[i];
+        if (!integrated && (heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0) {
+            continue;
+        }
+        // NVIDIA's driver counts the BAR heap's allocations in the main heap's usage as well:
+        // when the main heap's usage covers this allocator's blocks in both, the BAR heap is
+        // left out so it counts once.
+        if (!integrated && i != main_heap && heap.size <= MaxBarHeap &&
+            main.usage >= main.statistics.blockBytes + budgets[i].statistics.blockBytes) {
+            device_budget.own += budgets[i].statistics.blockBytes;
             continue;
         }
         device_budget.usage += budgets[i].usage;
@@ -172,7 +186,7 @@ void Memory::Refresh(u64 frame) {
 }
 
 u64 Memory::Headroom() const {
-    return EmulatedGpu::On() ? ForkHeadroom : OffHeadroom;
+    return OffHeadroom;
 }
 
 bool Memory::Reserve(u64 bytes) {
