@@ -23,7 +23,6 @@
 #include "core/libraries/pad/pad.h"
 #include "core/libraries/system/userservice.h"
 #include "core/user_settings.h"
-#include "imgui/friends_layer.h"
 #include "imgui/renderer/imgui_core.h"
 #include "input/controller.h"
 #include "input/input_handler.h"
@@ -301,7 +300,7 @@ void WindowSDL::WaitEvent() {
         Overlay::ToggleSimpleFps();
         break;
     case SDL_EVENT_TOGGLE_FRIENDS:
-        ImGui::Friends::Toggle();
+        // GR2port has no friends window: the key is taken and dropped.
         break;
     case SDL_EVENT_RELOAD_INPUTS:
         Input::ParseInputConfig(std::string(Common::ElfInfo::Instance().GameSerial()));
