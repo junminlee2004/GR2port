@@ -14,6 +14,7 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
+#include "GR2port.h"
 #include "common/arch.h"
 #include "common/key_manager.h"
 #include "common/logging/log.h"
@@ -27,7 +28,6 @@
 #include "core/ipc/ipc.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
-#include "GR2port.h"
 
 #ifdef _WIN32
 #include <windows.h>

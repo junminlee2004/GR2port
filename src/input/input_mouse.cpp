@@ -15,8 +15,8 @@
 #include "input/mouse_look.h"
 #include "input_mouse.h"
 
-#include <common/singleton.h>
 #include <GR2port.h>
+#include <common/singleton.h>
 #include "SDL3/SDL.h"
 
 extern Frontend::WindowSDL* g_window;

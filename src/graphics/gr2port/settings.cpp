@@ -332,18 +332,16 @@ Graphics FromPreset(const Preset& preset) {
 std::string_view MatchPreset(const Game& game, const Graphics& graphics) {
     for (const Preset& preset : Presets) {
         const Graphics passes = FromPreset(preset);
-        const bool same_passes = passes.shadows == graphics.shadows && passes.fog == graphics.fog &&
-                                 passes.ambient_occlusion == graphics.ambient_occlusion &&
-                                 passes.motion_blur == graphics.motion_blur &&
-                                 passes.antialiasing == graphics.antialiasing &&
-                                 passes.bloom == graphics.bloom &&
-                                 passes.outlines == graphics.outlines &&
-                                 passes.decals == graphics.decals &&
-                                 passes.glass_refraction == graphics.glass_refraction &&
-                                 passes.fog_shadows == graphics.fog_shadows &&
-                                 passes.half_resolution_particles ==
-                                     graphics.half_resolution_particles &&
-                                 passes.anisotropic_filtering == graphics.anisotropic_filtering;
+        const bool same_passes =
+            passes.shadows == graphics.shadows && passes.fog == graphics.fog &&
+            passes.ambient_occlusion == graphics.ambient_occlusion &&
+            passes.motion_blur == graphics.motion_blur &&
+            passes.antialiasing == graphics.antialiasing && passes.bloom == graphics.bloom &&
+            passes.outlines == graphics.outlines && passes.decals == graphics.decals &&
+            passes.glass_refraction == graphics.glass_refraction &&
+            passes.fog_shadows == graphics.fog_shadows &&
+            passes.half_resolution_particles == graphics.half_resolution_particles &&
+            passes.anisotropic_filtering == graphics.anisotropic_filtering;
         const bool same_size = preset.aspect.empty() || (preset.aspect == game.aspect &&
                                                          preset.render_size == game.render_size);
         const bool same_streaming = preset.texture_streaming_mb == 0 ||

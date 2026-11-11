@@ -13,19 +13,18 @@
 #include <fmt/xchar.h>
 #include <hwinfo/hwinfo.h>
 
+#include "GR2port.h"
 #include "common/debug.h"
-#include "common/logging/log.h"
-#include "common/string_util.h"
-#include "common/thread.h"
-#include "core/emulator_settings.h"
-#include "core/ipc/ipc.h"
 #include "common/elf_info.h"
+#include "common/logging/log.h"
 #include "common/memory_patcher.h"
 #include "common/ntapi.h"
 #include "common/path_util.h"
 #include "common/polyfill_thread.h"
 #include "common/scm_rev.h"
 #include "common/singleton.h"
+#include "common/string_util.h"
+#include "common/thread.h"
 #include "core/cpu_patches.h" // Windows static guest red-zone protection
 #include "core/debugger.h"
 #include "core/devtools/widget/module_list.h"
@@ -35,6 +34,7 @@
 #include "core/file_format/trp.h"
 #include "core/file_sys/fs.h"
 #include "core/game_check/game_patches.h"
+#include "core/ipc/ipc.h"
 #include "core/libraries/kernel/kernel.h"
 #include "core/libraries/libs.h"
 #include "core/libraries/net/net_discovery.h"
@@ -45,7 +45,6 @@
 #include "core/linker.h"
 #include "core/memory.h"
 #include "core/user_settings.h"
-#include "GR2port.h"
 #include "graphics/gr2_fsr3/dlss_streamline.h"
 #include "graphics/renderdoc.h"
 

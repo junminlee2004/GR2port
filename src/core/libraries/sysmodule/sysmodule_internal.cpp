@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "GR2port.h"
 #include "common/assert.h"
 #include "common/elf_info.h"
 #include "common/logging/log.h"
@@ -27,7 +28,6 @@
 #include "core/libraries/sysmodule/sysmodule_table.h"
 #include "core/libraries/system_gesture/system_gesture.h"
 #include "core/linker.h"
-#include "GR2port.h"
 
 namespace Libraries::SysModule {
 

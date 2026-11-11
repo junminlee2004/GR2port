@@ -400,8 +400,7 @@ bool CreateDlss(vk::Extent2D render, vk::Extent2D output) {
                             render.width, render.height));
         return false;
     }
-    if (const std::string rejected =
-            Gr2Fsr3::DlssSetOptions(mode, DlssModel, output);
+    if (const std::string rejected = Gr2Fsr3::DlssSetOptions(mode, DlssModel, output);
         !rejected.empty()) {
         TurnOff(rejected);
         return false;

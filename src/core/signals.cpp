@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <fmt/format.h>
+#include "GR2port.h"
 #include "common/arch.h"
 #include "common/assert.h"
 #include "common/decoder.h"
@@ -12,7 +13,6 @@
 #include "core/libraries/kernel/threads/exception.h"
 #include "core/libraries/kernel/threads/pthread.h"
 #include "core/signals.h"
-#include "GR2port.h"
 
 #include "graphics/gr2port/fault_report.h"
 

@@ -233,8 +233,8 @@ std::string ConnectedPadLayout() {
 // The pad bindings of the player's input config.
 Input::PadBindings::Map PlayerPadBindings() {
     const std::string serial{Common::ElfInfo::Instance().GameSerial()};
-    return Input::PadBindings::Read(Input::GetInputConfigFile(
-        EmulatorSettings.IsUseUnifiedInputConfig() ? "default" : serial));
+    return Input::PadBindings::Read(
+        Input::GetInputConfigFile(EmulatorSettings.IsUseUnifiedInputConfig() ? "default" : serial));
 }
 
 // The layout GR2 starts with: the launcher's choice, else the connected pad's. "playstation" is the

@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "GR2port.h"
 #include "common/arch.h"
 #include "common/elf_info.h"
 #include "common/singleton.h"
@@ -89,7 +90,6 @@
 #include "core/libraries/vr_tracker/vr_tracker.h"
 #include "core/libraries/web_browser_dialog/webbrowserdialog.h"
 #include "core/libraries/zlib/zlib_sce.h"
-#include "GR2port.h"
 
 #include <array>
 

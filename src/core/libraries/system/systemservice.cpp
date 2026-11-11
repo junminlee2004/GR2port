@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <cstdlib>
+#include "GR2port.h"
 #include "common/elf_info.h"
 #include "common/singleton.h"
 #include "core/emulator_settings.h"
@@ -12,7 +13,6 @@
 #include "core/libraries/music/music_player_service.h"
 #include "core/libraries/system/systemservice.h"
 #include "core/libraries/system/systemservice_error.h"
-#include "GR2port.h"
 
 namespace Libraries::SystemService {
 
