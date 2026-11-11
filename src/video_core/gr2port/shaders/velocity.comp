@@ -11,25 +11,18 @@ layout(local_size_x = 8, local_size_y = 8) in;
 layout(set = 0, binding = 0) uniform sampler2D scene_depth;
 layout(set = 0, binding = 1) uniform sampler2D character_depth;
 layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D velocity;
+layout(set = 0, binding = 3, rg16f) uniform writeonly image2D upscaler_motion;
+
+// With an upscaler, its own motion image, where characters move with the camera too.
+layout(constant_id = 0) const bool UpscalerMotion = false;
 
 layout(push_constant) uniform Constants {
     Light light;
 };
 
-// The game's Velocity program, where every surface moves with the camera: a character's pixel
-// holds still, and any other holds its place in the last frame's clip space less its place in this
-// frame's.
-void main() {
-    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-    const ivec2 size = textureSize(scene_depth, 0);
-    if (any(greaterThanEqual(pixel, size))) {
-        return;
-    }
-    const float depth = texelFetch(scene_depth, pixel, 0).r;
-    if (texelFetch(character_depth, pixel, 0).r > depth) {
-        imageStore(velocity, pixel, vec4(0.0));
-        return;
-    }
+// A pixel at depth that moves with the camera: its place in the last frame's clip space less its
+// place in this frame's.
+vec2 CameraMotion(ivec2 pixel, ivec2 size, float depth) {
     const vec2 center = (vec2(pixel) + 0.5) / vec2(size);
     const vec2 ndc = vec2(2.0 * center.x - 1.0, 1.0 - 2.0 * center.y);
     const float distance_to_eye =
@@ -37,5 +30,30 @@ void main() {
     const vec3 position =
         vec3(light.inverse_projection.xy * distance_to_eye * ndc, -distance_to_eye);
     const vec4 previous = light.view_to_previous * vec4(position, 1.0);
-    imageStore(velocity, pixel, vec4(previous.xy / previous.w - ndc, 0.0, 0.0));
+    return previous.xy / previous.w - ndc;
+}
+
+// The game's Velocity program, where every surface moves with the camera and a character's pixel
+// holds still.
+void main() {
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 size = textureSize(scene_depth, 0);
+    if (any(greaterThanEqual(pixel, size))) {
+        return;
+    }
+    const float depth = texelFetch(scene_depth, pixel, 0).r;
+    const float character = texelFetch(character_depth, pixel, 0).r;
+    if (character > depth) {
+        imageStore(velocity, pixel, vec4(0.0));
+        if (UpscalerMotion) {
+            const vec2 motion = CameraMotion(pixel, size, character);
+            imageStore(upscaler_motion, pixel, vec4(motion, 0.0, 0.0));
+        }
+        return;
+    }
+    const vec2 motion = CameraMotion(pixel, size, depth);
+    imageStore(velocity, pixel, vec4(motion, 0.0, 0.0));
+    if (UpscalerMotion) {
+        imageStore(upscaler_motion, pixel, vec4(motion, 0.0, 0.0));
+    }
 }

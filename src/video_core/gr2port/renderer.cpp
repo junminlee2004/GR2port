@@ -62,6 +62,7 @@
 #include "video_core/gr2port/swapchain.h"
 #include "video_core/gr2port/textures.h"
 #include "video_core/gr2port/ui.h"
+#include "video_core/gr2port/upscaler.h"
 #include "video_core/gr2port/vegetation.h"
 #include "video_core/gr2port/velocity.h"
 #include "video_core/gr2port/water.h"
@@ -267,9 +268,11 @@ private:
     std::unique_ptr<Swapchain> swapchain;
     std::array<Slot, FramesInFlight> slots;
     vk::QueryPool timestamps;
-    // The size of the scene's images, 0 by 0 before they are made, and a size they did not fit at.
+    // The size of the picture the scene's images make, 0 by 0 before they are made, and a size
+    // they did not fit at. The scene draws at render_extent, which the upscaler makes smaller.
     vk::Extent2D scene_extent;
     vk::Extent2D refused_extent;
+    vk::Extent2D render_extent;
     Image depth;
     // The characters' depth alone, for the ambient occlusion.
     Image character_depth;
@@ -364,10 +367,11 @@ bool Thread::Init() {
                                           vk::BufferUsageFlagBits::eIndirectBuffer |
                                           vk::BufferUsageFlagBits::eTransferSrc,
                                       Placement::Upload);
-    if (scene_ring.mapped == nullptr || !Meshes::Start(d, *memory) ||
-        !Textures::Start(d, *memory) || !Ui::Start(d, *memory) || !ImGuiRelay::Start(d, *memory) ||
-        !Shadows::Start(d, *memory) || !Deformers::Start(d, *memory) ||
-        !Velocity::Start(d, *memory) || !Look::Start(d, *memory, DepthFormat) ||
+    if (scene_ring.mapped == nullptr || !Upscaler::Start(d, *memory) ||
+        !Meshes::Start(d, *memory) || !Textures::Start(d, *memory) || !Ui::Start(d, *memory) ||
+        !ImGuiRelay::Start(d, *memory) || !Shadows::Start(d, *memory) ||
+        !Deformers::Start(d, *memory) || !Velocity::Start(d, *memory) ||
+        !Look::Start(d, *memory, DepthFormat) ||
         !World::Start(d, *memory, DepthFormat, Look::SceneFormat) ||
         !Contours::Start(d, Look::SceneFormat, DepthFormat) ||
         !Fog::Start(d, *memory, Look::SceneFormat) ||
@@ -502,12 +506,17 @@ bool Thread::Recreate() {
     return !needs_swapchain;
 }
 
-// Makes the scene's images at extent. When one is not made, the scene has none.
-bool Thread::ResizeScene(vk::Extent2D extent) {
+// Makes the scene's images for a picture of output. When one is not made, the scene has none.
+bool Thread::ResizeScene(vk::Extent2D output) {
     if (d.device.waitIdle(d.dispatch) != vk::Result::eSuccess) {
         return false;
     }
     scene_extent = vk::Extent2D{};
+    // An upscaler that cannot run at these sizes leaves the scene at the picture's size.
+    if (!Upscaler::Resize(Upscaler::RenderExtent(output), output)) {
+        return false;
+    }
+    const vk::Extent2D extent = Upscaler::RenderExtent(output);
     for (Image* image : {&depth, &character_depth}) {
         memory->Destroy(*image);
         *image = memory->CreateImage(DepthFormat, extent,
@@ -517,8 +526,11 @@ bool Thread::ResizeScene(vk::Extent2D extent) {
                                      vk::ImageAspectFlagBits::eDepth);
     }
     if (!depth.image || !character_depth.image ||
-        !Velocity::Resize(extent, depth.view, character_depth.view) ||
-        !Look::Resize(extent, Ui::TargetFormat, depth.view) ||
+        !Velocity::Resize(extent, depth.view, character_depth.view)) {
+        return false;
+    }
+    Upscaler::SetInputs(depth.image, depth.view, Velocity::MotionImage(), Velocity::MotionView());
+    if (!Look::Resize(extent, output, Ui::TargetFormat, depth.view) ||
         !ShadowTrace::Resize(extent, depth.view) ||
         !MotionBlur::Resize(extent, Velocity::View(), depth.view, character_depth.view,
                             Look::SceneImage(), Look::SceneView()) ||
@@ -531,10 +543,12 @@ bool Thread::ResizeScene(vk::Extent2D extent) {
         return false;
     }
     Effects::Resize(depth.view, Glass::BehindView());
-    scene_extent = extent;
+    scene_extent = output;
+    render_extent = extent;
     // The picture's pipeline is made with the first images.
     SavePipelineCache(d);
-    LOG_INFO(Render_Vulkan, "GR2port: the scene is drawn at {}x{}", extent.width, extent.height);
+    LOG_INFO(Render_Vulkan, "GR2port: the scene is drawn at {}x{} for a picture of {}x{}",
+             extent.width, extent.height, output.width, output.height);
     return true;
 }
 
@@ -572,14 +586,7 @@ void Thread::DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const P
         return;
     }
     // A negative height keeps the game's y-up clip space.
-    const vk::Viewport viewport{
-        .x = 0.0f,
-        .y = static_cast<float>(extent.height),
-        .width = static_cast<float>(extent.width),
-        .height = -static_cast<float>(extent.height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
+    const vk::Viewport viewport = Upscaler::SceneViewport(extent, !glow_pass);
     const vk::Rect2D scissor{{0, 0}, extent};
     const CharacterPush push{
         .draws = packet.address + Scene::DrawsOffset,
@@ -805,10 +812,11 @@ void Thread::LogShadows(const Scene::Header& header, const SceneRing::Packet& pa
 void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Header& header,
                          const SceneRing::Packet& packet, u64 offset) {
     const auto& dl = d.dispatch;
-    const vk::Extent2D extent = scene_extent;
+    const vk::Extent2D extent = render_extent;
     const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices;
     stats.refused += header.indices > MaxFrameIndices;
     if (drawn) {
+        Upscaler::BeginFrame(packet.data, frame, FramesInFlight);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Deformers);
         Deformers::Record(cmd, header, packet.address);
         PassTimes::Mark(cmd, PassTimes::Pass::Deformers);

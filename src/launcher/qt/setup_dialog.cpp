@@ -246,14 +246,16 @@ constexpr std::array<std::string_view, 3> VSyncNames{"Off", "Double Buffered", "
 // The Graphics tab: the preset, then each pass's choice. Quality choices are in the order of
 // Settings::Quality; switches put On first.
 constexpr int PresetTop = 88;
-constexpr int ShadowsTop = 128;
-constexpr int FogTop = 157;
-constexpr int OcclusionTop = 186;
-constexpr int MotionBlurTop = 215;
-constexpr int AntialiasTop = 244;
-constexpr int BloomTop = 273;
-constexpr int TextureStreamingTop = 302;
-constexpr int GraphicsNoteTop = 345;
+constexpr int ShadowsTop = 113;
+constexpr int FogTop = 138;
+constexpr int OcclusionTop = 163;
+constexpr int MotionBlurTop = 188;
+constexpr int AntialiasTop = 213;
+constexpr int BloomTop = 238;
+constexpr int UpscalerTop = 263;
+constexpr int UpscaleQualityTop = 288;
+constexpr int TextureStreamingTop = 313;
+constexpr int GraphicsNoteTop = 342;
 // The Texture Streaming choices after Auto, in MB. One at least the GPU's memory keeps within the
 // driver's budget, as Auto does.
 constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  4096,  6144, 8192,
@@ -261,6 +263,10 @@ constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  
 constexpr std::array<std::string_view, 4> QualityChoices{"PS4 Original", "Medium", "Low", "Off"};
 constexpr std::array<std::string_view, 3> FogChoices{"PS4 Original", "Medium", "Low"};
 constexpr std::array<std::string_view, 2> SwitchChoices{"On", "Off"};
+// Indexed by Settings::Upscaler and Settings::UpscaleQuality.
+constexpr std::array<std::string_view, 4> UpscalerChoices{"Off", "FSR 3.1", "FSR 4", "DLSS"};
+constexpr std::array<std::string_view, 5> UpscaleQualityChoices{"Native AA", "Quality", "Balanced",
+                                                                "Performance", "Ultra Performance"};
 
 // English text and the values its {N} markers name, shown in the language in use.
 struct Phrase {
@@ -349,6 +355,8 @@ struct Dialog {
     QComboBox* motion_blur = nullptr;
     QComboBox* antialias = nullptr;
     QComboBox* bloom = nullptr;
+    QComboBox* upscaler = nullptr;
+    QComboBox* upscale_quality = nullptr;
     QComboBox* texture_streaming_list = nullptr;
     std::array<QCheckBox*, Toggles.size()> toggles{};
     QComboBox* active_pad = nullptr;
@@ -780,6 +788,12 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.bloom->setCurrentIndex(graphics.bloom ? 0 : 1);
 }
 
+// The upscaler and its quality, which presets leave.
+void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
+    dialog.upscaler->setCurrentIndex(static_cast<int>(graphics.upscaler));
+    dialog.upscale_quality->setCurrentIndex(static_cast<int>(graphics.upscale_quality));
+}
+
 // The passes as shown, with the preset they and the Display tab's sizes match.
 Settings::Graphics ReadGraphics(const Dialog& dialog) {
     Settings::Graphics graphics = dialog.values.graphics;
@@ -795,6 +809,14 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.motion_blur = dialog.motion_blur->currentIndex() != 1;
     graphics.antialiasing = dialog.antialias->currentIndex() != 1;
     graphics.bloom = dialog.bloom->currentIndex() != 1;
+    const int upscaler = dialog.upscaler->currentIndex();
+    if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
+        graphics.upscaler = static_cast<Settings::Upscaler>(upscaler);
+    }
+    const int upscale_quality = dialog.upscale_quality->currentIndex();
+    if (upscale_quality >= 0 && upscale_quality < static_cast<int>(UpscaleQualityChoices.size())) {
+        graphics.upscale_quality = static_cast<Settings::UpscaleQuality>(upscale_quality);
+    }
     const int texture_streaming = dialog.texture_streaming_list->currentIndex();
     if (texture_streaming >= 0 &&
         texture_streaming < static_cast<int>(dialog.texture_streaming.size())) {
@@ -1107,6 +1129,8 @@ void BuildGraphics(Dialog& dialog, QWidget* page) {
     dialog.motion_blur = row("Motion Blur", MotionBlurTop, SwitchChoices);
     dialog.antialias = row("Anti-Aliasing", AntialiasTop, SwitchChoices);
     dialog.bloom = row("Bloom", BloomTop, SwitchChoices);
+    dialog.upscaler = row("Upscaler", UpscalerTop, UpscalerChoices);
+    dialog.upscale_quality = row("Upscaler Quality", UpscaleQualityTop, UpscaleQualityChoices);
     dialog.texture_streaming_list = MakeRow(dialog, page, "Texture Streaming", TextureStreamingTop);
     FillTextureStreaming(dialog, dialog.values.graphics.texture_streaming_mb);
     MakeNote(dialog, page,
@@ -1319,6 +1343,7 @@ void SetDefaults(Dialog& dialog) {
     Show(dialog, Settings::Display{});
     ShowGame(dialog, Settings::Game{});
     ShowGraphics(dialog, Settings::Graphics{});
+    ShowUpscaler(dialog, Settings::Graphics{});
     ShowTextureStreaming(dialog, Settings::Graphics{}.texture_streaming_mb);
     ShowPreset(dialog);
     for (size_t i = 0; i < Toggles.size(); ++i) {
@@ -1401,6 +1426,7 @@ void Build(Dialog& dialog) {
     Show(dialog, dialog.values.display);
     ShowGame(dialog, dialog.values.game);
     ShowGraphics(dialog, dialog.values.graphics);
+    ShowUpscaler(dialog, dialog.values.graphics);
     ShowTextureStreaming(dialog, dialog.values.graphics.texture_streaming_mb);
     ShowPreset(dialog);
     ShowController(dialog);

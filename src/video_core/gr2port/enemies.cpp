@@ -24,6 +24,7 @@
 #include "video_core/gr2port/shaders/enemy_skinned_vert.h"
 #include "video_core/gr2port/shaders/enemy_vert.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/upscaler.h"
 
 namespace Gr2Port::Enemies {
 
@@ -168,14 +169,7 @@ void Draw(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk::B
     }
     const auto& dl = g_device->dispatch;
     // A negative height keeps the game's y-up clip space.
-    const vk::Viewport viewport{
-        .x = 0.0f,
-        .y = static_cast<float>(extent.height),
-        .width = static_cast<float>(extent.width),
-        .height = -static_cast<float>(extent.height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
+    const vk::Viewport viewport = Upscaler::SceneViewport(extent);
     const DrawPush push{
         .draws = address + Scene::EnemyDrawsOffset,
         .point_lights = address + Scene::PointLightsOffset,

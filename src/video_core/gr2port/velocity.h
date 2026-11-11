@@ -26,4 +26,9 @@ void Record(vk::CommandBuffer cmd, bool drawn, u64 packet_address);
 
 vk::ImageView View();
 
+/// The upscaler's motion, R16G16 like View's but with characters moving with the camera, in the
+/// general layout after Record.
+vk::Image MotionImage();
+vk::ImageView MotionView();
+
 } // namespace Gr2Port::Velocity

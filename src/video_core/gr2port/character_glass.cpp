@@ -18,6 +18,7 @@
 #include "video_core/gr2port/shaders/character_glass_vert.h"
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/upscaler.h"
 
 namespace Gr2Port::CharacterGlass {
 
@@ -102,14 +103,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* data, 
     std::array<u32, Scene::MaxCharacterGlassDraws> states;
     std::memcpy(states.data(), data + Scene::CharacterGlassStatesOffset, count * sizeof(u32));
     // A negative height keeps the game's y-up clip space.
-    const vk::Viewport viewport{
-        .x = 0.0f,
-        .y = static_cast<float>(extent.height),
-        .width = static_cast<float>(extent.width),
-        .height = -static_cast<float>(extent.height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
+    const vk::Viewport viewport = Upscaler::SceneViewport(extent);
     const DrawPush push{.draws = address + Scene::CharacterGlassDrawsOffset};
     const std::array sets{Textures::Set(), Shadows::Set()};
     cmd.setViewport(0, viewport, dl);

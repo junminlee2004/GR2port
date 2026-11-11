@@ -27,6 +27,7 @@
 #include "video_core/gr2port/scene.h"
 #include "video_core/gr2port/scene_ring.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/upscaler.h"
 #include "video_core/host_shaders/tiling_macro_128_comp.h"
 #include "video_core/host_shaders/tiling_macro_16_comp.h"
 #include "video_core/host_shaders/tiling_macro_32_comp.h"
@@ -874,8 +875,9 @@ bool CreateSet(const Device& d) {
         .addressModeU = vk::SamplerAddressMode::eRepeat,
         .addressModeV = vk::SamplerAddressMode::eRepeat,
         .addressModeW = vk::SamplerAddressMode::eRepeat,
-        // The game's loader sets this bias and ratio on every texture it loads.
-        .mipLodBias = -51.0f / 256.0f,
+        // The game's loader sets this bias and ratio on every texture it loads. A scene drawn
+        // below the picture's size for the upscaler takes the upscaler's bias too.
+        .mipLodBias = -51.0f / 256.0f + Upscaler::LodBias(),
         .anisotropyEnable = true,
         .maxAnisotropy = 2.0f,
         .maxLod = VK_LOD_CLAMP_NONE,

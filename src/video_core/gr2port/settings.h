@@ -78,6 +78,31 @@ enum class Quality : u32 {
     Off,
 };
 
+/// The temporal upscaler that replaces the game's antialiasing. With one on, the scene draws at the
+/// render size over the quality's ratio and the upscaler fills the render size.
+enum class Upscaler : u32 {
+    Off,
+    Fsr3,
+    Fsr4,
+    Dlss,
+};
+
+/// The upscaler's ratio of output to scene size: Native 1, Quality 1.5, Balanced 1.7, Performance
+/// 2, Ultra Performance 3.
+enum class UpscaleQuality : u32 {
+    Native,
+    Quality,
+    Balanced,
+    Performance,
+    UltraPerformance,
+};
+
+/// The scene's width and height over the output's for the quality.
+constexpr float UpscaleRatio(UpscaleQuality quality) {
+    constexpr float Ratios[] = {1.0f, 1.5f, 1.7f, 2.0f, 3.0f};
+    return Ratios[static_cast<u32>(quality)];
+}
+
 /// What the renderer draws and how finely. A preset sets them all; "custom" is any other mix.
 struct Graphics {
     std::string preset{"ps4"};
@@ -90,6 +115,9 @@ struct Graphics {
     bool motion_blur{true};
     bool antialiasing{true};
     bool bloom{true};
+    /// The upscaler and its quality. Presets leave them.
+    Upscaler upscaler{Upscaler::Off};
+    UpscaleQuality upscale_quality{UpscaleQuality::Quality};
     /// Texture streaming: the device memory GR2port keeps within, in MB; 0 takes the budget the
     /// driver gives the process, or on an integrated GPU its share of RAM. With less, textures
     /// keep fewer mip levels. Presets leave it.

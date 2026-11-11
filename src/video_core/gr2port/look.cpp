@@ -26,6 +26,7 @@
 #include "video_core/gr2port/shaders/tonemap_frag.h"
 #include "video_core/gr2port/shaders/vision_frag.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/upscaler.h"
 #include "video_core/gr2port/velocity.h"
 
 namespace Gr2Port::Look {
@@ -139,6 +140,10 @@ Buffer g_antialias_constants;
 // Each indexed by the antialias image that holds the output.
 std::array<vk::DescriptorSet, AntialiasImages> g_picture_sets;
 std::array<vk::DescriptorSet, AntialiasImages> g_antialias_sets;
+// With an upscaler, the sets that encode its output into each antialias image.
+std::array<vk::DescriptorSet, AntialiasImages> g_upscaled_sets;
+// The antialias images' size: the picture's, which the upscaler fills from the scene's.
+vk::Extent2D g_picture_extent;
 // Each indexed by the current bloom image.
 std::array<vk::DescriptorSet, BloomImages> g_composite_sets;
 std::array<vk::DescriptorSet, BloomImages> g_across_sets;
@@ -217,14 +222,15 @@ bool CreateSceneSet(const Device& d) {
                 {.bindingCount = static_cast<u32>(antialias.size()), .pBindings = antialias.data()},
                 nullptr, dl)
             .value;
+    // The antialias sets twice: the game's antialiasing's and the upscaler's encode.
     const std::array<vk::DescriptorPoolSize, 4> sizes{{
         {vk::DescriptorType::eCombinedImageSampler, 2 * Sets},
-        {vk::DescriptorType::eSampledImage, 4 * AntialiasImages},
-        {vk::DescriptorType::eSampler, AntialiasImages},
-        {vk::DescriptorType::eStorageImage, AntialiasImages},
+        {vk::DescriptorType::eSampledImage, 2 * 4 * AntialiasImages},
+        {vk::DescriptorType::eSampler, 2 * AntialiasImages},
+        {vk::DescriptorType::eStorageImage, 2 * AntialiasImages},
     }};
     g_pool = d.device
-                 .createDescriptorPool({.maxSets = Sets + AntialiasImages,
+                 .createDescriptorPool({.maxSets = Sets + 2 * AntialiasImages,
                                         .poolSizeCount = static_cast<u32>(sizes.size()),
                                         .pPoolSizes = sizes.data()},
                                        nullptr, dl)
@@ -248,11 +254,11 @@ bool CreateSceneSet(const Device& d) {
         g_down_sets[i] = sets[1 + 2 * BloomImages + i];
     }
     g_extract_set = sets[1 + 3 * BloomImages];
-    std::array<vk::DescriptorSetLayout, AntialiasImages> antialias_layouts;
+    std::array<vk::DescriptorSetLayout, 2 * AntialiasImages> antialias_layouts;
     antialias_layouts.fill(g_antialias_layout);
     const auto [antialias_result, antialias_sets] =
         d.device.allocateDescriptorSets({.descriptorPool = g_pool,
-                                         .descriptorSetCount = AntialiasImages,
+                                         .descriptorSetCount = 2 * AntialiasImages,
                                          .pSetLayouts = antialias_layouts.data()},
                                         dl);
     if (antialias_result != vk::Result::eSuccess) {
@@ -261,6 +267,7 @@ bool CreateSceneSet(const Device& d) {
     for (u32 i = 0; i < AntialiasImages; i++) {
         g_picture_sets[i] = sets[2 + 3 * BloomImages + i];
         g_antialias_sets[i] = antialias_sets[i];
+        g_upscaled_sets[i] = antialias_sets[AntialiasImages + i];
     }
     return true;
 }
@@ -453,11 +460,12 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format) {
         sizeof(AntialiasConstants), vk::BufferUsageFlagBits::eStorageBuffer, Placement::Upload);
     return g_sky.pipeline && g_luminance.pipeline && g_exposure.pipeline && g_extract.pipeline &&
            g_blur.pipeline && g_tonemap.pipeline && g_antialias.pipeline &&
-           g_antialias_off.pipeline &&
-           g_glow_depth_copy.pipeline && g_glow.pipeline && g_antialias_constants.mapped != nullptr;
+           g_antialias_off.pipeline && g_glow_depth_copy.pipeline && g_glow.pipeline &&
+           g_antialias_constants.mapped != nullptr;
 }
 
-bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth) {
+bool Resize(vk::Extent2D extent, vk::Extent2D output, vk::Format picture_format,
+            vk::ImageView depth) {
     const auto& dl = g_device->dispatch;
     g_memory->Destroy(g_scene);
     g_scene = g_memory->CreateImage(SceneFormat, extent,
@@ -512,11 +520,12 @@ bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth)
     if (!g_toned.image) {
         return false;
     }
+    Upscaler::SetColor(g_toned.image, g_toned.view, SceneFormat);
     for (u32 i = 0; i < AntialiasImages; i++) {
         g_device->device.destroyImageView(g_antialiased_read[i], nullptr, dl);
         g_memory->Destroy(g_antialiased[i]);
         g_antialiased[i] = g_memory->CreateImage(
-            AntialiasFormat, extent,
+            AntialiasFormat, output,
             vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
                 vk::ImageUsageFlagBits::eTransferDst,
             vk::ImageAspectFlagBits::eColor, 1, 1, vk::ImageCreateFlagBits::eMutableFormat);
@@ -541,6 +550,7 @@ bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth)
         }
     }
     g_antialiased_cleared = false;
+    g_picture_extent = output;
     const vk::DescriptorImageInfo toned_info{.imageView = g_toned.view, .imageLayout = Read};
     const vk::DescriptorImageInfo velocity_info{
         .imageView = Velocity::View(),
@@ -579,6 +589,29 @@ bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth)
             sampled(5, scene_info),
         }};
         g_device->device.updateDescriptorSets(antialias_writes, {}, dl);
+        if (Upscaler::Active()) {
+            const vk::DescriptorImageInfo upscaled_info{
+                .imageView = Upscaler::OutputView(),
+                .imageLayout = vk::ImageLayout::eGeneral,
+            };
+            const std::array<vk::WriteDescriptorSet, 2> upscaled_writes{{
+                {
+                    .dstSet = g_upscaled_sets[i],
+                    .dstBinding = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = vk::DescriptorType::eSampledImage,
+                    .pImageInfo = &upscaled_info,
+                },
+                {
+                    .dstSet = g_upscaled_sets[i],
+                    .dstBinding = 2,
+                    .descriptorCount = 1,
+                    .descriptorType = vk::DescriptorType::eStorageImage,
+                    .pImageInfo = &output_info,
+                },
+            }};
+            g_device->device.updateDescriptorSets(upscaled_writes, {}, dl);
+        }
         WritePair(g_picture_sets[i], g_antialiased_read[i], g_scene_sampler, Read,
                   g_antialiased_read[i], g_scene_sampler, Read);
     }
@@ -630,14 +663,7 @@ vk::ImageView SceneView() {
 void RecordSky(vk::CommandBuffer cmd, u64 packet_address) {
     const auto& dl = g_device->dispatch;
     // A negative height keeps the game's y-up clip space, as in the scene's draws.
-    const vk::Viewport viewport{
-        .x = 0.0f,
-        .y = static_cast<float>(g_extent.height),
-        .width = static_cast<float>(g_extent.width),
-        .height = -static_cast<float>(g_extent.height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
+    const vk::Viewport viewport = Upscaler::SceneViewport(g_extent);
     const u64 sky = packet_address + Scene::SkyOffset;
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_sky.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_sky.layout, 0, Textures::Set(), {},
@@ -875,17 +901,26 @@ void RecordAntialias(vk::CommandBuffer cmd, u64 packet_address) {
     // The last frame read this image as its history.
     ImageBarrier(cmd, output, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral, Compute,
                  vk::AccessFlagBits2::eNone, Compute, vk::AccessFlagBits2::eShaderStorageWrite);
-    const u64 constants = g_antialias_constants.address;
-    const Pipeline& pipeline = g_antialias_enabled ? g_antialias : g_antialias_off;
-    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline.pipeline, dl);
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.layout, 0,
-                           g_antialias_sets[g_antialiased_image], {}, dl);
-    if (g_antialias_enabled) {
-        cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0,
-                          sizeof(constants), &constants, dl);
+    if (Upscaler::Active()) {
+        // The upscaler fills the picture from the toned scene; the encode writes its sRGB.
+        Upscaler::Record(cmd);
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_antialias_off.pipeline, dl);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_antialias_off.layout, 0,
+                               g_upscaled_sets[g_antialiased_image], {}, dl);
+    } else {
+        const u64 constants = g_antialias_constants.address;
+        const Pipeline& pipeline = g_antialias_enabled ? g_antialias : g_antialias_off;
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline.pipeline, dl);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline.layout, 0,
+                               g_antialias_sets[g_antialiased_image], {}, dl);
+        if (g_antialias_enabled) {
+            cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eCompute, 0,
+                              sizeof(constants), &constants, dl);
+        }
     }
-    cmd.dispatch((g_extent.width + AntialiasGroupPixels - 1) / AntialiasGroupPixels,
-                 (g_extent.height + AntialiasGroupPixels - 1) / AntialiasGroupPixels, 1, dl);
+    cmd.dispatch((g_picture_extent.width + AntialiasGroupPixels - 1) / AntialiasGroupPixels,
+                 (g_picture_extent.height + AntialiasGroupPixels - 1) / AntialiasGroupPixels, 1,
+                 dl);
     // The picture reads the output, and the next frame reads it as its history.
     ImageBarrier(cmd, output, vk::ImageLayout::eGeneral, vk::ImageLayout::eShaderReadOnlyOptimal,
                  Compute, vk::AccessFlagBits2::eShaderStorageWrite, Compute | Fragment, Read);

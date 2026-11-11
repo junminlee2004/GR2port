@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -40,8 +41,8 @@ struct DlssEvaluateInfo {
     vk::Extent2D output_size{};
     float jitter_x{}; ///< Render pixels, as the viewport jitter.
     float jitter_y{};
-    float motion_vector_scale_x{}; ///< Times the render width, pixels.
-    float motion_vector_scale_y{}; ///< Times the render height, pixels.
+    float motion_vector_scale_x{}; ///< Gives the motion as a fraction of the width.
+    float motion_vector_scale_y{}; ///< Gives the motion as a fraction of the height.
     bool reset{};
 };
 
@@ -52,21 +53,26 @@ struct DlssEvaluateInfo {
 void StartCudaForDlss();
 
 /**
- * Main thread, while the instance extensions are chosen. For Gravity Rush 2 with dlssEnable or
- * Gravity Rush Remastered with grrDlssEnable set, loads Streamline from Settings::DlssDir(),
- * initializes it and appends the instance extensions DLSS needs when the instance offers all.
+ * While GR2port's instance extensions are chosen. With DLSS chosen in GR2port's graphics settings,
+ * loads Streamline from DlssDir(), initializes it and appends the instance extensions DLSS needs
+ * when the instance offers all.
  */
-void ExtendInstance(std::vector<const char*>& extensions);
+void ExtendInstance(std::vector<const char*>& extensions,
+                    const vk::detail::DispatchLoaderDynamic& dispatch);
 
-/// Main thread, right before the device is created: appends the device extensions and enables
-/// the Vulkan 1.2 features DLSS needs when the physical device supports DLSS and all of them.
+/// Right before GR2port's device is created: appends the device extensions and enables the Vulkan
+/// 1.2 features DLSS needs when the physical device supports DLSS and all of them.
 void ExtendDeviceForDlss(vk::PhysicalDevice physical_device, vk::DeviceCreateInfo& create_info,
-                         vk::PhysicalDeviceVulkan12Features& vk12);
+                         vk::PhysicalDeviceVulkan12Features& vk12,
+                         const vk::detail::DispatchLoaderDynamic& dispatch);
 
-/// Main thread, right after the device and the default dispatcher are set up: hands the device to
-/// Streamline, which starts NGX, and routes the presentation functions through Streamline.
+/// Right after GR2port's device and dispatch are set up: hands the device to Streamline, which
+/// starts NGX, and routes the dispatcher's presentation functions through Streamline.
 void OnDeviceCreated(vk::Instance instance, vk::PhysicalDevice physical_device, vk::Device device,
-                     u32 queue_family_index);
+                     u32 queue_family_index, vk::detail::DispatchLoaderDynamic& dispatch);
+
+/// The folder the Streamline and DLSS libraries load from: dlss in the user folder.
+std::filesystem::path DlssDir();
 
 /// Whether Streamline runs DLSS on the device. Any thread after the device is created.
 bool DlssRunning();
@@ -96,10 +102,12 @@ void DlssFree();
 #else
 
 inline void StartCudaForDlss() {}
-inline void ExtendInstance(std::vector<const char*>&) {}
+inline void ExtendInstance(std::vector<const char*>&, const vk::detail::DispatchLoaderDynamic&) {}
 inline void ExtendDeviceForDlss(vk::PhysicalDevice, vk::DeviceCreateInfo&,
-                                vk::PhysicalDeviceVulkan12Features&) {}
-inline void OnDeviceCreated(vk::Instance, vk::PhysicalDevice, vk::Device, u32) {}
+                                vk::PhysicalDeviceVulkan12Features&,
+                                const vk::detail::DispatchLoaderDynamic&) {}
+inline void OnDeviceCreated(vk::Instance, vk::PhysicalDevice, vk::Device, u32,
+                            vk::detail::DispatchLoaderDynamic&) {}
 inline bool DlssRunning() {
     return false;
 }

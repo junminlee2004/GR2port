@@ -173,7 +173,8 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
         ${GR2_FSR3_DIR}/grr_fsr3.cpp
         ${GR2_FSR3_DIR}/grr_survey.cpp
         ${GR2_FSR3_DIR}/grr_survey.h
-        ${GR2_FSR3_DIR}/vk_trampolines.cpp)
+        ${GR2_FSR3_DIR}/vk_trampolines.cpp
+        ${GR2_FSR3_DIR}/vk_trampolines.h)
     # Streamline's MIT headers. The Streamline and DLSS libraries load at run time from the dlss
     # folder of the user folder.
     if (WIN32)

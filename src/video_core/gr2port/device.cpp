@@ -15,6 +15,7 @@
 #include "common/logging/log.h"
 #include "video_core/gr2port/device.h"
 #include "video_core/gr2port/pipeline.h"
+#include "video_core/gr2port/upscaler.h"
 
 namespace Gr2Port {
 
@@ -137,11 +138,13 @@ bool CreateInstance(Device& d) {
     }
     d.dispatch.init(get_proc);
     Uint32 count = 0;
-    const char* const* extensions = SDL_Vulkan_GetInstanceExtensions(&count);
-    if (extensions == nullptr) {
+    const char* const* surface_extensions = SDL_Vulkan_GetInstanceExtensions(&count);
+    if (surface_extensions == nullptr) {
         LOG_ERROR(Render_Vulkan, "GR2port: no surface extensions: {}", SDL_GetError());
         return false;
     }
+    std::vector<const char*> extensions{surface_extensions, surface_extensions + count};
+    Upscaler::ExtendInstance(extensions, d.dispatch);
     const vk::ApplicationInfo application{
         .pApplicationName = "GR2port",
         .apiVersion = ApiVersion,
@@ -151,8 +154,8 @@ bool CreateInstance(Device& d) {
         .pApplicationInfo = &application,
         .enabledLayerCount = validation ? 1u : 0u,
         .ppEnabledLayerNames = &ValidationLayer,
-        .enabledExtensionCount = count,
-        .ppEnabledExtensionNames = extensions,
+        .enabledExtensionCount = static_cast<u32>(extensions.size()),
+        .ppEnabledExtensionNames = extensions.data(),
     };
     const auto [result, instance] = vk::createInstance(info, nullptr, d.dispatch);
     if (result != vk::Result::eSuccess) {
@@ -299,13 +302,14 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         fault_features.pNext = features.pNext;
         features.pNext = &fault_features;
     }
-    const vk::DeviceCreateInfo info{
+    vk::DeviceCreateInfo info{
         .pNext = &features,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queue_info,
         .enabledExtensionCount = static_cast<u32>(extensions.size()),
         .ppEnabledExtensionNames = extensions.data(),
     };
+    Upscaler::ExtendDevice(d.gpu, d.dispatch, info, features, features11, features12, features13);
     const auto [result, device] = d.gpu.createDevice(info, nullptr, d.dispatch);
     if (result != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "GR2port: no device: {}", vk::to_string(result));
@@ -313,6 +317,7 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     }
     d.device = device;
     d.dispatch.init(device);
+    Upscaler::OnDeviceCreated(d);
     d.queue = device.getQueue(d.queue_family, 0, d.dispatch);
 
     const auto properties = d.gpu.getProperties(d.dispatch);

@@ -92,6 +92,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/ui.h
     ${CMAKE_CURRENT_LIST_DIR}/ui_capture.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ui_capture.h
+    ${CMAKE_CURRENT_LIST_DIR}/upscaler.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/upscaler.h
     ${CMAKE_CURRENT_LIST_DIR}/vegetation.cpp
     ${CMAKE_CURRENT_LIST_DIR}/velocity.cpp
     ${CMAKE_CURRENT_LIST_DIR}/velocity.h

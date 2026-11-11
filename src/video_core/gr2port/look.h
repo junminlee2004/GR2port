@@ -42,9 +42,12 @@ using GlowDraws = std::function<void(vk::CommandBuffer cmd, vk::Extent2D extent)
 /// After Textures::Start: creates the pipelines and the meter. depth_format is the scene's.
 bool Start(const Device& device, Memory& memory, vk::Format depth_format);
 
-/// With the GPU idle: creates the scene's colour image at extent, the bloom's images, and the
-/// picture's pipeline for picture_format. depth is the scene's depth, for the bloom to read.
-bool Resize(vk::Extent2D extent, vk::Format picture_format, vk::ImageView depth);
+/// With the GPU idle: creates the scene's colour image at extent, the bloom's images, the
+/// antialias images at output, and the picture's pipeline for picture_format. depth is the scene's
+/// depth, for the bloom to read. output differs from extent only with an upscaler, after its
+/// Resize.
+bool Resize(vk::Extent2D extent, vk::Extent2D output, vk::Format picture_format,
+            vk::ImageView depth);
 
 vk::Image SceneImage();
 vk::ImageView SceneView();

@@ -26,12 +26,10 @@
 
 #include "common/alignment.h"
 #include "common/error.h"
-#include "common/gravity_rush.h"
 #include "common/logging/log.h"
 #include "common/path_util.h"
-#include "video_core/gr2_fsr3/context_images.h"
 #include "video_core/gr2_fsr3/dlss_streamline.h"
-#include "video_core/gr2_fsr3/fsr3_settings.h"
+#include "video_core/gr2port/settings.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 
 // <vulkan/vulkan.h> must first be included through vk_common.h, which configures it.
@@ -124,15 +122,15 @@ void Disable(std::string notice) {
     g_stage.store(Stage::Off, std::memory_order_release);
 }
 
-// Whether the title is a Gravity Rush game with its DLSS setting on.
+// Whether GR2port's graphics settings choose DLSS.
 bool DlssRequested() {
-    const bool gr2 = Common::IsGravityRush2();
-    if (!gr2 && !Common::IsGravityRushRemastered()) {
-        return false;
-    }
-    const Settings::Values settings = Settings::Snapshot();
-    return gr2 ? settings.dlss_enable : settings.grr_dlss_enable;
+    return Gr2Port::Settings::Get().graphics.upscaler == Gr2Port::Settings::Upscaler::Dlss;
 }
+
+// Formats of the images DLSS reads and writes: colour, motion vectors, depth and output.
+constexpr std::array<vk::Format, 4> ImageFormats{vk::Format::eR16G16B16A16Sfloat,
+                                                 vk::Format::eR16G16Sfloat, vk::Format::eR32Sfloat,
+                                                 vk::Format::eR16G16B16A16Sfloat};
 
 // Streamline ends the messages it formats with a newline.
 void ForwardLog(sl::LogType type, const char* message) {
@@ -289,12 +287,12 @@ void StartCudaForDlss() {
     }
 }
 
-void ExtendInstance(std::vector<const char*>& extensions) {
+void ExtendInstance(std::vector<const char*>& extensions,
+                    const vk::detail::DispatchLoaderDynamic& dispatch) {
     if (!DlssRequested()) {
         return;
     }
-    const Settings::Values settings = Settings::Snapshot();
-    const std::filesystem::path folder = Settings::DlssDir();
+    const std::filesystem::path folder = DlssDir();
     const std::string folder_text = Common::FS::PathToUTF8String(folder);
     std::string missing;
     for (const std::wstring_view file : RequiredFiles) {
@@ -326,7 +324,7 @@ void ExtendInstance(std::vector<const char*>& extensions) {
     const wchar_t* plugin_paths[] = {plugin_path.c_str()};
     const sl::Feature features[] = {sl::kFeatureDLSS};
     sl::Preferences preferences{};
-    preferences.logLevel = settings.log ? sl::LogLevel::eVerbose : sl::LogLevel::eDefault;
+    preferences.logLevel = sl::LogLevel::eDefault;
     preferences.pathsToPlugins = plugin_paths;
     preferences.numPathsToPlugins = 1;
     preferences.logMessageCallback = ForwardLog;
@@ -351,7 +349,8 @@ void ExtendInstance(std::vector<const char*>& extensions) {
     // Streamline keeps these names until slShutdown, which is never called.
     const std::span<const char* const> names{g_requirements.vkInstanceExtensions,
                                              g_requirements.vkNumInstanceExtensions};
-    const auto [properties_result, properties] = vk::enumerateInstanceExtensionProperties();
+    const auto [properties_result, properties] =
+        vk::enumerateInstanceExtensionProperties(nullptr, dispatch);
     if (const std::string lacking = Unavailable(names, properties); !lacking.empty()) {
         Disable(fmt::format("DLSS: the Vulkan instance lacks {}", lacking));
         return;
@@ -364,13 +363,15 @@ void ExtendInstance(std::vector<const char*>& extensions) {
 }
 
 void ExtendDeviceForDlss(vk::PhysicalDevice physical_device, vk::DeviceCreateInfo& create_info,
-                         vk::PhysicalDeviceVulkan12Features& vk12) {
+                         vk::PhysicalDeviceVulkan12Features& vk12,
+                         const vk::detail::DispatchLoaderDynamic& dispatch) {
     if (g_stage.load(std::memory_order_acquire) != Stage::Initialized) {
         return;
     }
     const auto properties =
         physical_device
-            .getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceIDProperties>();
+            .getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceIDProperties>(
+                dispatch);
     const std::string_view device_name =
         properties.get<vk::PhysicalDeviceProperties2>().properties.deviceName.data();
     std::ranges::copy(properties.get<vk::PhysicalDeviceIDProperties>().deviceLUID, g_luid.begin());
@@ -383,7 +384,7 @@ void ExtendDeviceForDlss(vk::PhysicalDevice physical_device, vk::DeviceCreateInf
     const std::span<const char* const> names{g_requirements.vkDeviceExtensions,
                                              g_requirements.vkNumDeviceExtensions};
     const auto [extensions_result, available] =
-        physical_device.enumerateDeviceExtensionProperties();
+        physical_device.enumerateDeviceExtensionProperties(nullptr, dispatch);
     if (const std::string lacking = Unavailable(names, available); !lacking.empty()) {
         Disable(fmt::format("DLSS: {} lacks {}", device_name, lacking));
         return;
@@ -409,7 +410,7 @@ void ExtendDeviceForDlss(vk::PhysicalDevice physical_device, vk::DeviceCreateInf
         g_requirements.vkNumFeatures12, g_requirements.vkFeatures12);
     const vk::PhysicalDeviceVulkan12Features supported =
         physical_device
-            .getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan12Features>()
+            .getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan12Features>(dispatch)
             .get<vk::PhysicalDeviceVulkan12Features>();
     sl::getMergedSupportedVkPhysicalDeviceVulkanFeatures(
         reinterpret_cast<VkBaseOutStructure*>(&vk12),
@@ -427,7 +428,7 @@ void ExtendDeviceForDlss(vk::PhysicalDevice physical_device, vk::DeviceCreateInf
 }
 
 void OnDeviceCreated(vk::Instance instance, vk::PhysicalDevice physical_device, vk::Device device,
-                     u32 queue_family_index) {
+                     u32 queue_family_index, vk::detail::DispatchLoaderDynamic& dispatch) {
     if (g_stage.load(std::memory_order_acquire) != Stage::DeviceExtended) {
         return;
     }
@@ -435,7 +436,7 @@ void OnDeviceCreated(vk::Instance instance, vk::PhysicalDevice physical_device, 
     info.device = static_cast<VkDevice>(device);
     info.instance = static_cast<VkInstance>(instance);
     info.physicalDevice = static_cast<VkPhysicalDevice>(physical_device);
-    // DLSS creates no queue; the indices name the first one after the emulator's queue.
+    // DLSS creates no queue; the indices name the first one after the renderer's queue.
     info.graphicsQueueFamily = queue_family_index;
     info.graphicsQueueIndex = 1;
     info.computeQueueFamily = queue_family_index;
@@ -475,7 +476,7 @@ void OnDeviceCreated(vk::Instance instance, vk::PhysicalDevice physical_device, 
     g_api.slGetFeatureVersion(sl::kFeatureDLSS, version);
 
     // The dispatcher loaded its device functions just before and does not load them again.
-    auto& dispatcher = VULKAN_HPP_DEFAULT_DISPATCHER;
+    auto& dispatcher = dispatch;
     dispatcher.vkQueuePresentKHR = g_proxies.queue_present;
     dispatcher.vkCreateSwapchainKHR = g_proxies.create_swapchain;
     dispatcher.vkDestroySwapchainKHR = g_proxies.destroy_swapchain;
@@ -551,10 +552,10 @@ std::string DlssEvaluate(vk::CommandBuffer cmdbuf, const DlssEvaluateInfo& info)
     }
     const Fsr4Images& images = info.images;
     std::array resources{
-        ResourceOf(images.color, ContextImageFormats[0], info.render_size),
-        ResourceOf(images.motion_vectors, ContextImageFormats[1], info.render_size),
-        ResourceOf(images.depth, ContextImageFormats[2], info.render_size),
-        ResourceOf(images.output, ContextImageFormats[3], info.output_size),
+        ResourceOf(images.color, ImageFormats[0], info.render_size),
+        ResourceOf(images.motion_vectors, ImageFormats[1], info.render_size),
+        ResourceOf(images.depth, ImageFormats[2], info.render_size),
+        ResourceOf(images.output, ImageFormats[3], info.output_size),
     };
     constexpr sl::ResourceLifecycle Lifecycle = sl::ResourceLifecycle::eValidUntilEvaluate;
     std::array tags{
@@ -584,6 +585,10 @@ u64 DlssFeatureBytes() {
         return 0;
     }
     return state.estimatedVRAMUsageInBytes;
+}
+
+std::filesystem::path DlssDir() {
+    return Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "dlss";
 }
 
 void DlssFree() {

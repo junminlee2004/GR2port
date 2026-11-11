@@ -12,6 +12,7 @@
 #include "video_core/gr2port/self_translucent.h"
 #include "video_core/gr2port/shaders/self_translucent_frag.h"
 #include "video_core/gr2port/shaders/self_translucent_vert.h"
+#include "video_core/gr2port/upscaler.h"
 
 namespace Gr2Port::SelfTranslucent {
 
@@ -204,14 +205,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
                        dl);
     if (bodies != 0) {
         // A negative height keeps the game's y-up clip space.
-        const vk::Viewport viewport{
-            .x = 0.0f,
-            .y = static_cast<float>(g_extent.height),
-            .width = static_cast<float>(g_extent.width),
-            .height = -static_cast<float>(g_extent.height),
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f,
-        };
+        const vk::Viewport viewport = Upscaler::SceneViewport(g_extent);
         cmd.setViewport(0, viewport, dl);
         cmd.setScissor(0, vk::Rect2D{{0, 0}, g_extent}, dl);
         const u64 draws = address + Scene::DrawsOffset;

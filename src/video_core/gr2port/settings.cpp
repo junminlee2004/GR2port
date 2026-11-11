@@ -78,6 +78,46 @@ std::string QualityName(Quality quality) {
     return "original";
 }
 
+constexpr std::pair<Upscaler, std::string_view> UpscalerNames[] = {
+    {Upscaler::Off, "off"},
+    {Upscaler::Fsr3, "fsr3"},
+    {Upscaler::Fsr4, "fsr4"},
+    {Upscaler::Dlss, "dlss"},
+};
+
+constexpr std::pair<UpscaleQuality, std::string_view> UpscaleQualityNames[] = {
+    {UpscaleQuality::Native, "native"},
+    {UpscaleQuality::Quality, "quality"},
+    {UpscaleQuality::Balanced, "balanced"},
+    {UpscaleQuality::Performance, "performance"},
+    {UpscaleQuality::UltraPerformance, "ultra_performance"},
+};
+
+template <typename Value, std::size_t Count>
+Value ReadName(const json& section, const char* key, Value fallback,
+               const std::pair<Value, std::string_view> (&names)[Count]) {
+    const auto it = section.find(key);
+    if (it == section.end() || !it->is_string()) {
+        return fallback;
+    }
+    for (const auto& [value, name] : names) {
+        if (it->get<std::string>() == name) {
+            return value;
+        }
+    }
+    return fallback;
+}
+
+template <typename Value, std::size_t Count>
+std::string NameOf(Value value, const std::pair<Value, std::string_view> (&names)[Count]) {
+    for (const auto& [entry, name] : names) {
+        if (entry == value) {
+            return std::string(name);
+        }
+    }
+    return std::string(names[0].second);
+}
+
 void ReadGraphics(const json& section, Graphics& graphics) {
     if (const auto preset = section.find("graphics_preset");
         preset != section.end() && preset->is_string()) {
@@ -92,6 +132,9 @@ void ReadGraphics(const json& section, Graphics& graphics) {
     graphics.motion_blur = ReadBool(section, "motion_blur", graphics.motion_blur);
     graphics.antialiasing = ReadBool(section, "antialiasing", graphics.antialiasing);
     graphics.bloom = ReadBool(section, "bloom", graphics.bloom);
+    graphics.upscaler = ReadName(section, "upscaler", graphics.upscaler, UpscalerNames);
+    graphics.upscale_quality =
+        ReadName(section, "upscale_quality", graphics.upscale_quality, UpscaleQualityNames);
     graphics.texture_streaming_mb =
         ReadU32(section, "texture_streaming_mb", graphics.texture_streaming_mb);
     graphics.pass_times = ReadBool(section, "pass_times", graphics.pass_times);
@@ -206,6 +249,8 @@ json ToJson(const Values& values) {
         {"motion_blur", values.graphics.motion_blur},
         {"antialiasing", values.graphics.antialiasing},
         {"bloom", values.graphics.bloom},
+        {"upscaler", NameOf(values.graphics.upscaler, UpscalerNames)},
+        {"upscale_quality", NameOf(values.graphics.upscale_quality, UpscaleQualityNames)},
         {"texture_streaming_mb", values.graphics.texture_streaming_mb},
         {"pass_times", values.graphics.pass_times},
     };

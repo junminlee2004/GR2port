@@ -87,6 +87,7 @@
 #include "video_core/gr2port/shaders/sprite_vert.h"
 #include "video_core/gr2port/shadows.h"
 #include "video_core/gr2port/textures.h"
+#include "video_core/gr2port/upscaler.h"
 #include "video_core/gr2port/world.h"
 
 namespace Gr2Port::Particles {
@@ -1680,14 +1681,7 @@ void RecordDraws(vk::CommandBuffer cmd, const Scene::Header& header, const u8* p
                                 .pDepthAttachment = &depth_attachment},
                                dl);
             // A negative height keeps the game's y-up clip space.
-            const vk::Viewport viewport{
-                .x = 0.0f,
-                .y = static_cast<float>(extent.height),
-                .width = static_cast<float>(extent.width),
-                .height = -static_cast<float>(extent.height),
-                .minDepth = 0.0f,
-                .maxDepth = 1.0f,
-            };
+            const vk::Viewport viewport = Upscaler::SceneViewport(extent);
             cmd.setViewport(0, viewport, dl);
             cmd.setScissor(0, vk::Rect2D{{0, 0}, extent}, dl);
             cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);

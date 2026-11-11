@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -27,6 +28,7 @@
 #include "video_core/gr2port/scene_ring.h"
 #include "video_core/gr2port/textures.h"
 #include "video_core/gr2port/ui_capture.h"
+#include "video_core/gr2port/upscaler.h"
 
 namespace Gr2Port::Capture {
 
@@ -843,6 +845,28 @@ std::array<u32, 16> MeshElements(VAddr vertex_buffer) {
     return elements;
 }
 
+// The size the scene draws at for the game's target size, which the upscaler makes smaller: the
+// width, the height and their inverses.
+std::array<float, 4> RenderSize(float width, float height) {
+    const vk::Extent2D render = Upscaler::RenderExtent(
+        {static_cast<u32>(std::lround(width)), static_cast<u32>(std::lround(height))});
+    const float render_width = static_cast<float>(render.width);
+    const float render_height = static_cast<float>(render.height);
+    return {render_width, render_height, 1.0f / render_width, 1.0f / render_height};
+}
+
+// The game's inverse target size in a pixel constant pair, made the scene's inverse size.
+void RescaleInverseSize(u32& inverse_width, u32& inverse_height) {
+    const float width = std::bit_cast<float>(inverse_width);
+    const float height = std::bit_cast<float>(inverse_height);
+    if (!(width > 0.0f) || !(height > 0.0f)) {
+        return;
+    }
+    const std::array<float, 4> render = RenderSize(1.0f / width, 1.0f / height);
+    inverse_width = std::bit_cast<u32>(render[2]);
+    inverse_height = std::bit_cast<u32>(render[3]);
+}
+
 // The view's point lights that the packet holds and the programs count.
 u32 PointLightCount(VAddr view) {
     return Load<VAddr>(view + ViewPointLights) != 0
@@ -1522,6 +1546,9 @@ public:
         std::memcpy(pixels.data(), reinterpret_cast<const void*>(pixel_constants),
                     core ? EnemyCorePixelBytes : EnemyPixelBytes);
         if (!core) {
+            // The body programs turn the pixel's position into screen coordinates with these.
+            RescaleInverseSize(pixels[10], pixels[11]);
+            RescaleInverseSize(pixels[110], pixels[111]);
             std::memcpy(pixels.data() + EnemyShWord,
                         reinterpret_cast<const void*>(frame_graph + FrameGraphSh), EnemyShBytes);
             pixels[EnemyPointLightsWord] = PointLightCount(view);
@@ -2864,8 +2891,9 @@ void WriteParticleColorScene(VAddr view, u8* packet) {
     const VAddr targets = Load<VAddr>(view + ViewTargets);
     const auto size = targets != 0 ? Load<std::array<float, 2>>(targets + TargetsSize)
                                    : std::array<float, 2>{1920.0f, 1080.0f};
-    words[64] = size[0] * Quarter;
-    words[65] = size[1] * Quarter;
+    const std::array<float, 4> render = RenderSize(size[0], size[1]);
+    words[64] = render[0] * Quarter;
+    words[65] = render[1] * Quarter;
     words[66] = size[1] != 0.0f ? size[0] / size[1] : 0.0f;
     std::memcpy(packet + Scene::ParticleColorSceneOffset, words.data(), sizeof(words));
 }
@@ -3101,12 +3129,16 @@ void WriteMotionBlur(VAddr frame_graph, VAddr view, u8* packet) {
     }
     const float scale = 0.5f / std::max(MinFrameTime, Load<float>(view + ViewFrameTime)) *
                         Load<float>(view + ViewBlur);
-    const auto size = Load<std::array<float, 4>>(targets + TargetsSize);
+    const auto game_size = Load<std::array<float, 4>>(targets + TargetsSize);
+    const std::array<float, 4> size = RenderSize(game_size[0], game_size[1]);
+    const vk::Extent2D compressed =
+        Upscaler::RenderExtent({Load<u16>(targets + TargetsCompressedWidth),
+                                Load<u16>(targets + TargetsCompressedHeight)});
     Scene::MotionBlur blur{
         .velocity_scale = scale,
         .tile_velocity_scale = scale,
-        .tile_width = Load<u16>(targets + TargetsCompressedWidth) / MotionBlurTileColumns,
-        .tile_height = Load<u16>(targets + TargetsCompressedHeight) / MotionBlurTileRows,
+        .tile_width = compressed.width / MotionBlurTileColumns,
+        .tile_height = compressed.height / MotionBlurTileRows,
         .blur_velocity_scale = scale,
     };
     std::memcpy(blur.target_size, size.data(), sizeof(blur.target_size));
@@ -3238,8 +3270,9 @@ u32 WriteLight(VAddr frame_graph, VAddr view, u8* packet) {
         };
         copy(trace.projection, ViewProjection, sizeof(trace.projection));
         copy(trace.inverse_view, ViewInverseConstants, sizeof(trace.inverse_view));
-        std::memcpy(trace.target_size, reinterpret_cast<const void*>(targets + TargetsSize),
-                    sizeof(trace.target_size));
+        const auto game_size = Load<std::array<float, 2>>(targets + TargetsSize);
+        const std::array<float, 4> size = RenderSize(game_size[0], game_size[1]);
+        std::memcpy(trace.target_size, size.data(), sizeof(trace.target_size));
         std::memcpy(packet + Scene::ShadowTraceOffset, &trace, sizeof(trace));
     }
     std::memcpy(packet + Scene::LightOffset, &light, sizeof(light));
