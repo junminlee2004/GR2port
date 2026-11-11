@@ -1513,11 +1513,6 @@ void Thread::Report() {
         static_cast<double>(meshes.resident_bytes) / (1 << 20), meshes.pending,
         static_cast<double>(meshes.uploaded_bytes) / (1 << 20), meshes.skipped, meshes.bad_indices,
         meshes.missed_unloads, meshes.lost_handles);
-    LOG_INFO(Render_Vulkan,
-             "GR2port mesh indices: {:.1f} MB in use, {:.1f} MB at most, of {:.0f} MB",
-             static_cast<double>(meshes.index_bytes) / (1 << 20),
-             static_cast<double>(meshes.index_peak_bytes) / (1 << 20),
-             static_cast<double>(meshes.index_capacity_bytes) / (1 << 20));
     LOG_INFO(
         Render_Vulkan,
         "GR2port textures: per frame {:.0f} draws with a colour texture not converted; {} "

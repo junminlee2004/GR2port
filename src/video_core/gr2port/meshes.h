@@ -109,10 +109,6 @@ struct Stats {
     u32 no_normal;
     u64 uploaded_bytes;
     u64 resident_bytes;
-    /// The shared index buffer's bytes in use, the most in use since the start, and its size.
-    u64 index_bytes;
-    u64 index_peak_bytes;
-    u64 index_capacity_bytes;
 };
 Stats TakeStats();
 
