@@ -97,7 +97,11 @@ constexpr u32 LoggedUploads = 8;
 constexpr u32 LoggedSkins = 4;
 constexpr u32 LoggedVertexStreams = 12;
 constexpr u32 LoggedCloth = 4;
+// The shared index buffer's indices: 64M, or 48M when the GPU's budget is small; a session through
+// the game measured 42.5M at most.
 constexpr u64 IndexCapacity = 64ull << 20;
+constexpr u64 SmallIndexCapacity = 48ull << 20;
+constexpr u64 SmallBudget = 3_GB;
 
 template <typename T>
 T Load(VAddr address) {
@@ -591,14 +595,16 @@ const Mesh* Get(VAddr shape) {
 bool Start(const Device& device, Memory& memory) {
     g_device = &device;
     g_memory = &memory;
-    g_index_buffer = memory.CreateBuffer(IndexCapacity * 2,
-                                         vk::BufferUsageFlagBits::eIndexBuffer |
-                                             vk::BufferUsageFlagBits::eTransferDst,
-                                         Placement::Device);
+    memory.Refresh(0);
+    const u64 capacity =
+        memory.DeviceBudget().budget <= SmallBudget ? SmallIndexCapacity : IndexCapacity;
+    g_index_buffer = memory.CreateBuffer(
+        capacity * 2, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+        Placement::Device);
     if (!g_index_buffer.buffer) {
         return false;
     }
-    g_free_indices.emplace(0u, static_cast<u32>(IndexCapacity));
+    g_free_indices.emplace(0u, static_cast<u32>(capacity));
     return true;
 }
 
