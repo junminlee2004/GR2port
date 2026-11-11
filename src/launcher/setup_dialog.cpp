@@ -156,6 +156,7 @@ enum Control : int {
     IdTouchSwipe,
     IdTouchSwipeNote,
     IdKeyBindings,
+    IdPadBindings,
     IdExtras,
     IdPresetLabel,
     IdPreset,
@@ -301,6 +302,7 @@ constexpr int MouseNoteTop = 280;
 constexpr int TouchSwipeTop = 336;
 constexpr int TouchSwipeNoteTop = 356;
 constexpr RECT KeyBindingsButton{18, 396, 178, 419};
+constexpr RECT PadBindingsButton{433, 402, 577, 424};
 
 // The button prompts setting's values, in the order of the combo box.
 constexpr std::array<std::pair<const wchar_t*, std::string_view>, 7> PromptChoices{{
@@ -454,6 +456,8 @@ struct Dialog {
     bool touch_swipe = false;
     // The keys of the game's functions as the Key Bindings dialog left them, to save on Ok.
     std::optional<KeyBindings> key_bindings;
+    // The pad buttons as the Button Bindings dialog left them, to save on Ok.
+    std::optional<PadBindings> pad_bindings;
     // The MB of each Texture Streaming choice; 0 for Auto.
     std::vector<u32> texture_streaming;
 };
@@ -907,6 +911,19 @@ void ShowAutomaticPrompts(const Dialog& dialog) {
             items.front() = text;
         }
     }
+}
+
+// The prompts whose names the Button Bindings dialog gives the pad's buttons: the Controller
+// tab's Button Prompts choice, PlayStation for the keyboard's.
+std::string PadNamesLayout(const Dialog& dialog) {
+    const int chosen = Selected(Item(dialog, IdPadPrompts));
+    std::string layout = chosen >= 0 && chosen < static_cast<int>(PromptChoices.size())
+                             ? std::string(PromptChoices[chosen].second)
+                             : std::string("auto");
+    if (layout == "auto") {
+        layout = PromptPacks::AutomaticLayout();
+    }
+    return layout == "keyboard" ? std::string("playstation") : layout;
 }
 
 Settings::Mouse ReadMouse(const Dialog& dialog) {
@@ -1640,6 +1657,8 @@ void Build(HWND window, Dialog& dialog) {
     controller_order.push_back(
         add(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, IdPadPrompts,
             {ComboLeft, PadPromptsTop, ComboLeft + ComboWidth, PadPromptsTop + ComboListHeight}));
+    controller_order.push_back(add(WC_BUTTONW, L"Button Bindings...", BS_PUSHBUTTON | WS_TABSTOP,
+                                   IdPadBindings, PadBindingsButton));
     KeepTabOrder(controller_order);
 
     const HWND mouse_page = dialog.pages[MousePage];
@@ -1873,6 +1892,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             ShowMouse(dialog, Settings::Mouse{});
             Check(dialog, IdTouchSwipe, false);
             dialog.key_bindings = DefaultKeyBindings();
+            dialog.pad_bindings = DefaultPadBindings();
             ShowLanguage(dialog, GeneralSettings{}.console_language.value);
         }
         break;
@@ -1914,6 +1934,16 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             }
         }
         break;
+    case IdPadBindings:
+        if (code == BN_CLICKED) {
+            const PadBindings buttons =
+                dialog.pad_bindings ? *dialog.pad_bindings : ReadPadBindings(dialog.input_config);
+            if (auto edited = EditPadBindings(window, buttons, dialog.values.mouse.control_type,
+                                              PadNamesLayout(dialog))) {
+                dialog.pad_bindings = std::move(edited);
+            }
+        }
+        break;
     case IdAvatar:
     case IdAvatarChoose:
         if (code == BN_CLICKED || code == STN_CLICKED) {
@@ -1932,6 +1962,10 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         SaveController(window, dialog);
         if (dialog.key_bindings && !SaveKeyBindings(dialog.input_config, *dialog.key_bindings)) {
             Tell(window, L"The key bindings could not be saved.", L"Key Bindings",
+                 MB_OK | MB_ICONWARNING);
+        }
+        if (dialog.pad_bindings && !SavePadBindings(dialog.input_config, *dialog.pad_bindings)) {
+            Tell(window, L"The button bindings could not be saved.", L"Button Bindings",
                  MB_OK | MB_ICONWARNING);
         }
         EndDialog(window, IDOK);

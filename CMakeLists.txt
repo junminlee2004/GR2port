@@ -1336,6 +1336,8 @@ set(INPUT src/input/controller.cpp
           src/input/selected_pad.h
           src/input/game_functions.cpp
           src/input/game_functions.h
+          src/input/pad_bindings.cpp
+          src/input/pad_bindings.h
           src/input/mouse_look.cpp
           src/input/mouse_look.h
           src/input/controller_state.cpp

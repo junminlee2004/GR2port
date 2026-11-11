@@ -11,11 +11,14 @@
 #include <string_view>
 #include <windows.h>
 // windows.h first
+#include <SDL3/SDL_gamepad.h>
+#include <SDL3/SDL_init.h>
 #include <commctrl.h>
 
 #include "core/language/language.h"
 #include "input/game_functions.h"
 #include "input/input_handler.h"
+#include "input/pad_bindings.h"
 #include "launcher/key_bindings.h"
 
 namespace Gr2Port::Launcher {
@@ -32,7 +35,7 @@ constexpr int ClientHeight = 430;
 constexpr RECT TabArea{10, 10, 550, 330};
 constexpr RECT TypeLine{10, 338, 550, 353};
 constexpr RECT StatusLine{10, 358, 550, 373};
-constexpr RECT ChangeButton{10, 398, 110, 420};
+constexpr RECT ChangeArea{10, 398, 110, 420};
 constexpr RECT ClearButton{116, 398, 206, 420};
 constexpr RECT DefaultsButton{212, 398, 302, 420};
 constexpr RECT OkButton{394, 398, 467, 420};
@@ -57,6 +60,10 @@ constexpr std::array<const wchar_t*, Game::TypeCount> TypeNames{L"Type A", L"Typ
 
 struct Editor {
     KeyBindings keys;
+    // The Button Bindings dialog edits buttons, named as layout's prompts show them.
+    bool pad = false;
+    PadBindings buttons;
+    std::string layout;
     u32 type = 0;
     u32 game_type = 0;
     UINT dpi = USER_DEFAULT_SCREEN_DPI;
@@ -261,20 +268,152 @@ std::string KeyName(WPARAM key, LPARAM flags) {
     }
 }
 
+// ------------------------------------------------------------------------------ pad buttons
+
+// A pad button by the input config's input name; triggers are axes.
+struct PadInput {
+    std::string_view name;
+    SDL_GamepadButton button;
+    SDL_GamepadAxis axis;
+};
+
+constexpr std::array<PadInput, 16> PadInputs{{
+    {"cross", SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_AXIS_INVALID},
+    {"circle", SDL_GAMEPAD_BUTTON_EAST, SDL_GAMEPAD_AXIS_INVALID},
+    {"square", SDL_GAMEPAD_BUTTON_WEST, SDL_GAMEPAD_AXIS_INVALID},
+    {"triangle", SDL_GAMEPAD_BUTTON_NORTH, SDL_GAMEPAD_AXIS_INVALID},
+    {"l1", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, SDL_GAMEPAD_AXIS_INVALID},
+    {"r1", SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, SDL_GAMEPAD_AXIS_INVALID},
+    {"l2", SDL_GAMEPAD_BUTTON_INVALID, SDL_GAMEPAD_AXIS_LEFT_TRIGGER},
+    {"r2", SDL_GAMEPAD_BUTTON_INVALID, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER},
+    {"l3", SDL_GAMEPAD_BUTTON_LEFT_STICK, SDL_GAMEPAD_AXIS_INVALID},
+    {"r3", SDL_GAMEPAD_BUTTON_RIGHT_STICK, SDL_GAMEPAD_AXIS_INVALID},
+    {"options", SDL_GAMEPAD_BUTTON_START, SDL_GAMEPAD_AXIS_INVALID},
+    {"back", SDL_GAMEPAD_BUTTON_BACK, SDL_GAMEPAD_AXIS_INVALID},
+    {"pad_up", SDL_GAMEPAD_BUTTON_DPAD_UP, SDL_GAMEPAD_AXIS_INVALID},
+    {"pad_down", SDL_GAMEPAD_BUTTON_DPAD_DOWN, SDL_GAMEPAD_AXIS_INVALID},
+    {"pad_left", SDL_GAMEPAD_BUTTON_DPAD_LEFT, SDL_GAMEPAD_AXIS_INVALID},
+    {"pad_right", SDL_GAMEPAD_BUTTON_DPAD_RIGHT, SDL_GAMEPAD_AXIS_INVALID},
+}};
+
+// A pad button's name as the layout's prompts show it: the face buttons by position, the rest by
+// their print on that pad.
+std::wstring PadText(std::string_view layout, std::string_view name) {
+    if (name.empty()) {
+        return L"\x2014";
+    }
+    struct Names {
+        std::string_view layout;
+        std::array<const wchar_t*, 12> text;
+    };
+    // cross circle square triangle l1 r1 l2 r2 l3 r3 options back
+    static constexpr std::array<Names, 5> Layouts{{
+        {"xbox",
+         {L"A", L"B", L"X", L"Y", L"LB", L"RB", L"LT", L"RT", L"LS", L"RS", L"Menu", L"View"}},
+        {"switch",
+         {L"B", L"A", L"Y", L"X", L"L", L"R", L"ZL", L"ZR", L"LS", L"RS", L"+", L"\x2212"}},
+        {"steamdeck",
+         {L"A", L"B", L"X", L"Y", L"L1", L"R1", L"L2", L"R2", L"L3", L"R3", L"Menu", L"View"}},
+        {"steamcontroller",
+         {L"A", L"B", L"X", L"Y", L"LB", L"RB", L"LT", L"RT", L"Stick", L"Right Pad", L"Start",
+          L"Back"}},
+        {"playstation",
+         {L"Cross", L"Circle", L"Square", L"Triangle", L"L1", L"R1", L"L2", L"R2", L"L3", L"R3",
+          L"OPTIONS", L"SHARE"}},
+    }};
+    static constexpr std::array<std::string_view, 12> Order{
+        "cross", "circle", "square", "triangle", "l1",      "r1",
+        "l2",    "r2",     "l3",     "r3",       "options", "back"};
+    const auto names = std::ranges::find(Layouts, layout, &Names::layout);
+    const Names& chosen = names != Layouts.end() ? *names : Layouts.back();
+    if (const auto at = std::ranges::find(Order, name); at != Order.end()) {
+        return Tr(chosen.text[at - Order.begin()]);
+    }
+    if (name == "pad_up") {
+        return Tr(L"D-pad up");
+    }
+    if (name == "pad_down") {
+        return Tr(L"D-pad down");
+    }
+    if (name == "pad_left") {
+        return Tr(L"D-pad left");
+    }
+    if (name == "pad_right") {
+        return Tr(L"D-pad right");
+    }
+    return Wide(name);
+}
+
+// The PlayStation button a function is on in a control type, or empty when the type uses a
+// stick, a touch pad flick or a button held with another.
+std::string_view GameButton(const Game::Function& function, u32 type) {
+    const auto buttons = Input::PadBindings::GameButtons();
+    if (std::ranges::find(buttons, function.output) != buttons.end()) {
+        return function.output;
+    }
+    if (function.name == "gr2_evade" && type == 0) {
+        return "r2";
+    }
+    if (function.name == "gr2_normal_style") {
+        return type == 0 ? "touchpad_center" : type >= 2 ? "r2" : "";
+    }
+    return {};
+}
+
 // ------------------------------------------------------------------------------- key capture
 
 struct Capture {
     std::wstring function;
     HFONT font = nullptr;
+    // Takes a pad button instead of a key or mouse button.
+    bool pad = false;
     int seconds_left = CaptureSeconds;
     bool done = false;
     std::string key;
+    std::vector<SDL_Gamepad*> pads;
+    // Pad buttons held since before the popup opened, which count once released.
+    std::set<std::string_view> held;
 };
 
+constexpr UINT_PTR CountdownTimer = 1;
+constexpr UINT_PTR PadTimer = 2;
+constexpr UINT PadPollMs = 15;
+// A trigger counts as pressed past half its travel.
+constexpr Sint16 TriggerPressed = 16384;
+
 void Finish(Capture& capture, std::string key) {
-    if (!capture.done && (key.empty() || Input::string_to_keyboard_key_map.contains(key))) {
+    if (!capture.done &&
+        (key.empty() || capture.pad || Input::string_to_keyboard_key_map.contains(key))) {
         capture.key = std::move(key);
         capture.done = true;
+    }
+}
+
+// The pad buttons pressed now on any open pad.
+std::set<std::string_view> PressedPadInputs(const Capture& capture) {
+    SDL_UpdateGamepads();
+    std::set<std::string_view> pressed;
+    for (SDL_Gamepad* const pad : capture.pads) {
+        for (const PadInput& input : PadInputs) {
+            const bool down = input.button != SDL_GAMEPAD_BUTTON_INVALID
+                                  ? SDL_GetGamepadButton(pad, input.button)
+                                  : SDL_GetGamepadAxis(pad, input.axis) > TriggerPressed;
+            if (down) {
+                pressed.insert(input.name);
+            }
+        }
+    }
+    return pressed;
+}
+
+void PollPads(Capture& capture) {
+    const std::set<std::string_view> pressed = PressedPadInputs(capture);
+    std::erase_if(capture.held, [&](std::string_view name) { return !pressed.contains(name); });
+    for (const std::string_view name : pressed) {
+        if (!capture.held.contains(name)) {
+            Finish(capture, std::string(name));
+            return;
+        }
     }
 }
 
@@ -283,6 +422,17 @@ LRESULT CALLBACK CaptureProc(HWND window, UINT message, WPARAM wparam, LPARAM lp
     auto* const capture = reinterpret_cast<Capture*>(GetWindowLongPtrW(window, GWLP_USERDATA));
     if (capture == nullptr) {
         return DefWindowProcW(window, message, wparam, lparam);
+    }
+    if (capture->pad) {
+        // Escape gives up; other keys and the mouse do nothing.
+        if (message == WM_KEYDOWN && wparam == VK_ESCAPE) {
+            capture->done = true;
+            return 0;
+        }
+        if ((message >= WM_KEYFIRST && message <= WM_KEYLAST) ||
+            (message >= WM_MOUSEFIRST && message <= WM_MOUSELAST)) {
+            return 0;
+        }
     }
     switch (message) {
     case WM_KEYDOWN:
@@ -318,6 +468,10 @@ LRESULT CALLBACK CaptureProc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         Finish(*capture, GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? "mousewheelright" : "mousewheelleft");
         return 0;
     case WM_TIMER:
+        if (wparam == PadTimer) {
+            PollPads(*capture);
+            return 0;
+        }
         if (--capture->seconds_left <= 0) {
             capture->done = true;
         }
@@ -335,8 +489,11 @@ LRESULT CALLBACK CaptureProc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         const HGDIOBJ old_font = SelectObject(dc, capture->font);
         SetBkMode(dc, TRANSPARENT);
         const std::wstring text =
-            Tr(L"Press a key or mouse button for\n{0}\n\nNothing changes in {1} s.",
-               {capture->function, std::to_wstring(capture->seconds_left)});
+            capture->pad
+                ? Tr(L"Press a button on the controller for\n{0}\n\nNothing changes in {1} s.",
+                     {capture->function, std::to_wstring(capture->seconds_left)})
+                : Tr(L"Press a key or mouse button for\n{0}\n\nNothing changes in {1} s.",
+                     {capture->function, std::to_wstring(capture->seconds_left)});
         InflateRect(&area, 0, -MulDiv(area.bottom, 1, 10));
         DrawTextW(dc, text.c_str(), -1, &area, DT_CENTER | DT_WORDBREAK);
         SelectObject(dc, old_font);
@@ -348,8 +505,9 @@ LRESULT CALLBACK CaptureProc(HWND window, UINT message, WPARAM wparam, LPARAM lp
     }
 }
 
-// Waits for a key or mouse button over owner. Empty when the countdown ends first.
-std::string CaptureKey(HWND owner, const Editor& editor, const std::wstring& function) {
+// Waits for a key or mouse button over owner, or a pad button when pad is set. Empty when the
+// countdown ends first.
+std::string CaptureKey(HWND owner, const Editor& editor, const std::wstring& function, bool pad) {
     const HINSTANCE instance = GetModuleHandleW(nullptr);
     WNDCLASSEXW capture_class{};
     capture_class.cbSize = sizeof(capture_class);
@@ -371,14 +529,27 @@ std::string CaptureKey(HWND owner, const Editor& editor, const std::wstring& fun
     if (window == nullptr) {
         return {};
     }
-    Capture capture{function, editor.font};
+    Capture capture{function, editor.font, pad};
+    const bool gamepads = pad && SDL_InitSubSystem(SDL_INIT_GAMEPAD);
+    if (gamepads) {
+        int count = 0;
+        SDL_JoystickID* const ids = SDL_GetGamepads(&count);
+        for (int i = 0; i < count; ++i) {
+            if (SDL_Gamepad* const opened = SDL_OpenGamepad(ids[i])) {
+                capture.pads.push_back(opened);
+            }
+        }
+        SDL_free(ids);
+        capture.held = PressedPadInputs(capture);
+        SetTimer(window, PadTimer, PadPollMs, nullptr);
+    }
     SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&capture));
     EnableWindow(owner, FALSE);
     ShowWindow(window, SW_SHOW);
     SetForegroundWindow(window);
     SetFocus(window);
     SetCapture(window);
-    SetTimer(window, 1, 1000, nullptr);
+    SetTimer(window, CountdownTimer, 1000, nullptr);
     MSG message{};
     while (!capture.done) {
         const BOOL got = GetMessageW(&message, nullptr, 0, 0);
@@ -390,7 +561,14 @@ std::string CaptureKey(HWND owner, const Editor& editor, const std::wstring& fun
         }
         DispatchMessageW(&message);
     }
-    KillTimer(window, 1);
+    KillTimer(window, CountdownTimer);
+    KillTimer(window, PadTimer);
+    for (SDL_Gamepad* const opened : capture.pads) {
+        SDL_CloseGamepad(opened);
+    }
+    if (gamepads) {
+        SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
+    }
     SetWindowLongPtrW(window, GWLP_USERDATA, 0);
     ReleaseCapture();
     EnableWindow(owner, TRUE);
@@ -419,12 +597,25 @@ void SetCell(HWND list, int row, int column, const std::wstring& text) {
     SendMessageW(list, LVM_SETITEMTEXTW, row, reinterpret_cast<LPARAM>(&item));
 }
 
-// The pad column shows the type's pad inputs; the key column is the same in every type.
+// The pad button bound to the PlayStation button a function is on in the type shown; blank for a
+// function on a stick, a flick or a combination.
+std::wstring PadCell(const Editor& editor, const Game::Function& function) {
+    const std::string_view button = GameButton(function, editor.type);
+    if (button.empty()) {
+        return {};
+    }
+    const auto bound = editor.buttons.find(button);
+    return PadText(editor.layout, bound != editor.buttons.end() ? bound->second : std::string{});
+}
+
+// The pad column shows the type's pad inputs; the key column is the same in every type, and the
+// button column shows the pad button of each function's PlayStation button.
 void ShowRows(const Editor& editor) {
     const auto functions = Game::Functions();
     for (size_t i = 0; i < functions.size(); ++i) {
         SetCell(editor.list, static_cast<int>(i), 1, Tr(Wide(functions[i].pad[editor.type])));
-        SetCell(editor.list, static_cast<int>(i), 2, KeyText(editor.keys[i]));
+        SetCell(editor.list, static_cast<int>(i), 2,
+                editor.pad ? PadCell(editor, functions[i]) : KeyText(editor.keys[i]));
     }
     LVCOLUMNW column{};
     column.mask = LVCF_TEXT;
@@ -442,6 +633,45 @@ int SelectedRow(const Editor& editor) {
         SendMessageW(editor.list, LVM_GETNEXTITEM, static_cast<WPARAM>(-1), LVNI_SELECTED));
 }
 
+// The functions on a PlayStation button in the type shown, for the status line.
+std::wstring FunctionsOn(const Editor& editor, std::string_view button) {
+    std::wstring names;
+    for (const Game::Function& function : Game::Functions()) {
+        if (GameButton(function, editor.type) == button) {
+            names += (names.empty() ? L"" : L", ") + Tr(Wide(function.label));
+        }
+    }
+    return names;
+}
+
+// Takes a pad button for the selected function's PlayStation button. A pad button that another
+// PlayStation button had moves to this one.
+void ChangeButton(HWND window, Editor& editor, int row) {
+    const Game::Function& function = Game::Functions()[row];
+    const std::wstring label = Tr(Wide(function.label));
+    const std::string_view button = GameButton(function, editor.type);
+    if (button.empty()) {
+        ShowStatus(window,
+                   Tr(L"{0} is not on one button in {1}.", {label, Tr(TypeNames[editor.type])}));
+        return;
+    }
+    const std::string input = CaptureKey(window, editor, label, true);
+    if (input.empty()) {
+        ShowStatus(window, Tr(L"No button was pressed; {0} keeps its button.", {label}));
+        return;
+    }
+    std::wstring status = Tr(L"{0} now does {1}.", {PadText(editor.layout, input), label});
+    for (auto& [other, bound] : editor.buttons) {
+        if (other != button && bound == input) {
+            bound.clear();
+            status += L" " + Tr(L"{0} has no button now.", {FunctionsOn(editor, other)});
+        }
+    }
+    editor.buttons[std::string(button)] = input;
+    ShowRows(editor);
+    ShowStatus(window, status);
+}
+
 // Takes a key for the selected function. A key that another function had moves to this one.
 void ChangeKey(HWND window, Editor& editor) {
     const int row = SelectedRow(editor);
@@ -450,8 +680,12 @@ void ChangeKey(HWND window, Editor& editor) {
         ShowStatus(window, Tr(L"Pick a game function first."));
         return;
     }
+    if (editor.pad) {
+        ChangeButton(window, editor, row);
+        return;
+    }
     const std::wstring label = Tr(Wide(functions[row].label));
-    const std::string key = CaptureKey(window, editor, label);
+    const std::string key = CaptureKey(window, editor, label, false);
     if (key.empty()) {
         ShowStatus(window, Tr(L"No key was pressed; {0} keeps its key.", {label}));
         return;
@@ -469,7 +703,7 @@ void ChangeKey(HWND window, Editor& editor) {
 }
 
 void Build(HWND window, Editor& editor) {
-    SetWindowTextW(window, Tr(L"Key Bindings").c_str());
+    SetWindowTextW(window, Tr(editor.pad ? L"Button Bindings" : L"Key Bindings").c_str());
     editor.dpi = GetDpiForWindow(window);
     editor.font =
         CreateFontW(-MulDiv(8, static_cast<int>(editor.dpi), 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE,
@@ -514,7 +748,8 @@ void Build(HWND window, Editor& editor) {
     SendMessageW(editor.list, LVM_SETEXTENDEDLISTVIEWSTYLE, 0,
                  LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER);
     SetWindowPos(editor.list, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-    constexpr std::array<const wchar_t*, 3> Headers{L"Game Function", L"Controller", L"Key"};
+    const std::array<const wchar_t*, 3> Headers{L"Game Function", L"Controller",
+                                                editor.pad ? L"Button" : L"Key"};
     for (size_t i = 0; i < Headers.size(); ++i) {
         LVCOLUMNW column{};
         column.mask = LVCF_TEXT | LVCF_WIDTH;
@@ -534,19 +769,26 @@ void Build(HWND window, Editor& editor) {
     }
     ShowRows(editor);
 
-    const std::wstring in_use = Tr(L"The game used {0} last (Options > Controls). Each key does "
-                                   L"its function in every type.",
-                                   {Tr(TypeNames[editor.game_type])});
+    const std::wstring in_use =
+        editor.pad ? Tr(L"The game used {0} last (Options > Controls). A button presses the same "
+                        L"PlayStation button in every type.",
+                        {Tr(TypeNames[editor.game_type])})
+                   : Tr(L"The game used {0} last (Options > Controls). Each key does "
+                        L"its function in every type.",
+                        {Tr(TypeNames[editor.game_type])});
     MakeControl(editor, window, WC_STATICW, in_use.c_str(), SS_LEFT, IdType, TypeLine);
     MakeControl(editor, window, WC_STATICW,
-                Tr(L"Double-click a function, then press its key. Mouse buttons and the wheel "
-                   L"count.")
+                (editor.pad ? Tr(L"Double-click a function, then press its button on the "
+                                 L"controller.")
+                            : Tr(L"Double-click a function, then press its key. Mouse buttons and "
+                                 L"the wheel count."))
                     .c_str(),
                 SS_LEFT, IdStatus, StatusLine);
-    MakeControl(editor, window, WC_BUTTONW, Tr(L"Change Key...").c_str(),
-                BS_PUSHBUTTON | WS_TABSTOP, IdChange, ChangeButton);
-    MakeControl(editor, window, WC_BUTTONW, Tr(L"Clear Key").c_str(), BS_PUSHBUTTON | WS_TABSTOP,
-                IdClear, ClearButton);
+    MakeControl(editor, window, WC_BUTTONW,
+                Tr(editor.pad ? L"Change Button..." : L"Change Key...").c_str(),
+                BS_PUSHBUTTON | WS_TABSTOP, IdChange, ChangeArea);
+    MakeControl(editor, window, WC_BUTTONW, Tr(editor.pad ? L"Clear Button" : L"Clear Key").c_str(),
+                BS_PUSHBUTTON | WS_TABSTOP, IdClear, ClearButton);
     MakeControl(editor, window, WC_BUTTONW, Tr(L"Defaults").c_str(), BS_PUSHBUTTON | WS_TABSTOP,
                 IdDefaults, DefaultsButton);
     MakeControl(editor, window, WC_BUTTONW, Tr(L"OK").c_str(), BS_DEFPUSHBUTTON | WS_TABSTOP, IDOK,
@@ -578,14 +820,25 @@ INT_PTR CALLBACK EditorProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
             return TRUE;
         case IdClear:
             if (const int row = SelectedRow(*editor); row >= 0) {
-                editor->keys[row].clear();
+                if (!editor->pad) {
+                    editor->keys[row].clear();
+                } else if (const std::string_view button =
+                               GameButton(Game::Functions()[row], editor->type);
+                           !button.empty()) {
+                    editor->buttons[std::string(button)].clear();
+                }
                 ShowRows(*editor);
             }
             return TRUE;
         case IdDefaults:
-            editor->keys = DefaultKeyBindings();
+            if (editor->pad) {
+                editor->buttons = DefaultPadBindings();
+            } else {
+                editor->keys = DefaultKeyBindings();
+            }
             ShowRows(*editor);
-            ShowStatus(window, Tr(L"Every function has its default key again."));
+            ShowStatus(window, Tr(editor->pad ? L"Every function has its default button again."
+                                              : L"Every function has its default key again."));
             return TRUE;
         case IDOK:
         case IDCANCEL:
@@ -735,6 +988,84 @@ std::optional<KeyBindings> EditKeyBindings(HWND owner, const KeyBindings& keys, 
         return std::nullopt;
     }
     return editor.keys;
+}
+
+PadBindings DefaultPadBindings() {
+    return Input::PadBindings::Defaults();
+}
+
+PadBindings ReadPadBindings(const std::filesystem::path& file) {
+    return Input::PadBindings::Read(file);
+}
+
+bool SavePadBindings(const std::filesystem::path& file, const PadBindings& buttons) {
+    const auto blank = [](std::string_view line) {
+        return std::ranges::all_of(line, [](unsigned char c) { return std::isspace(c) != 0; });
+    };
+    std::vector<std::string> lines;
+    std::optional<size_t> block_at;
+    {
+        std::ifstream in(file);
+        for (std::string line; std::getline(in, line);) {
+            if (Input::PadBindings::ParseLine(Compact(line))) {
+                block_at = block_at.value_or(lines.size());
+                continue;
+            }
+            if (blank(line) && !lines.empty() && blank(lines.back())) {
+                continue;
+            }
+            lines.push_back(std::move(line));
+        }
+    }
+    std::vector<std::string> block;
+    if (!block_at) {
+        block.emplace_back();
+        block.emplace_back("# Controller bindings");
+    }
+    for (const std::string_view button : Input::PadBindings::GameButtons()) {
+        const auto bound = buttons.find(button);
+        const bool none = bound == buttons.end() || bound->second.empty();
+        block.push_back(std::string(button) + " = " + (none ? "unmapped" : bound->second));
+    }
+    const size_t at = block_at.value_or(lines.size());
+    if (at < lines.size() && !blank(lines[at])) {
+        block.emplace_back();
+    }
+    lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(at), block.begin(), block.end());
+    std::ofstream out(file, std::ios::trunc);
+    for (const std::string& line : lines) {
+        out << line << '\n';
+    }
+    return !out.fail();
+}
+
+std::optional<PadBindings> EditPadBindings(HWND owner, const PadBindings& buttons, u32 control_type,
+                                           std::string_view layout) {
+    struct alignas(4) Template {
+        DLGTEMPLATE header;
+        WORD menu;
+        WORD window_class;
+        wchar_t title[16];
+    };
+    Template dialog_template{};
+    dialog_template.header.style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME;
+    wcscpy_s(dialog_template.title, L"Button Bindings");
+
+    Editor editor;
+    editor.pad = true;
+    editor.buttons = buttons;
+    editor.layout = layout;
+    editor.keys.resize(Game::Functions().size());
+    editor.game_type = std::min(control_type, Game::TypeCount - 1);
+    editor.type = editor.game_type;
+    const INT_PTR result =
+        DialogBoxIndirectParamW(GetModuleHandleW(nullptr), &dialog_template.header, owner,
+                                &EditorProc, reinterpret_cast<LPARAM>(&editor));
+    DeleteObject(editor.font);
+    if (result != IDOK) {
+        return std::nullopt;
+    }
+    return editor.buttons;
 }
 
 } // namespace Gr2Port::Launcher
