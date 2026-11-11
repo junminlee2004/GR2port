@@ -102,15 +102,23 @@ void main() {
         if (any(lessThan(tap, ivec2(0))) || any(greaterThanEqual(tap, size))) {
             continue;
         }
-        const float world_depth = texelFetch(scene_depth, tap, 0).r;
-        if (world_samples && !WorldAt(tap, world_depth)) {
-            continue;
-        }
         const int level = clamp(int(floor(log2(reach))) - 3, 0, TopLevel);
+        // The tap's own depths are read only where the world test or level 0 uses them.
+        float world_depth = 0.0;
+        float character = 0.0;
+        if (world_samples || level == 0) {
+            world_depth = texelFetch(scene_depth, tap, 0).r;
+            if (level == 0 || world_depth > 0.0) {
+                character = texelFetch(character_depth, tap, 0).r;
+            }
+            if (world_samples && !(world_depth > 0.0 && character <= world_depth)) {
+                continue;
+            }
+        }
         const ivec2 texel = tap >> level;
         float tap_depth;
         if (level == 0) {
-            tap_depth = max(world_depth, texelFetch(character_depth, tap, 0).r);
+            tap_depth = max(world_depth, character);
         } else if (all(lessThan(texel, textureSize(depth_levels, level - 1)))) {
             tap_depth = texelFetch(depth_levels, texel, level - 1).r;
         } else {
