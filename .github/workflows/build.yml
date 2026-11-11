@@ -181,9 +181,9 @@ jobs:
       with:
         path: ./artifacts
 
-    # Each zip holds the executable, an empty userdata folder and the readme. GitHub puts a dot
-    # for each space of an asset's file name, so the file names carry the dots and the labels
-    # the release page shows carry the spaces.
+    # Each zip holds the executable, the readme and a userdata folder with FSR 4's files; the
+    # Windows zip also has DLSS's. GitHub puts a dot for each space of an asset's file name, so
+    # the file names carry the dots and the labels the release page shows carry the spaces.
     - name: Make the zips
       run: |
         chmod a+x ./artifacts/gr2port-linux-sdl-*/*.AppImage
@@ -192,7 +192,13 @@ jobs:
             *-win64-*) system=Windows ;;
             *) system=Linux ;;
           esac
-          mkdir "$dir/userdata"
+          mkdir -p "$dir/userdata/fsr4_v07"
+          tar -xJf third_party/upscaler-files/fsr4_v07.tar.xz -C "$dir/userdata/fsr4_v07"
+          if [ "$system" = Windows ]; then
+            mkdir -p "$dir/userdata/dlss"
+            tar -xJf third_party/upscaler-files/dlss.tar.xz -C "$dir/userdata/dlss"
+            cp third_party/streamline/license.txt "$dir/userdata/dlss/LICENSE-Streamline.txt"
+          fi
           cp src/dist/README.txt "$dir"
           (cd "$dir" && zip -r "$GITHUB_WORKSPACE/GR2port.build.${FULLHASH:0:8}.$system.zip" .)
         done

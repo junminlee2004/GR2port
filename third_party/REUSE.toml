@@ -17,6 +17,24 @@ SPDX-FileCopyrightText = [
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
+path = "upscaler-files/fsr4_v07.tar.xz"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Advanced Micro Devices, Inc."
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = "upscaler-files/dlss.tar.xz"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2022-2025 NVIDIA CORPORATION"
+SPDX-License-Identifier = "LicenseRef-NVIDIA-DLSS-SDK"
+
+[[annotations]]
+path = "upscaler-files/NOTICE.md"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2026 GR2port"
+SPDX-License-Identifier = "GPL-2.0-or-later"
+
+[[annotations]]
 path = "streamline/**"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2022-2024 NVIDIA CORPORATION"
