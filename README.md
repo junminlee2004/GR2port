@@ -38,7 +38,7 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 
 > [!NOTE]
 > Upscaling is NOT considered for these fps targets but may be used to optionally improve fps further.
-> Currently, Windows and Linux are supported. macOS release is planned.
+> Currently, Windows and Linux are supported. MacOS release is planned.
 
 **Included Features for Gravity Rush 2**
 - Fully game region-agnostic (Asia, Europe, USA, Japan regions all supported); **update v1.11 is required**.
