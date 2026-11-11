@@ -34,6 +34,7 @@
 #include "core/file_sys/fs.h"
 #include "core/libraries/error_codes.h"
 #include "core/libraries/font/font.h"
+#include "core/libraries/font/font_gpos.h"
 #include "core/libraries/font/font_internal.h"
 #include "core/libraries/font/fontft.h"
 #include "core/libraries/font/fontft_internal.h"
@@ -1974,8 +1975,34 @@ s32 PS4_SYSV_ABI sceFontGetHorizontalLayout(OrbisFontHandle fontHandle,
     return rc;
 }
 
-s32 PS4_SYSV_ABI sceFontGetKerning(OrbisFontHandle fontHandle, u32 preCode, u32 code,
-                                   OrbisFontKerning* kerning) {
+// The GPOS table of a face and its kern feature. The face owns it through its generic slot.
+struct FaceGpos {
+    std::vector<u8> table;
+    u32 kern_feature = 0;
+};
+
+static const FaceGpos& GetFaceGpos(FT_Face face) {
+    if (!face->generic.data) {
+        auto* gpos = new FaceGpos;
+        const FT_ULong tag = FT_MAKE_TAG('G', 'P', 'O', 'S');
+        FT_ULong size = 0;
+        if (FT_Load_Sfnt_Table(face, tag, 0, nullptr, &size) == 0 && size != 0) {
+            gpos->table.resize(size);
+            if (FT_Load_Sfnt_Table(face, tag, 0, gpos->table.data(), &size) == 0) {
+                gpos->kern_feature = Internal::FindGposKernFeature(gpos->table);
+            }
+        }
+        face->generic.data = gpos;
+        face->generic.finalizer = [](void* object) {
+            delete static_cast<FaceGpos*>(static_cast<FT_Face>(object)->generic.data);
+        };
+    }
+    return *static_cast<const FaceGpos*>(face->generic.data);
+}
+
+// If render_scale is true, the kerning is for the scale set with sceFontSetupRenderScalePixel.
+static s32 GetKerning(OrbisFontHandle fontHandle, u32 preCode, u32 code, OrbisFontKerning* kerning,
+                      bool render_scale) {
     if (!kerning) {
         LOG_DEBUG(Lib_Font, "invalid parameters");
         return ORBIS_FONT_ERROR_INVALID_PARAMETER;
@@ -2014,19 +2041,38 @@ s32 PS4_SYSV_ABI sceFontGetKerning(OrbisFontHandle fontHandle, u32 preCode, u32 
     }
 
     if (resolved_face && g1 != 0 && g2 != 0) {
-        const float scaled_w = st.scale_w * resolved_scale_factor;
-        const float scaled_h = st.scale_h * resolved_scale_factor;
+        const float scaled_w =
+            (render_scale ? st.render_scale_w : st.scale_w) * resolved_scale_factor;
+        const float scaled_h =
+            (render_scale ? st.render_scale_h : st.scale_h) * resolved_scale_factor;
         const auto char_w = static_cast<FT_F26Dot6>(static_cast<s32>(scaled_w * 64.0f));
         const auto char_h = static_cast<FT_F26Dot6>(static_cast<s32>(scaled_h * 64.0f));
         (void)FT_Set_Char_Size(resolved_face, char_w, char_h, 72, 72);
 
-        FT_Vector delta{};
-        FT_Get_Kerning(resolved_face, g1, g2, FT_KERNING_DEFAULT, &delta);
-        const float kx = static_cast<float>(delta.x) / 64.0f;
-        kerning->offsetX = kx;
-        kerning->offsetY = 0.0f;
-        kerning->positionX = 0.0f;
-        kerning->positionY = 0.0f;
+        // The kerning comes from the kern table, or from the GPOS table if the face has no kern
+        // table. It is scaled and not rounded to whole pixels.
+        *kerning = {};
+        if (FT_HAS_KERNING(resolved_face)) {
+            FT_Vector delta{};
+            if (FT_Get_Kerning(resolved_face, g1, g2, FT_KERNING_UNFITTED, &delta) == 0) {
+                kerning->offsetX = static_cast<float>(delta.x) / 64.0f;
+                kerning->offsetY = static_cast<float>(delta.y) / 64.0f;
+            }
+            return ORBIS_OK;
+        }
+        const FaceGpos& gpos = GetFaceGpos(resolved_face);
+        Internal::GposPairAdjustment pair{};
+        if (gpos.kern_feature != 0 &&
+            Internal::GetGposPairAdjustment(gpos.table, gpos.kern_feature, g1, g2, pair)) {
+            const FT_Size_Metrics& metrics = resolved_face->size->metrics;
+            const auto scale = [](s16 units, FT_Fixed factor) {
+                return static_cast<float>(FT_MulFix(units, factor)) / 64.0f;
+            };
+            kerning->offsetX = scale(pair.advance_x, metrics.x_scale);
+            kerning->offsetY = scale(pair.advance_y, metrics.y_scale);
+            kerning->positionX = scale(pair.placement_x, metrics.x_scale);
+            kerning->positionY = scale(pair.placement_y, metrics.y_scale);
+        }
         return ORBIS_OK;
     }
     kerning->offsetX = 0.0f;
@@ -2034,6 +2080,11 @@ s32 PS4_SYSV_ABI sceFontGetKerning(OrbisFontHandle fontHandle, u32 preCode, u32 
     kerning->positionX = 0.0f;
     kerning->positionY = 0.0f;
     return ORBIS_OK;
+}
+
+s32 PS4_SYSV_ABI sceFontGetKerning(OrbisFontHandle fontHandle, u32 preCode, u32 code,
+                                   OrbisFontKerning* kerning) {
+    return GetKerning(fontHandle, preCode, code, kerning, false);
 }
 
 s32 PS4_SYSV_ABI sceFontGetLibrary(OrbisFontHandle fontHandle, OrbisFontLib* pLibrary) {
@@ -2045,9 +2096,26 @@ s32 PS4_SYSV_ABI sceFontGetLibrary(OrbisFontHandle fontHandle, OrbisFontLib* pLi
     return ORBIS_OK;
 }
 
-s32 PS4_SYSV_ABI sceFontGetPixelResolution() {
-    LOG_ERROR(Lib_Font, "(STUBBED) called");
-    return ORBIS_OK;
+s32 PS4_SYSV_ABI sceFontGetPixelResolution(OrbisFontLib library, u32* pixel_resolution) {
+    s32 rc = ORBIS_FONT_ERROR_INVALID_LIBRARY;
+    auto* lib = static_cast<Internal::FontLibOpaque*>(library);
+    u32 prev_lock_word = 0;
+    if (lib && lib->magic == 0x0F01 && AcquireLibraryLock(lib, prev_lock_word)) {
+        const auto* driver = reinterpret_cast<const Internal::SysDriver*>(lib->sys_driver);
+        if (driver && driver->pixel_resolution) {
+            if (pixel_resolution) {
+                *pixel_resolution = driver->pixel_resolution();
+                ReleaseLibraryLock(lib, prev_lock_word);
+                return ORBIS_OK;
+            }
+            rc = ORBIS_FONT_ERROR_INVALID_PARAMETER;
+        }
+        ReleaseLibraryLock(lib, prev_lock_word);
+    }
+    if (pixel_resolution) {
+        *pixel_resolution = 0;
+    }
+    return rc;
 }
 
 s32 PS4_SYSV_ABI sceFontGetRenderCharGlyphMetrics(OrbisFontHandle fontHandle, u32 codepoint,
@@ -2126,9 +2194,9 @@ s32 PS4_SYSV_ABI sceFontGetRenderEffectWeight(OrbisFontHandle fontHandle, float*
     return rc;
 }
 
-s32 PS4_SYSV_ABI sceFontGetRenderScaledKerning() {
-    LOG_ERROR(Lib_Font, "(STUBBED) called");
-    return ORBIS_OK;
+s32 PS4_SYSV_ABI sceFontGetRenderScaledKerning(OrbisFontHandle fontHandle, u32 preCode, u32 code,
+                                               OrbisFontKerning* kerning) {
+    return GetKerning(fontHandle, preCode, code, kerning, true);
 }
 
 s32 PS4_SYSV_ABI sceFontGetRenderScalePixel(OrbisFontHandle fontHandle, float* out_w,

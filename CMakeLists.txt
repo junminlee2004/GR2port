@@ -497,6 +497,8 @@ set(SYSTEM_LIBS src/core/libraries/system/commondialog.cpp
                 src/core/libraries/web_browser_dialog/webbrowserdialog.h
                 src/core/libraries/font/font.cpp
                 src/core/libraries/font/font.h
+                src/core/libraries/font/font_gpos.cpp
+                src/core/libraries/font/font_gpos.h
                 src/core/libraries/font/font_internal.cpp
                 src/core/libraries/font/font_internal.h
                 src/core/libraries/font/fontft.cpp
