@@ -38,8 +38,17 @@ void AddMap(sampler3D map, sampler3D map_darkness, vec4 layer, vec4 offset, vec3
     if (layer.z > 0.0) {
         const vec3 q = vec3(offset.x + layer.w * p.x, offset.y + layer.w * p.z,
                             (p.y - layer.x) * layer.y + 0.5);
-        density += layer.z * textureLod(map, q, 0.0).r;
-        darkness += offset.z * textureLod(map_darkness, q, 0.0).r;
+        // More than a slice past either end of the maps, both slices the filter reads are the
+        // border, which is zero, so the maps are not read.
+        const float slice = 1.0 / float(textureSize(map, 0).z);
+        float cloud = 0.0;
+        float shade = 0.0;
+        if (!(q.z < -slice || q.z > 1.0 + slice)) {
+            cloud = textureLod(map, q, 0.0).r;
+            shade = textureLod(map_darkness, q, 0.0).r;
+        }
+        density += layer.z * cloud;
+        darkness += offset.z * shade;
     }
 }
 
@@ -63,15 +72,16 @@ void main() {
         if (layer.z > 0.0) {
             const vec2 offset = fog.cumulus_offsets[i].xy;
             const vec2 uv = (p.xz + offset) * layer.w;
-            // The game's default texture is white until the cumulus texture loads.
-            const float c =
-                fog.cumulus_texture != 0u
-                    ? textureLod(sampler2D(textures[nonuniformEXT(fog.cumulus_texture)],
-                                           texture_sampler),
-                                 uv, 0.0)
-                          .r
-                    : 1.0;
             const float u = min(1.0, abs(p.y - layer.x) * layer.y);
+            // The game's default texture is white until the cumulus texture loads. At u = 1 the
+            // layer's share is zero whatever the texture holds, so it is not read.
+            float c = 1.0;
+            if (fog.cumulus_texture != 0u && !(u >= 1.0)) {
+                c = textureLod(
+                        sampler2D(textures[nonuniformEXT(fog.cumulus_texture)], texture_sampler),
+                        uv, 0.0)
+                        .r;
+            }
             density += layer.z * c * (1.0 - u * u * u);
         }
     }
