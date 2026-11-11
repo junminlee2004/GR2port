@@ -42,6 +42,7 @@ Screenshots © Sony Interactive Entertainment LLC. Not covered by this project's
 
 **Included Features for Gravity Rush 2**
 - Fully game region-agnostic (Asia, Europe, USA, Japan regions all supported); **update v1.11 is required**.
+- Launcher GUI contains all 31 console region languages.
 - Native mouse input (controls camera)
 - Fully bindable gamepad and keyboard bindings and button prompts
 - Fully customizable graphics presets
