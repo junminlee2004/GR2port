@@ -228,12 +228,12 @@ static void GenerateTcbExclusiveOr(void* address, const ZydisDecodedInstruction&
 #endif
 }
 
+static bool LegacyCpuPatchesForced();
+
 static bool FilterNoSSE4a(const ZydisDecodedOperand*) {
     Cpu cpu;
-    return !cpu.has(Cpu::tSSE4a);
+    return !cpu.has(Cpu::tSSE4a) || LegacyCpuPatchesForced();
 }
-
-static bool LegacyCpuPatchesForced();
 
 // With BMI2, the register-form extrq and the insertq stubs use shifts, pdep and pext, which leave
 // the flags alone, so they skip saving and restoring them.
