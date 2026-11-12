@@ -12,4 +12,8 @@ namespace Gr2Port {
 /// Installs the hooks when module_base is the Gravity Rush 2 executable.
 void Install(VAddr module_base);
 
+/// Waits until the renderer has built the pipelines it makes at start, so that the game starts
+/// with every pipeline in place. Returns at once when the renderer is not started.
+void WaitForPipelines();
+
 } // namespace Gr2Port

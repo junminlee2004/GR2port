@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <chrono>
 #include <limits>
 
 #include <xbyak/xbyak.h>
@@ -18,6 +19,7 @@
 #include "graphics/gr2port/mouse_camera.h"
 #include "graphics/gr2port/movies.h"
 #include "graphics/gr2port/particle_capture.h"
+#include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/player_control.h"
 #include "graphics/gr2port/renderer.h"
 #include "graphics/gr2port/textures.h"
@@ -136,6 +138,16 @@ void Install(VAddr module_base) {
     FrameGraphDraws::Install(module_base, c, StubAreaSize);
     Renderer::Start();
     LOG_INFO(Render_Vulkan, "GR2port: renderer started");
+}
+
+void WaitForPipelines() {
+    const auto start = std::chrono::steady_clock::now();
+    if (WaitForPipelineBuilds()) {
+        LOG_INFO(Render_Vulkan, "GR2port: the game starts after {} ms of pipeline builds",
+                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - start)
+                     .count());
+    }
 }
 
 } // namespace Gr2Port

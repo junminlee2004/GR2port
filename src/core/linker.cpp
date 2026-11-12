@@ -27,6 +27,7 @@
 #include "core/linker.h"
 #include "core/memory.h"
 #include "core/tls.h"
+#include "graphics/gr2port/gr2port.h"
 #include "ipc/ipc.h"
 
 #ifndef _WIN32
@@ -129,6 +130,7 @@ void Linker::Execute(const std::vector<std::string>& args) {
         if (auto& ipc = IPC::Instance()) {
             ipc.WaitForStart();
         }
+        Gr2Port::WaitForPipelines();
 
         // Have libSceSysmodule preload our libraries.
         Libraries::SysModule::sceSysmodulePreloadModuleForLibkernel();

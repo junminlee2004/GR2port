@@ -6,7 +6,6 @@
 #include <chrono>
 #include <cstring>
 #include <span>
-#include <thread>
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/effects.h"
@@ -92,7 +91,6 @@ const Device* g_device = nullptr;
 vk::Format g_scene_format;
 vk::Format g_depth_format;
 std::atomic<bool> g_ready{false};
-std::thread g_builder;
 Pipelines g_hidden;
 Pipelines g_scene;
 vk::Sampler g_depth_sampler;
@@ -304,8 +302,7 @@ bool Start(const Device& device, vk::Format scene_format, vk::Format depth_forma
         return false;
     }
     g_set = sets[0];
-    g_builder = std::thread{Build};
-    g_builder.detach();
+    StartPipelineBuild(Build);
     return true;
 }
 

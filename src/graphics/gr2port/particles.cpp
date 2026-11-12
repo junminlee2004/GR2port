@@ -8,7 +8,6 @@
 #include <cstring>
 #include <mutex>
 #include <span>
-#include <thread>
 #include <vector>
 
 #include "common/logging/log.h"
@@ -244,7 +243,6 @@ Memory* g_memory = nullptr;
 vk::Format g_scene_format;
 vk::Format g_depth_format;
 std::atomic<bool> g_ready{false};
-std::thread g_builder;
 
 std::array<Pipeline, ShapeCount * ProgramCount> g_draws;
 // Pass 1's materials turn blending off: they replace the colour and clear the antialias history's
@@ -1511,8 +1509,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
         g_composite_set = half_sets[2];
         WriteSampledImage(g_half_set, 0, g_curves.view, vk::ImageLayout::eGeneral);
     }
-    g_builder = std::thread{Build};
-    g_builder.detach();
+    StartPipelineBuild(Build);
     return true;
 }
 

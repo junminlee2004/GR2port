@@ -3,12 +3,14 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <initializer_list>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <fmt/format.h>
@@ -30,6 +32,9 @@ std::mutex g_cache_file;
 // Bytes in the cache file as last read or written. The driver's cache data grows with each
 // pipeline it adds, so the same size means the file holds them all.
 size_t g_file_size = 0;
+
+// The pipeline builds that have not returned.
+std::atomic<u32> g_builds{0};
 
 vk::ShaderModule CreateModule(const Device& d, std::span<const u32> code) {
     const vk::ShaderModuleCreateInfo info{
@@ -342,6 +347,34 @@ void LoadPipelineCache(Device& d) {
     }
     LOG_INFO(Render_Vulkan, "GR2port: pipeline cache of {} bytes from {}", data.size(),
              path.string());
+}
+
+void StartPipelineBuild(void (*build)()) {
+    PipelineBuildStarted();
+    std::thread{[build] {
+        build();
+        PipelineBuildDone();
+    }}.detach();
+}
+
+void PipelineBuildStarted() {
+    g_builds.fetch_add(1, std::memory_order_relaxed);
+}
+
+void PipelineBuildDone() {
+    if (g_builds.fetch_sub(1, std::memory_order_release) == 1) {
+        g_builds.notify_all();
+    }
+}
+
+bool WaitForPipelineBuilds() {
+    bool waited = false;
+    for (u32 builds = g_builds.load(std::memory_order_acquire); builds != 0;
+         builds = g_builds.load(std::memory_order_acquire)) {
+        waited = true;
+        g_builds.wait(builds, std::memory_order_acquire);
+    }
+    return waited;
 }
 
 void SavePipelineCache(const Device& d) {

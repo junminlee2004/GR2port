@@ -86,6 +86,17 @@ void DestroyPipeline(const Device& device, Pipeline& pipeline);
 /// code and its length, for the report of a fault inside the driver; empty outside a build.
 std::string PipelineBeingBuilt();
 
+/// Runs build on a thread of its own, counted among the builds the game's start waits for.
+void StartPipelineBuild(void (*build)());
+
+/// Counts a build on one of the caller's threads among those the game's start waits for, until
+/// PipelineBuildDone.
+void PipelineBuildStarted();
+void PipelineBuildDone();
+
+/// Waits until every pipeline build started so far has returned. True when it waited.
+bool WaitForPipelineBuilds();
+
 /// After the device is made: creates its pipeline cache from the file an earlier run saved.
 void LoadPipelineCache(Device& device);
 

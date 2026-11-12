@@ -5,7 +5,6 @@
 #include <atomic>
 #include <chrono>
 #include <span>
-#include <thread>
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/enemies.h"
@@ -40,7 +39,6 @@ const Device* g_device = nullptr;
 vk::Format g_scene_format;
 vk::Format g_depth_format;
 std::atomic<bool> g_ready{false};
-std::thread g_builder;
 // By list, with the game's programs, and for the lists the scene draws, with the vertex program
 // alone. Lists 6 and 7 draw into SelfTranslucent's targets, 8 and 9 after the sky.
 std::array<Pipeline, Scene::EnemyLists> g_forward;
@@ -201,8 +199,7 @@ bool Start(const Device& device, vk::Format scene_format, vk::Format depth_forma
     g_device = &device;
     g_scene_format = scene_format;
     g_depth_format = depth_format;
-    g_builder = std::thread{Build};
-    g_builder.detach();
+    StartPipelineBuild(Build);
     return true;
 }
 

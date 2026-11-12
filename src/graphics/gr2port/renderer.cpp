@@ -1672,7 +1672,9 @@ void Thread::PublishStats() {
 void Thread::Run() {
     Common::SetCurrentThreadName("GR2port Render");
     const auto started = std::chrono::steady_clock::now();
-    if (!Init()) {
+    const bool ready = Init();
+    PipelineBuildDone();
+    if (!ready) {
         LOG_ERROR(Render_Vulkan, "GR2port: the renderer did not start");
         return;
     }
@@ -1704,6 +1706,8 @@ void Thread::Run() {
 } // namespace
 
 void Start() {
+    // The game starts once Init has built its pipelines.
+    PipelineBuildStarted();
     std::thread([] {
         static Thread thread;
         thread.Run();

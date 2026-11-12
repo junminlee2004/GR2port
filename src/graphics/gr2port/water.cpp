@@ -4,7 +4,6 @@
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <thread>
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/memory.h"
@@ -34,7 +33,6 @@ Memory* g_memory = nullptr;
 vk::Format g_scene_format;
 vk::Format g_depth_format;
 std::atomic<bool> g_ready{false};
-std::thread g_builder;
 Pipeline g_pipeline;
 Image g_depth_copy;
 vk::Sampler g_depth_sampler;
@@ -127,8 +125,7 @@ bool Start(const Device& device, Memory& memory, vk::Format scene_format, vk::Fo
         return false;
     }
     g_set = sets[0];
-    g_builder = std::thread{Build};
-    g_builder.detach();
+    StartPipelineBuild(Build);
     return true;
 }
 

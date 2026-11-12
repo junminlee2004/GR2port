@@ -6,7 +6,6 @@
 #include <chrono>
 #include <cstring>
 #include <span>
-#include <thread>
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/character_glass.h"
@@ -34,7 +33,6 @@ const Device* g_device = nullptr;
 vk::Format g_scene_format;
 vk::Format g_depth_format;
 std::atomic<bool> g_ready{false};
-std::thread g_builder;
 // By whether the mesh is skinned, then by blend mode.
 std::array<std::array<Pipeline, BlendModes>, 2> g_pipelines;
 
@@ -88,8 +86,7 @@ bool Start(const Device& device, vk::Format scene_format, vk::Format depth_forma
     g_device = &device;
     g_scene_format = scene_format;
     g_depth_format = depth_format;
-    g_builder = std::thread{Build};
-    g_builder.detach();
+    StartPipelineBuild(Build);
     return true;
 }
 
