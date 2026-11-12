@@ -464,7 +464,8 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
     ASSERT_MSG(mnt->Exists(guest_eboot_path), "Guest app's main executable {} does not exist",
                guest_eboot_path);
 
-    // The log starts with the system and the game.
+    // The log starts with the build, the system and the game.
+    LOG_INFO(Config, "GR2port build {} of {}", Common::g_scm_desc, Common::g_scm_date);
     hwinfo::Memory ram;
     hwinfo::OS os;
     const auto cpus = hwinfo::getAllCPUs();
