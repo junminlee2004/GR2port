@@ -3,8 +3,8 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <filesystem>
 #include <initializer_list>
@@ -33,8 +33,14 @@ std::mutex g_cache_file;
 // pipeline it adds, so the same size means the file holds them all.
 size_t g_file_size = 0;
 
-// The pipeline builds that have not returned.
-std::atomic<u32> g_builds{0};
+// The pipeline builds that have not returned, with the lock and the signal of the wait for them.
+u32 g_builds = 0;
+std::mutex g_builds_mutex;
+std::condition_variable g_builds_done;
+// While the game waits for the builds, the log tells how far they are this often, and names the
+// pipelines that have been in the making for longer than LongBuild.
+constexpr std::chrono::seconds ReportPeriod{30};
+constexpr std::chrono::seconds LongBuild{10};
 
 vk::ShaderModule CreateModule(const Device& d, std::span<const u32> code) {
     const vk::ShaderModuleCreateInfo info{
@@ -51,15 +57,39 @@ struct Stage {
     std::span<const u32> code;
 };
 constexpr size_t MaxStages = 5;
-thread_local std::array<Stage, MaxStages> t_building{};
+using Stages = std::array<Stage, MaxStages>;
+thread_local Stages t_building{};
+
+// The pipelines in the making on every thread, each with the time its build began, and the
+// number made so far, for the report of a build that does not return.
+struct Flight {
+    const Stages* stages;
+    std::chrono::steady_clock::time_point began;
+};
+std::mutex g_flights_mutex;
+std::vector<Flight> g_flights;
+u32 g_made = 0;
+
+void BeginBuild(std::initializer_list<Stage> stages) {
+    std::scoped_lock lock{g_flights_mutex};
+    std::copy_n(stages.begin(), std::min(stages.size(), MaxStages), t_building.begin());
+    g_flights.push_back({&t_building, std::chrono::steady_clock::now()});
+}
+
+void EndBuild() {
+    std::scoped_lock lock{g_flights_mutex};
+    std::erase_if(g_flights, [](const Flight& flight) { return flight.stages == &t_building; });
+    t_building = {};
+    g_made++;
+}
 
 // Names the stages a thread builds until the end of the scope.
 struct Building {
     explicit Building(std::initializer_list<Stage> stages) {
-        std::copy_n(stages.begin(), std::min(stages.size(), MaxStages), t_building.begin());
+        BeginBuild(stages);
     }
     ~Building() {
-        t_building = {};
+        EndBuild();
     }
 };
 
@@ -72,11 +102,9 @@ u64 CodeSum(std::span<const u32> code) {
     return sum;
 }
 
-} // namespace
-
-std::string PipelineBeingBuilt() {
+std::string Describe(const Stages& building) {
     std::string stages;
-    for (const Stage& stage : t_building) {
+    for (const Stage& stage : building) {
         if (stage.code.empty()) {
             continue;
         }
@@ -84,6 +112,37 @@ std::string PipelineBeingBuilt() {
                               CodeSum(stage.code), stage.code.size());
     }
     return stages;
+}
+
+void ReportBuilds(std::chrono::steady_clock::time_point began) {
+    const auto now = std::chrono::steady_clock::now();
+    const auto seconds = [now](std::chrono::steady_clock::time_point since) {
+        return std::chrono::duration_cast<std::chrono::seconds>(now - since).count();
+    };
+    std::scoped_lock lock{g_flights_mutex};
+    LOG_WARNING(Render_Vulkan,
+                "GR2port: the game has waited {} s for its pipelines: {} made, {} in the making",
+                seconds(began), g_made, g_flights.size());
+    for (const Flight& flight : g_flights) {
+        if (now - flight.began >= LongBuild) {
+            LOG_WARNING(Render_Vulkan, "GR2port: a pipeline has been in the making for {} s: {}",
+                        seconds(flight.began), Describe(*flight.stages));
+        }
+    }
+}
+
+} // namespace
+
+std::string PipelineBeingBuilt() {
+    return Describe(t_building);
+}
+
+PipelineBuildNote::PipelineBuildNote(const char* stage, std::span<const u32> code) {
+    BeginBuild({{stage, code}});
+}
+
+PipelineBuildNote::~PipelineBuildNote() {
+    EndBuild();
 }
 
 Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& info) {
@@ -358,21 +417,24 @@ void StartPipelineBuild(void (*build)()) {
 }
 
 void PipelineBuildStarted() {
-    g_builds.fetch_add(1, std::memory_order_relaxed);
+    std::scoped_lock lock{g_builds_mutex};
+    g_builds++;
 }
 
 void PipelineBuildDone() {
-    if (g_builds.fetch_sub(1, std::memory_order_release) == 1) {
-        g_builds.notify_all();
+    {
+        std::scoped_lock lock{g_builds_mutex};
+        g_builds--;
     }
+    g_builds_done.notify_all();
 }
 
 bool WaitForPipelineBuilds() {
-    bool waited = false;
-    for (u32 builds = g_builds.load(std::memory_order_acquire); builds != 0;
-         builds = g_builds.load(std::memory_order_acquire)) {
-        waited = true;
-        g_builds.wait(builds, std::memory_order_acquire);
+    const auto began = std::chrono::steady_clock::now();
+    std::unique_lock lock{g_builds_mutex};
+    const bool waited = g_builds != 0;
+    while (!g_builds_done.wait_for(lock, ReportPeriod, [] { return g_builds == 0; })) {
+        ReportBuilds(began);
     }
     return waited;
 }

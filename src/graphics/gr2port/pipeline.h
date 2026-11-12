@@ -86,6 +86,16 @@ void DestroyPipeline(const Device& device, Pipeline& pipeline);
 /// code and its length, for the report of a fault inside the driver; empty outside a build.
 std::string PipelineBeingBuilt();
 
+/// Names a pipeline of one stage that a thread makes by its own call, until the end of the scope,
+/// as the two calls above name theirs.
+class PipelineBuildNote {
+public:
+    PipelineBuildNote(const char* stage, std::span<const u32> code);
+    ~PipelineBuildNote();
+    PipelineBuildNote(const PipelineBuildNote&) = delete;
+    PipelineBuildNote& operator=(const PipelineBuildNote&) = delete;
+};
+
 /// Runs build on a thread of its own, counted among the builds the game's start waits for.
 void StartPipelineBuild(void (*build)());
 
@@ -94,7 +104,9 @@ void StartPipelineBuild(void (*build)());
 void PipelineBuildStarted();
 void PipelineBuildDone();
 
-/// Waits until every pipeline build started so far has returned. True when it waited.
+/// Waits until every pipeline build started so far has returned, and tells the log during a long
+/// wait how far the builds are and which pipelines have been long in the making. True when it
+/// waited.
 bool WaitForPipelineBuilds();
 
 /// After the device is made: creates its pipeline cache from the file an earlier run saved.

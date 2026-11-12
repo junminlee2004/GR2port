@@ -46,6 +46,7 @@ constexpr std::array Needs10{
 };
 constexpr std::array Needs11{
     Need<Features11>{"shaderDrawParameters", &Features11::shaderDrawParameters},
+    Need<Features11>{"storageBuffer16BitAccess", &Features11::storageBuffer16BitAccess},
 };
 constexpr std::array Needs12{
     Need<Features12>{"shaderSampledImageArrayNonUniformIndexing",
@@ -58,6 +59,8 @@ constexpr std::array Needs12{
                      &Features12::descriptorBindingPartiallyBound},
     Need<Features12>{"runtimeDescriptorArray", &Features12::runtimeDescriptorArray},
     Need<Features12>{"bufferDeviceAddress", &Features12::bufferDeviceAddress},
+    Need<Features12>{"storageBuffer8BitAccess", &Features12::storageBuffer8BitAccess},
+    Need<Features12>{"uniformBufferStandardLayout", &Features12::uniformBufferStandardLayout},
 };
 constexpr std::array Needs13{
     Need<Features13>{"synchronization2", &Features13::synchronization2},
@@ -325,11 +328,16 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     if (families[d.queue_family].timestampValidBits != 0) {
         d.timestamp_period = properties.limits.timestampPeriod;
     }
+    const auto driver =
+        d.gpu
+            .getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>(
+                d.dispatch)
+            .get<vk::PhysicalDeviceDriverProperties>();
     LOG_INFO(Render_Vulkan,
              "GR2port: renderer device {} (queue family {}), checkpoints {}, fault information {}, "
-             "dynamic blend {}",
+             "dynamic blend {}, driver {} {}",
              properties.deviceName.data(), d.queue_family, d.checkpoints, d.device_fault,
-             d.dynamic_blend);
+             d.dynamic_blend, driver.driverName.data(), driver.driverInfo.data());
     LoadPipelineCache(d);
     return true;
 }

@@ -24,6 +24,7 @@
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/movies.h"
+#include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/scene.h"
 #include "graphics/gr2port/scene_ring.h"
 #include "graphics/gr2port/settings.h"
@@ -852,6 +853,7 @@ bool CreateDetile(const Device& d) {
                           .pSpecializationInfo = &specialization},
                 .layout = g_detile_layout,
             };
+            const PipelineBuildNote note{"detile compute", code};
             const auto [result, pipeline] = d.device.createComputePipeline({}, info, nullptr, dl);
             d.device.destroyShaderModule(module, nullptr, dl);
             if (result != vk::Result::eSuccess) {
