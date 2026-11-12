@@ -38,6 +38,9 @@ inline constexpr bool NeedsCaseInsensitiveSearch = true;
 class MntPoints {
 public:
     static bool ignore_game_patches;
+    /// GR2port: the folder or archive of the game's update, which the game check finds by its
+    /// files. Empty for the one named after the game's folder.
+    static std::filesystem::path update_root;
     struct MntPair {
         std::filesystem::path host_path;
         std::string mount; // e.g /app0

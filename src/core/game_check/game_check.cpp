@@ -16,6 +16,7 @@
 #include "common/logging/log.h"
 #include "common/path_util.h"
 #include "core/file_format/psf.h"
+#include "core/file_sys/fs.h"
 #include "core/file_sys/ifile.h"
 #include "core/game_check/game_check.h"
 #include "core/language/language.h"
@@ -31,7 +32,6 @@ using Core::FileSys::IBackend;
 
 constexpr const char* PatchFile = "src/resources/patches/GravityDaze2-Orbis.xml";
 constexpr std::string_view Version = "01.11";
-constexpr std::array UpdateSuffixes{"-patch", "-UPDATE"};
 constexpr std::array Archives{"Gravite2_Chunk0", "Gravite2_Chunk1", "Gravite2_Patch_Chunk0",
                               "Gravite2_Patch_Chunk1"};
 constexpr u64 PatchBase = 0x400000;
@@ -204,9 +204,66 @@ std::string NoGame(const std::filesystem::path& folder) {
         Common::FS::PathToUTF8String(folder), Language::Text(PkgNote));
 }
 
+// A folder's or archive's own name, as the player sees it.
+std::string NameOf(const std::filesystem::path& root) {
+    return Common::FS::PathToUTF8String(root.filename());
+}
+
+// What a folder or archive beside the executable holds of the game.
+struct Dump {
+    std::filesystem::path root;
+    std::string title_id;
+    // The game's own archives are in it, alone or with the update copied over them.
+    bool game = false;
+};
+
+// The dumps beside the executable, in the order of their names. Its param.sfo tells what a
+// folder or a .zar archive holds, whatever it is called.
+std::vector<Dump> ListDumps(const std::filesystem::path& folder) {
+    std::vector<std::filesystem::path> roots;
+    std::error_code ignored;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator{folder, ignored}) {
+        if (entry.is_directory(ignored) || Core::FileSys::IsZArchiveFile(entry.path())) {
+            roots.push_back(entry.path());
+        }
+    }
+    std::ranges::sort(roots);
+    std::vector<Dump> dumps;
+    for (const std::filesystem::path& root : roots) {
+        // A folder without the file is not opened, so other folders cost one look each.
+        if (std::filesystem::is_directory(root, ignored) &&
+            !std::filesystem::exists(root / "sce_sys" / "param.sfo", ignored)) {
+            continue;
+        }
+        const std::unique_ptr<IBackend> files = Core::FileSys::OpenGameBackend(root);
+        if (files == nullptr) {
+            continue;
+        }
+        const std::optional<std::vector<u8>> bytes = files->ReadFile("sce_sys/param.sfo");
+        PSF psf;
+        if (!bytes || !psf.Open(*bytes)) {
+            continue;
+        }
+        const std::optional<std::string_view> title_id = psf.GetString("TITLE_ID");
+        if (!title_id) {
+            continue;
+        }
+        const std::string archive = std::string(Archives[0]) + ".psarc";
+        dumps.push_back({
+            .root = root,
+            .title_id = std::string(*title_id),
+            .game = files->Exists(archive) || files->IsDirectory(Archives[0]),
+        });
+    }
+    return dumps;
+}
+
 std::optional<Game> Check(const std::string& id, const std::optional<std::filesystem::path>& root,
                           const std::optional<std::filesystem::path>& update_root) {
-    const std::string update_name = id + "-patch";
+    // The names the folders have, or those the messages suggest for the missing one.
+    const std::string game_name = root ? NameOf(*root) : id;
+    const std::string update_name = update_root ? NameOf(*update_root) : id + "-patch";
     if (!root) {
         Tell(Say("No {} folder found beside {}. GR2port needs the game as well as its update: "
                  "put the game beside it as {}, or copy the update over the game folder.\n\n{}",
@@ -218,7 +275,7 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
         update_root ? Core::FileSys::OpenGameBackend(*update_root) : nullptr;
     if (game == nullptr || (update_root && update == nullptr)) {
         Tell(Say("{} cannot be opened. Your game files may be corrupted.",
-                 update_root && update == nullptr ? update_name : id));
+                 update_root && update == nullptr ? update_name : game_name));
         return std::nullopt;
     }
 
@@ -228,7 +285,7 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
             Tell(Say("No {} folder found. {} holds version {} of the game, and GR2port needs "
                      "the 1.11 update: put it beside the game as {}, or copy it over the game "
                      "folder.\n\n{}",
-                     update_name, id, *version, update_name, Language::Text(PkgNote)));
+                     update_name, game_name, *version, update_name, Language::Text(PkgNote)));
             return std::nullopt;
         }
     } else if (const auto version = AppVersion(*update); version && *version != Version) {
@@ -250,7 +307,7 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
     if (!EbootFits(*eboot)) {
         Tell(Say("Your game files are corrupted: eboot.bin in {} is not the Gravity Rush 2 "
                  "v1.11 eboot.bin that GR2port's patches fit.",
-                 eboot == update.get() ? update_name : id));
+                 eboot == update.get() ? update_name : game_name));
         return std::nullopt;
     }
 
@@ -279,8 +336,11 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
         g_roots.push_back(*update_root);
     }
     g_roots.push_back(*root);
-    LOG_INFO(Loader, "GR2port: Gravity Rush 2 v1.11 {} in {}, {}", id,
-             Common::FS::PathToUTF8String(*root), loose_files ? "loose files" : "archives");
+    // The emulator's mounts read the update over the game from where it is.
+    Core::FileSys::MntPoints::update_root = update_root.value_or(std::filesystem::path{});
+    LOG_INFO(Loader, "GR2port: Gravity Rush 2 v1.11 {} in {}, {}; update in {}", id,
+             Common::FS::PathToUTF8String(*root), loose_files ? "loose files" : "archives",
+             update_root ? Common::FS::PathToUTF8String(*update_root) : "the game's folder");
     return Game{*root, loose_files};
 }
 
@@ -288,13 +348,14 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
 
 std::optional<Game> Find() {
     const std::filesystem::path folder = ExecutableFolder();
+    const std::vector<Dump> dumps = ListDumps(folder);
     for (const std::string& id : TitleIds()) {
-        const std::optional<std::filesystem::path> root =
-            Core::FileSys::ResolveGameRoot(folder / id);
+        std::optional<std::filesystem::path> root;
         std::optional<std::filesystem::path> update;
-        for (const char* const suffix : UpdateSuffixes) {
-            if (!update) {
-                update = Core::FileSys::ResolveGameRoot(folder / (id + suffix));
+        for (const Dump& dump : dumps) {
+            std::optional<std::filesystem::path>& found = dump.game ? root : update;
+            if (dump.title_id == id && !found) {
+                found = dump.root;
             }
         }
         if (root || update) {

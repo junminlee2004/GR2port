@@ -40,6 +40,7 @@ private:
 };
 
 bool MntPoints::ignore_game_patches = false;
+std::filesystem::path MntPoints::update_root;
 
 std::string RemoveTrailingSlashes(const std::string& path) {
     // Remove trailing slashes to make comparisons simpler.
@@ -144,7 +145,8 @@ void MntPoints::Mount(const std::filesystem::path& host_folder, const std::strin
             stack.push_back(std::move(mods));
         }
         if (!ignore_game_patches) {
-            auto patch = probe_overlay(host_folder, "-UPDATE");
+            auto patch = update_root.empty() ? probe_overlay(host_folder, "-UPDATE")
+                                             : CreateBackend(update_root, /*ro=*/true);
             if (!patch) {
                 patch = probe_overlay(host_folder, "-patch");
             }
@@ -231,7 +233,9 @@ std::filesystem::path MntPoints::GetHostPath(std::string_view path, bool* is_rea
 
     // Update folder is either mount + "-UPDATE" or mount + "-patch"
     std::filesystem::path patch_path = OverlayPath(mount->host_path, "-UPDATE");
-    if (!std::filesystem::exists(patch_path)) {
+    if (!update_root.empty() && (mount->mount == "/app0" || mount->mount == "/hostapp")) {
+        patch_path = update_root;
+    } else if (!std::filesystem::exists(patch_path)) {
         patch_path = OverlayPath(mount->host_path, "-patch");
     }
 

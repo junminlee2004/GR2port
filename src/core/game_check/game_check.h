@@ -11,12 +11,12 @@
 #include "common/types.h"
 
 // GR2port starts only Gravity Rush 2 v1.11, from the executable's own folder: the game and its
-// update as CUSAxxxxx and CUSAxxxxx-patch, or one with the update copied over it, each a folder or
-// a .zar archive. The checks run at every start.
+// update, or one with the update copied over it, each a folder or a .zar archive of any name. The
+// param.sfo of each tells what it holds. The checks run at every start.
 namespace Gr2Port::GameCheck {
 
 struct Game {
-    /// The game's folder or .zar archive; the emulator finds the update beside it.
+    /// The game's folder or .zar archive. The mounts take the update's from the check.
     std::filesystem::path root;
     /// The four .psarc archives are extracted to folders of their names.
     bool loose_files = false;
