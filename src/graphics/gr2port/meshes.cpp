@@ -21,6 +21,7 @@
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/meshes.h"
+#include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/textures.h"
 
 namespace Gr2Port::Meshes {
@@ -186,6 +187,7 @@ bool AllocateIndices(u32 count, u32& first) {
         if (left != 0) {
             g_free_indices.emplace(first + count, left);
         }
+        g_stats.indices_held += count;
         return true;
     }
     return false;
@@ -195,6 +197,7 @@ void FreeIndices(u32 first, u32 count) {
     if (count == 0) {
         return;
     }
+    g_stats.indices_held -= count;
     auto [it, inserted] = g_free_indices.emplace(first, count);
     const auto next = std::next(it);
     if (next != g_free_indices.end() && it->first + it->second == next->first) {
@@ -778,8 +781,12 @@ bool Start(const Device& device, Memory& memory) {
     g_device = &device;
     g_memory = &memory;
     memory.Refresh(0);
-    const u64 capacity =
+    // Areas that show their detailed models from further away hold more meshes at once: at four
+    // times the margin a flight through either city held 79M indices, at twice 49M.
+    const u64 margin = std::max(Settings::Get().graphics.far_environment_detail, 100u);
+    const u64 base =
         memory.DeviceBudget().budget <= SmallBudget ? SmallIndexCapacity : IndexCapacity;
+    const u64 capacity = base + base * (margin - 100) / 300;
     g_index_buffer = memory.CreateBuffer(
         capacity * 2, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
         Placement::Device);
@@ -787,6 +794,7 @@ bool Start(const Device& device, Memory& memory) {
         return false;
     }
     g_free_indices.emplace(0u, static_cast<u32>(capacity));
+    g_stats.index_capacity = capacity;
     return true;
 }
 

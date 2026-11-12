@@ -136,6 +136,9 @@ struct Stats {
     u32 no_normal;
     u64 uploaded_bytes;
     u64 resident_bytes;
+    /// The indices the meshes hold in the shared index buffer, and its room.
+    u64 indices_held;
+    u64 index_capacity;
 };
 Stats TakeStats();
 

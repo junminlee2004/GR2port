@@ -1496,7 +1496,7 @@ void Thread::Report() {
         "{:.3f}, world {:.3f}, characters {:.3f}), {} frames not drawn for too many indices; {} "
         "meshes ({} skinned) in {:.1f} "
         "MB, {} waiting, {:.1f} MB uploaded, {} not drawable ({} with indices past their "
-        "vertices), {} missed unloads, {} lost handles",
+        "vertices), {} missed unloads, {} lost handles, {:.1f} of {} million indices held",
         static_cast<double>(stats.draws) / frames, static_cast<double>(stats.skinned) / frames,
         static_cast<double>(stats.deformed) / frames, static_cast<double>(stats.decals) / frames,
         static_cast<double>(stats.dropped_decals) / frames,
@@ -1516,7 +1516,8 @@ void Thread::Report() {
         capture_part(Scene::CapturePart::Characters), stats.refused, meshes.meshes, meshes.skinned,
         static_cast<double>(meshes.resident_bytes) / (1 << 20), meshes.pending,
         static_cast<double>(meshes.uploaded_bytes) / (1 << 20), meshes.skipped, meshes.bad_indices,
-        meshes.missed_unloads, meshes.lost_handles);
+        meshes.missed_unloads, meshes.lost_handles,
+        static_cast<double>(meshes.indices_held) / (1 << 20), meshes.index_capacity >> 20);
     LOG_INFO(
         Render_Vulkan,
         "GR2port textures: per frame {:.0f} draws with a colour texture not converted; {} "

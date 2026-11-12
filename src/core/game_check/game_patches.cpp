@@ -100,6 +100,9 @@ constexpr std::array<u64, 3> AreaMarginStores{0x0098284e, 0x00982881, 0x009828a5
 constexpr std::array AreaMarginsOfFile{1.0f,  80.0f, 50.0f,  1.0f,  100.0f,
                                        70.0f, 1.0f,  130.0f, 110.0f};
 constexpr std::string_view ThreeStoresSkipped = "0f1f8400000000000f1f8400000000000f1f840000000000";
+// The megabytes of the game's heap for meshes and textures that each percent of margin above
+// 100 may fill.
+constexpr u32 AreaHeapMegabytesPerPercent = 5;
 
 // Queues a patch of the bytes, as hexadecimal digits, at address.
 void QueueBytes(u64 address, std::string bytes) {
@@ -153,6 +156,78 @@ void QueueAreaMargins(u32 percent) {
     QueueBytes(AreaMargins, std::move(bytes));
 }
 
+// The game keeps its meshes and textures in one heap of a fixed size, which it names VideoShared.
+// Eight bytes of the executable hold the size, VideoHeapBytes as shipped; the patches for the
+// largest pictures write up to VideoHeapMost there. Each area that shows its detailed models
+// takes room in the heap, and when the heap is full the game copies a model into a null pointer.
+constexpr u64 VideoHeapSize = 0x0183e088;
+constexpr u64 VideoHeapBytes = 0xba8d0000;
+constexpr u64 VideoHeapMost = 0x280000000;
+// The system heap's size sits in the eight bytes before, and a patch may write both at once.
+constexpr u64 SystemHeapSize = 0x0183e080;
+
+// The megabytes of the heap that margins grown to percent may fill beyond the game's own.
+u32 AreaHeapMegabytes(u32 percent) {
+    return percent <= 100 ? 0 : (percent - 100) * AreaHeapMegabytesPerPercent;
+}
+
+// The heap's size as the chosen resolution patch leaves it.
+u64 VideoHeapOfResolution() {
+    pugi::xml_document doc;
+    const std::string_view xml = GameCheck::PatchXml();
+    if (!doc.load_buffer(xml.data(), xml.size())) {
+        return VideoHeapBytes;
+    }
+    const auto little_endian = [](std::string_view digits) {
+        u64 value = 0;
+        for (size_t i = 0; i < 8; i++) {
+            u8 byte = 0;
+            std::from_chars(digits.data() + i * 2, digits.data() + i * 2 + 2, byte, 16);
+            value |= u64{byte} << (i * 8);
+        }
+        return value;
+    };
+    for (const pugi::xml_node patch : doc.child("Patch").children("Metadata")) {
+        const std::string_view category = patch.attribute("Category").value();
+        if (!IsResolutionPatch(category) ||
+            !IsEnabled(patch.attribute("Name").value(), category, false)) {
+            continue;
+        }
+        u64 size = VideoHeapBytes;
+        for (const pugi::xml_node line : patch.child("PatchList").children("Line")) {
+            const u64 address = line.attribute("Address").as_ullong();
+            const std::string_view value = line.attribute("Value").value();
+            if (address == VideoHeapSize && value.size() >= 16) {
+                size = little_endian(value);
+            } else if (address == SystemHeapSize && value.size() >= 32) {
+                size = little_endian(value.substr(16));
+            }
+        }
+        return size;
+    }
+    return VideoHeapBytes;
+}
+
+// The megabytes the heap grows by for margins at percent; the heap never passes VideoHeapMost.
+u32 VideoHeapGrowth(u32 percent) {
+    const u64 size = VideoHeapOfResolution();
+    const u64 wanted = u64{AreaHeapMegabytes(percent)} << 20;
+    return static_cast<u32>(std::min(wanted, VideoHeapMost - std::min(size, VideoHeapMost)) >> 20);
+}
+
+// Queues the patch that grows the heap by megabytes; none leaves it alone.
+void QueueVideoHeap(u32 megabytes) {
+    if (megabytes == 0) {
+        return;
+    }
+    const u64 size = VideoHeapOfResolution() + (u64{megabytes} << 20);
+    std::string bytes;
+    for (u32 i = 0; i < 8; i++) {
+        bytes += fmt::format("{:02x}", size >> (i * 8) & 0xff);
+    }
+    QueueBytes(VideoHeapSize, std::move(bytes));
+}
+
 } // namespace
 
 std::vector<Extra> Extras() {
@@ -196,7 +271,10 @@ void ApplySettings() {
     const u32 fps = Settings::Get().game.frame_rate;
     // The game's own 30 frames run with the PS4's 60 Hz vblank.
     EmulatorSettings.SetVblankFrequency(FrameRatePatch(fps).empty() ? 60 : fps, true);
-    const int dmem = ResolutionDmem();
+    const Settings::Graphics graphics = Settings::Get().graphics;
+    // The heap's growth for the areas' margins comes out of direct memory too.
+    const u32 heap_growth = VideoHeapGrowth(graphics.far_environment_detail);
+    const int dmem = ResolutionDmem() + static_cast<int>(heap_growth);
     if (dmem > EmulatorSettings.GetExtraDmemInMBytes()) {
         EmulatorSettings.SetExtraDmemInMBytes(dmem, true);
     }
@@ -205,8 +283,8 @@ void ApplySettings() {
     EmulatorSettings.SetShadNetServer(std::string(ShadNetServer), true);
     EmulatorSettings.SetShadNetWebApiServer(std::string(ShadNetWebApiServer), true);
     EmulatorSettings.SetP2PPort(P2pPort, true);
-    const Settings::Graphics graphics = Settings::Get().graphics;
     QueueAreaMargins(graphics.far_environment_detail);
+    QueueVideoHeap(heap_growth);
     QueueDetail(WorldDetailRow, WorldDetail, graphics.near_environment_detail);
     QueueDetail(CharacterDetailRow, CharacterDetail, graphics.character_detail);
 }

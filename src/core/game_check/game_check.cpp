@@ -89,6 +89,7 @@ constexpr std::array ExpectedBytes{
     Expected{0x0098284e, "c5fa11053ae22f01c5fa110d2ae22f01c5fa111526e22f01"},
     Expected{0x00982881, "c5fa1105efe12f01c5fa110ddfe12f01c5fa1115dbe12f01"},
     Expected{0x009828a5, "c5fa1105d7e12f01c5fa110dc7e12f01c5fa1115c3e12f01"},
+    Expected{0x0183e088, "00008dba00000000"},
 };
 
 enum class Form {
