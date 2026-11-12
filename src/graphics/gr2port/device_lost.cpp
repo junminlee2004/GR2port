@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
 #include <vector>
 
@@ -69,13 +70,21 @@ void ReportFault(const Device& d) {
         .pAddressInfos = addresses.data(),
         .pVendorInfos = vendors.data(),
     };
+    // The vendor's binary is not asked for, so a driver that has one answers incomplete and
+    // still fills in the rest.
+    const u64 binary_bytes = counts.vendorBinarySize;
     counts.vendorBinarySize = 0;
-    if (dl.vkGetDeviceFaultInfoEXT(d.device, &counts, &info) != VK_SUCCESS) {
-        LOG_ERROR(Render_Vulkan, "GR2port: the fault's information failed");
+    if (const VkResult result = dl.vkGetDeviceFaultInfoEXT(d.device, &counts, &info);
+        result != VK_SUCCESS && result != VK_INCOMPLETE) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the fault's information failed: {}",
+                  vk::to_string(static_cast<vk::Result>(result)));
         return;
     }
-    LOG_ERROR(Render_Vulkan, "GR2port: fault \"{}\", {} addresses, {} vendor records",
-              info.description, counts.addressInfoCount, counts.vendorInfoCount);
+    addresses.resize(std::min<size_t>(addresses.size(), counts.addressInfoCount));
+    vendors.resize(std::min<size_t>(vendors.size(), counts.vendorInfoCount));
+    LOG_ERROR(Render_Vulkan,
+              "GR2port: fault \"{}\", {} addresses, {} vendor records, a vendor binary of {} bytes",
+              info.description, addresses.size(), vendors.size(), binary_bytes);
     for (const VkDeviceFaultAddressInfoEXT& address : addresses) {
         LOG_ERROR(Render_Vulkan, "GR2port: fault address {:#x}, within {:#x}, {}",
                   address.reportedAddress, address.addressPrecision,
