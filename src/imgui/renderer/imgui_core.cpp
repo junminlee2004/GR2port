@@ -9,6 +9,7 @@
 #include <SDL3/SDL_events.h>
 #include <imgui.h>
 
+#include "common/debug_files.h"
 #include "common/path_util.h"
 #include "core/debug_state.h"
 #include "core/devtools/layer.h"
@@ -82,10 +83,14 @@ void Initialize(const Frontend::WindowSDL& window) {
     std::memcpy(config_file_buf, path.c_str(), path.size());
     io.IniFilename = config_file_buf;
 
-    path = log_path.u8string();
-    char* log_file_buf = new char[path.size() + 1]();
-    std::memcpy(log_file_buf, path.c_str(), path.size());
-    io.LogFilename = log_file_buf;
+    // GR2port: ImGui's own log is one of the developers' files.
+    io.LogFilename = nullptr;
+    if (Common::DebugFiles()) {
+        path = log_path.u8string();
+        char* log_file_buf = new char[path.size() + 1]();
+        std::memcpy(log_file_buf, path.c_str(), path.size());
+        io.LogFilename = log_file_buf;
+    }
 
     ImFontConfig font_cfg{};
     font_cfg.OversampleH = 2;

@@ -17,6 +17,7 @@
 
 #include "GR2port.h"
 #include "common/arch.h"
+#include "common/debug_files.h"
 #include "common/logging/log.h"
 #include "common/memory_patcher.h"
 #include "common/path_util.h"
@@ -82,6 +83,7 @@ int main(int argc, char* argv[]) {
     bool configClean = false;
     bool configGlobal = false;
     bool append_log{};
+    bool debugFiles = false;
 
     std::optional<std::filesystem::path> addGameFolder;
     std::optional<std::filesystem::path> setAddonFolder;
@@ -106,6 +108,8 @@ int main(int argc, char* argv[]) {
     app.add_flag("--config-clean", configClean);
     app.add_flag("--config-global", configGlobal);
     app.add_flag("--log-append", append_log);
+    app.add_flag("--debug-files", debugFiles,
+                 "Add the developers' files to the log folder, which holds log.txt alone");
 
     app.add_option("--add-game-folder", addGameFolder)->check(CLI::ExistingDirectory);
     app.add_option("--set-addon-folder", setAddonFolder)->check(CLI::ExistingDirectory);
@@ -137,6 +141,8 @@ int main(int argc, char* argv[]) {
     } catch (const CLI::ParseError& e) {
         return app.exit(e);
     }
+
+    Common::SetDebugFiles(debugFiles);
 
     if (waitPid)
         Core::Debugger::WaitForPid(*waitPid);

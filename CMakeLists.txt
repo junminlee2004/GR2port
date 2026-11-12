@@ -817,6 +817,7 @@ set(COMMON src/common/logging/classes.cpp
            src/common/concepts.h
            src/common/cstring.h
            src/common/debug.h
+           src/common/debug_files.h
            src/common/decoder.cpp
            src/common/decoder.h
            src/common/elf_info.h

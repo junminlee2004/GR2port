@@ -76,7 +76,8 @@ enum class Pass : u32 {
     Count,
 };
 
-/// Creates the query pool for slots frame slots and opens the file.
+/// Creates the query pool for slots frame slots and, with --debug-files, opens the file of every
+/// frame's times.
 void Start(const Device& device, u32 slots);
 
 /// At the start of a frame's commands in slot: resets its marks and writes the first.

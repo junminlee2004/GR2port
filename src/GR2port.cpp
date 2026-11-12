@@ -15,6 +15,7 @@
 
 #include "GR2port.h"
 #include "common/debug.h"
+#include "common/debug_files.h"
 #include "common/elf_info.h"
 #include "common/logging/log.h"
 #include "common/memory_patcher.h"
@@ -611,6 +612,9 @@ void Emulator::Restart(std::filesystem::path eboot_path,
         std::filesystem::is_regular_file(game_folder) && game_folder.extension() == ".zar";
 
     args.push_back("--log-append");
+    if (Common::DebugFiles()) {
+        args.push_back("--debug-files");
+    }
 
     if (from_archive) {
         // Archive-backed base game: relaunch by pointing --game at the

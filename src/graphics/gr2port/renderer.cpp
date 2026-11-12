@@ -16,6 +16,7 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
+#include "common/debug_files.h"
 #include "common/io_file.h"
 #include "common/logging/log.h"
 #include "common/path_util.h"
@@ -292,7 +293,7 @@ private:
     bool logged_shadows = false;
     bool logged_decals = false;
     bool logged_refusal = false;
-    // Each report saves the next frame to a PNG in the log folder.
+    // With --debug-files, each report saves the next frame to a PNG in the log folder.
     Buffer snapshot;
     vk::Extent2D snapshot_extent;
     vk::Format snapshot_format = vk::Format::eUndefined;
@@ -1262,8 +1263,10 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
             Fog::Log(packet.data);
             Look::LogAndReadMeter(cmd, packet.data);
         }
-        RecordSnapshot(cmd, swapchain->Image(index));
-        slot.snapshot = snapshot.mapped != nullptr;
+        if (Common::DebugFiles()) {
+            RecordSnapshot(cmd, swapchain->Image(index));
+            slot.snapshot = snapshot.mapped != nullptr;
+        }
     }
     stats.draws += header.draws;
     stats.materials += header.materials;

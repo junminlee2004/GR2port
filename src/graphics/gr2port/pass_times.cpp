@@ -10,6 +10,7 @@
 #include <vector>
 #include <fmt/format.h>
 
+#include "common/debug_files.h"
 #include "common/logging/log.h"
 #include "common/path_util.h"
 #include "graphics/gr2port/pass_times.h"
@@ -131,6 +132,9 @@ void Start(const Device& device, u32 slots) {
     g_pending.resize(slots);
     Clear();
     g_start = std::chrono::steady_clock::now();
+    if (!Common::DebugFiles()) {
+        return;
+    }
     const auto path =
         Common::FS::GetUserPath(Common::FS::PathType::LogDir) / "gr2port_pass_times.csv";
     g_file = std::fopen(path.string().c_str(), "w");

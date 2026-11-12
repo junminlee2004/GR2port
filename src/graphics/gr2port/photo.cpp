@@ -7,6 +7,7 @@
 #include <mutex>
 #include <thread>
 
+#include "common/debug_files.h"
 #include "common/io_file.h"
 #include "common/logging/log.h"
 #include "common/path_util.h"
@@ -112,7 +113,9 @@ bool Read(std::vector<u8>& pixels, u32& width, u32& height, u32& pitch) {
         return false;
     }
     g_taken = g_delivered;
-    SavePicture(g_pixels, g_size);
+    if (Common::DebugFiles()) {
+        SavePicture(g_pixels, g_size);
+    }
     width = g_size.width;
     height = g_size.height;
     pitch = width * PixelBytes;

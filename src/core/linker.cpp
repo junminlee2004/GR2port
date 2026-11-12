@@ -5,6 +5,7 @@
 #include "common/alignment.h"
 #include "common/arch.h"
 #include "common/assert.h"
+#include "common/debug_files.h"
 #include "common/elf_info.h"
 #include "common/logging/formatter.h"
 #include "common/logging/log.h"
@@ -71,7 +72,7 @@ Linker::Linker() : memory{Memory::Instance()} {}
 Linker::~Linker() = default;
 
 void Linker::Execute(const std::vector<std::string>& args) {
-    if (EmulatorSettings.IsDebugDump()) {
+    if (EmulatorSettings.IsDebugDump() && Common::DebugFiles()) {
         DebugDump();
     }
 
