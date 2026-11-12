@@ -23,6 +23,7 @@
 #include "common/stb.h"
 #include "common/thread.h"
 #include "graphics/gr2port/capture.h"
+#include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/character_glass.h"
 #include "graphics/gr2port/contours.h"
 #include "graphics/gr2port/deformers.h"
@@ -255,6 +256,7 @@ private:
                         std::span<const vk::DescriptorSet> sets, const Scene::Header& header,
                         const SceneRing::Packet& packet, u64 offset, vk::Extent2D extent,
                         bool glow_pass = false);
+    void MeasureMotion(const SceneRing::Packet& packet);
     void RecordSnapshot(vk::CommandBuffer cmd, vk::Image image);
     void SaveSnapshot();
     void Report();
@@ -289,6 +291,9 @@ private:
     // The number of the next frame to submit; frames up to frame - FramesInFlight are done once
     // the frame's slot is free.
     u64 frame = FramesInFlight;
+    // The camera of the last frame whose world was drawn, which the histories hold.
+    Scene::Camera last_camera;
+    bool camera_drawn = false;
     bool logged_scene = false;
     bool logged_shadows = false;
     bool logged_decals = false;
@@ -808,6 +813,39 @@ void Thread::LogShadows(const Scene::Header& header, const SceneRing::Packet& pa
     }
 }
 
+// The game measures a frame's motion against the frame before it, which the render thread may not
+// have drawn: the histories then hold an older frame. Before a frame's world draws, writes the
+// packet's view_to_previous against the last frame drawn. MotionBlur blurs by the motion of the
+// frame's own step, so its velocity scales take that step's share of the time since that frame.
+void Thread::MeasureMotion(const SceneRing::Packet& packet) {
+    Scene::Camera camera;
+    std::memcpy(&camera, packet.data + Scene::CameraOffset, sizeof(camera));
+    if (camera_drawn) {
+        Capture::Matrix inverse_view;
+        Capture::Matrix last_world_to_clip;
+        std::memcpy(inverse_view.data(), camera.inverse_view, sizeof(inverse_view));
+        std::memcpy(last_world_to_clip.data(), last_camera.world_to_clip,
+                    sizeof(last_world_to_clip));
+        const Capture::Matrix view_to_previous =
+            Capture::Multiply(inverse_view, last_world_to_clip);
+        std::memcpy(packet.data + Scene::LightOffset + offsetof(Scene::Light, view_to_previous),
+                    view_to_previous.data(), sizeof(view_to_previous));
+        // The clock stands still while the game is paused.
+        const float elapsed = static_cast<float>(camera.time - last_camera.time);
+        if (elapsed > 0.0f) {
+            const float scale = camera.blur_scale * camera.time_step / elapsed;
+            u8* const blur = packet.data + Scene::MotionBlurOffset;
+            for (const size_t field : {offsetof(Scene::MotionBlur, velocity_scale),
+                                       offsetof(Scene::MotionBlur, tile_velocity_scale),
+                                       offsetof(Scene::MotionBlur, blur_velocity_scale)}) {
+                std::memcpy(blur + field, &scale, sizeof(scale));
+            }
+        }
+    }
+    last_camera = camera;
+    camera_drawn = true;
+}
+
 // The world's passes, from the deformers to the antialias, which leave the picture the composite
 // reads.
 void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Header& header,
@@ -817,6 +855,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices;
     stats.refused += header.indices > MaxFrameIndices;
     if (drawn) {
+        MeasureMotion(packet);
         Upscaler::BeginFrame(packet.data, frame, FramesInFlight);
         DeviceLost::Mark(d, cmd, DeviceLost::Pass::Deformers);
         Deformers::Record(cmd, header, packet.address);

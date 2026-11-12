@@ -1190,6 +1190,19 @@ struct MotionBlur {
 };
 static_assert(sizeof(MotionBlur) == 112);
 
+/// What the render thread measures a frame's motion with, against the frame it drew last: world
+/// space to the frame's clip space and the view's inverse, matrices as in Draw; the game's render
+/// clock in seconds and the frame's step of it; and MotionBlur's velocity scale for the motion of
+/// that step.
+struct Camera {
+    float world_to_clip[16];
+    float inverse_view[16];
+    double time;
+    float time_step;
+    float blur_scale;
+};
+static_assert(sizeof(Camera) == 144);
+
 struct PointLight {
     float position[3];
     float range;
@@ -1453,7 +1466,8 @@ inline constexpr u64 CharacterGlassStatesOffset =
 inline constexpr u64 ShadowTraceOffset =
     (CharacterGlassStatesOffset + MaxCharacterGlassDraws * sizeof(u32) + 15) & ~u64{15};
 inline constexpr u64 MotionBlurOffset = ShadowTraceOffset + sizeof(ShadowTrace);
-inline constexpr u64 PacketBytes = MotionBlurOffset + sizeof(MotionBlur);
+inline constexpr u64 CameraOffset = MotionBlurOffset + sizeof(MotionBlur);
+inline constexpr u64 PacketBytes = CameraOffset + sizeof(Camera);
 static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
               DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
               SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&

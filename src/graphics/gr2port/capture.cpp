@@ -3418,14 +3418,19 @@ FogHeader WriteFog(VAddr frame_graph, VAddr view, u8* packet) {
     return header;
 }
 
+// MotionBlur's velocity scale.
+float BlurScale(VAddr view) {
+    return 0.5f / std::max(MinFrameTime, Load<float>(view + ViewFrameTime)) *
+           Load<float>(view + ViewBlur);
+}
+
 // Writes MotionBlur's constants into the packet.
 void WriteMotionBlur(VAddr frame_graph, VAddr view, u8* packet) {
     const VAddr targets = Load<VAddr>(frame_graph + FrameGraphTargets);
     if (targets == 0) {
         return;
     }
-    const float scale = 0.5f / std::max(MinFrameTime, Load<float>(view + ViewFrameTime)) *
-                        Load<float>(view + ViewBlur);
+    const float scale = BlurScale(view);
     const auto game_size = Load<std::array<float, 4>>(targets + TargetsSize);
     const std::array<float, 4> size = RenderSize(game_size[0], game_size[1]);
     const vk::Extent2D compressed =
@@ -3446,6 +3451,21 @@ void WriteMotionBlur(VAddr frame_graph, VAddr view, u8* packet) {
     std::memcpy(blur.inverse_view, reinterpret_cast<const void*>(view + ViewInverseConstants),
                 sizeof(blur.inverse_view));
     std::memcpy(packet + Scene::MotionBlurOffset, &blur, sizeof(blur));
+}
+
+// Writes the frame's camera into the packet.
+void WriteCamera(VAddr view, u8* packet) {
+    Scene::Camera camera{
+        .time = Load<double>(view + ViewTime),
+        .time_step = Load<float>(view + ViewFrameTime),
+        .blur_scale = BlurScale(view),
+    };
+    const Matrix world_to_clip =
+        Multiply(Load<Matrix>(view + ViewMatrix), Load<Matrix>(view + ViewProjection));
+    std::memcpy(camera.world_to_clip, world_to_clip.data(), sizeof(world_to_clip));
+    std::memcpy(camera.inverse_view, reinterpret_cast<const void*>(view + ViewInverse),
+                sizeof(camera.inverse_view));
+    std::memcpy(packet + Scene::CameraOffset, &camera, sizeof(camera));
 }
 
 // The first point light the capture copies is logged once, to check its fields.
@@ -3726,6 +3746,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     WriteParticleColorScene(view, packet);
     const u32 point_lights = WriteLight(frame_graph, view, packet);
     WriteMotionBlur(frame_graph, view, packet);
+    WriteCamera(view, packet);
     const FogHeader fog = WriteFog(frame_graph, view, packet);
     const VAddr hatching = Load<VAddr>(frame_graph + FrameGraphHatching);
     writer.SetHatching(hatching != 0 ? Textures::Get(hatching) : 0);

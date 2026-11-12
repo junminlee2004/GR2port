@@ -35,7 +35,7 @@ void Publish(u64 frame, bool keep);
 struct Packet {
     u32 slot;
     u64 frame;
-    const u8* data;
+    u8* data;
     u64 address;
 };
 
