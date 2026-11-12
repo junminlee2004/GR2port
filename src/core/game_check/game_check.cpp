@@ -34,6 +34,12 @@ constexpr const char* PatchFile = "src/resources/patches/GravityDaze2-Orbis.xml"
 constexpr std::string_view Version = "01.11";
 constexpr std::array Archives{"Gravite2_Chunk0", "Gravite2_Chunk1", "Gravite2_Patch_Chunk0",
                               "Gravite2_Patch_Chunk1"};
+// The folders the four archives hold between them. A dump with the archives extracted over it
+// has the folders in the archives' place, and the loose-files patch has the game read them.
+constexpr std::array ExtractedFolders{"bin", "debug", "eaf", "font", "gcd", "gfx", "hkx",
+                                      "lua", "mp4",   "pfx", "sxd",  "tex", "txb", "xml"};
+// One of them that the update's archives do not hold.
+constexpr std::string_view GameFolder = "xml";
 constexpr u64 PatchBase = 0x400000;
 
 constexpr std::string_view PkgNote =
@@ -213,7 +219,8 @@ std::string NameOf(const std::filesystem::path& root) {
 struct Dump {
     std::filesystem::path root;
     std::string title_id;
-    // The game's own archives are in it, alone or with the update copied over them.
+    // The game's own archives are in it, as they are or extracted over it, alone or with the
+    // update copied over them.
     bool game = false;
 };
 
@@ -253,7 +260,8 @@ std::vector<Dump> ListDumps(const std::filesystem::path& folder) {
         dumps.push_back({
             .root = root,
             .title_id = std::string(*title_id),
-            .game = files->Exists(archive) || files->IsDirectory(Archives[0]),
+            .game = files->Exists(archive) || files->IsDirectory(Archives[0]) ||
+                    files->IsDirectory(GameFolder),
         });
     }
     return dumps;
@@ -322,13 +330,17 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
     const auto all = [&forms](Form form) {
         return std::ranges::all_of(forms, [form](Form found) { return found == form; });
     };
-    if (!all(Form::Archive) && !all(Form::Folder)) {
+    const bool extracted =
+        all(Form::Missing) && std::ranges::all_of(ExtractedFolders, [&](const char* folder) {
+            return game->IsDirectory(folder) || (update != nullptr && update->IsDirectory(folder));
+        });
+    if (!all(Form::Archive) && !all(Form::Folder) && !extracted) {
         Tell(Say("Bad dump: the game's four archives must all be .psarc files, or all be "
                  "extracted to folders of the same names.\n{}",
                  listing));
         return std::nullopt;
     }
-    const bool loose_files = all(Form::Folder);
+    const bool loose_files = !all(Form::Archive);
     g_loose_files.store(loose_files, std::memory_order_relaxed);
     g_title_id = id;
     g_roots.clear();

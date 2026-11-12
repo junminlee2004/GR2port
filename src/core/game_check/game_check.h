@@ -18,7 +18,7 @@ namespace Gr2Port::GameCheck {
 struct Game {
     /// The game's folder or .zar archive. The mounts take the update's from the check.
     std::filesystem::path root;
-    /// The four .psarc archives are extracted to folders of their names.
+    /// The four .psarc archives are extracted, to folders of their names or over the dump.
     bool loose_files = false;
 };
 
