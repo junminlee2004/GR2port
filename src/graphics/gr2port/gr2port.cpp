@@ -143,10 +143,12 @@ void Install(VAddr module_base) {
 void WaitForPipelines() {
     const auto start = std::chrono::steady_clock::now();
     if (WaitForPipelineBuilds()) {
-        LOG_INFO(Render_Vulkan, "GR2port: the game starts after {} ms of pipeline builds",
+        LOG_INFO(Render_Vulkan,
+                 "GR2port: the game starts after {} ms of pipeline builds, {} pipelines",
                  std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - start)
-                     .count());
+                     .count(),
+                 PipelineBuildProgress().made);
     }
 }
 

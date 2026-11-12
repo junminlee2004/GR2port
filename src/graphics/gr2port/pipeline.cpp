@@ -41,6 +41,9 @@ std::condition_variable g_builds_done;
 // pipelines that have been in the making for longer than LongBuild.
 constexpr std::chrono::seconds ReportPeriod{30};
 constexpr std::chrono::seconds LongBuild{10};
+// The pipelines a start makes before the game runs, for the splash's percentage. The line "the
+// game starts after ... pipelines" of a log gives the number to keep here.
+constexpr u32 ExpectedPipelines = 335;
 
 vk::ShaderModule CreateModule(const Device& d, std::span<const u32> code) {
     const vk::ShaderModuleCreateInfo info{
@@ -437,6 +440,17 @@ bool WaitForPipelineBuilds() {
         ReportBuilds(began);
     }
     return waited;
+}
+
+BuildProgress PipelineBuildProgress() {
+    BuildProgress progress{.expected = ExpectedPipelines};
+    {
+        std::scoped_lock lock{g_flights_mutex};
+        progress.made = g_made;
+    }
+    std::scoped_lock lock{g_builds_mutex};
+    progress.building = g_builds != 0;
+    return progress;
 }
 
 void SavePipelineCache(const Device& d) {

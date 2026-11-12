@@ -1678,6 +1678,7 @@ void Thread::Run() {
     const bool ready = Init();
     PipelineBuildDone();
     if (!ready) {
+        Splash::End();
         LOG_ERROR(Render_Vulkan, "GR2port: the renderer did not start");
         return;
     }
@@ -1691,6 +1692,8 @@ void Thread::Run() {
             continue;
         }
         seen = packet.frame;
+        // The splash has the queue and the swapchain until the first frame.
+        Splash::End();
         Frame(packet);
         if (!drawn && stats.frames > 0) {
             drawn = true;

@@ -109,6 +109,15 @@ void PipelineBuildDone();
 /// waited.
 bool WaitForPipelineBuilds();
 
+/// The state of the builds the game's start waits for: the pipelines made by now, the number a
+/// start makes in all, and whether a build has not returned yet.
+struct BuildProgress {
+    u32 made = 0;
+    u32 expected = 0;
+    bool building = false;
+};
+BuildProgress PipelineBuildProgress();
+
 /// After the device is made: creates its pipeline cache from the file an earlier run saved.
 void LoadPipelineCache(Device& device);
 
