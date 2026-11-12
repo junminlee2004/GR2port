@@ -91,7 +91,8 @@ std::vector<Extra> Extras();
 bool IsEnabled(std::string_view name, std::string_view category, bool listed_on);
 
 /// After the game's own settings load: sets the vblank to the chosen frame rate's, raises the
-/// extra direct memory to what the chosen resolution's patch needs, and turns GR2 online on.
+/// extra direct memory to what the chosen resolution's patch needs, turns GR2 online on, and
+/// queues the patches that scale the game's level of detail distances to the chosen detail.
 void ApplySettings();
 
 /// The chosen aspect's width over height.

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -154,6 +155,14 @@ void ReadGraphics(const json& section, Graphics& graphics) {
         anisotropy == 16) {
         graphics.anisotropic_filtering = anisotropy;
     }
+    const auto detail = [&](const char* key, u32& percent) {
+        const u32 value = ReadU32(section, key, percent);
+        if (std::ranges::find(DetailLevels, value) != DetailLevels.end()) {
+            percent = value;
+        }
+    };
+    detail("world_detail", graphics.world_detail);
+    detail("character_detail", graphics.character_detail);
     graphics.upscaler = ReadName(section, "upscaler", graphics.upscaler, UpscalerNames);
     graphics.upscale_quality =
         ReadName(section, "upscale_quality", graphics.upscale_quality, UpscaleQualityNames);
@@ -277,6 +286,8 @@ json ToJson(const Values& values) {
         {"fog_shadows", values.graphics.fog_shadows},
         {"half_resolution_particles", values.graphics.half_resolution_particles},
         {"anisotropic_filtering", values.graphics.anisotropic_filtering},
+        {"world_detail", values.graphics.world_detail},
+        {"character_detail", values.graphics.character_detail},
         {"upscaler", NameOf(values.graphics.upscaler, UpscalerNames)},
         {"upscale_quality", NameOf(values.graphics.upscale_quality, UpscaleQualityNames)},
         {"texture_streaming_mb", values.graphics.texture_streaming_mb},
@@ -341,7 +352,9 @@ std::string_view MatchPreset(const Game& game, const Graphics& graphics) {
             passes.glass_refraction == graphics.glass_refraction &&
             passes.fog_shadows == graphics.fog_shadows &&
             passes.half_resolution_particles == graphics.half_resolution_particles &&
-            passes.anisotropic_filtering == graphics.anisotropic_filtering;
+            passes.anisotropic_filtering == graphics.anisotropic_filtering &&
+            passes.world_detail == graphics.world_detail &&
+            passes.character_detail == graphics.character_detail;
         const bool same_size = preset.aspect.empty() || (preset.aspect == game.aspect &&
                                                          preset.render_size == game.render_size);
         const bool same_streaming = preset.texture_streaming_mb == 0 ||

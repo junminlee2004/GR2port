@@ -195,6 +195,10 @@ enum Control : int {
     IdAnisotropy,
     IdTextureStreamingLabel,
     IdTextureStreaming,
+    IdWorldDetailLabel,
+    IdWorldDetail,
+    IdCharacterDetailLabel,
+    IdCharacterDetail,
     IdGraphicsNote,
     IdDefaults,
 };
@@ -410,7 +414,7 @@ constexpr std::array<const wchar_t*, 5> UpscaleQualityChoices{L"Native AA", L"Qu
 constexpr int PresetTop = 88;
 constexpr int PassTop = 118;
 constexpr int PassStep = 28;
-constexpr int GraphicsNoteTop = 322;
+constexpr int GraphicsNoteTop = 348;
 // The Texture Streaming list is wider than its combo box, to show the GPU's name.
 constexpr int TextureStreamingListWidth = 280;
 // The Texture Streaming choices after Auto, in MB. One at least the GPU's memory keeps within the
@@ -433,6 +437,11 @@ constexpr std::array<const wchar_t*, 2> ParticleChoices{L"Full Resolution", L"Ha
 constexpr std::array<const wchar_t*, 5> AnisotropyChoices{L"Off", L"2x (PS4)", L"4x", L"8x",
                                                           L"16x"};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
+// World Detail's and Character Detail's choices, in the order of Settings::DetailLevels, and the
+// game's own among them.
+constexpr std::array<const wchar_t*, 7> DetailChoices{L"400%", L"200%", L"150%", L"PS4 Original",
+                                                      L"75%",  L"50%",  L"25%"};
+constexpr int OwnDetail = 3;
 
 struct GraphicsColumn {
     int label_left;
@@ -472,6 +481,9 @@ constexpr std::array GraphicsRows{
                 AnisotropyChoices},
     GraphicsRow{
         IdTextureStreamingLabel, IdTextureStreaming, L"Texture Streaming", RightColumn, 5, {}},
+    GraphicsRow{IdWorldDetailLabel, IdWorldDetail, L"World Detail", RightColumn, 6, DetailChoices},
+    GraphicsRow{IdCharacterDetailLabel, IdCharacterDetail, L"Character Detail", RightColumn, 7,
+                DetailChoices},
 };
 
 struct Monitor {
@@ -1275,6 +1287,10 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     Select(Item(dialog, IdParticles), graphics.half_resolution_particles ? 1 : 0);
     Select(Item(dialog, IdAnisotropy),
            IndexOf(AnisotropyLevels, graphics.anisotropic_filtering, 1));
+    Select(Item(dialog, IdWorldDetail),
+           IndexOf(Settings::DetailLevels, graphics.world_detail, OwnDetail));
+    Select(Item(dialog, IdCharacterDetail),
+           IndexOf(Settings::DetailLevels, graphics.character_detail, OwnDetail));
 }
 
 // The upscaler and its quality, which presets leave.
@@ -1304,6 +1320,8 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.glass_refraction = Selected(Item(dialog, IdGlass)) != 1;
     graphics.half_resolution_particles = Selected(Item(dialog, IdParticles)) == 1;
     ReadChoice(Item(dialog, IdAnisotropy), AnisotropyLevels, graphics.anisotropic_filtering);
+    ReadChoice(Item(dialog, IdWorldDetail), Settings::DetailLevels, graphics.world_detail);
+    ReadChoice(Item(dialog, IdCharacterDetail), Settings::DetailLevels, graphics.character_detail);
     const int upscaler = Selected(Item(dialog, IdUpscaler));
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
         graphics.upscaler = static_cast<Settings::Upscaler>(upscaler);
@@ -2009,6 +2027,8 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
     case IdGlass:
     case IdParticles:
     case IdAnisotropy:
+    case IdWorldDetail:
+    case IdCharacterDetail:
     case IdAspect:
     case IdRenderSize:
     case IdTextureStreaming:

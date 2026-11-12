@@ -103,6 +103,9 @@ constexpr float UpscaleRatio(UpscaleQuality quality) {
     return Ratios[static_cast<u32>(quality)];
 }
 
+/// The choices of Graphics::world_detail and character_detail, from the finest.
+inline constexpr std::array<u32, 7> DetailLevels{400, 200, 150, 100, 75, 50, 25};
+
 /// What the renderer draws and how finely. A preset sets them all; "custom" is any other mix.
 struct Graphics {
     std::string preset{"ps4"};
@@ -130,6 +133,11 @@ struct Graphics {
     bool half_resolution_particles{false};
     /// The material textures' anisotropic filtering: 0 off, else the most samples, 2 as the game.
     u32 anisotropic_filtering{2};
+    /// How far from the eye the world's and the characters' models keep their finer meshes, in
+    /// percent of the game's distances, each a DetailLevels entry. GamePatches scales the game's
+    /// own level of detail distances by them.
+    u32 world_detail{100};
+    u32 character_detail{100};
     /// The upscaler and its quality. Presets leave them.
     Upscaler upscaler{Upscaler::Off};
     UpscaleQuality upscale_quality{UpscaleQuality::Quality};

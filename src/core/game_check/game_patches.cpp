@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <bit>
 #include <charconv>
+#include <span>
 #include <string>
+#include <fmt/format.h>
 #include <pugixml.hpp>
 
+#include "common/memory_patcher.h"
 #include "core/emulator_settings.h"
 #include "core/game_check/game_check.h"
 #include "core/game_check/game_patches.h"
@@ -76,6 +80,38 @@ int ResolutionDmem() {
     return 0;
 }
 
+// The game's level of detail distances, in metres: its scene starts with these two rows of the
+// executable, Level0 to Level7 each. A model at or past Level i of its row draws its meshes of
+// level i + 1. The world's models take the first row; the characters' take the second, whose
+// Level3 to Level7 no distance reaches.
+constexpr u64 WorldDetailRow = 0x018af120;
+constexpr u64 CharacterDetailRow = 0x018af140;
+constexpr std::array WorldDetail{0.0f, 35.0f, 55.0f, 80.0f, 110.0f, 145.0f, 185.0f, 230.0f};
+constexpr std::array CharacterDetail{0.0f, 15.0f, 25.0f};
+
+// Queues the patch that writes a row's distances at percent of the game's; 100 keeps the row.
+void QueueDetail(u64 row, std::span<const float> distances, u32 percent) {
+    if (percent == 100) {
+        return;
+    }
+    std::string bytes;
+    for (const float distance : distances) {
+        const u32 bits = std::bit_cast<u32>(distance * static_cast<float>(percent) / 100.0f);
+        bytes += fmt::format("{:02x}{:02x}{:02x}{:02x}", bits & 0xff, bits >> 8 & 0xff,
+                             bits >> 16 & 0xff, bits >> 24);
+    }
+    MemoryPatcher::AddPatchToQueue({
+        .gameSerial = "*",
+        .modNameStr = "Level of detail",
+        .offsetStr = fmt::format("{:#x}", row),
+        .valueStr = std::move(bytes),
+        .isOffset = false,
+        .littleEndian = false,
+        .patchMask = MemoryPatcher::PatchMask::None,
+        .maskOffset = 0,
+    });
+}
+
 } // namespace
 
 std::vector<Extra> Extras() {
@@ -128,6 +164,9 @@ void ApplySettings() {
     EmulatorSettings.SetShadNetServer(std::string(ShadNetServer), true);
     EmulatorSettings.SetShadNetWebApiServer(std::string(ShadNetWebApiServer), true);
     EmulatorSettings.SetP2PPort(P2pPort, true);
+    const Settings::Graphics graphics = Settings::Get().graphics;
+    QueueDetail(WorldDetailRow, WorldDetail, graphics.world_detail);
+    QueueDetail(CharacterDetailRow, CharacterDetail, graphics.character_detail);
 }
 
 float AspectRatio() {
