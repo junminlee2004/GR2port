@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Todas las funciones vuelven a tener su botón predeterminado.",
     "Stick": "Joystick",
     "Right Pad": "Panel derecho",
-    "World Detail": "Detalle del mundo",
+    "Far Environment LOD Quality": "Calidad LOD entorno lejano",
+    "Near Environment LOD Quality": "Calidad LOD entorno cercano",
     "Character Detail": "Detalle de personajes"
   }
 }

@@ -103,8 +103,10 @@ constexpr float UpscaleRatio(UpscaleQuality quality) {
     return Ratios[static_cast<u32>(quality)];
 }
 
-/// The choices of Graphics::world_detail and character_detail, from the finest.
+/// The choices of Graphics::near_environment_detail and character_detail, from the finest.
 inline constexpr std::array<u32, 7> DetailLevels{400, 200, 150, 100, 75, 50, 25};
+/// The choices of Graphics::far_environment_detail: the game's own range last, longer ones before.
+inline constexpr std::array<u32, 4> FarDetailLevels{400, 200, 150, 100};
 
 /// What the renderer draws and how finely. A preset sets them all; "custom" is any other mix.
 struct Graphics {
@@ -133,10 +135,14 @@ struct Graphics {
     bool half_resolution_particles{false};
     /// The material textures' anisotropic filtering: 0 off, else the most samples, 2 as the game.
     u32 anisotropic_filtering{2};
-    /// How far from the eye the world's and the characters' models keep their finer meshes, in
-    /// percent of the game's distances, each a DetailLevels entry. GamePatches scales the game's
-    /// own level of detail distances by them.
-    u32 world_detail{100};
+    /// How far from an island of the city the game shows its detailed models in place of its low
+    /// one, in percent of the game's range, a FarDetailLevels entry. GamePatches grows the game's
+    /// own margins by it.
+    u32 far_environment_detail{100};
+    /// How far from the eye the environment's and the characters' models keep their finer meshes,
+    /// in percent of the game's distances, each a DetailLevels entry. GamePatches scales the
+    /// game's own level of detail distances by them.
+    u32 near_environment_detail{100};
     u32 character_detail{100};
     /// The upscaler and its quality. Presets leave them.
     Upscaler upscaler{Upscaler::Off};

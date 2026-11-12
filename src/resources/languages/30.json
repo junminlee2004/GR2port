@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Усі дії знову мають типові кнопки.",
     "Stick": "Джойстик",
     "Right Pad": "Права панель",
-    "World Detail": "Деталізація світу",
+    "Far Environment LOD Quality": "LOD далекого оточення",
+    "Near Environment LOD Quality": "LOD ближнього оточення",
     "Character Detail": "Деталізація персонажів"
   }
 }

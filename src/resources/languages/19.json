@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Her işlev yeniden varsayılan düğmesine sahip.",
     "Stick": "Çubuk",
     "Right Pad": "Sağ Dokunmatik Yüzey",
-    "World Detail": "Dünya Ayrıntısı",
+    "Far Environment LOD Quality": "Uzak Çevre LOD Kalitesi",
+    "Near Environment LOD Quality": "Yakın Çevre LOD Kalitesi",
     "Character Detail": "Karakter Ayrıntısı"
   }
 }

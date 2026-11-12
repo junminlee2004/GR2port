@@ -89,6 +89,38 @@ constexpr u64 CharacterDetailRow = 0x018af140;
 constexpr std::array WorldDetail{0.0f, 35.0f, 55.0f, 80.0f, 110.0f, 145.0f, 185.0f, 230.0f};
 constexpr std::array CharacterDetail{0.0f, 15.0f, 25.0f};
 
+// An area of the world, an island of the city or a part of one, shows its detailed models while
+// the player is inside its box grown by a margin, and its low model outside. The margins are nine
+// floats of the executable, three for each kind of area that lua/area/areaAttrs.evd names enter,
+// dummyonly and root: the box's scale, the margin in metres and the margin in Hekseville. At its
+// start the game stores the file's values over them, each kind with three instructions of eight
+// bytes: AreaMarginStores. AreaMarginsOfFile are that file's values.
+constexpr u64 AreaMargins = 0x01c80a70;
+constexpr std::array<u64, 3> AreaMarginStores{0x0098284e, 0x00982881, 0x009828a5};
+constexpr std::array AreaMarginsOfFile{1.0f,  80.0f, 50.0f,  1.0f,  100.0f,
+                                       70.0f, 1.0f,  130.0f, 110.0f};
+constexpr std::string_view ThreeStoresSkipped = "0f1f8400000000000f1f8400000000000f1f840000000000";
+
+// Queues a patch of the bytes, as hexadecimal digits, at address.
+void QueueBytes(u64 address, std::string bytes) {
+    MemoryPatcher::AddPatchToQueue({
+        .gameSerial = "*",
+        .modNameStr = "Level of detail",
+        .offsetStr = fmt::format("{:#x}", address),
+        .valueStr = std::move(bytes),
+        .isOffset = false,
+        .littleEndian = false,
+        .patchMask = MemoryPatcher::PatchMask::None,
+        .maskOffset = 0,
+    });
+}
+
+std::string FloatBytes(float value) {
+    const u32 bits = std::bit_cast<u32>(value);
+    return fmt::format("{:02x}{:02x}{:02x}{:02x}", bits & 0xff, bits >> 8 & 0xff, bits >> 16 & 0xff,
+                       bits >> 24);
+}
+
 // Queues the patch that writes a row's distances at percent of the game's; 100 keeps the row.
 void QueueDetail(u64 row, std::span<const float> distances, u32 percent) {
     if (percent == 100) {
@@ -96,20 +128,29 @@ void QueueDetail(u64 row, std::span<const float> distances, u32 percent) {
     }
     std::string bytes;
     for (const float distance : distances) {
-        const u32 bits = std::bit_cast<u32>(distance * static_cast<float>(percent) / 100.0f);
-        bytes += fmt::format("{:02x}{:02x}{:02x}{:02x}", bits & 0xff, bits >> 8 & 0xff,
-                             bits >> 16 & 0xff, bits >> 24);
+        bytes += FloatBytes(distance * static_cast<float>(percent) / 100.0f);
     }
-    MemoryPatcher::AddPatchToQueue({
-        .gameSerial = "*",
-        .modNameStr = "Level of detail",
-        .offsetStr = fmt::format("{:#x}", row),
-        .valueStr = std::move(bytes),
-        .isOffset = false,
-        .littleEndian = false,
-        .patchMask = MemoryPatcher::PatchMask::None,
-        .maskOffset = 0,
-    });
+    QueueBytes(row, std::move(bytes));
+}
+
+// Above 100 percent, queues the patches that grow the areas' margins to percent of the file's, so
+// an area shows its detailed models from further away. The game's stores of the file's values are
+// skipped and the grown values written in their place. At 100 and below the margins stay the
+// file's: smaller ones leave the game less time to load an area before the player reaches it.
+void QueueAreaMargins(u32 percent) {
+    if (percent <= 100) {
+        return;
+    }
+    for (const u64 stores : AreaMarginStores) {
+        QueueBytes(stores, std::string(ThreeStoresSkipped));
+    }
+    std::string bytes;
+    for (size_t i = 0; i < AreaMarginsOfFile.size(); ++i) {
+        const bool scale = i % 3 == 0;
+        bytes += FloatBytes(scale ? AreaMarginsOfFile[i]
+                                  : AreaMarginsOfFile[i] * static_cast<float>(percent) / 100.0f);
+    }
+    QueueBytes(AreaMargins, std::move(bytes));
 }
 
 } // namespace
@@ -165,7 +206,8 @@ void ApplySettings() {
     EmulatorSettings.SetShadNetWebApiServer(std::string(ShadNetWebApiServer), true);
     EmulatorSettings.SetP2PPort(P2pPort, true);
     const Settings::Graphics graphics = Settings::Get().graphics;
-    QueueDetail(WorldDetailRow, WorldDetail, graphics.world_detail);
+    QueueAreaMargins(graphics.far_environment_detail);
+    QueueDetail(WorldDetailRow, WorldDetail, graphics.near_environment_detail);
     QueueDetail(CharacterDetailRow, CharacterDetail, graphics.character_detail);
 }
 

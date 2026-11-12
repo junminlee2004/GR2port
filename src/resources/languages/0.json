@@ -265,7 +265,8 @@
     "Every function has its default button again.": "すべての操作を既定のボタンに戻しました。",
     "Stick": "スティック",
     "Right Pad": "右パッド",
-    "World Detail": "ワールドの詳細度",
+    "Far Environment LOD Quality": "遠景の環境LOD品質",
+    "Near Environment LOD Quality": "近景の環境LOD品質",
     "Character Detail": "キャラクターの詳細度"
   }
 }

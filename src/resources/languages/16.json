@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Każda funkcja ma znów swój domyślny przycisk.",
     "Stick": "Drążek",
     "Right Pad": "Prawy panel",
-    "World Detail": "Szczegóły świata",
+    "Far Environment LOD Quality": "Jakość LOD dalekiego otoczenia",
+    "Near Environment LOD Quality": "Jakość LOD bliskiego otoczenia",
     "Character Detail": "Szczegóły postaci"
   }
 }

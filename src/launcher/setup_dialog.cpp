@@ -195,8 +195,10 @@ enum Control : int {
     IdAnisotropy,
     IdTextureStreamingLabel,
     IdTextureStreaming,
-    IdWorldDetailLabel,
-    IdWorldDetail,
+    IdFarDetailLabel,
+    IdFarDetail,
+    IdNearDetailLabel,
+    IdNearDetail,
     IdCharacterDetailLabel,
     IdCharacterDetail,
     IdGraphicsNote,
@@ -437,10 +439,13 @@ constexpr std::array<const wchar_t*, 2> ParticleChoices{L"Full Resolution", L"Ha
 constexpr std::array<const wchar_t*, 5> AnisotropyChoices{L"Off", L"2x (PS4)", L"4x", L"8x",
                                                           L"16x"};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
-// World Detail's and Character Detail's choices, in the order of Settings::DetailLevels, and the
-// game's own among them.
+// The near environment's and the characters' detail choices, in the order of
+// Settings::DetailLevels, the far environment's in the order of Settings::FarDetailLevels, and the
+// game's own among either.
 constexpr std::array<const wchar_t*, 7> DetailChoices{L"400%", L"200%", L"150%", L"PS4 Original",
                                                       L"75%",  L"50%",  L"25%"};
+constexpr std::array<const wchar_t*, 4> FarDetailChoices{L"400%", L"200%", L"150%",
+                                                         L"PS4 Original"};
 constexpr int OwnDetail = 3;
 
 struct GraphicsColumn {
@@ -473,6 +478,8 @@ constexpr std::array GraphicsRows{
     GraphicsRow{IdMotionBlurLabel, IdMotionBlur, L"Motion Blur", LeftColumn, 4, MotionBlurChoices},
     GraphicsRow{IdAntialiasLabel, IdAntialias, L"Anti-Aliasing", LeftColumn, 5, SwitchChoices},
     GraphicsRow{IdBloomLabel, IdBloom, L"Bloom", LeftColumn, 6, SwitchChoices},
+    GraphicsRow{IdCharacterDetailLabel, IdCharacterDetail, L"Character Detail", LeftColumn, 7,
+                DetailChoices},
     GraphicsRow{IdOutlinesLabel, IdOutlines, L"Outlines", RightColumn, 0, SwitchChoices},
     GraphicsRow{IdDecalsLabel, IdDecals, L"Decals", RightColumn, 1, SwitchChoices},
     GraphicsRow{IdGlassLabel, IdGlass, L"Glass Refraction", RightColumn, 2, SwitchChoices},
@@ -481,8 +488,9 @@ constexpr std::array GraphicsRows{
                 AnisotropyChoices},
     GraphicsRow{
         IdTextureStreamingLabel, IdTextureStreaming, L"Texture Streaming", RightColumn, 5, {}},
-    GraphicsRow{IdWorldDetailLabel, IdWorldDetail, L"World Detail", RightColumn, 6, DetailChoices},
-    GraphicsRow{IdCharacterDetailLabel, IdCharacterDetail, L"Character Detail", RightColumn, 7,
+    GraphicsRow{IdFarDetailLabel, IdFarDetail, L"Far Environment LOD Quality", RightColumn, 6,
+                FarDetailChoices},
+    GraphicsRow{IdNearDetailLabel, IdNearDetail, L"Near Environment LOD Quality", RightColumn, 7,
                 DetailChoices},
 };
 
@@ -1287,8 +1295,10 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     Select(Item(dialog, IdParticles), graphics.half_resolution_particles ? 1 : 0);
     Select(Item(dialog, IdAnisotropy),
            IndexOf(AnisotropyLevels, graphics.anisotropic_filtering, 1));
-    Select(Item(dialog, IdWorldDetail),
-           IndexOf(Settings::DetailLevels, graphics.world_detail, OwnDetail));
+    Select(Item(dialog, IdFarDetail),
+           IndexOf(Settings::FarDetailLevels, graphics.far_environment_detail, OwnDetail));
+    Select(Item(dialog, IdNearDetail),
+           IndexOf(Settings::DetailLevels, graphics.near_environment_detail, OwnDetail));
     Select(Item(dialog, IdCharacterDetail),
            IndexOf(Settings::DetailLevels, graphics.character_detail, OwnDetail));
 }
@@ -1320,7 +1330,10 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.glass_refraction = Selected(Item(dialog, IdGlass)) != 1;
     graphics.half_resolution_particles = Selected(Item(dialog, IdParticles)) == 1;
     ReadChoice(Item(dialog, IdAnisotropy), AnisotropyLevels, graphics.anisotropic_filtering);
-    ReadChoice(Item(dialog, IdWorldDetail), Settings::DetailLevels, graphics.world_detail);
+    ReadChoice(Item(dialog, IdFarDetail), Settings::FarDetailLevels,
+               graphics.far_environment_detail);
+    ReadChoice(Item(dialog, IdNearDetail), Settings::DetailLevels,
+               graphics.near_environment_detail);
     ReadChoice(Item(dialog, IdCharacterDetail), Settings::DetailLevels, graphics.character_detail);
     const int upscaler = Selected(Item(dialog, IdUpscaler));
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
@@ -2027,7 +2040,8 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
     case IdGlass:
     case IdParticles:
     case IdAnisotropy:
-    case IdWorldDetail:
+    case IdFarDetail:
+    case IdNearDetail:
     case IdCharacterDetail:
     case IdAspect:
     case IdRenderSize:

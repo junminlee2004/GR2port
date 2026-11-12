@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <span>
 #include <string>
 #include <string_view>
 #include <nlohmann/json.hpp>
@@ -155,14 +156,17 @@ void ReadGraphics(const json& section, Graphics& graphics) {
         anisotropy == 16) {
         graphics.anisotropic_filtering = anisotropy;
     }
-    const auto detail = [&](const char* key, u32& percent) {
+    const auto detail = [&](const char* key, std::span<const u32> levels, u32& percent) {
         const u32 value = ReadU32(section, key, percent);
-        if (std::ranges::find(DetailLevels, value) != DetailLevels.end()) {
+        if (std::ranges::find(levels, value) != levels.end()) {
             percent = value;
         }
     };
-    detail("world_detail", graphics.world_detail);
-    detail("character_detail", graphics.character_detail);
+    detail("far_environment_detail", FarDetailLevels, graphics.far_environment_detail);
+    // Older files hold the near distances as world_detail.
+    detail("world_detail", DetailLevels, graphics.near_environment_detail);
+    detail("near_environment_detail", DetailLevels, graphics.near_environment_detail);
+    detail("character_detail", DetailLevels, graphics.character_detail);
     graphics.upscaler = ReadName(section, "upscaler", graphics.upscaler, UpscalerNames);
     graphics.upscale_quality =
         ReadName(section, "upscale_quality", graphics.upscale_quality, UpscaleQualityNames);
@@ -286,7 +290,8 @@ json ToJson(const Values& values) {
         {"fog_shadows", values.graphics.fog_shadows},
         {"half_resolution_particles", values.graphics.half_resolution_particles},
         {"anisotropic_filtering", values.graphics.anisotropic_filtering},
-        {"world_detail", values.graphics.world_detail},
+        {"far_environment_detail", values.graphics.far_environment_detail},
+        {"near_environment_detail", values.graphics.near_environment_detail},
         {"character_detail", values.graphics.character_detail},
         {"upscaler", NameOf(values.graphics.upscaler, UpscalerNames)},
         {"upscale_quality", NameOf(values.graphics.upscale_quality, UpscaleQualityNames)},
@@ -353,7 +358,8 @@ std::string_view MatchPreset(const Game& game, const Graphics& graphics) {
             passes.fog_shadows == graphics.fog_shadows &&
             passes.half_resolution_particles == graphics.half_resolution_particles &&
             passes.anisotropic_filtering == graphics.anisotropic_filtering &&
-            passes.world_detail == graphics.world_detail &&
+            passes.far_environment_detail == graphics.far_environment_detail &&
+            passes.near_environment_detail == graphics.near_environment_detail &&
             passes.character_detail == graphics.character_detail;
         const bool same_size = preset.aspect.empty() || (preset.aspect == game.aspect &&
                                                          preset.render_size == game.render_size);

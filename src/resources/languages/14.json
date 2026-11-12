@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Alle funktioner har igen deres standardknap.",
     "Stick": "Pind",
     "Right Pad": "Højre touchpad",
-    "World Detail": "Verdensdetaljer",
+    "Far Environment LOD Quality": "LOD-kvalitet, fjerne omgivelser",
+    "Near Environment LOD Quality": "LOD-kvalitet, nære omgivelser",
     "Character Detail": "Figurdetaljer"
   }
 }

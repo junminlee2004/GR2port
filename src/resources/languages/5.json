@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Ogni funzione ha di nuovo il suo pulsante predefinito.",
     "Stick": "Levetta",
     "Right Pad": "Pad destro",
-    "World Detail": "Dettaglio del mondo",
+    "Far Environment LOD Quality": "Qualità LOD ambiente lontano",
+    "Near Environment LOD Quality": "Qualità LOD ambiente vicino",
     "Character Detail": "Dettaglio dei personaggi"
   }
 }

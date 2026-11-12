@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Jede Funktion hat wieder ihre Standardtaste.",
     "Stick": "Stick",
     "Right Pad": "Rechtes Trackpad",
-    "World Detail": "Weltdetails",
+    "Far Environment LOD Quality": "LOD-Qualität ferne Umgebung",
+    "Near Environment LOD Quality": "LOD-Qualität nahe Umgebung",
     "Character Detail": "Figurendetails"
   }
 }

@@ -265,7 +265,8 @@
     "Every function has its default button again.": "ทุกฟังก์ชันกลับไปใช้ปุ่มเริ่มต้นแล้ว",
     "Stick": "สติ๊ก",
     "Right Pad": "แพดขวา",
-    "World Detail": "รายละเอียดของโลก",
+    "Far Environment LOD Quality": "คุณภาพ LOD ฉากระยะไกล",
+    "Near Environment LOD Quality": "คุณภาพ LOD ฉากระยะใกล้",
     "Character Detail": "รายละเอียดตัวละคร"
   }
 }

@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Fiecare funcție are din nou butonul implicit.",
     "Stick": "Manetă",
     "Right Pad": "Touchpad drept",
-    "World Detail": "Detalii lume",
+    "Far Environment LOD Quality": "Calitate LOD mediu îndepărtat",
+    "Near Environment LOD Quality": "Calitate LOD mediu apropiat",
     "Character Detail": "Detalii personaje"
   }
 }

@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Mọi chức năng đã trở về nút mặc định.",
     "Stick": "Cần",
     "Right Pad": "Bàn cảm ứng phải",
-    "World Detail": "Chi tiết thế giới",
+    "Far Environment LOD Quality": "Chất lượng LOD môi trường xa",
+    "Near Environment LOD Quality": "Chất lượng LOD môi trường gần",
     "Character Detail": "Chi tiết nhân vật"
   }
 }

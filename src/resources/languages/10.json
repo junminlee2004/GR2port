@@ -265,7 +265,8 @@
     "Every function has its default button again.": "所有功能都已恢復為預設按鈕。",
     "Stick": "操作桿",
     "Right Pad": "右觸控板",
-    "World Detail": "世界細節",
+    "Far Environment LOD Quality": "遠景環境 LOD 品質",
+    "Near Environment LOD Quality": "近景環境 LOD 品質",
     "Character Detail": "角色細節"
   }
 }

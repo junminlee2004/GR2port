@@ -281,10 +281,12 @@ constexpr std::array<std::string_view, 2> ParticleChoices{"Full Resolution", "Ha
 // The most anisotropic filtering samples of each choice; 2 is the game's.
 constexpr std::array<std::string_view, 5> AnisotropyChoices{"Off", "2x (PS4)", "4x", "8x", "16x"};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
-// World Detail's and Character Detail's choices, in the order of Settings::DetailLevels, and the
-// game's own among them.
+// The near environment's and the characters' detail choices, in the order of
+// Settings::DetailLevels, the far environment's in the order of Settings::FarDetailLevels, and the
+// game's own among either.
 constexpr std::array<std::string_view, 7> DetailChoices{"400%", "200%", "150%", "PS4 Original",
                                                         "75%",  "50%",  "25%"};
+constexpr std::array<std::string_view, 4> FarDetailChoices{"400%", "200%", "150%", "PS4 Original"};
 constexpr int OwnDetail = 3;
 
 struct GraphicsColumn {
@@ -394,7 +396,8 @@ struct Dialog {
     QComboBox* particles = nullptr;
     QComboBox* anisotropy = nullptr;
     QComboBox* texture_streaming_list = nullptr;
-    QComboBox* world_detail = nullptr;
+    QComboBox* far_detail = nullptr;
+    QComboBox* near_detail = nullptr;
     QComboBox* character_detail = nullptr;
     std::array<QCheckBox*, Toggles.size()> toggles{};
     QComboBox* active_pad = nullptr;
@@ -850,8 +853,10 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.particles->setCurrentIndex(graphics.half_resolution_particles ? 1 : 0);
     dialog.anisotropy->setCurrentIndex(
         IndexOf(AnisotropyLevels, graphics.anisotropic_filtering, 1));
-    dialog.world_detail->setCurrentIndex(
-        IndexOf(Settings::DetailLevels, graphics.world_detail, OwnDetail));
+    dialog.far_detail->setCurrentIndex(
+        IndexOf(Settings::FarDetailLevels, graphics.far_environment_detail, OwnDetail));
+    dialog.near_detail->setCurrentIndex(
+        IndexOf(Settings::DetailLevels, graphics.near_environment_detail, OwnDetail));
     dialog.character_detail->setCurrentIndex(
         IndexOf(Settings::DetailLevels, graphics.character_detail, OwnDetail));
 }
@@ -883,7 +888,8 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.glass_refraction = dialog.glass_refraction->currentIndex() != 1;
     graphics.half_resolution_particles = dialog.particles->currentIndex() == 1;
     ReadChoice(dialog.anisotropy, AnisotropyLevels, graphics.anisotropic_filtering);
-    ReadChoice(dialog.world_detail, Settings::DetailLevels, graphics.world_detail);
+    ReadChoice(dialog.far_detail, Settings::FarDetailLevels, graphics.far_environment_detail);
+    ReadChoice(dialog.near_detail, Settings::DetailLevels, graphics.near_environment_detail);
     ReadChoice(dialog.character_detail, Settings::DetailLevels, graphics.character_detail);
     const int upscaler = dialog.upscaler->currentIndex();
     if (upscaler >= 0 && upscaler < static_cast<int>(UpscalerChoices.size())) {
@@ -1222,6 +1228,7 @@ void BuildGraphics(Dialog& dialog, QWidget* page) {
     dialog.motion_blur = row("Motion Blur", LeftColumn, 4, MotionBlurChoices);
     dialog.antialias = row("Anti-Aliasing", LeftColumn, 5, SwitchChoices);
     dialog.bloom = row("Bloom", LeftColumn, 6, SwitchChoices);
+    dialog.character_detail = row("Character Detail", LeftColumn, 7, DetailChoices);
     dialog.outlines = row("Outlines", RightColumn, 0, SwitchChoices);
     dialog.decals = row("Decals", RightColumn, 1, SwitchChoices);
     dialog.glass_refraction = row("Glass Refraction", RightColumn, 2, SwitchChoices);
@@ -1230,8 +1237,8 @@ void BuildGraphics(Dialog& dialog, QWidget* page) {
     // Its choices come from the GPU.
     dialog.texture_streaming_list = row("Texture Streaming", RightColumn, 5, {});
     FillTextureStreaming(dialog, dialog.values.graphics.texture_streaming_mb);
-    dialog.world_detail = row("World Detail", RightColumn, 6, DetailChoices);
-    dialog.character_detail = row("Character Detail", RightColumn, 7, DetailChoices);
+    dialog.far_detail = row("Far Environment LOD Quality", RightColumn, 6, FarDetailChoices);
+    dialog.near_detail = row("Near Environment LOD Quality", RightColumn, 7, DetailChoices);
     MakeNote(dialog, page,
              "Steam Deck also sets Aspect Ratio to 16:10, Render Resolution to 720p (1280 x 800) "
              "and VSync to Off on the Display tab, and Swap Gyro Yaw/Roll and Invert Gyro Yaw on "
@@ -1588,7 +1595,8 @@ void Build(Dialog& dialog) {
          {dialog.shadows, dialog.fog, dialog.fog_shadows, dialog.occlusion, dialog.motion_blur,
           dialog.antialias, dialog.bloom, dialog.outlines, dialog.decals, dialog.glass_refraction,
           dialog.particles, dialog.anisotropy, dialog.aspect, dialog.render_size,
-          dialog.texture_streaming_list, dialog.world_detail, dialog.character_detail}) {
+          dialog.texture_streaming_list, dialog.far_detail, dialog.near_detail,
+          dialog.character_detail}) {
         QObject::connect(combo, &QComboBox::activated, window, [&dialog] { ShowPreset(dialog); });
     }
     QObject::connect(defaults, &QPushButton::clicked, window, [&dialog] { SetDefaults(dialog); });

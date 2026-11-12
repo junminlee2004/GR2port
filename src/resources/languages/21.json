@@ -265,7 +265,8 @@
     "Every function has its default button again.": "‫عادت كل وظيفة إلى زرها الافتراضي.‬",
     "Stick": "‫العصا‬",
     "Right Pad": "‫اللوحة اليمنى‬",
-    "World Detail": "‫تفاصيل العالم‬",
+    "Far Environment LOD Quality": "‫جودة LOD للبيئة البعيدة‬",
+    "Near Environment LOD Quality": "‫جودة LOD للبيئة القريبة‬",
     "Character Detail": "‫تفاصيل الشخصيات‬"
   }
 }

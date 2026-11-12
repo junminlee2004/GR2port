@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Každá funkce má opět své výchozí tlačítko.",
     "Stick": "Páčka",
     "Right Pad": "Pravý panel",
-    "World Detail": "Detaily světa",
+    "Far Environment LOD Quality": "Kvalita LOD vzdáleného okolí",
+    "Near Environment LOD Quality": "Kvalita LOD blízkého okolí",
     "Character Detail": "Detaily postav"
   }
 }

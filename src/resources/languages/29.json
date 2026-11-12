@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Setiap fungsi kembali ke tombol bawaannya.",
     "Stick": "Stik",
     "Right Pad": "Pad Kanan",
-    "World Detail": "Detail Dunia",
+    "Far Environment LOD Quality": "Kualitas LOD Lingkungan Jauh",
+    "Near Environment LOD Quality": "Kualitas LOD Lingkungan Dekat",
     "Character Detail": "Detail Karakter"
   }
 }

@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Alla funktioner har sina standardknappar igen.",
     "Stick": "Spak",
     "Right Pad": "Höger styrplatta",
-    "World Detail": "Världsdetaljer",
+    "Far Environment LOD Quality": "LOD-kvalitet, avlägsen miljö",
+    "Near Environment LOD Quality": "LOD-kvalitet, nära miljö",
     "Character Detail": "Karaktärsdetaljer"
   }
 }

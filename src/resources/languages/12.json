@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Jokaisella toiminnolla on taas oletuspainikkeensa.",
     "Stick": "Sauva",
     "Right Pad": "Oikea levy",
-    "World Detail": "Maailman yksityiskohdat",
+    "Far Environment LOD Quality": "Kaukaisen ympäristön LOD-laatu",
+    "Near Environment LOD Quality": "Lähiympäristön LOD-laatu",
     "Character Detail": "Hahmojen yksityiskohdat"
   }
 }

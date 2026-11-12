@@ -265,7 +265,8 @@
     "Every function has its default button again.": "Κάθε λειτουργία έχει ξανά το προεπιλεγμένο κουμπί της.",
     "Stick": "Μοχλός",
     "Right Pad": "Δεξιά επιφάνεια",
-    "World Detail": "Λεπτομέρεια κόσμου",
+    "Far Environment LOD Quality": "LOD μακρινού περιβάλλοντος",
+    "Near Environment LOD Quality": "LOD κοντινού περιβάλλοντος",
     "Character Detail": "Λεπτομέρεια χαρακτήρων"
   }
 }
