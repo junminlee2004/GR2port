@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 target_sources(gr2port PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/camera_reach.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/camera_reach.h
     ${CMAKE_CURRENT_LIST_DIR}/capture.cpp
     ${CMAKE_CURRENT_LIST_DIR}/capture.h
     ${CMAKE_CURRENT_LIST_DIR}/capture_math.h

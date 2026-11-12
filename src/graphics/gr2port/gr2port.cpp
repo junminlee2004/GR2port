@@ -11,6 +11,7 @@
 #include "common/memory_patcher.h"
 #include "core/libraries/error_codes.h"
 #include "core/memory.h"
+#include "graphics/gr2port/camera_reach.h"
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/frame_graph_draws.h"
 #include "graphics/gr2port/gr2port.h"
@@ -107,6 +108,7 @@ void Install(VAddr module_base) {
     }
     UiCapture::Install(module_base);
     MouseCamera::Install(module_base, c, StubAreaSize);
+    CameraReach::Install(module_base, c, StubAreaSize);
     Timeline::Install(module_base, c, StubAreaSize);
     PlayerControl::Install(module_base, c, StubAreaSize);
     if (Hooks::ObserveReturn(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraphEnd, 0) ==
