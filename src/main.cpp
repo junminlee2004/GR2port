@@ -10,6 +10,7 @@
 #include <span>
 #include <vector>
 #include <CLI/CLI.hpp>
+#include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_messagebox.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -144,6 +145,10 @@ int main(int argc, char* argv[]) {
     Common::Log::Setup(Common::FS::LOG_FILE);
 
     LOG_INFO(Debug, "Run: {}", fmt::join(std::span(argv, argc), " "));
+
+    // GR2port: Steam hides the real gamepads from the programs it starts, which leaves its own
+    // virtual pad, one without motion sensors. SDL lists every gamepad again.
+    SDL_SetHintWithPriority(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, "", SDL_HINT_OVERRIDE);
 
     IPC::Instance().Init();
 
