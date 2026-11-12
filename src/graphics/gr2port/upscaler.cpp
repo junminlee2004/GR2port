@@ -311,7 +311,9 @@ bool CreateFsr3(vk::Extent2D render, vk::Extent2D output) {
 }
 
 bool CreateInputs(vk::Extent2D render) {
-    constexpr auto Usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled;
+    // DLSS clears one of the images it is given, which takes the transfer usage.
+    constexpr auto Usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
+                           vk::ImageUsageFlagBits::eTransferDst;
     g_input_color =
         g_memory->CreateImage(InputColorFormat, render, Usage, vk::ImageAspectFlagBits::eColor);
     g_input_motion =
@@ -633,6 +635,8 @@ void ExtendDevice(vk::PhysicalDevice gpu, const vk::detail::DispatchLoaderDynami
     features.features.shaderStorageImageWriteWithoutFormat =
         core.shaderStorageImageWriteWithoutFormat;
     if (chosen == Settings::Upscaler::Dlss) {
+        // Streamline makes a private data slot on the device.
+        vk13.privateData = supported.get<vk::PhysicalDeviceVulkan13Features>().privateData;
         Gr2Fsr3::ExtendDeviceForDlss(gpu, info, vk12, dispatch);
         return;
     }
@@ -843,9 +847,12 @@ bool Resize(vk::Extent2D render, vk::Extent2D output) {
     if (!Active()) {
         return true;
     }
-    g_output = g_memory->CreateImage(
-        OutputFormat, output, vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
-        vk::ImageAspectFlagBits::eColor);
+    // The transfer usage is for the clear of DLSS, as on its inputs.
+    g_output =
+        g_memory->CreateImage(OutputFormat, output,
+                              vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
+                                  vk::ImageUsageFlagBits::eTransferDst,
+                              vk::ImageAspectFlagBits::eColor);
     if (!g_output.image || (UsesInputs() && !CreateInputs(render))) {
         return false;
     }

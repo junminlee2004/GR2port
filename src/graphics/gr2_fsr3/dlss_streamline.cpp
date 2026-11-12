@@ -243,7 +243,8 @@ sl::Resource ResourceOf(const Fsr4Image& image, vk::Format format, vk::Extent2D 
     resource.mipLevels = 1;
     resource.arrayLayers = 1;
     resource.flags = 0;
-    resource.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    resource.usage =
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     return resource;
 }
 
