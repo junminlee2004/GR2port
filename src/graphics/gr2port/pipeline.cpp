@@ -1,11 +1,17 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
+#include <initializer_list>
 #include <mutex>
+#include <string>
 #include <vector>
+
+#include <fmt/format.h>
 
 #include "common/io_file.h"
 #include "common/logging/log.h"
@@ -33,9 +39,54 @@ vk::ShaderModule CreateModule(const Device& d, std::span<const u32> code) {
     return d.device.createShaderModule(info, nullptr, d.dispatch).value;
 }
 
+// The code of each stage of the pipeline a thread is building, for the report of a fault: the
+// driver compiles the stages inside the calls that make the pipeline.
+struct Stage {
+    const char* name;
+    std::span<const u32> code;
+};
+constexpr size_t MaxStages = 5;
+thread_local std::array<Stage, MaxStages> t_building{};
+
+// Names the stages a thread builds until the end of the scope.
+struct Building {
+    explicit Building(std::initializer_list<Stage> stages) {
+        std::copy_n(stages.begin(), std::min(stages.size(), MaxStages), t_building.begin());
+    }
+    ~Building() {
+        t_building = {};
+    }
+};
+
+// FNV-1a over the code's bytes, which tells the shaders apart in a report.
+u64 CodeSum(std::span<const u32> code) {
+    u64 sum = 0xcbf29ce484222325;
+    for (const std::byte byte : std::as_bytes(code)) {
+        sum = (sum ^ std::to_integer<u64>(byte)) * 0x100000001b3;
+    }
+    return sum;
+}
+
 } // namespace
 
+std::string PipelineBeingBuilt() {
+    std::string stages;
+    for (const Stage& stage : t_building) {
+        if (stage.code.empty()) {
+            continue;
+        }
+        stages += fmt::format("{}{} {:016x} of {} words", stages.empty() ? "" : ", ", stage.name,
+                              CodeSum(stage.code), stage.code.size());
+    }
+    return stages;
+}
+
 Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& info) {
+    const Building building{{"vertex", info.vertex},
+                            {"tessellation control", info.tessellation_control},
+                            {"tessellation evaluation", info.tessellation_evaluation},
+                            {"geometry", info.geometry},
+                            {"fragment", info.fragment}};
     const auto& dl = d.dispatch;
     Pipeline result;
     const vk::PushConstantRange push{
@@ -227,6 +278,7 @@ Pipeline CreateGraphicsPipeline(const Device& d, const GraphicsPipelineInfo& inf
 Pipeline CreateComputePipeline(const Device& d, std::span<const u32> code, u32 push_constant_bytes,
                                std::span<const vk::DescriptorSetLayout> set_layouts,
                                const vk::SpecializationInfo* specialization) {
+    const Building building{{"compute", code}};
     const auto& dl = d.dispatch;
     Pipeline result;
     const vk::PushConstantRange push{

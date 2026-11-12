@@ -12,6 +12,7 @@
 #include "common/logging/log.h"
 #include "common/types.h"
 #include "graphics/gr2port/fault_report.h"
+#include "graphics/gr2port/pipeline.h"
 
 namespace Gr2Port {
 
@@ -83,6 +84,9 @@ void ReportFault(void* exception_pointers) {
               record.ExceptionCode, access,
               Describe(reinterpret_cast<u64>(record.ExceptionAddress)), c.Rax, c.Rcx, c.Rdx, c.Rbx,
               c.Rsi, c.Rdi, c.R8, c.R9, Stack(c));
+    if (const std::string pipeline = PipelineBeingBuilt(); !pipeline.empty()) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the thread was building a pipeline: {}", pipeline);
+    }
 }
 
 } // namespace Gr2Port

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <span>
+#include <string>
 
 #include "graphics/gr2port/device.h"
 
@@ -80,6 +81,10 @@ Pipeline CreateComputePipeline(const Device& device, std::span<const u32> code,
                                const vk::SpecializationInfo* specialization = nullptr);
 
 void DestroyPipeline(const Device& device, Pipeline& pipeline);
+
+/// The stages of the pipeline the calling thread is building, each with the FNV-1a sum of its
+/// code and its length, for the report of a fault inside the driver; empty outside a build.
+std::string PipelineBeingBuilt();
 
 /// After the device is made: creates its pipeline cache from the file an earlier run saved.
 void LoadPipelineCache(Device& device);
