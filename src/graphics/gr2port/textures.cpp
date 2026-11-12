@@ -1061,6 +1061,8 @@ void PutInUse(u32 handle, const Image& image, u32 first, u64 frame) {
         r.first = first;
         WriteDescriptor(handle, image.view);
         g_refreshed[handle] = 0;
+        // The handle may be that of an earlier texture, a movie's surface.
+        std::ranges::replace(g_movie_handles, handle, 0u);
         g_stats.textures++;
         t.slot.store(static_cast<u16>(handle), std::memory_order_relaxed);
         t.ready.store(true, std::memory_order_release);
@@ -1757,10 +1759,13 @@ void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> read) {
             u64{info.pitch} * image.extent.height > layout.bytes) {
             continue;
         }
+        // A movie's surface holds a byte per texel. A texture of another kind at a surface's
+        // address is one the game put there after the movie, and takes its own memory.
+        const bool surface = layout.bits == 8 && !layout.block;
         // A surface that keeps a movie's frame takes, once per DMA, the copy of the frame the DMA
         // copied, taken when the game kept it, as only the GPU writes its memory. Without a copy
         // it takes the image of the source when that holds the source's last job.
-        const Movies::Kept kept = Movies::FindKept(sharp.Address());
+        const Movies::Kept kept = surface ? Movies::FindKept(sharp.Address()) : Movies::Kept{};
         Movies::Frame movie{};
         if (kept.source != 0) {
             if (kept.generation == g_refreshed[handle]) {
@@ -1783,7 +1788,7 @@ void Refresh(vk::CommandBuffer cmd, u64 frame, std::span<const u32> read) {
                 continue;
             }
             movie = kept.frame;
-        } else {
+        } else if (surface) {
             // A movie surface takes the copy of each frame the game's job copies into it.
             movie = Movies::Find(sharp.Address());
             if (movie.found) {
