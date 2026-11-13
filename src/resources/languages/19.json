@@ -270,6 +270,9 @@
     "Exit to Desktop": "Masaüstüne Çık",
     "EXIT TO DESKTOP": "MASAÜSTÜNE ÇIK",
     "Close the game and return to the desktop.": "Oyunu kapat ve masaüstüne dön.",
-    "Are you sure you want to quit to desktop?": "Masaüstüne çıkmak istediğinden emin misin?"
+    "Are you sure you want to quit to desktop?": "Masaüstüne çıkmak istediğinden emin misin?",
+    "Update your graphics driver": "Grafik sürücünü güncelle",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "NVIDIA grafik sürücünün sürümü {0}. DLSS'i kullanmak için sürüm {1} veya daha yenisine güncelle.",
+    "Don't show again": "Bir daha gösterme"
   }
 }

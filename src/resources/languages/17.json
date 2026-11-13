@@ -270,6 +270,9 @@
     "Exit to Desktop": "Sair para a área de trabalho",
     "EXIT TO DESKTOP": "SAIR PARA A ÁREA DE TRABALHO",
     "Close the game and return to the desktop.": "Feche o jogo e volte para a área de trabalho.",
-    "Are you sure you want to quit to desktop?": "Tem certeza de que deseja sair para a área de trabalho?"
+    "Are you sure you want to quit to desktop?": "Tem certeza de que deseja sair para a área de trabalho?",
+    "Update your graphics driver": "Atualize o driver de vídeo",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "O seu driver de vídeo NVIDIA está na versão {0}. Atualize-o para a versão {1} ou mais recente para usar o DLSS.",
+    "Don't show again": "Não mostrar novamente"
   }
 }

@@ -270,6 +270,9 @@
     "Exit to Desktop": "Вийти на робочий стіл",
     "EXIT TO DESKTOP": "ВИЙТИ НА РОБОЧИЙ СТІЛ",
     "Close the game and return to the desktop.": "Закрити гру й повернутися на робочий стіл.",
-    "Are you sure you want to quit to desktop?": "Ви впевнені, що хочете вийти на робочий стіл?"
+    "Are you sure you want to quit to desktop?": "Ви впевнені, що хочете вийти на робочий стіл?",
+    "Update your graphics driver": "Оновіть графічний драйвер",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Версія вашого графічного драйвера NVIDIA — {0}. Оновіть його до версії {1} або новішої, щоб використовувати DLSS.",
+    "Don't show again": "Більше не показувати"
   }
 }

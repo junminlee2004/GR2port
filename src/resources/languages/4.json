@@ -270,6 +270,9 @@
     "Exit to Desktop": "Zum Desktop beenden",
     "EXIT TO DESKTOP": "ZUM DESKTOP BEENDEN",
     "Close the game and return to the desktop.": "Beende das Spiel und kehre zum Desktop zurück.",
-    "Are you sure you want to quit to desktop?": "Möchtest du das Spiel wirklich zum Desktop beenden?"
+    "Are you sure you want to quit to desktop?": "Möchtest du das Spiel wirklich zum Desktop beenden?",
+    "Update your graphics driver": "Grafiktreiber aktualisieren",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Ihr NVIDIA-Grafiktreiber hat die Version {0}. Aktualisieren Sie ihn auf Version {1} oder neuer, um DLSS zu verwenden.",
+    "Don't show again": "Nicht mehr anzeigen"
   }
 }

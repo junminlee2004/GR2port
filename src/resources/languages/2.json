@@ -270,6 +270,9 @@
     "Exit to Desktop": "Quitter vers le bureau",
     "EXIT TO DESKTOP": "QUITTER VERS LE BUREAU",
     "Close the game and return to the desktop.": "Ferme le jeu et reviens au bureau.",
-    "Are you sure you want to quit to desktop?": "Veux-tu vraiment revenir au bureau ?"
+    "Are you sure you want to quit to desktop?": "Veux-tu vraiment revenir au bureau ?",
+    "Update your graphics driver": "Mettez à jour votre pilote graphique",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Votre pilote graphique NVIDIA est en version {0}. Mettez-le à jour vers la version {1} ou une version ultérieure pour utiliser le DLSS.",
+    "Don't show again": "Ne plus afficher"
   }
 }

@@ -16,6 +16,7 @@
 #include "common/scm_rev.h"
 #include "core/language/language.h"
 #include "launcher/art.h"
+#include "launcher/driver_notice.h"
 #include "launcher/launcher.h"
 #include "launcher/setup_dialog.h"
 
@@ -433,6 +434,7 @@ bool Run() {
             Layout(window, state);
             ShowWindow(window, SW_SHOW);
             SetForegroundWindow(window);
+            ShowDriverNotice(window);
             MSG message{};
             while (!state.done && GetMessageW(&message, nullptr, 0, 0) > 0) {
                 TranslateMessage(&message);

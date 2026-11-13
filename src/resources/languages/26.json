@@ -270,6 +270,9 @@
     "Exit to Desktop": "Ieșire pe desktop",
     "EXIT TO DESKTOP": "IEȘIRE PE DESKTOP",
     "Close the game and return to the desktop.": "Închide jocul și revino pe desktop.",
-    "Are you sure you want to quit to desktop?": "Sigur vrei să ieși pe desktop?"
+    "Are you sure you want to quit to desktop?": "Sigur vrei să ieși pe desktop?",
+    "Update your graphics driver": "Actualizează driverul grafic",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Driverul tău grafic NVIDIA are versiunea {0}. Actualizează-l la versiunea {1} sau una mai nouă pentru a folosi DLSS.",
+    "Don't show again": "Nu mai afișa"
   }
 }

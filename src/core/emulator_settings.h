@@ -193,6 +193,8 @@ struct GeneralSettings {
     Setting<int> settings_window_scale{1000};
     Setting<bool> redzone_patches{false};
     Setting<bool> legacy_cpu_patches{false};
+    // The launcher tells a player with an NVIDIA RTX GPU to update a driver too old for DLSS.
+    Setting<bool> nvidia_driver_notice{true};
     // return a vector of override descriptors (runtime, but tiny)
     std::vector<OverrideItem> GetOverrideableFields() const {
         return std::vector<OverrideItem>{
@@ -220,7 +222,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GeneralSettings, install_dirs, addon_install_
                                    extra_dmem_in_mbytes, extra_fmem_in_mbytes,
                                    trophy_popup_disabled, trophy_notification_duration, show_splash,
                                    trophy_notification_side, show_fps_counter, console_language,
-                                   settings_window_scale, redzone_patches, legacy_cpu_patches)
+                                   settings_window_scale, redzone_patches, legacy_cpu_patches,
+                                   nvidia_driver_notice)
 
 // -------------------------------
 // Network settings
@@ -765,6 +768,7 @@ public:
     SETTING_FORWARD(m_general, SettingsWindowScale, settings_window_scale)
     SETTING_FORWARD_BOOL(m_general, RedZonePatchingEnabled, redzone_patches)
     SETTING_FORWARD_BOOL(m_general, LegacyCpuPatchesEnabled, legacy_cpu_patches)
+    SETTING_FORWARD_BOOL(m_general, NvidiaDriverNotice, nvidia_driver_notice)
 
     // Network settings
     SETTING_FORWARD_BOOL(m_network, ConnectedToNetwork, connected_to_network)

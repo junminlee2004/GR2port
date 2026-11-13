@@ -270,6 +270,9 @@
     "Exit to Desktop": "デスクトップへ",
     "EXIT TO DESKTOP": "デスクトップへ",
     "Close the game and return to the desktop.": "ゲームを終了してデスクトップへ戻ります",
-    "Are you sure you want to quit to desktop?": "ゲームを終了してデスクトップへ戻りますか？"
+    "Are you sure you want to quit to desktop?": "ゲームを終了してデスクトップへ戻りますか？",
+    "Update your graphics driver": "グラフィックドライバーを更新してください",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "お使いのNVIDIAグラフィックドライバーはバージョン{0}です。DLSSを使用するには、バージョン{1}以降に更新してください。",
+    "Don't show again": "今後表示しない"
   }
 }

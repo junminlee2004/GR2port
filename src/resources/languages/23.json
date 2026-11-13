@@ -270,6 +270,9 @@
     "Exit to Desktop": "Ukončit na plochu",
     "EXIT TO DESKTOP": "UKONČIT NA PLOCHU",
     "Close the game and return to the desktop.": "Zavře hru a vrátí se na plochu.",
-    "Are you sure you want to quit to desktop?": "Opravdu chcete ukončit hru a přejít na plochu?"
+    "Are you sure you want to quit to desktop?": "Opravdu chcete ukončit hru a přejít na plochu?",
+    "Update your graphics driver": "Aktualizujte ovladač grafické karty",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Váš ovladač grafické karty NVIDIA má verzi {0}. Chcete-li používat DLSS, aktualizujte jej na verzi {1} nebo novější.",
+    "Don't show again": "Příště nezobrazovat"
   }
 }

@@ -270,6 +270,9 @@
     "Exit to Desktop": "Afslut til skrivebordet",
     "EXIT TO DESKTOP": "AFSLUT TIL SKRIVEBORDET",
     "Close the game and return to the desktop.": "Luk spillet, og vend tilbage til skrivebordet.",
-    "Are you sure you want to quit to desktop?": "Er du sikker på, at du vil afslutte til skrivebordet?"
+    "Are you sure you want to quit to desktop?": "Er du sikker på, at du vil afslutte til skrivebordet?",
+    "Update your graphics driver": "Opdater grafikdriveren",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Din NVIDIA-grafikdriver er version {0}. Opdater den til version {1} eller nyere for at bruge DLSS.",
+    "Don't show again": "Vis ikke igen"
   }
 }

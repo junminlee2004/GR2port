@@ -270,6 +270,9 @@
     "Exit to Desktop": "返回桌面",
     "EXIT TO DESKTOP": "返回桌面",
     "Close the game and return to the desktop.": "結束遊戲並返回桌面",
-    "Are you sure you want to quit to desktop?": "確定要結束遊戲並返回桌面嗎？"
+    "Are you sure you want to quit to desktop?": "確定要結束遊戲並返回桌面嗎？",
+    "Update your graphics driver": "請更新顯示卡驅動程式",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "目前的 NVIDIA 顯示卡驅動程式版本為 {0}。若要使用 DLSS，請更新至 {1} 或更新版本。",
+    "Don't show again": "不再顯示"
   }
 }

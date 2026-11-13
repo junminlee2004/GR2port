@@ -270,6 +270,9 @@
     "Exit to Desktop": "ออกสู่เดสก์ท็อป",
     "EXIT TO DESKTOP": "ออกสู่เดสก์ท็อป",
     "Close the game and return to the desktop.": "ปิดเกมและกลับสู่เดสก์ท็อป",
-    "Are you sure you want to quit to desktop?": "คุณแน่ใจหรือไม่ว่าต้องการออกสู่เดสก์ท็อป"
+    "Are you sure you want to quit to desktop?": "คุณแน่ใจหรือไม่ว่าต้องการออกสู่เดสก์ท็อป",
+    "Update your graphics driver": "อัปเดตไดรเวอร์กราฟิก",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "ไดรเวอร์กราฟิก NVIDIA ของคุณเป็นเวอร์ชัน {0} โปรดอัปเดตเป็นเวอร์ชัน {1} หรือใหม่กว่าเพื่อใช้ DLSS",
+    "Don't show again": "ไม่ต้องแสดงอีก"
   }
 }

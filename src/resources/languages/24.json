@@ -270,6 +270,9 @@
     "Exit to Desktop": "Kilépés az asztalra",
     "EXIT TO DESKTOP": "KILÉPÉS AZ ASZTALRA",
     "Close the game and return to the desktop.": "Bezárja a játékot, és visszatér az asztalra.",
-    "Are you sure you want to quit to desktop?": "Biztosan ki szeretnél lépni az asztalra?"
+    "Are you sure you want to quit to desktop?": "Biztosan ki szeretnél lépni az asztalra?",
+    "Update your graphics driver": "Frissítsd a grafikus illesztőprogramot",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Az NVIDIA grafikus illesztőprogramod verziója {0}. A DLSS használatához frissítsd {1} vagy újabb verzióra.",
+    "Don't show again": "Ne jelenjen meg többé"
   }
 }

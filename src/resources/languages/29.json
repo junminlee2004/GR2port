@@ -270,6 +270,9 @@
     "Exit to Desktop": "Keluar ke Desktop",
     "EXIT TO DESKTOP": "KELUAR KE DESKTOP",
     "Close the game and return to the desktop.": "Tutup game dan kembali ke desktop.",
-    "Are you sure you want to quit to desktop?": "Yakin ingin keluar ke desktop?"
+    "Are you sure you want to quit to desktop?": "Yakin ingin keluar ke desktop?",
+    "Update your graphics driver": "Perbarui driver grafis",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Driver grafis NVIDIA Anda adalah versi {0}. Perbarui ke versi {1} atau yang lebih baru untuk menggunakan DLSS.",
+    "Don't show again": "Jangan tampilkan lagi"
   }
 }

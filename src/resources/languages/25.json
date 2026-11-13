@@ -270,6 +270,9 @@
     "Exit to Desktop": "Έξοδος στην επιφάνεια εργασίας",
     "EXIT TO DESKTOP": "ΕΞΟΔΟΣ ΣΤΗΝ ΕΠΙΦΑΝΕΙΑ ΕΡΓΑΣΙΑΣ",
     "Close the game and return to the desktop.": "Κλείνει το παιχνίδι και επιστρέφει στην επιφάνεια εργασίας.",
-    "Are you sure you want to quit to desktop?": "Θέλετε σίγουρα να κάνετε έξοδο στην επιφάνεια εργασίας;"
+    "Are you sure you want to quit to desktop?": "Θέλετε σίγουρα να κάνετε έξοδο στην επιφάνεια εργασίας;",
+    "Update your graphics driver": "Ενημερώστε το πρόγραμμα οδήγησης γραφικών",
+    "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Το πρόγραμμα οδήγησης γραφικών NVIDIA είναι στην έκδοση {0}. Ενημερώστε το στην έκδοση {1} ή νεότερη για να χρησιμοποιήσετε το DLSS.",
+    "Don't show again": "Να μην εμφανιστεί ξανά"
   }
 }
