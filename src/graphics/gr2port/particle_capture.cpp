@@ -25,7 +25,6 @@ namespace Gr2Port::ParticleCapture {
 
 namespace {
 
-using Capture::Invert;
 using Capture::Load;
 using Capture::Matrix;
 using Capture::Multiply;
@@ -694,8 +693,6 @@ void WriteLiveDescriptions(VAddr library, u8* packet, Scene::ParticleHeader& out
 struct Camera {
     Matrix view;
     Matrix projection;
-    Matrix view_inverse;
-    Matrix projection_inverse;
     std::array<float, 2> screen;
     std::array<float, 2> clip;
 };
@@ -706,9 +703,10 @@ void WriteDraw(Scene::ParticleDraw& record, const Camera& camera, VAddr material
                u32 first, u32 instances) {
     std::memcpy(&record.constants[0], camera.view.data(), sizeof(camera.view));
     std::memcpy(&record.constants[16], camera.projection.data(), sizeof(camera.projection));
-    std::memcpy(&record.constants[32], camera.view_inverse.data(), sizeof(camera.view_inverse));
-    std::memcpy(&record.constants[48], camera.projection_inverse.data(),
-                sizeof(camera.projection_inverse));
+    // FUN_014b4100 computes the two inverses and then stores the view and the projection over
+    // them. The model program's depth offset takes a particle's depth from that projection.
+    std::memcpy(&record.constants[32], camera.view.data(), sizeof(camera.view));
+    std::memcpy(&record.constants[48], camera.projection.data(), sizeof(camera.projection));
     const float scale = Load<u8>(material + MaterialTarget) == TargetHalfSize ? 0.5f : 1.0f;
     record.constants[64] = camera.screen[0] * scale;
     record.constants[65] = camera.screen[1] * scale;
@@ -1384,12 +1382,10 @@ void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {
     const Camera camera{
         .view = Transposed(game_view),
         .projection = Transposed(game_projection),
-        .view_inverse = Transposed(Invert(game_view)),
-        .projection_inverse = Transposed(Invert(game_projection)),
         .screen = Load<std::array<float, 2>>(context + ContextScreen),
         .clip = Load<std::array<float, 2>>(context + ContextClip),
     };
-    // The shadow passes take a cascade's matrices, and no program reads their inverses.
+    // The shadow passes take a cascade's matrices.
     std::array<Camera, Scene::Cascades> cascades;
     for (u32 c = 0; c < Scene::Cascades; c++) {
         cascades[c] = camera;
