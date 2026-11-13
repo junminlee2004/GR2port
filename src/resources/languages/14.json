@@ -275,6 +275,7 @@
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Din NVIDIA-grafikdriver er version {0}. Opdater den til version {1} eller nyere for at bruge DLSS.",
     "Don't show again": "Vis ikke igen",
     "Choose custom game directory instead": "Vælg en brugerdefineret spilmappe i stedet",
-    "Choose the folder that holds your game and its update": "Vælg den mappe, der indeholder spillet og dets opdatering"
+    "Choose the folder that holds your game and its update": "Vælg den mappe, der indeholder spillet og dets opdatering",
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 kører allerede."
   }
 }

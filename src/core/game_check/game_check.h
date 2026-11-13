@@ -27,6 +27,10 @@ struct Game {
 /// returns nothing. The box for no game at all lets the player choose the folder that holds it.
 std::optional<Game> Find();
 
+/// Holds the user folder for this process: copies of the game share its saves and its log. When
+/// another copy holds it, tells the player and returns false.
+bool HoldUserFolder();
+
 /// Whether Find found the four archives extracted to folders.
 bool LooseFiles();
 

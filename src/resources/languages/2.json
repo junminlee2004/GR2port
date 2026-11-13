@@ -275,6 +275,7 @@
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Votre pilote graphique NVIDIA est en version {0}. Mettez-le à jour vers la version {1} ou une version ultérieure pour utiliser le DLSS.",
     "Don't show again": "Ne plus afficher",
     "Choose custom game directory instead": "Choisir plutôt un dossier de jeu personnalisé",
-    "Choose the folder that holds your game and its update": "Choisir le dossier qui contient votre jeu et sa mise à jour"
+    "Choose the folder that holds your game and its update": "Choisir le dossier qui contient votre jeu et sa mise à jour",
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 est déjà en cours d'exécution."
   }
 }

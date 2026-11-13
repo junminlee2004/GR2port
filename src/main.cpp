@@ -177,6 +177,9 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    if (!Gr2Port::GameCheck::HoldUserFolder()) {
+        return 1;
+    }
     // GR2port starts only Gravity Rush 2 v1.11 from its own folder, and checks the dump each time.
     const std::optional<Gr2Port::GameCheck::Game> game = Gr2Port::GameCheck::Find();
     if (!game) {

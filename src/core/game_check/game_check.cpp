@@ -4,7 +4,9 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <charconv>
+#include <functional>
 #include <span>
 #include <string>
 #include <vector>
@@ -24,6 +26,12 @@
 #include "core/loader/elf.h"
 #if defined(_WIN32) || defined(__linux__)
 #include "launcher/launcher.h"
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/file.h>
 #endif
 
 CMRC_DECLARE(gr2port_patches);
@@ -426,6 +434,37 @@ std::optional<Game> Find() {
         chosen = *folder;
     }
     return game;
+}
+
+bool HoldUserFolder() {
+    const std::filesystem::path& folder = Common::FS::GetUserPath(Common::FS::PathType::UserDir);
+#ifdef _WIN32
+    // A named mutex marks the folder. Its name holds a hash of the canonical path, which spells
+    // the folder one way whatever path started the executable.
+    std::error_code error;
+    const std::filesystem::path canonical = std::filesystem::canonical(folder, error);
+    const std::wstring name =
+        L"Local\\GR2port " +
+        std::to_wstring(std::hash<std::wstring>{}((error ? folder : canonical).wstring()));
+    SetLastError(ERROR_SUCCESS);
+    // The handle stays open until the process ends.
+    const HANDLE mutex = CreateMutexW(nullptr, FALSE, name.c_str());
+    const bool held = mutex == nullptr || GetLastError() != ERROR_ALREADY_EXISTS;
+    if (!held) {
+        CloseHandle(mutex);
+    }
+#else
+    // A lock on the folder marks it. The descriptor stays open until the process ends.
+    const int handle = open(folder.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    const bool held = handle < 0 || flock(handle, LOCK_EX | LOCK_NB) == 0 || errno != EWOULDBLOCK;
+#endif
+    if (!held) {
+        LOG_WARNING(Loader, "GR2port: another copy of the game runs from {}; this one closes",
+                    Common::FS::PathToUTF8String(folder));
+        const std::string text = Say("Gravity Rush 2 is already running.");
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Gravity Rush 2", text.c_str(), nullptr);
+    }
+    return held;
 }
 
 bool LooseFiles() {

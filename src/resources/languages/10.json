@@ -275,6 +275,7 @@
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "目前的 NVIDIA 顯示卡驅動程式版本為 {0}。若要使用 DLSS，請更新至 {1} 或更新版本。",
     "Don't show again": "不再顯示",
     "Choose custom game directory instead": "改為選擇自訂遊戲資料夾",
-    "Choose the folder that holds your game and its update": "選擇存放遊戲本體與更新檔的資料夾"
+    "Choose the folder that holds your game and its update": "選擇存放遊戲本體與更新檔的資料夾",
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 已在執行中。"
   }
 }

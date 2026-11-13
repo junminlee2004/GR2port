@@ -275,6 +275,7 @@
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "NVIDIA grafik sürücünün sürümü {0}. DLSS'i kullanmak için sürüm {1} veya daha yenisine güncelle.",
     "Don't show again": "Bir daha gösterme",
     "Choose custom game directory instead": "Bunun yerine özel oyun klasörü seç",
-    "Choose the folder that holds your game and its update": "Oyunu ve Güncellemesini İçeren Klasörü Seç"
+    "Choose the folder that holds your game and its update": "Oyunu ve Güncellemesini İçeren Klasörü Seç",
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 zaten çalışıyor."
   }
 }

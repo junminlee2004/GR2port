@@ -275,6 +275,7 @@
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "ไดรเวอร์กราฟิก NVIDIA ของคุณเป็นเวอร์ชัน {0} โปรดอัปเดตเป็นเวอร์ชัน {1} หรือใหม่กว่าเพื่อใช้ DLSS",
     "Don't show again": "ไม่ต้องแสดงอีก",
     "Choose custom game directory instead": "เลือกโฟลเดอร์เกมแบบกำหนดเองแทน",
-    "Choose the folder that holds your game and its update": "เลือกโฟลเดอร์ที่มีเกมและอัปเดต"
+    "Choose the folder that holds your game and its update": "เลือกโฟลเดอร์ที่มีเกมและอัปเดต",
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 กำลังทำงานอยู่แล้ว"
   }
 }

@@ -275,6 +275,7 @@
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Driverul tău grafic NVIDIA are versiunea {0}. Actualizează-l la versiunea {1} sau una mai nouă pentru a folosi DLSS.",
     "Don't show again": "Nu mai afișa",
     "Choose custom game directory instead": "Selectează în schimb un dosar personalizat pentru joc",
-    "Choose the folder that holds your game and its update": "Selectează dosarul care conține jocul și actualizarea sa"
+    "Choose the folder that holds your game and its update": "Selectează dosarul care conține jocul și actualizarea sa",
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 rulează deja."
   }
 }

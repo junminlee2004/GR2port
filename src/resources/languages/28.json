@@ -275,6 +275,7 @@
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Trình điều khiển đồ họa NVIDIA của bạn đang ở phiên bản {0}. Hãy cập nhật lên phiên bản {1} trở lên để dùng DLSS.",
     "Don't show again": "Không hiển thị lại",
     "Choose custom game directory instead": "Chọn thư mục trò chơi tùy chỉnh thay thế",
-    "Choose the folder that holds your game and its update": "Chọn thư mục chứa trò chơi và bản cập nhật"
+    "Choose the folder that holds your game and its update": "Chọn thư mục chứa trò chơi và bản cập nhật",
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 hiện đang chạy."
   }
 }

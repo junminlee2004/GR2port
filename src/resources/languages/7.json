@@ -118,6 +118,7 @@
     "Are you sure you want to quit to desktop?": "Tens a certeza de que queres sair para o ambiente de trabalho?",
     "Update your graphics driver": "Atualize o controlador gráfico",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "O seu controlador gráfico NVIDIA está na versão {0}. Atualize-o para a versão {1} ou mais recente para usar o DLSS.",
-    "Don't show again": "Não voltar a mostrar"
+    "Don't show again": "Não voltar a mostrar",
+    "Gravity Rush 2 is already running.": "O Gravity Rush 2 já está em execução."
   }
 }

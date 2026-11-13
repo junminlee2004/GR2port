@@ -275,6 +275,7 @@
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "お使いのNVIDIAグラフィックドライバーはバージョン{0}です。DLSSを使用するには、バージョン{1}以降に更新してください。",
     "Don't show again": "今後表示しない",
     "Choose custom game directory instead": "代わりにゲームフォルダーを指定する",
-    "Choose the folder that holds your game and its update": "ゲーム本体とアップデートが入っているフォルダーの選択"
+    "Choose the folder that holds your game and its update": "ゲーム本体とアップデートが入っているフォルダーの選択",
+    "Gravity Rush 2 is already running.": "Gravity Rush 2はすでに起動しています。"
   }
 }
