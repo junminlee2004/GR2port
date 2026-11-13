@@ -19,7 +19,9 @@
 // game's prompt textures with every key face left blank, and its slots.json says where each label
 // goes, how big it is and how it is drawn. When the game starts, the key bound to each PlayStation
 // button is drawn there: key names in the game's own DIN Round Bold, the mouse buttons, the wheel,
-// Space, Shift and the arrows as symbols.
+// Space, Shift and the arrows as symbols. The pack's layouts of the pause menu's control list hold
+// the sticks' lines 28 pixels higher than the game's, level with the picture's labels for moving
+// the camera and for resetting it.
 namespace PromptPacks::Keyboard {
 
 /// A key as a prompt shows it: a name, or a symbol of keyboard_symbols.h.
@@ -40,7 +42,9 @@ std::map<std::string, Label> BoundLabels();
 /// slots name that are missing are left out, and buttons without a label show a dash.
 ///
 /// With only, just the textures with a slot of those buttons are drawn, each on its copy in blank
-/// (the keyboard pack's members); the other textures of members stay as they are.
+/// (the keyboard pack's members); the other textures of members stay as they are. Slots marked
+/// keyboard_only are left out then: their texture holds the controller's picture around the key,
+/// and each pad layout has its own.
 void Compose(const std::filesystem::path& slots_json, std::span<const u8> font,
              const std::map<std::string, Label>& labels,
              std::map<std::pair<std::string, std::string>, std::vector<u8>>& members,

@@ -3405,6 +3405,174 @@
   {
    "archive": "Gravite2_Patch_Chunk0.psarc",
    "member": "gcd/system_menu_keyset.gcdv",
+   "index": 3,
+   "button": "L2",
+   "center": [
+    94.5,
+    21.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 104400,
+   "keyboard_only": true
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 1,
+   "button": "L2",
+   "center": [
+    94.5,
+    21.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 19.0,
+   "max_width": 24.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 26432,
+   "keyboard_only": true
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 3,
+   "button": "Lstick",
+   "center": [
+    95.0,
+    407.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 14.5,
+   "max_width": 21.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 104400,
+   "keyboard_only": true
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 3,
+   "button": "Rstick",
+   "center": [
+    368.0,
+    407.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 14.5,
+   "max_width": 21.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 104400,
+   "keyboard_only": true
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 1,
+   "button": "Lstick",
+   "center": [
+    95.0,
+    407.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 14.5,
+   "max_width": 21.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 26432,
+   "keyboard_only": true
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 1,
+   "button": "Rstick",
+   "center": [
+    368.0,
+    407.0
+   ],
+   "recipe": "rekey_word",
+   "cap": 14.5,
+   "max_width": 21.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 26432,
+   "keyboard_only": true
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
+   "index": 3,
+   "button": "R3",
+   "center": [
+    368.0,
+    452.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.0,
+   "max_width": 40.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 104400,
+   "keyboard_only": true
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset_dlc.gcdv",
+   "index": 1,
+   "button": "R3",
+   "center": [
+    368.0,
+    452.5
+   ],
+   "recipe": "rekey_word",
+   "cap": 16.0,
+   "max_width": 40.0,
+   "style": "color",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "offset": 26432,
+   "keyboard_only": true
+  },
+  {
+   "archive": "Gravite2_Patch_Chunk0.psarc",
+   "member": "gcd/system_menu_keyset.gcdv",
    "index": 7,
    "button": "touchpad",
    "center": [

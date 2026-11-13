@@ -494,6 +494,9 @@ void Compose(const std::filesystem::path& slots_json, std::span<const u8> font,
     std::map<std::tuple<std::string, std::string, u64>, std::vector<const nlohmann::json*>>
         textures;
     for (const nlohmann::json& slot : root.at("slots")) {
+        if (only != nullptr && slot.value("keyboard_only", false)) {
+            continue;
+        }
         textures[{Lower(slot.value("archive", "")), Lower(slot.value("member", "")),
                   slot.value("offset", u64{0})}]
             .push_back(&slot);

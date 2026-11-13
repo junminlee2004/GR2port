@@ -616,9 +616,9 @@
       "orig_size": 628176,
       "orig_crc32": "8a778ceb",
       "new_size": 628176,
-      "new_crc32": "5bf1541d",
+      "new_crc32": "9f7f45d7",
       "orig_sha256": "30b8e2314cdb3ad6e4fe744e6c18dd4ff034b024b8b76c30fa59a1decba522c1",
-      "new_sha256": "d82e2dc411726c1ac6e1d1cfbac9728fe6d4fa012a113ec54d2a06cf376db51c",
+      "new_sha256": "63ef6b8c022ea3a923c3dbddaef52b29f926820f2f2c240c78597831c1b4cc77",
       "delta": "deltas/0056.gpd"
     },
     {
@@ -627,10 +627,32 @@
       "orig_size": 397376,
       "orig_crc32": "a9502e39",
       "new_size": 397376,
-      "new_crc32": "38ceef0f",
+      "new_crc32": "9cc8157c",
       "orig_sha256": "021f9473753084a93670793cd49a2b07dfbccc6d1b4d6ed9ff144d0abdb75bf6",
-      "new_sha256": "a8a859c61a3f7d1ea8388112b0e337e9a128ee6c83990f5765854f06df324133",
+      "new_sha256": "6c99272a519fb2daa2a4520feb99b46e03cb629d84649f25c80ad8fd52236625",
       "delta": "deltas/0057.gpd"
+    },
+    {
+      "archive": "Gravite2_Patch_Chunk0.psarc",
+      "path": "gcd/system_menu_keyset.gcdm",
+      "orig_size": 41856,
+      "orig_crc32": "e9c98d52",
+      "new_size": 41856,
+      "new_crc32": "e51f5825",
+      "orig_sha256": "61256bca42a0107ac11bdf4c4728a21f8b087845455045f471de072d5b226853",
+      "new_sha256": "e73a6866f2e4b3ece15b374abf325ce202e3d76d200e47eb145cccf09e46871c",
+      "delta": "deltas/0058.gpd"
+    },
+    {
+      "archive": "Gravite2_Patch_Chunk0.psarc",
+      "path": "gcd/system_menu_keyset_dlc.gcdm",
+      "orig_size": 15296,
+      "orig_crc32": "45a5235f",
+      "new_size": 15296,
+      "new_crc32": "254db770",
+      "orig_sha256": "fdca61f78bb41fa7459ca76fd6f0ba511ba2fb5fd27a28c68feb706fdccb7370",
+      "new_sha256": "5a56bc1a9a39e2ee749fade64453796e2185a44a22032d438faf24086367b669",
+      "delta": "deltas/0059.gpd"
     }
   ]
 }
