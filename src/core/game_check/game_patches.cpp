@@ -260,6 +260,32 @@ void QueueFramePools() {
     }
 }
 
+// The game's physics world holds PhysicsBodies bodies and as many motions: one instruction of
+// its maker loads the count for both, and ends with it. Each area that shows its detailed models
+// adds its bodies to the world, and with none left the game stops at Havok's "Body buffer is
+// full". The world takes its memory from a heap of PhysicsHeapBytes, a size in eight bytes of the
+// executable. The game gives that heap its share of one block of direct memory and the rest of
+// the block to the heap it names "User Other Malloc", so a larger physics heap leaves that one
+// less.
+constexpr u64 PhysicsBodyCount = 0x014e6705;
+constexpr std::string_view CountLoaded = "b9";
+constexpr u32 PhysicsBodies = 0x1c00;
+constexpr u64 PhysicsHeapSize = 0x018a9878;
+constexpr u64 PhysicsHeapBytes = 0x0a000000;
+// With the areas' margins at their longest: the bodies as a multiple of the game's, and the
+// megabytes more of heap they take.
+constexpr u32 PhysicsBodyGrowth = 4;
+constexpr u64 PhysicsHeapGrowth = 160;
+
+// Queues the patches that grow the physics world's bodies and its heap.
+void QueuePhysicsWorld() {
+    QueueBytes(PhysicsBodyCount,
+               std::string(CountLoaded) + WordBytes(PhysicsBodies * PhysicsBodyGrowth));
+    const u64 heap = PhysicsHeapBytes + (PhysicsHeapGrowth << 20);
+    QueueBytes(PhysicsHeapSize,
+               WordBytes(static_cast<u32>(heap)) + WordBytes(static_cast<u32>(heap >> 32)));
+}
+
 // A gravity slide kick that hits scales the slide's velocity once, by a factor of the gravity
 // style raised to the power of the game step times 30: at the PS4's 30 frames a second the power
 // is 1 and the factor itself results. Lunar's factor is -0.3, the kick's rebound, and at any other
@@ -329,6 +355,9 @@ void ApplySettings() {
     QueueDetail(CharacterDetailRow, CharacterDetail, graphics.character_detail);
     if (Settings::FinestDetail(graphics)) {
         QueueFramePools();
+    }
+    if (graphics.far_environment_detail >= Settings::FarDetailLevels.front()) {
+        QueuePhysicsWorld();
     }
     QueueBytes(SlideKickPower, std::string(CallSkipped));
 }
