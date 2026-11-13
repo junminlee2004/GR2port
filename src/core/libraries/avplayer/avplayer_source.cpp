@@ -353,6 +353,8 @@ bool AvPlayerSource::Stop() {
     m_start_time.reset();
     m_pause_time = {};
     m_pause_duration = {};
+    m_last_video_ts = 0;
+    m_video_loop_base = 0;
 
     m_is_paused = false;
     m_is_eof = false;
@@ -393,10 +395,21 @@ bool AvPlayerSource::GetVideoData(AvPlayerFrameInfoEx& video_info) {
         return false;
     }
 
-    const auto current_time = CurrentTime();
+    auto current_time = CurrentTime();
     const auto& new_frame = m_video_frames.Front();
+    // The clock of a source without sound stops at the source's length, and a looped source's
+    // timestamps start over: such a source's frame is due when the time played reaches its
+    // timestamp after the loops before it. The last frames of a loop come out of order, so only
+    // a fall of half the length begins a loop.
+    auto loop_base = m_video_loop_base;
+    bool looped = false;
+    if (!m_audio_stream_index.has_value() && m_duration != 0) {
+        looped = new_frame.info.timestamp + m_duration / 2 < m_last_video_ts;
+        loop_base += looped ? m_duration : 0;
+        current_time = PlayedTime();
+    }
     if (m_state.GetSyncMode() == AvPlayerAvSyncMode::Default) {
-        if (new_frame.info.timestamp > current_time) {
+        if (loop_base + new_frame.info.timestamp > current_time) {
             return false;
         }
     }
@@ -409,6 +422,9 @@ bool AvPlayerSource::GetVideoData(AvPlayerFrameInfoEx& video_info) {
 
     auto frame = m_video_frames.Pop();
     video_info = frame->info;
+    m_last_video_ts =
+        looped ? frame->info.timestamp : std::max(m_last_video_ts, frame->info.timestamp);
+    m_video_loop_base = loop_base;
 
     m_current_video_frame = std::move(frame);
     return true;
@@ -504,13 +520,19 @@ u64 AvPlayerSource::CurrentTime() {
         return m_last_audio_ts.value_or(0) + elapsed;
     }
 
-    const auto elapsed =
-        duration_cast<milliseconds>(now - m_start_time.value() - m_pause_duration).count();
-    if (elapsed <= 0) {
+    const auto current_time = PlayedTime();
+    return m_duration != 0 && current_time > m_duration ? m_duration : current_time;
+}
+
+u64 AvPlayerSource::PlayedTime() {
+    if (!m_start_time.has_value()) {
         return 0;
     }
-    const auto current_time = u64(elapsed);
-    return m_duration != 0 && current_time > m_duration ? m_duration : current_time;
+    using namespace std::chrono;
+    const auto now = m_is_paused.load() ? m_pause_time : high_resolution_clock::now();
+    const auto elapsed =
+        duration_cast<milliseconds>(now - m_start_time.value() - m_pause_duration).count();
+    return elapsed > 0 ? u64(elapsed) : 0;
 }
 
 bool AvPlayerSource::IsActive() {

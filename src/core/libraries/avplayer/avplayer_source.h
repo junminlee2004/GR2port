@@ -169,6 +169,8 @@ public:
 
 private:
     u64 DurationMillis() const;
+    /// The time since playback began without the pauses, which runs on past the source's length.
+    u64 PlayedTime();
     AvPlayerStreamInfo CreateStreamInfo(u32 stream_index);
 
     static void ReleaseAVPacket(AVPacket* packet);
@@ -255,6 +257,10 @@ private:
     std::optional<std::chrono::high_resolution_clock::time_point> m_start_time{};
     std::chrono::high_resolution_clock::time_point m_pause_time{};
     std::chrono::high_resolution_clock::duration m_pause_duration{};
+    // The highest timestamp of the video frames handed out in the loop that plays, and the length
+    // of the loops played before it.
+    u64 m_last_video_ts = 0;
+    u64 m_video_loop_base = 0;
 };
 
 } // namespace Libraries::AvPlayer
