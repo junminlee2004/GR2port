@@ -17,6 +17,7 @@
 #include "graphics/gr2port/gr2port.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/meshes.h"
+#include "graphics/gr2port/mob_float.h"
 #include "graphics/gr2port/mouse_camera.h"
 #include "graphics/gr2port/movies.h"
 #include "graphics/gr2port/particle_capture.h"
@@ -111,6 +112,7 @@ void Install(VAddr module_base) {
     Timeline::Install(module_base, c, StubAreaSize);
     PlayerControl::Install(module_base, c, StubAreaSize);
     ExitRows::Install(module_base, c, StubAreaSize);
+    MobFloat::Install(module_base, c, StubAreaSize);
     if (Hooks::ObserveReturn(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraphEnd, 0) ==
             Hooks::Result::Mismatch ||
         Hooks::ObserveEntry(module_base, NextContext, c, StubAreaSize, &OnNextContext, 0) ==
