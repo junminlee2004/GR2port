@@ -5,8 +5,12 @@
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
+#include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_video.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "common/logging/log.h"
 #include "input/controller.h"
@@ -30,12 +34,25 @@ void StoreSize(int width, int height) {
                  std::memory_order_relaxed);
 }
 
+// Whether the print screen key is down. Windows tells SDL of that key only when it is released,
+// so there the key's own state is read.
+bool PrintScreenHeld() {
+#ifdef _WIN32
+    return (GetAsyncKeyState(VK_SNAPSHOT) & 0x8000) != 0;
+#else
+    return SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_PRINTSCREEN];
+#endif
+}
+
 bool SDLCALL WatchEvents(void*, SDL_Event* event) {
     if (event->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED &&
         event->window.windowID == g_window_id.load(std::memory_order_relaxed)) {
         StoreSize(event->window.data1, event->window.data2);
     }
-    if (event->type == SDL_EVENT_KEY_DOWN && event->key.key == SDLK_F2 && !event->key.repeat) {
+    // Shift + Print Screen + F2 stops the capture, and starts it again. The picture stands still
+    // while it is stopped, so no key alone does it.
+    if (event->type == SDL_EVENT_KEY_DOWN && event->key.key == SDLK_F2 && !event->key.repeat &&
+        (event->key.mod & SDL_KMOD_SHIFT) != 0 && PrintScreenHeld()) {
         Capture::ToggleCapture();
     }
     return true;
