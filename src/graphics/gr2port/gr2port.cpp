@@ -31,6 +31,7 @@
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/timeline.h"
 #include "graphics/gr2port/ui_capture.h"
+#include "graphics/gr2port/water_splashes.h"
 
 namespace Gr2Port {
 
@@ -122,6 +123,7 @@ void Install(VAddr module_base) {
     GravityKick::Install(module_base, c, StubAreaSize);
     GravitySlide::Install(module_base, c, StubAreaSize);
     ScriptTimers::Install(module_base, c, StubAreaSize);
+    WaterSplashes::Install(module_base, c, StubAreaSize);
     if (Hooks::ObserveReturn(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraphEnd, 0) ==
             Hooks::Result::Mismatch ||
         Hooks::ObserveEntry(module_base, NextContext, c, StubAreaSize, &OnNextContext, 0) ==
