@@ -228,6 +228,14 @@ void QueueVideoHeap(u32 megabytes) {
     QueueBytes(VideoHeapSize, std::move(bytes));
 }
 
+// A gravity slide kick that hits scales the slide's velocity once, by a factor of the gravity
+// style raised to the power of the game step times 30: at the PS4's 30 frames a second the power
+// is 1 and the factor itself results. Lunar's factor is -0.3, the kick's rebound, and at any other
+// frame rate its power is not a number: the game hangs in the sweeps that follow. With the call
+// to powf skipped the factor scales the velocity as it is.
+constexpr u64 SlideKickPower = 0x008be47e;
+constexpr std::string_view CallSkipped = "0f1f440000";
+
 } // namespace
 
 std::vector<Extra> Extras() {
@@ -287,6 +295,7 @@ void ApplySettings() {
     QueueVideoHeap(heap_growth);
     QueueDetail(WorldDetailRow, WorldDetail, graphics.near_environment_detail);
     QueueDetail(CharacterDetailRow, CharacterDetail, graphics.character_detail);
+    QueueBytes(SlideKickPower, std::string(CallSkipped));
 }
 
 float AspectRatio() {
