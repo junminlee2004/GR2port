@@ -61,6 +61,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/particles.h
     ${CMAKE_CURRENT_LIST_DIR}/mob_float.cpp
     ${CMAKE_CURRENT_LIST_DIR}/mob_float.h
+    ${CMAKE_CURRENT_LIST_DIR}/hair_flutter.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/hair_flutter.h
     ${CMAKE_CURRENT_LIST_DIR}/pass_times.cpp
     ${CMAKE_CURRENT_LIST_DIR}/pass_times.h
     ${CMAKE_CURRENT_LIST_DIR}/pipeline.cpp
