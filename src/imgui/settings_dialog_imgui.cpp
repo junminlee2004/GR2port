@@ -67,6 +67,7 @@ void SettingsWindow::LoadSettings(std::string profile) {
     gyroInvertYawSetting = EmulatorSettings.IsGyroInvertYaw();
     gyroInvertXSetting = EmulatorSettings.IsGyroInvertX();
     gyroInvertRollSetting = EmulatorSettings.IsGyroInvertRoll();
+    gyroDeadzoneSetting = EmulatorSettings.GetGyroDeadzone();
     backgroundControllerSetting = EmulatorSettings.IsBackgroundControllerInput();
     cursorStateSetting = EmulatorSettings.GetCursorState();
     cursorTimeoutSetting = EmulatorSettings.GetCursorHideTimeout();
@@ -119,6 +120,7 @@ void SettingsWindow::SaveSettings(std::string profile) {
     EmulatorSettings.SetGyroInvertYaw(gyroInvertYawSetting, isSpecific);
     EmulatorSettings.SetGyroInvertX(gyroInvertXSetting, isSpecific);
     EmulatorSettings.SetGyroInvertRoll(gyroInvertRollSetting, isSpecific);
+    EmulatorSettings.SetGyroDeadzone(gyroDeadzoneSetting, isSpecific);
     EmulatorSettings.SetBackgroundControllerInput(backgroundControllerSetting, isSpecific);
     EmulatorSettings.SetCursorState(cursorStateSetting, isSpecific);
     EmulatorSettings.SetCursorHideTimeout(cursorTimeoutSetting, isSpecific);
@@ -550,6 +552,8 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
             AddSettingCheckbox("Gyro: Invert Yaw", gyroInvertYawSetting);
             AddSettingCheckbox("Gyro: Invert Pitch", gyroInvertXSetting);
             AddSettingCheckbox("Gyro: Invert Roll", gyroInvertRollSetting);
+            AddSettingSliderInt("Gyro: Deadzone (degrees per second)", gyroDeadzoneSetting, 0,
+                                MaxGyroDeadzone);
             AddSettingCheckbox("Enable Background Controller Input", backgroundControllerSetting);
             AddSettingCombo("Hide Cursor", cursorStateSetting, hideCursorOptions);
 

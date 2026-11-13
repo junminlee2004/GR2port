@@ -318,6 +318,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(DebugSettings, debug_dump, config_version)
 // Input settings
 // -------------------------------
 
+// The highest gyro deadzone the settings offer, in degrees per second.
+inline constexpr int MaxGyroDeadzone = 20;
+
 struct InputSettings {
     Setting<int> cursor_state{HideCursorState::Idle};      // specific
     Setting<int> cursor_hide_timeout{5};                   // specific
@@ -331,6 +334,9 @@ struct InputSettings {
     Setting<bool> gyro_invert_yaw{false};    // specific
     Setting<bool> gyro_invert_x{false};      // specific
     Setting<bool> gyro_invert_roll{false};   // specific
+    // A gyro sensor's rotation slower than this many degrees per second counts as none; 0 turns
+    // the deadzone off.
+    Setting<int> gyro_deadzone{0}; // specific
     Setting<bool> use_unified_input_config{true};
     Setting<std::string> default_controller_id{""};
     Setting<bool> background_controller_input{false}; // specific
@@ -354,6 +360,7 @@ struct InputSettings {
             make_override<InputSettings>("gyro_invert_yaw", &InputSettings::gyro_invert_yaw),
             make_override<InputSettings>("gyro_invert_x", &InputSettings::gyro_invert_x),
             make_override<InputSettings>("gyro_invert_roll", &InputSettings::gyro_invert_roll),
+            make_override<InputSettings>("gyro_deadzone", &InputSettings::gyro_deadzone),
             make_override<InputSettings>("background_controller_input",
                                          &InputSettings::background_controller_input),
             make_override<InputSettings>("ime_accessibility_enabled",
@@ -371,11 +378,11 @@ struct InputSettings {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(InputSettings, cursor_state, cursor_hide_timeout,
                                    usb_device_backend, use_special_pad, special_pad_class,
                                    motion_controls_enabled, gyro_swap_yaw_roll, gyro_invert_yaw,
-                                   gyro_invert_x, gyro_invert_roll, use_unified_input_config,
-                                   default_controller_id, background_controller_input,
-                                   ime_accessibility_enabled, ime_url_mail_short_panel, camera_id,
-                                   is_circle_enter, use_mice_as_mice, use_keyboard_as_keyboard,
-                                   vibration_enabled)
+                                   gyro_invert_x, gyro_invert_roll, gyro_deadzone,
+                                   use_unified_input_config, default_controller_id,
+                                   background_controller_input, ime_accessibility_enabled,
+                                   ime_url_mail_short_panel, camera_id, is_circle_enter,
+                                   use_mice_as_mice, use_keyboard_as_keyboard, vibration_enabled)
 // -------------------------------
 // Audio settings
 // -------------------------------
@@ -848,6 +855,7 @@ public:
     SETTING_FORWARD_BOOL(m_input, GyroInvertYaw, gyro_invert_yaw)
     SETTING_FORWARD_BOOL(m_input, GyroInvertX, gyro_invert_x)
     SETTING_FORWARD_BOOL(m_input, GyroInvertRoll, gyro_invert_roll)
+    SETTING_FORWARD(m_input, GyroDeadzone, gyro_deadzone)
     SETTING_FORWARD_BOOL(m_input, BackgroundControllerInput, background_controller_input)
     SETTING_FORWARD_BOOL(m_input, ImeAccessibilityEnabled, ime_accessibility_enabled)
     SETTING_FORWARD_BOOL(m_input, ImeUrlMailShortPanel, ime_url_mail_short_panel)

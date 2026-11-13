@@ -118,6 +118,7 @@ constexpr Area RemoveDefaultPadButton{312, 249, 565, 272};
 constexpr int GroupInset = 12;
 constexpr int ToggleTop = 108;
 constexpr int ToggleStep = 21;
+constexpr int GyroDeadzoneTop = 234;
 constexpr int PadTop = 108;
 constexpr int PadIdTop = 134;
 constexpr int DefaultPadNameTop = 180;
@@ -149,10 +150,6 @@ constexpr std::array Toggles{
            &EmulatorSettingsImpl::SetGyroInvertRoll, false},
     Toggle{"Enable Vibration", &EmulatorSettingsImpl::IsVibrationEnabled,
            &EmulatorSettingsImpl::SetVibrationEnabled, true},
-    Toggle{"Enable Background Controller Input", &EmulatorSettingsImpl::IsBackgroundControllerInput,
-           &EmulatorSettingsImpl::SetBackgroundControllerInput, false},
-    Toggle{"Use Keyboard as Keyboard", &EmulatorSettingsImpl::IsKeyboardUsedAsKeyboard,
-           &EmulatorSettingsImpl::SetKeyboardUsedAsKeyboard, false},
 };
 // The toggles a handheld preset checks.
 constexpr size_t GyroSwapToggle = 1;
@@ -400,6 +397,7 @@ struct Dialog {
     QComboBox* near_detail = nullptr;
     QComboBox* character_detail = nullptr;
     std::array<QCheckBox*, Toggles.size()> toggles{};
+    QSlider* gyro_deadzone = nullptr;
     QComboBox* active_pad = nullptr;
     QLabel* active_pad_id = nullptr;
     QLabel* default_pad_name = nullptr;
@@ -667,6 +665,7 @@ void ShowController(Dialog& dialog) {
     for (size_t i = 0; i < Toggles.size(); ++i) {
         dialog.toggles[i]->setChecked((EmulatorSettings.*Toggles[i].get)());
     }
+    dialog.gyro_deadzone->setValue(EmulatorSettings.GetGyroDeadzone());
     dialog.trophy_popups->setChecked(!EmulatorSettings.IsTrophyPopupDisabled());
     dialog.input_config = Input::GetInputConfigFile(
         EmulatorSettings.IsUseUnifiedInputConfig() ? "default" : GameCheck::TitleId());
@@ -677,12 +676,14 @@ void ShowController(Dialog& dialog) {
     dialog.default_pad = EmulatorSettings.GetDefaultControllerId();
 }
 
-// Saves the check boxes and the default gamepad to config.json and the deadzones and the touch pad
-// swipe switch to the input config. The gamepad picked plays as player 1 in this run.
+// Saves the check boxes, the gyro deadzone and the default gamepad to config.json and the stick
+// deadzones and the touch pad swipe switch to the input config. The gamepad picked plays as player
+// 1 in this run.
 void SaveController(const Dialog& dialog) {
     for (size_t i = 0; i < Toggles.size(); ++i) {
         (EmulatorSettings.*Toggles[i].set)(dialog.toggles[i]->isChecked(), false);
     }
+    EmulatorSettings.SetGyroDeadzone(dialog.gyro_deadzone->value(), false);
     EmulatorSettings.SetDefaultControllerId(dialog.default_pad);
     EmulatorSettings.Save();
     const int pad = dialog.active_pad->currentIndex();
@@ -1261,6 +1262,10 @@ void BuildController(Dialog& dialog, QWidget* page) {
             Place(page, ControllerGroup.left + GroupInset, top,
                   ControllerGroup.right - ControllerGroup.left - 2 * GroupInset, CheckHeight));
     }
+    dialog.gyro_deadzone =
+        MakeSlider(dialog, page, "Gyro Deadzone", ControllerGroup.left + GroupInset,
+                   ControllerGroup.right - GroupInset, GyroDeadzoneTop, 0, MaxGyroDeadzone,
+                   QStringLiteral("\u00b0/s"));
     const int pad_left = ActivePadGroup.left + GroupInset;
     const int pad_width = ActivePadGroup.right - GroupInset - pad_left;
     MakeGroup(dialog, page, "Active Gamepad", ActivePadGroup);
@@ -1466,6 +1471,7 @@ void SetDefaults(Dialog& dialog) {
     for (size_t i = 0; i < Toggles.size(); ++i) {
         dialog.toggles[i]->setChecked(Toggles[i].fallback);
     }
+    dialog.gyro_deadzone->setValue(InputSettings{}.gyro_deadzone.value);
     ShowDeadzones(dialog, DefaultDeadzones());
     ShowMouse(dialog, Settings::Mouse{});
     dialog.touch_swipe_box->setChecked(false);

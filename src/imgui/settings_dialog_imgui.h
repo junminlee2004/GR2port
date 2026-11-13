@@ -130,6 +130,7 @@ private:
     bool gyroInvertYawSetting;
     bool gyroInvertXSetting;
     bool gyroInvertRollSetting;
+    int gyroDeadzoneSetting;
     bool backgroundControllerSetting;
     int cursorStateSetting;
     int cursorTimeoutSetting;

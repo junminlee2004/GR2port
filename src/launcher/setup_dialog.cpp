@@ -119,8 +119,9 @@ enum Control : int {
     IdGyroPitch,
     IdGyroRoll,
     IdVibration,
-    IdBackgroundInput,
-    IdKeyboard,
+    IdGyroDeadzoneLabel,
+    IdGyroDeadzone,
+    IdGyroDeadzoneValue,
     IdActivePadGroup,
     IdActivePad,
     IdActivePadId,
@@ -237,6 +238,7 @@ constexpr RECT RemoveDefaultPadButton{312, 249, 565, 272};
 constexpr int GroupInset = 12;
 constexpr int ToggleTop = 108;
 constexpr int ToggleStep = 21;
+constexpr int GyroDeadzoneTop = 234;
 constexpr int PadTop = 108;
 constexpr int PadIdTop = 134;
 constexpr int DefaultPadNameTop = 180;
@@ -271,11 +273,6 @@ constexpr std::array Toggles{
            &EmulatorSettingsImpl::SetGyroInvertRoll, false},
     Toggle{IdVibration, L"Enable Vibration", &EmulatorSettingsImpl::IsVibrationEnabled,
            &EmulatorSettingsImpl::SetVibrationEnabled, true},
-    Toggle{IdBackgroundInput, L"Enable Background Controller Input",
-           &EmulatorSettingsImpl::IsBackgroundControllerInput,
-           &EmulatorSettingsImpl::SetBackgroundControllerInput, false},
-    Toggle{IdKeyboard, L"Use Keyboard as Keyboard", &EmulatorSettingsImpl::IsKeyboardUsedAsKeyboard,
-           &EmulatorSettingsImpl::SetKeyboardUsedAsKeyboard, false},
 };
 
 struct Slider {
@@ -945,9 +942,21 @@ std::wstring Percent(LRESULT value) {
     return std::to_wstring(value) + L"%";
 }
 
+std::wstring DegreesPerSecond(LRESULT value) {
+    return std::to_wstring(value) + L"\xb0/s";
+}
+
+void ShowGyroDeadzone(const Dialog& dialog, int value) {
+    SendMessageW(Item(dialog, IdGyroDeadzone), TBM_SETPOS, TRUE, value);
+    SetWindowTextW(Item(dialog, IdGyroDeadzoneValue), DegreesPerSecond(value).c_str());
+}
+
 // The number beside a slider follows it.
 void ShowSliderValue(const Dialog& dialog, HWND bar) {
     const LRESULT value = SendMessageW(bar, TBM_GETPOS, 0, 0);
+    if (GetDlgCtrlID(bar) == IdGyroDeadzone) {
+        SetWindowTextW(Item(dialog, IdGyroDeadzoneValue), DegreesPerSecond(value).c_str());
+    }
     for (const Stick& stick : Sticks) {
         for (const Slider& slider : stick.sliders) {
             if (slider.bar == GetDlgCtrlID(bar)) {
@@ -1100,6 +1109,7 @@ void ShowController(Dialog& dialog) {
     for (const Toggle& toggle : Toggles) {
         Check(dialog, toggle.id, (EmulatorSettings.*toggle.get)());
     }
+    ShowGyroDeadzone(dialog, EmulatorSettings.GetGyroDeadzone());
     Check(dialog, IdTrophyPopups, !EmulatorSettings.IsTrophyPopupDisabled());
     dialog.input_config = Input::GetInputConfigFile(
         EmulatorSettings.IsUseUnifiedInputConfig() ? "default" : GameCheck::TitleId());
@@ -1110,12 +1120,15 @@ void ShowController(Dialog& dialog) {
     dialog.default_pad = EmulatorSettings.GetDefaultControllerId();
 }
 
-// Saves the check boxes and the default gamepad to config.json and the deadzones and the touch pad
-// swipe switch to the input config. The gamepad picked plays as player 1 in this run.
+// Saves the check boxes, the gyro deadzone and the default gamepad to config.json and the stick
+// deadzones and the touch pad swipe switch to the input config. The gamepad picked plays as player
+// 1 in this run.
 void SaveController(HWND window, const Dialog& dialog) {
     for (const Toggle& toggle : Toggles) {
         (EmulatorSettings.*toggle.set)(Checked(dialog, toggle.id), false);
     }
+    EmulatorSettings.SetGyroDeadzone(
+        static_cast<int>(SendMessageW(Item(dialog, IdGyroDeadzone), TBM_GETPOS, 0, 0)), false);
     EmulatorSettings.SetDefaultControllerId(dialog.default_pad);
     EmulatorSettings.Save();
     const int pad = Selected(Item(dialog, IdActivePad));
@@ -1755,6 +1768,21 @@ void Build(HWND window, Dialog& dialog) {
                                        {ControllerGroup.left + GroupInset, top,
                                         ControllerGroup.right - GroupInset, top + CheckHeight}));
     }
+    const int gyro_left = ControllerGroup.left + GroupInset;
+    const int gyro_right = ControllerGroup.right - GroupInset;
+    controller_order.push_back(add(
+        WC_STATICW, L"Gyro Deadzone", SS_LEFT, IdGyroDeadzoneLabel,
+        {gyro_left, GyroDeadzoneTop, gyro_right - SliderValueWidth, GyroDeadzoneTop + InfoHeight}));
+    controller_order.push_back(add(WC_STATICW, L"", SS_RIGHT, IdGyroDeadzoneValue,
+                                   {gyro_right - SliderValueWidth, GyroDeadzoneTop, gyro_right,
+                                    GyroDeadzoneTop + InfoHeight}));
+    const int gyro_bar_top = GyroDeadzoneTop + SliderTop;
+    const HWND gyro_bar =
+        add(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, IdGyroDeadzone,
+            {gyro_left - SliderOverhang, gyro_bar_top, gyro_right + SliderOverhang,
+             gyro_bar_top + SliderHeight});
+    SendMessageW(gyro_bar, TBM_SETRANGE, FALSE, MAKELPARAM(0, MaxGyroDeadzone));
+    controller_order.push_back(gyro_bar);
     const int pad_left = ActivePadGroup.left + GroupInset;
     const int pad_right = ActivePadGroup.right - GroupInset;
     controller_order.push_back(
@@ -2061,6 +2089,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             for (const Toggle& toggle : Toggles) {
                 Check(dialog, toggle.id, toggle.fallback);
             }
+            ShowGyroDeadzone(dialog, InputSettings{}.gyro_deadzone.value);
             ShowDeadzones(dialog, DefaultDeadzones());
             ShowMouse(dialog, Settings::Mouse{});
             Check(dialog, IdTouchSwipe, false);

@@ -120,6 +120,14 @@ void GameController::UpdateGyro(const float gyro[3]) {
     std::memcpy(gyro_buf, gyro, sizeof(gyro_buf));
 }
 
+void GameController::UpdateSensorGyro(const float gyro[3]) {
+    // The setting is in degrees per second.
+    const float deadzone =
+        static_cast<float>(EmulatorSettings.GetGyroDeadzone()) * std::numbers::pi_v<float> / 180.0f;
+    constexpr float still[3]{};
+    UpdateGyro(std::hypot(gyro[0], gyro[1], gyro[2]) < deadzone ? still : gyro);
+}
+
 void GameController::UpdateAcceleration(const float acceleration[3]) {
     std::lock_guard lock{m_state_mutex};
     std::memcpy(accel_buf, acceleration, sizeof(accel_buf));
