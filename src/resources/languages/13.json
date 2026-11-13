@@ -266,6 +266,10 @@
     "Right Pad": "Höger styrplatta",
     "Far Environment LOD Quality": "LOD-kvalitet, avlägsen miljö",
     "Near Environment LOD Quality": "LOD-kvalitet, nära miljö",
-    "Character Detail": "Karaktärsdetaljer"
+    "Character Detail": "Karaktärsdetaljer",
+    "Exit to Desktop": "Avsluta till skrivbordet",
+    "EXIT TO DESKTOP": "AVSLUTA TILL SKRIVBORDET",
+    "Close the game and return to the desktop.": "Stäng spelet och återgå till skrivbordet.",
+    "Are you sure you want to quit to desktop?": "Är du säker på att du vill avsluta till skrivbordet?"
   }
 }

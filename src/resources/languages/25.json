@@ -266,6 +266,10 @@
     "Right Pad": "Δεξιά επιφάνεια",
     "Far Environment LOD Quality": "LOD μακρινού περιβάλλοντος",
     "Near Environment LOD Quality": "LOD κοντινού περιβάλλοντος",
-    "Character Detail": "Λεπτομέρεια χαρακτήρων"
+    "Character Detail": "Λεπτομέρεια χαρακτήρων",
+    "Exit to Desktop": "Έξοδος στην επιφάνεια εργασίας",
+    "EXIT TO DESKTOP": "ΕΞΟΔΟΣ ΣΤΗΝ ΕΠΙΦΑΝΕΙΑ ΕΡΓΑΣΙΑΣ",
+    "Close the game and return to the desktop.": "Κλείνει το παιχνίδι και επιστρέφει στην επιφάνεια εργασίας.",
+    "Are you sure you want to quit to desktop?": "Θέλετε σίγουρα να κάνετε έξοδο στην επιφάνεια εργασίας;"
   }
 }

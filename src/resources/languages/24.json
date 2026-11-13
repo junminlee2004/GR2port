@@ -266,6 +266,10 @@
     "Right Pad": "Jobb érintőpad",
     "Far Environment LOD Quality": "Távoli környezet LOD-minősége",
     "Near Environment LOD Quality": "Közeli környezet LOD-minősége",
-    "Character Detail": "Karakterek részletessége"
+    "Character Detail": "Karakterek részletessége",
+    "Exit to Desktop": "Kilépés az asztalra",
+    "EXIT TO DESKTOP": "KILÉPÉS AZ ASZTALRA",
+    "Close the game and return to the desktop.": "Bezárja a játékot, és visszatér az asztalra.",
+    "Are you sure you want to quit to desktop?": "Biztosan ki szeretnél lépni az asztalra?"
   }
 }

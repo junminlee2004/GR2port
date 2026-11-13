@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-// The text GR2port shows outside the game, in the console language the player picks. Each console
+// GR2port's own text, in the console language the player picks. Each console
 // language but English has a table from the English text to its own, embedded from
 // src/resources/languages/<console language>.json. Text a table lacks stays English.
 namespace Gr2Port::Language {
@@ -27,6 +27,9 @@ void Use(int console_language);
 /// English text in the current language, with each {N} replaced by values[N]. Without values the
 /// text is returned as the table has it, so fmt placeholders stay.
 std::string Text(std::string_view english, std::span<const std::string> values = {});
+
+/// English text in a console language's table, whatever the current language is.
+std::string TextIn(int console_language, std::string_view english);
 
 #ifdef _WIN32
 /// The same for UTF-16 text.

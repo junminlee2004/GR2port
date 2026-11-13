@@ -266,6 +266,10 @@
     "Right Pad": "Права панель",
     "Far Environment LOD Quality": "LOD далекого оточення",
     "Near Environment LOD Quality": "LOD ближнього оточення",
-    "Character Detail": "Деталізація персонажів"
+    "Character Detail": "Деталізація персонажів",
+    "Exit to Desktop": "Вийти на робочий стіл",
+    "EXIT TO DESKTOP": "ВИЙТИ НА РОБОЧИЙ СТІЛ",
+    "Close the game and return to the desktop.": "Закрити гру й повернутися на робочий стіл.",
+    "Are you sure you want to quit to desktop?": "Ви впевнені, що хочете вийти на робочий стіл?"
   }
 }

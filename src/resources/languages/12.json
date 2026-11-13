@@ -266,6 +266,10 @@
     "Right Pad": "Oikea levy",
     "Far Environment LOD Quality": "Kaukaisen ympäristön LOD-laatu",
     "Near Environment LOD Quality": "Lähiympäristön LOD-laatu",
-    "Character Detail": "Hahmojen yksityiskohdat"
+    "Character Detail": "Hahmojen yksityiskohdat",
+    "Exit to Desktop": "Poistu työpöydälle",
+    "EXIT TO DESKTOP": "POISTU TYÖPÖYDÄLLE",
+    "Close the game and return to the desktop.": "Sulje peli ja palaa työpöydälle.",
+    "Are you sure you want to quit to desktop?": "Haluatko varmasti poistua työpöydälle?"
   }
 }

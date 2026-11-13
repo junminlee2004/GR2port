@@ -266,6 +266,10 @@
     "Right Pad": "Panel derecho",
     "Far Environment LOD Quality": "Calidad LOD entorno lejano",
     "Near Environment LOD Quality": "Calidad LOD entorno cercano",
-    "Character Detail": "Detalle de personajes"
+    "Character Detail": "Detalle de personajes",
+    "Exit to Desktop": "Salir al escritorio",
+    "EXIT TO DESKTOP": "SALIR AL ESCRITORIO",
+    "Close the game and return to the desktop.": "Cierra el juego y vuelve al escritorio.",
+    "Are you sure you want to quit to desktop?": "¿Seguro que quieres salir al escritorio?"
   }
 }

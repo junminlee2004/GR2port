@@ -266,6 +266,10 @@
     "Right Pad": "‫اللوحة اليمنى‬",
     "Far Environment LOD Quality": "‫جودة LOD للبيئة البعيدة‬",
     "Near Environment LOD Quality": "‫جودة LOD للبيئة القريبة‬",
-    "Character Detail": "‫تفاصيل الشخصيات‬"
+    "Character Detail": "‫تفاصيل الشخصيات‬",
+    "Exit to Desktop": "‫الخروج إلى سطح المكتب‬",
+    "EXIT TO DESKTOP": "‫الخروج إلى سطح المكتب‬",
+    "Close the game and return to the desktop.": "‫أغلق اللعبة وعُد إلى سطح المكتب.‬",
+    "Are you sure you want to quit to desktop?": "‫هل أنت متأكد أنك تريد الخروج إلى سطح المكتب؟‬"
   }
 }

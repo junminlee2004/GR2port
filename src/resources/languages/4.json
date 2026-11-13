@@ -266,6 +266,10 @@
     "Right Pad": "Rechtes Trackpad",
     "Far Environment LOD Quality": "LOD-Qualität ferne Umgebung",
     "Near Environment LOD Quality": "LOD-Qualität nahe Umgebung",
-    "Character Detail": "Figurendetails"
+    "Character Detail": "Figurendetails",
+    "Exit to Desktop": "Zum Desktop beenden",
+    "EXIT TO DESKTOP": "ZUM DESKTOP BEENDEN",
+    "Close the game and return to the desktop.": "Beende das Spiel und kehre zum Desktop zurück.",
+    "Are you sure you want to quit to desktop?": "Möchtest du das Spiel wirklich zum Desktop beenden?"
   }
 }

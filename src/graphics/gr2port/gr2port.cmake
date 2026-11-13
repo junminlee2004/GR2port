@@ -15,6 +15,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/device_lost.cpp
     ${CMAKE_CURRENT_LIST_DIR}/device_lost.h
     ${CMAKE_CURRENT_LIST_DIR}/device.h
+    ${CMAKE_CURRENT_LIST_DIR}/exit_rows.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/exit_rows.h
     ${CMAKE_CURRENT_LIST_DIR}/fault_report.cpp
     ${CMAKE_CURRENT_LIST_DIR}/fault_report.h
     ${CMAKE_CURRENT_LIST_DIR}/effects.cpp

@@ -169,6 +169,29 @@ std::string Text(std::string_view english, std::span<const std::string> values) 
     return text;
 }
 
+std::string TextIn(int console_language, std::string_view english) {
+    // A regional form lacks the strings it shares with its base.
+    for (int depth = 0; depth < 3; ++depth) {
+        const std::optional<nlohmann::json> root = ReadFile(console_language);
+        if (!root) {
+            break;
+        }
+        if (const auto strings = root->find("strings");
+            strings != root->end() && strings->is_object()) {
+            const auto text = strings->find(std::string{english});
+            if (text != strings->end() && text->is_string()) {
+                return text->get<std::string>();
+            }
+        }
+        const auto base = root->find("base");
+        if (base == root->end() || !base->is_number_integer()) {
+            break;
+        }
+        console_language = base->get<int>();
+    }
+    return std::string{english};
+}
+
 #ifdef _WIN32
 std::wstring Text(std::wstring_view english, std::span<const std::wstring> values) {
     std::wstring text;

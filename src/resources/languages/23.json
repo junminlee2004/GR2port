@@ -266,6 +266,10 @@
     "Right Pad": "Pravý panel",
     "Far Environment LOD Quality": "Kvalita LOD vzdáleného okolí",
     "Near Environment LOD Quality": "Kvalita LOD blízkého okolí",
-    "Character Detail": "Detaily postav"
+    "Character Detail": "Detaily postav",
+    "Exit to Desktop": "Ukončit na plochu",
+    "EXIT TO DESKTOP": "UKONČIT NA PLOCHU",
+    "Close the game and return to the desktop.": "Zavře hru a vrátí se na plochu.",
+    "Are you sure you want to quit to desktop?": "Opravdu chcete ukončit hru a přejít na plochu?"
   }
 }

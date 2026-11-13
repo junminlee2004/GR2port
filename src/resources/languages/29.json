@@ -266,6 +266,10 @@
     "Right Pad": "Pad Kanan",
     "Far Environment LOD Quality": "Kualitas LOD Lingkungan Jauh",
     "Near Environment LOD Quality": "Kualitas LOD Lingkungan Dekat",
-    "Character Detail": "Detail Karakter"
+    "Character Detail": "Detail Karakter",
+    "Exit to Desktop": "Keluar ke Desktop",
+    "EXIT TO DESKTOP": "KELUAR KE DESKTOP",
+    "Close the game and return to the desktop.": "Tutup game dan kembali ke desktop.",
+    "Are you sure you want to quit to desktop?": "Yakin ingin keluar ke desktop?"
   }
 }

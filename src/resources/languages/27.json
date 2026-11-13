@@ -266,6 +266,10 @@
     "Right Pad": "แพดขวา",
     "Far Environment LOD Quality": "คุณภาพ LOD ฉากระยะไกล",
     "Near Environment LOD Quality": "คุณภาพ LOD ฉากระยะใกล้",
-    "Character Detail": "รายละเอียดตัวละคร"
+    "Character Detail": "รายละเอียดตัวละคร",
+    "Exit to Desktop": "ออกสู่เดสก์ท็อป",
+    "EXIT TO DESKTOP": "ออกสู่เดสก์ท็อป",
+    "Close the game and return to the desktop.": "ปิดเกมและกลับสู่เดสก์ท็อป",
+    "Are you sure you want to quit to desktop?": "คุณแน่ใจหรือไม่ว่าต้องการออกสู่เดสก์ท็อป"
   }
 }

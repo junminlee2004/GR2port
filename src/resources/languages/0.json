@@ -266,6 +266,10 @@
     "Right Pad": "右パッド",
     "Far Environment LOD Quality": "遠景の環境LOD品質",
     "Near Environment LOD Quality": "近景の環境LOD品質",
-    "Character Detail": "キャラクターの詳細度"
+    "Character Detail": "キャラクターの詳細度",
+    "Exit to Desktop": "デスクトップへ",
+    "EXIT TO DESKTOP": "デスクトップへ",
+    "Close the game and return to the desktop.": "ゲームを終了してデスクトップへ戻ります",
+    "Are you sure you want to quit to desktop?": "ゲームを終了してデスクトップへ戻りますか？"
   }
 }

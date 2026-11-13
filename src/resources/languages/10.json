@@ -266,6 +266,10 @@
     "Right Pad": "右觸控板",
     "Far Environment LOD Quality": "遠景環境 LOD 品質",
     "Near Environment LOD Quality": "近景環境 LOD 品質",
-    "Character Detail": "角色細節"
+    "Character Detail": "角色細節",
+    "Exit to Desktop": "返回桌面",
+    "EXIT TO DESKTOP": "返回桌面",
+    "Close the game and return to the desktop.": "結束遊戲並返回桌面",
+    "Are you sure you want to quit to desktop?": "確定要結束遊戲並返回桌面嗎？"
   }
 }

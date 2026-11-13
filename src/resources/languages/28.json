@@ -266,6 +266,10 @@
     "Right Pad": "Bàn cảm ứng phải",
     "Far Environment LOD Quality": "Chất lượng LOD môi trường xa",
     "Near Environment LOD Quality": "Chất lượng LOD môi trường gần",
-    "Character Detail": "Chi tiết nhân vật"
+    "Character Detail": "Chi tiết nhân vật",
+    "Exit to Desktop": "Thoát ra màn hình nền",
+    "EXIT TO DESKTOP": "THOÁT RA MÀN HÌNH NỀN",
+    "Close the game and return to the desktop.": "Đóng trò chơi và trở về màn hình nền.",
+    "Are you sure you want to quit to desktop?": "Bạn có chắc muốn thoát ra màn hình nền không?"
   }
 }
