@@ -63,6 +63,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/mob_float.h
     ${CMAKE_CURRENT_LIST_DIR}/gravity_kick.cpp
     ${CMAKE_CURRENT_LIST_DIR}/gravity_kick.h
+    ${CMAKE_CURRENT_LIST_DIR}/gravity_slide.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/gravity_slide.h
     ${CMAKE_CURRENT_LIST_DIR}/hair_flutter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/hair_flutter.h
     ${CMAKE_CURRENT_LIST_DIR}/pass_times.cpp
