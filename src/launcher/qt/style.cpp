@@ -6,6 +6,7 @@
 #include <QProxyStyle>
 #include <QStyleFactory>
 #include <QStyleOptionGroupBox>
+#include <QWidget>
 
 #include "launcher/qt/style.h"
 
@@ -80,7 +81,7 @@ public:
         case PM_IndicatorHeight:
             return CheckSide;
         case PM_TabBarTabHSpace:
-            return TabSpace;
+            return TabSpace - (widget ? widget->property(TabSpaceTaken).toInt() : 0);
         default:
             return QProxyStyle::pixelMetric(metric, option, widget);
         }

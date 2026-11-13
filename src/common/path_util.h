@@ -23,6 +23,27 @@ enum class PathType {
 };
 
 constexpr auto PORTABLE_DIR = "userdata";
+constexpr auto GLOBAL_DIR = "GR2port";
+
+/// Where GR2port keeps the user folder.
+enum class UserFolderMode {
+    /// PORTABLE_DIR, beside the executable.
+    Portable,
+    /// GLOBAL_DIR, in the application data of the user's account.
+    Global,
+};
+
+/// What became of the launcher's request for the other user folder mode when this run started.
+enum class UserFolderSwitch {
+    /// No request, or the folder moved to the mode's place.
+    None,
+    /// The mode's place held a folder already. The game uses it, and the other stays in place.
+    Kept,
+    /// No global folder to bring back was found, so a new portable folder was made.
+    GlobalMissing,
+    /// The folder could not be moved, and the mode stays as it was.
+    Failed,
+};
 
 // Sub-directories contained within a user data directory
 constexpr auto LOG_DIR = "log";
@@ -76,6 +97,28 @@ constexpr auto LOG_FILE = "log.txt";
  * @returns The filesystem path associated with the PathType enum as a UTF-8 encoded std::string.
  */
 [[nodiscard]] std::string GetUserPathString(PathType user_path);
+
+/// The executable's file, on Linux its AppImage when it runs from one. Empty when unknown.
+[[nodiscard]] std::filesystem::path GetExecutableFile();
+
+/// The folder that holds the executable, on macOS the one that holds its app bundle.
+[[nodiscard]] std::filesystem::path GetExecutableDirectory();
+
+/// The user folder of the global mode. Empty when the account has no application data folder.
+[[nodiscard]] std::filesystem::path GetGlobalUserFolder();
+
+[[nodiscard]] UserFolderMode GetUserFolderMode();
+
+[[nodiscard]] UserFolderSwitch GetUserFolderSwitch();
+
+/// Asks for mode's user folder. The executable moves the folder when it next starts in this
+/// run's environment, which is what RestartExecutable gives it.
+void RequestUserFolderMode(UserFolderMode mode);
+
+/// Starts the executable again with this run's arguments. On Linux this process becomes it, and
+/// the call returns only on failure. On Windows the new process waits for this one to end, so
+/// the caller ends at once. Returns false when the executable did not start.
+bool RestartExecutable();
 
 /**
  * Sets a new filesystem path associated with the PathType enum.

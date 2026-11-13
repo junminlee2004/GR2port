@@ -9,7 +9,8 @@ namespace Gr2Port::Launcher {
 
 class Art;
 
-/// Shows the Setup dialog over owner until Ok or Cancel. Ok saves the settings.
-void ShowSetup(QWidget* owner, const Art& art);
+/// Shows the Setup dialog over owner until Ok or Cancel. Ok saves the settings. Returns whether
+/// it saved a change of the Paths tab, which the executable takes when it starts again.
+bool ShowSetup(QWidget* owner, const Art& art);
 
 } // namespace Gr2Port::Launcher

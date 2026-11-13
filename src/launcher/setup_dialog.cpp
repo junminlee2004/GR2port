@@ -27,6 +27,7 @@
 #include <dxgi.h>
 #include <shellapi.h>
 
+#include "common/path_util.h"
 #include "common/types.h"
 #include "core/emulator_settings.h"
 #include "core/game_check/game_check.h"
@@ -39,6 +40,7 @@
 #include "input/selected_pad.h"
 #include "launcher/art.h"
 #include "launcher/avatar.h"
+#include "launcher/folder_picker.h"
 #include "launcher/key_bindings.h"
 #include "launcher/setup_dialog.h"
 #include "launcher/trophy_viewer.h"
@@ -203,6 +205,15 @@ enum Control : int {
     IdCharacterDetailLabel,
     IdCharacterDetail,
     IdGraphicsNote,
+    IdGameFolderGroup,
+    IdGameFolder,
+    IdGameFolderBrowse,
+    IdUserFolderGroup,
+    IdPortableFolder,
+    IdPortablePath,
+    IdGlobalFolder,
+    IdGlobalPath,
+    IdPathsNote,
     IdDefaults,
 };
 
@@ -215,19 +226,31 @@ enum Page : size_t {
     OnlinePage,
     TrophiesPage,
     ExtrasPage,
+    PathsPage,
     PageCount,
 };
 
 // Tab controls draw a single ampersand as an underline.
 constexpr std::array<const wchar_t*, PageCount> PageNames{
-    L"Display", L"Graphics", L"Controller", L"Mouse && Keyboard",
-    L"DLC",     L"Online",   L"Trophies",   L"Cheats && Extras"};
+    L"Display",  L"Graphics",         L"Controller", L"Mouse && Keyboard", L"DLC", L"Online",
+    L"Trophies", L"Cheats && Extras", L"Paths"};
 
 constexpr RECT ExtrasList{18, 88, 577, 424};
 constexpr int OnlineIdTop = 121;
 constexpr int PasswordTop = 150;
 constexpr int AvatarTop = 192;
 constexpr RECT AvatarChooseButton{338, 252, 448, 274};
+
+// The Paths tab: the game's folder, and the user folder's two modes with the folder of each.
+constexpr RECT GameFolderGroup{18, 88, 577, 146};
+constexpr int GameFolderTop = 111;
+constexpr RECT BrowseButton{477, 110, 565, 133};
+constexpr RECT UserFolderGroup{18, 156, 577, 262};
+constexpr int PortableTop = 177;
+constexpr int GlobalTop = 219;
+constexpr int FolderPathInset = 18;
+constexpr int FolderPathDrop = 18;
+constexpr int PathsNoteTop = 274;
 
 // The Controller tab: GR2Launcher's controller settings in two columns of group boxes.
 constexpr RECT ControllerGroup{18, 88, 290, 280};
@@ -546,6 +569,8 @@ struct Dialog {
     std::optional<PadBindings> pad_bindings;
     // The MB of each Texture Streaming choice; 0 for Auto.
     std::vector<u32> texture_streaming;
+    // Ok saved a change of the Paths tab, which the executable takes when it starts.
+    bool restart = false;
 };
 
 int Scaled(const Dialog& dialog, int value) {
@@ -797,6 +822,34 @@ void Select(HWND combo, int index) {
 
 bool Checked(const Dialog& dialog, int id) {
     return SendMessageW(Item(dialog, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
+}
+
+void ShowPaths(const Dialog& dialog, const std::filesystem::path& game, bool global) {
+    SetWindowTextW(Item(dialog, IdGameFolder),
+                   (game.empty() ? Common::FS::GetExecutableDirectory() : game).c_str());
+    Check(dialog, IdPortableFolder, !global);
+    Check(dialog, IdGlobalFolder, global);
+}
+
+// Sets the game's folder, which SaveController saves, and asks for the user folder's mode.
+// Returns whether either changed.
+bool SavePaths(const Dialog& dialog) {
+    std::filesystem::path game{Text(Item(dialog, IdGameFolder))};
+    // No folder stands for the executable's.
+    if (game == Common::FS::GetExecutableDirectory()) {
+        game.clear();
+    }
+    const bool game_changed = game != EmulatorSettings.GetGameDirectory();
+    if (game_changed) {
+        EmulatorSettings.SetGameDirectory(game);
+    }
+    const auto mode = Checked(dialog, IdGlobalFolder) ? Common::FS::UserFolderMode::Global
+                                                      : Common::FS::UserFolderMode::Portable;
+    const bool mode_changed = mode != Common::FS::GetUserFolderMode();
+    if (mode_changed) {
+        Common::FS::RequestUserFolderMode(mode);
+    }
+    return game_changed || mode_changed;
 }
 
 // A config line without its comment and spaces, as the input config parser reads it.
@@ -1970,6 +2023,50 @@ void Build(HWND window, Dialog& dialog) {
         SendMessageW(list, LVM_INSERTITEMW, 0, reinterpret_cast<LPARAM>(&item));
     }
 
+    const HWND paths_page = dialog.pages[PathsPage];
+    const int paths_left = GameFolderGroup.left + GroupInset;
+    const int paths_width = GameFolderGroup.right - GroupInset - paths_left;
+    // Each mode's folder is under its name, cut in the middle when it is too long for the line.
+    KeepTabOrder({
+        MakeControl(dialog, paths_page, page_origin, WC_BUTTONW, L"Game Folder", BS_GROUPBOX,
+                    IdGameFolderGroup, GameFolderGroup.left, GameFolderGroup.top,
+                    GameFolderGroup.right - GameFolderGroup.left,
+                    GameFolderGroup.bottom - GameFolderGroup.top),
+        MakeControl(dialog, paths_page, page_origin, WC_EDITW, L"",
+                    WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL | ES_READONLY, IdGameFolder, paths_left,
+                    GameFolderTop, BrowseButton.left - 8 - paths_left, ComboHeight),
+        MakeControl(dialog, paths_page, page_origin, WC_BUTTONW, L"Browse...",
+                    BS_PUSHBUTTON | WS_TABSTOP, IdGameFolderBrowse, BrowseButton.left,
+                    BrowseButton.top, BrowseButton.right - BrowseButton.left,
+                    BrowseButton.bottom - BrowseButton.top),
+        MakeControl(dialog, paths_page, page_origin, WC_BUTTONW, L"User Data Folder", BS_GROUPBOX,
+                    IdUserFolderGroup, UserFolderGroup.left, UserFolderGroup.top,
+                    UserFolderGroup.right - UserFolderGroup.left,
+                    UserFolderGroup.bottom - UserFolderGroup.top),
+        MakeControl(dialog, paths_page, page_origin, WC_BUTTONW, L"Portable",
+                    BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, IdPortableFolder, paths_left,
+                    PortableTop, paths_width, CheckHeight),
+        MakeControl(dialog, paths_page, page_origin, WC_STATICW, L"",
+                    SS_LEFT | SS_PATHELLIPSIS | SS_NOPREFIX, IdPortablePath,
+                    paths_left + FolderPathInset, PortableTop + FolderPathDrop,
+                    paths_width - FolderPathInset, InfoHeight),
+        MakeControl(dialog, paths_page, page_origin, WC_BUTTONW, L"Global", BS_AUTORADIOBUTTON,
+                    IdGlobalFolder, paths_left, GlobalTop, paths_width, CheckHeight),
+        MakeControl(dialog, paths_page, page_origin, WC_STATICW, L"",
+                    SS_LEFT | SS_PATHELLIPSIS | SS_NOPREFIX, IdGlobalPath,
+                    paths_left + FolderPathInset, GlobalTop + FolderPathDrop,
+                    paths_width - FolderPathInset, InfoHeight),
+        MakeControl(dialog, paths_page, page_origin, WC_STATICW,
+                    L"The launcher restarts when Ok saves a change on this tab.",
+                    SS_LEFT | WS_GROUP, IdPathsNote, LabelLeft, PathsNoteTop,
+                    paths_left + paths_width - LabelLeft, 2 * InfoHeight),
+    });
+    SetWindowTextW(Item(dialog, IdPortablePath),
+                   (Common::FS::GetExecutableDirectory() / Common::FS::PORTABLE_DIR).c_str());
+    SetWindowTextW(Item(dialog, IdGlobalPath), Common::FS::GetGlobalUserFolder().c_str());
+    ShowPaths(dialog, EmulatorSettings.GetGameDirectory(),
+              Common::FS::GetUserFolderMode() == Common::FS::UserFolderMode::Global);
+
     KeepTabOrder({
         tab,
         MakeButton(dialog, window, L"Set To Default", BS_PUSHBUTTON, IdDefaults, DefaultsButton),
@@ -2097,6 +2194,24 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
             dialog.key_bindings = DefaultKeyBindings();
             dialog.pad_bindings = DefaultPadBindings();
             ShowLanguage(dialog, GeneralSettings{}.console_language.value);
+            ShowPaths(dialog, {}, false);
+        }
+        break;
+    case IdGameFolderBrowse:
+        if (code == BN_CLICKED) {
+            const std::optional<std::filesystem::path> folder = PickFolder(
+                window, Language::Text(L"Choose the folder that holds your game and its update"));
+            if (!folder) {
+                break;
+            }
+            if (!GameCheck::HoldsGame(*folder)) {
+                const std::array<std::wstring, 1> named{folder->wstring()};
+                MessageBoxW(window,
+                            Language::Text(L"No game or update was found in\n{0}", named).c_str(),
+                            Language::Text(L"Game Folder").c_str(), MB_OK | MB_ICONWARNING);
+                break;
+            }
+            SetWindowTextW(Item(dialog, IdGameFolder), folder->c_str());
         }
         break;
     case IdPrompts:
@@ -2169,6 +2284,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         // trophy pop-ups' switch.
         EmulatorSettings.SetConsoleLanguage(Language::Current());
         EmulatorSettings.SetTrophyPopupDisabled(!Checked(dialog, IdTrophyPopups));
+        dialog.restart = SavePaths(dialog);
         SaveOnline(window, dialog);
         SaveController(window, dialog);
         if (dialog.key_bindings && !SaveKeyBindings(dialog.input_config, *dialog.key_bindings)) {
@@ -2273,7 +2389,7 @@ LRESULT CALLBACK PageProc(HWND page, UINT message, WPARAM wparam, LPARAM lparam)
 
 } // namespace
 
-void ShowSetup(HWND owner, const Art& art) {
+bool ShowSetup(HWND owner, const Art& art) {
     const INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_TAB_CLASSES | ICC_STANDARD_CLASSES |
                                                               ICC_LISTVIEW_CLASSES |
                                                               ICC_LINK_CLASS | ICC_BAR_CLASSES};
@@ -2315,6 +2431,7 @@ void ShowSetup(HWND owner, const Art& art) {
     if (dialog.gamepads_started) {
         SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
     }
+    return dialog.restart;
 }
 
 } // namespace Gr2Port::Launcher

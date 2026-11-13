@@ -13,6 +13,7 @@
 #include <QGridLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -24,6 +25,7 @@
 #include <QWidget>
 #include <QWindow>
 
+#include "common/path_util.h"
 #include "common/scm_rev.h"
 #include "launcher/launcher.h"
 #include "launcher/qt/art.h"
@@ -58,6 +60,14 @@ enum class Item {
     Quit,
 };
 
+// How the launcher ends. Restart starts the executable again, for a change of the Paths tab to
+// take effect.
+enum class Choice {
+    Quit,
+    Play,
+    Restart,
+};
+
 struct Entry {
     Item item;
     std::string_view text;
@@ -70,6 +80,40 @@ constexpr std::array Entries{
     Entry{Item::Options, "Options", 88},
     Entry{Item::Quit, "Quit", 124},
 };
+
+QString Shown(const std::filesystem::path& path) {
+    return QString::fromStdString(Common::FS::PathToUTF8String(path));
+}
+
+// Tells what became of the request for the other user folder mode that this run started with.
+void ShowFolderNotice(QWidget* owner) {
+    const bool global = Common::FS::GetUserFolderMode() == Common::FS::UserFolderMode::Global;
+    const QString global_folder = Shown(Common::FS::GetGlobalUserFolder());
+    const QString portable_folder =
+        Shown(Common::FS::GetExecutableDirectory() / Common::FS::PORTABLE_DIR);
+    const QString& used = global ? global_folder : portable_folder;
+    const QString& other = global ? portable_folder : global_folder;
+    QString text;
+    switch (Common::FS::GetUserFolderSwitch()) {
+    case Common::FS::UserFolderSwitch::None:
+        return;
+    case Common::FS::UserFolderSwitch::Kept:
+        text = Tr("A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays "
+                  "where it is.",
+                  {used.toStdString(), other.toStdString()});
+        break;
+    case Common::FS::UserFolderSwitch::GlobalMissing:
+        text = Tr("The global folder was not found at\n{0}\nA new portable userdata folder was "
+                  "created instead.",
+                  {global_folder.toStdString()});
+        break;
+    case Common::FS::UserFolderSwitch::Failed:
+        text = Tr("The folder could not be moved to\n{0}\nThe game still uses\n{1}",
+                  {other.toStdString(), used.toStdString()});
+        break;
+    }
+    QMessageBox::warning(owner, Tr("User Data Folder"), text);
+}
 
 QString VersionText() {
     const std::string_view revision{Common::g_scm_rev};
@@ -149,9 +193,9 @@ public:
         Layout();
     }
 
-    /// The player picked Play.
-    bool Play() const {
-        return play;
+    /// How the player left the launcher.
+    Choice Chosen() const {
+        return choice;
     }
 
 protected:
@@ -265,24 +309,28 @@ private:
     void Activate(Item item) {
         switch (item) {
         case Item::Play:
-            play = true;
+            choice = Choice::Play;
             close();
             break;
         case Item::Options:
-            ShowSetup(this, art);
+            if (ShowSetup(this, art)) {
+                choice = Choice::Restart;
+                close();
+                break;
+            }
             // The menu takes the language Setup left.
             Layout();
             update();
             break;
         case Item::Quit:
-            play = false;
+            choice = Choice::Quit;
             close();
             break;
         }
     }
 
     const Art& art;
-    bool play = false;
+    Choice choice = Choice::Quit;
     QString version;
     QFont menu_font;
     QFont version_font;
@@ -356,7 +404,7 @@ std::optional<std::filesystem::path> AskGameFolder(const std::string& text) {
 }
 
 bool Run() {
-    return InApplication([] {
+    const Choice choice = InApplication([] {
         const Art art;
         Window window{art};
         // Centred on the primary monitor, where the desktop lets a window place itself.
@@ -364,9 +412,16 @@ bool Run() {
         window.move(area.center() - window.rect().center());
         window.show();
         window.activateWindow();
+        ShowFolderNotice(&window);
         QApplication::exec();
-        return window.Play();
+        return window.Chosen();
     });
+    // The executable starts again once Qt has let go of the desktop.
+    if (choice == Choice::Restart) {
+        Common::FS::RestartExecutable();
+        return false;
+    }
+    return choice == Choice::Play;
 }
 
 } // namespace Gr2Port::Launcher

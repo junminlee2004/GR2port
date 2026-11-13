@@ -14,6 +14,7 @@
 #include <vector>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QFileDialog>
 #include <QFrame>
@@ -25,11 +26,13 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QSlider>
 #include <QTabBar>
 #include <SDL3/SDL_gamepad.h>
 #include <SDL3/SDL_init.h>
 
+#include "common/path_util.h"
 #include "common/types.h"
 #include "core/emulator_settings.h"
 #include "core/game_check/game_check.h"
@@ -46,6 +49,7 @@
 #include "launcher/qt/input_config.h"
 #include "launcher/qt/key_bindings.h"
 #include "launcher/qt/setup_dialog.h"
+#include "launcher/qt/style.h"
 #include "launcher/qt/text.h"
 #include "launcher/qt/trophy_viewer.h"
 #include "launcher/qt/video_card.h"
@@ -95,19 +99,31 @@ enum Page : size_t {
     OnlinePage,
     TrophiesPage,
     ExtrasPage,
+    PathsPage,
     PageCount,
 };
 
 // A tab bar draws a single ampersand as an underline.
 constexpr std::array<std::string_view, PageCount> PageNames{
-    "Display", "Graphics", "Controller", "Mouse && Keyboard",
-    "DLC",     "Online",   "Trophies",   "Cheats && Extras"};
+    "Display",  "Graphics",         "Controller", "Mouse && Keyboard", "DLC", "Online",
+    "Trophies", "Cheats && Extras", "Paths"};
 
 constexpr Area ExtrasList{18, 88, 577, 424};
 constexpr int OnlineIdTop = 121;
 constexpr int PasswordTop = 150;
 constexpr int AvatarTop = 192;
 constexpr Area AvatarChooseButton{338, 252, 448, 274};
+
+// The Paths tab: the game's folder, and the user folder's two modes with the folder of each.
+constexpr Area GameFolderGroup{18, 88, 577, 146};
+constexpr int GameFolderTop = 111;
+constexpr Area BrowseButton{477, 110, 565, 133};
+constexpr Area UserFolderGroup{18, 156, 577, 262};
+constexpr int PortableTop = 177;
+constexpr int GlobalTop = 219;
+constexpr int FolderPathInset = 18;
+constexpr int FolderPathDrop = 18;
+constexpr int PathsNoteTop = 274;
 
 // The Controller tab: GR2Launcher's controller settings in two columns of group boxes.
 constexpr Area ControllerGroup{18, 88, 290, 280};
@@ -417,6 +433,11 @@ struct Dialog {
     // The Online tab's controls for an account, off when there is no user.
     std::vector<QWidget*> account_controls;
     QListWidget* extras_list = nullptr;
+    QLineEdit* game_folder = nullptr;
+    QRadioButton* portable_folder = nullptr;
+    QRadioButton* global_folder = nullptr;
+    // Ok saved a change of the Paths tab, which the executable takes when it starts.
+    bool restart = false;
 };
 
 void Apply(QWidget* control, const QString& text) {
@@ -1154,6 +1175,22 @@ QSlider* MakeSlider(Dialog& dialog, QWidget* page, const Phrase& text, int left,
 }
 
 // Shows every text again in the language in use.
+// Takes the same share of the space around its name from every tab when a language's names need
+// more than the bar's width, which otherwise scrolls the last tabs out of sight.
+void FitTabs(QTabBar* tab) {
+    const auto lay_out = [tab](int taken) {
+        tab->setProperty(TabSpaceTaken, taken);
+        // The bar lays its tabs out again when its style changes.
+        QEvent change{QEvent::StyleChange};
+        QCoreApplication::sendEvent(tab, &change);
+    };
+    lay_out(0);
+    const int needed = tab->sizeHint().width();
+    if (needed > tab->width()) {
+        lay_out((needed - tab->width() + tab->count() - 1) / tab->count());
+    }
+}
+
 void Retranslate(Dialog& dialog) {
     for (const auto& [control, text] : dialog.texts) {
         Apply(control, text.Shown());
@@ -1169,6 +1206,7 @@ void Retranslate(Dialog& dialog) {
     for (size_t i = 0; i < PageCount; ++i) {
         dialog.tab->setTabText(static_cast<int>(i), Tr(PageNames[i]));
     }
+    FitTabs(dialog.tab);
     ShowAutomaticPrompts(dialog);
 }
 
@@ -1440,6 +1478,82 @@ void BuildExtras(Dialog& dialog, QWidget* page) {
     }
 }
 
+QString Shown(const std::filesystem::path& path) {
+    return QString::fromStdString(Common::FS::PathToUTF8String(path));
+}
+
+void ShowPaths(const Dialog& dialog, const std::filesystem::path& game, bool global) {
+    dialog.game_folder->setText(Shown(game.empty() ? Common::FS::GetExecutableDirectory() : game));
+    (global ? dialog.global_folder : dialog.portable_folder)->setChecked(true);
+}
+
+void BuildPaths(Dialog& dialog, QWidget* page) {
+    const int left = GameFolderGroup.left + GroupInset;
+    const int right = GameFolderGroup.right - GroupInset;
+    MakeGroup(dialog, page, "Game Folder", GameFolderGroup);
+    dialog.game_folder = new QLineEdit{page};
+    dialog.game_folder->setGeometry(
+        Place(page, left, GameFolderTop, BrowseButton.left - 8 - left, ComboHeight));
+    dialog.game_folder->setReadOnly(true);
+    QPushButton* const browse = MakeButton(dialog, page, "Browse...", BrowseButton);
+    MakeGroup(dialog, page, "User Data Folder", UserFolderGroup);
+    // Each mode's folder is under its name, cut in the middle when it is too long for the line.
+    const auto make_mode = [&](const Phrase& name, int top, const std::filesystem::path& folder) {
+        auto* const mode = new QRadioButton{page};
+        mode->setGeometry(Place(page, left, top, right - left, CheckHeight));
+        SetText(dialog, mode, name);
+        QLabel* const path = MakeLabel(dialog, page, "", Qt::AlignLeft | Qt::AlignTop,
+                                       Place(page, left + FolderPathInset, top + FolderPathDrop,
+                                             right - left - FolderPathInset, InfoHeight));
+        path->setText(
+            path->fontMetrics().elidedText(Shown(folder), Qt::ElideMiddle, path->width()));
+        path->setToolTip(Shown(folder));
+        return mode;
+    };
+    dialog.portable_folder = make_mode(
+        "Portable", PortableTop, Common::FS::GetExecutableDirectory() / Common::FS::PORTABLE_DIR);
+    dialog.global_folder = make_mode("Global", GlobalTop, Common::FS::GetGlobalUserFolder());
+    MakeNote(dialog, page, "The launcher restarts when Ok saves a change on this tab.",
+             Place(page, LabelLeft, PathsNoteTop, right - LabelLeft, 2 * InfoHeight));
+    ShowPaths(dialog, EmulatorSettings.GetGameDirectory(),
+              Common::FS::GetUserFolderMode() == Common::FS::UserFolderMode::Global);
+    QObject::connect(browse, &QPushButton::clicked, dialog.window, [&dialog] {
+        const QString folder = QFileDialog::getExistingDirectory(
+            dialog.window, Tr("Choose the folder that holds your game and its update"),
+            dialog.game_folder->text());
+        if (folder.isEmpty()) {
+            return;
+        }
+        if (!GameCheck::HoldsGame(std::filesystem::path{folder.toStdString()})) {
+            QMessageBox::warning(dialog.window, Tr("Game Folder"),
+                                 Tr("No game or update was found in\n{0}", {folder.toStdString()}));
+            return;
+        }
+        dialog.game_folder->setText(folder);
+    });
+}
+
+// Sets the game's folder, which SaveController saves, and asks for the user folder's mode.
+// Returns whether either changed.
+bool SavePaths(const Dialog& dialog) {
+    std::filesystem::path game{dialog.game_folder->text().toStdString()};
+    // No folder stands for the executable's.
+    if (game == Common::FS::GetExecutableDirectory()) {
+        game.clear();
+    }
+    const bool game_changed = game != EmulatorSettings.GetGameDirectory();
+    if (game_changed) {
+        EmulatorSettings.SetGameDirectory(game);
+    }
+    const auto mode = dialog.global_folder->isChecked() ? Common::FS::UserFolderMode::Global
+                                                        : Common::FS::UserFolderMode::Portable;
+    const bool mode_changed = mode != Common::FS::GetUserFolderMode();
+    if (mode_changed) {
+        Common::FS::RequestUserFolderMode(mode);
+    }
+    return game_changed || mode_changed;
+}
+
 // Ok saves everything the dialog shows.
 void Save(Dialog& dialog) {
     dialog.values.display = Read(dialog);
@@ -1451,6 +1565,7 @@ void Save(Dialog& dialog) {
     // pop-ups' switch.
     EmulatorSettings.SetConsoleLanguage(Language::Current());
     EmulatorSettings.SetTrophyPopupDisabled(!dialog.trophy_popups->isChecked());
+    dialog.restart = SavePaths(dialog);
     SaveOnline(dialog);
     SaveController(dialog);
     if (dialog.key_bindings && !SaveKeyBindings(dialog.input_config, *dialog.key_bindings)) {
@@ -1479,6 +1594,7 @@ void SetDefaults(Dialog& dialog) {
     dialog.key_bindings = DefaultKeyBindings();
     dialog.pad_bindings = DefaultPadBindings();
     ShowLanguage(dialog, GeneralSettings{}.console_language.value);
+    ShowPaths(dialog, {}, false);
 }
 
 void Build(Dialog& dialog) {
@@ -1502,6 +1618,7 @@ void Build(Dialog& dialog) {
     const int tab_width = TabArea.right - TabArea.left;
     const int tab_height = dialog.tab->sizeHint().height();
     dialog.tab->setGeometry(TabArea.left, TabArea.top, tab_width, tab_height);
+    FitTabs(dialog.tab);
     auto* const frame = new QFrame{window};
     frame->setFrameShape(QFrame::StyledPanel);
     frame->setGeometry(TabArea.left, TabArea.top + tab_height - 1, tab_width,
@@ -1521,6 +1638,7 @@ void Build(Dialog& dialog) {
     BuildOnline(dialog, dialog.pages[OnlinePage]);
     BuildTrophies(dialog, dialog.pages[TrophiesPage]);
     BuildExtras(dialog, dialog.pages[ExtrasPage]);
+    BuildPaths(dialog, dialog.pages[PathsPage]);
 
     QPushButton* const defaults = MakeButton(dialog, window, "Set To Default", DefaultsButton);
     QPushButton* const ok = MakeButton(dialog, window, "Ok", OkButton);
@@ -1620,9 +1738,10 @@ void Build(Dialog& dialog) {
 
 } // namespace
 
-void ShowSetup(QWidget* owner, const Art& art) {
+bool ShowSetup(QWidget* owner, const Art& art) {
     // The monitors, their modes and the GPU come from SDL, as the game's window finds them.
     const bool video_started = SDL_InitSubSystem(SDL_INIT_VIDEO);
+    bool restart = false;
     {
         QDialog window{owner};
         Dialog dialog;
@@ -1632,6 +1751,7 @@ void ShowSetup(QWidget* owner, const Art& art) {
         dialog.extras = GamePatches::Extras();
         Build(dialog);
         window.exec();
+        restart = dialog.restart;
         // The game starts SDL's gamepads again, with its own hints.
         if (dialog.gamepads_started) {
             SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
@@ -1640,6 +1760,7 @@ void ShowSetup(QWidget* owner, const Art& art) {
     if (video_started) {
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
     }
+    return restart;
 }
 
 } // namespace Gr2Port::Launcher

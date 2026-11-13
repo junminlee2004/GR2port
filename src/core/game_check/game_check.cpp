@@ -132,11 +132,6 @@ void Tell(const std::string& text) {
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Gravity Rush 2", text.c_str(), nullptr);
 }
 
-// The user folder is beside the executable, or beside the app bundle or AppImage that holds it.
-std::filesystem::path ExecutableFolder() {
-    return Common::FS::GetUserPath(Common::FS::PathType::UserDir).parent_path();
-}
-
 // The title IDs of the regions the patches fit, from the patch file's own list.
 std::vector<std::string> TitleIds() {
     std::vector<std::string> ids;
@@ -415,16 +410,20 @@ bool CheckIn(const std::filesystem::path& folder, std::optional<Game>& game) {
 } // namespace
 
 std::optional<Game> Find() {
-    const std::filesystem::path beside = ExecutableFolder();
+    const std::filesystem::path beside = Common::FS::GetExecutableDirectory();
     std::filesystem::path chosen = EmulatorSettings.GetGameDirectory();
     std::optional<Game> game;
-    while (!CheckIn(beside, game)) {
+    for (;;) {
+        // The folder the player chose counts before the executable's.
         if (!chosen.empty() && CheckIn(chosen, game)) {
             // The settings keep a chosen folder once its dump passes the checks.
             if (game && chosen != EmulatorSettings.GetGameDirectory()) {
                 EmulatorSettings.SetGameDirectory(chosen);
                 EmulatorSettings.Save();
             }
+            break;
+        }
+        if (CheckIn(beside, game)) {
             break;
         }
         const std::optional<std::filesystem::path> folder = AskFolder(NoGame(beside, chosen));
@@ -434,6 +433,13 @@ std::optional<Game> Find() {
         chosen = *folder;
     }
     return game;
+}
+
+bool HoldsGame(const std::filesystem::path& folder) {
+    const std::vector<std::string> ids = TitleIds();
+    return std::ranges::any_of(ListDumps(folder), [&ids](const Dump& dump) {
+        return std::ranges::find(ids, dump.title_id) != ids.end();
+    });
 }
 
 bool HoldUserFolder() {

@@ -9,6 +9,8 @@ if (WIN32)
         ${CMAKE_CURRENT_LIST_DIR}/avatar.h
         ${CMAKE_CURRENT_LIST_DIR}/driver_notice.cpp
         ${CMAKE_CURRENT_LIST_DIR}/driver_notice.h
+        ${CMAKE_CURRENT_LIST_DIR}/folder_picker.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/folder_picker.h
         ${CMAKE_CURRENT_LIST_DIR}/key_bindings.cpp
         ${CMAKE_CURRENT_LIST_DIR}/key_bindings.h
         ${CMAKE_CURRENT_LIST_DIR}/launcher.cpp

@@ -11,15 +11,16 @@
 #include <windows.h>
 // windows.h first
 #include <commctrl.h>
-#include <shobjidl.h>
 #include <windowsx.h>
 
 #include "common/logging/log.h"
+#include "common/path_util.h"
 #include "common/scm_rev.h"
 #include "common/string_util.h"
 #include "core/language/language.h"
 #include "launcher/art.h"
 #include "launcher/driver_notice.h"
+#include "launcher/folder_picker.h"
 #include "launcher/launcher.h"
 #include "launcher/setup_dialog.h"
 
@@ -65,6 +66,8 @@ constexpr std::array Entries{
 struct State {
     const Art* art = nullptr;
     bool play = false;
+    // The executable starts again, for a change of the Paths tab to take effect.
+    bool restart = false;
     std::wstring version;
     bool done = false;
     UINT dpi = USER_DEFAULT_SCREEN_DPI;
@@ -259,6 +262,42 @@ void Paint(HWND window, const State& state) {
     EndPaint(window, &paint);
 }
 
+// Tells what became of the request for the other user folder mode that this run started with.
+void ShowFolderNotice(HWND owner) {
+    const bool global = Common::FS::GetUserFolderMode() == Common::FS::UserFolderMode::Global;
+    const std::wstring global_folder = Common::FS::GetGlobalUserFolder().wstring();
+    const std::wstring portable_folder =
+        (Common::FS::GetExecutableDirectory() / Common::FS::PORTABLE_DIR).wstring();
+    // The folder in use, then the other.
+    const std::array<std::wstring, 2> folders{global ? global_folder : portable_folder,
+                                              global ? portable_folder : global_folder};
+    std::wstring text;
+    switch (Common::FS::GetUserFolderSwitch()) {
+    case Common::FS::UserFolderSwitch::None:
+        return;
+    case Common::FS::UserFolderSwitch::Kept:
+        text = Language::Text(L"A folder was already at\n{0}\nThe game uses it now. The folder "
+                              L"at\n{1}\nstays where it is.",
+                              folders);
+        break;
+    case Common::FS::UserFolderSwitch::GlobalMissing: {
+        const std::array<std::wstring, 1> missing{global_folder};
+        text = Language::Text(L"The global folder was not found at\n{0}\nA new portable userdata "
+                              L"folder was created instead.",
+                              missing);
+        break;
+    }
+    case Common::FS::UserFolderSwitch::Failed: {
+        const std::array<std::wstring, 2> moved{folders[1], folders[0]};
+        text = Language::Text(L"The folder could not be moved to\n{0}\nThe game still uses\n{1}",
+                              moved);
+        break;
+    }
+    }
+    MessageBoxW(owner, text.c_str(), Language::Text(L"User Data Folder").c_str(),
+                MB_OK | MB_ICONWARNING);
+}
+
 void Activate(HWND window, State& state, Item item) {
     switch (item) {
     case Item::Play:
@@ -266,7 +305,11 @@ void Activate(HWND window, State& state, Item item) {
         DestroyWindow(window);
         break;
     case Item::Options:
-        ShowSetup(window, *state.art);
+        if (ShowSetup(window, *state.art)) {
+            state.restart = true;
+            DestroyWindow(window);
+            break;
+        }
         // The menu takes the language Setup left.
         Layout(window, state);
         InvalidateRect(window, nullptr, FALSE);
@@ -392,34 +435,6 @@ HRESULT CALLBACK OnNoGameEvent(HWND dialog, UINT notice, WPARAM, LPARAM, LONG_PT
     return S_OK;
 }
 
-// The folder the player picks in Windows' folder picker, a COM object, or nothing.
-std::optional<std::filesystem::path> PickFolder(const std::wstring& title) {
-    std::optional<std::filesystem::path> folder;
-    const bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
-    IFileOpenDialog* picker = nullptr;
-    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
-                                   IID_PPV_ARGS(&picker)))) {
-        FILEOPENDIALOGOPTIONS options = 0;
-        picker->GetOptions(&options);
-        picker->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
-        picker->SetTitle(title.c_str());
-        IShellItem* item = nullptr;
-        if (SUCCEEDED(picker->Show(nullptr)) && SUCCEEDED(picker->GetResult(&item))) {
-            wchar_t* path = nullptr;
-            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
-                folder = path;
-                CoTaskMemFree(path);
-            }
-            item->Release();
-        }
-        picker->Release();
-    }
-    if (com) {
-        CoUninitialize();
-    }
-    return folder;
-}
-
 } // namespace
 
 void AttachTerminal() {
@@ -467,12 +482,14 @@ std::optional<std::filesystem::path> AskGameFolder(const std::string& text) {
     if (!choose) {
         return std::nullopt;
     }
-    return PickFolder(Language::Text(L"Choose the folder that holds your game and its update"));
+    return PickFolder(nullptr,
+                      Language::Text(L"Choose the folder that holds your game and its update"));
 }
 
 bool Run() {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     bool play = true;
+    bool restart = false;
     {
         const Art art;
         State state;
@@ -501,17 +518,23 @@ bool Run() {
             ShowWindow(window, SW_SHOW);
             SetForegroundWindow(window);
             ShowDriverNotice(window);
+            ShowFolderNotice(window);
             MSG message{};
             while (!state.done && GetMessageW(&message, nullptr, 0, 0) > 0) {
                 TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
             play = state.play;
+            restart = state.restart;
         }
         DeleteObject(state.background);
         DeleteObject(state.menu_font);
         DeleteObject(state.version_font);
         UnregisterClassW(WindowClass, instance);
+    }
+    if (restart) {
+        Common::FS::RestartExecutable();
+        return false;
     }
     return play;
 }

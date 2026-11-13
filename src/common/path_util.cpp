@@ -3,7 +3,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
+#include <iterator>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include "common/logging/log.h"
 #include "common/path_util.h"
@@ -19,6 +23,10 @@
 
 #ifdef _WIN32
 #include <windows.h>
+// windows.h first
+#include <shlobj.h>
+#elif defined(__linux__)
+#include <unistd.h>
 #endif
 
 #ifndef MAX_PATH
@@ -84,42 +92,160 @@ static std::optional<std::filesystem::path> GetBundleDirectory() {
 }
 #endif
 
-// The folder that holds the executable, on macOS the one that holds its app bundle, and on Linux
-// the one that holds its AppImage.
-static fs::path ExecutableDirectory() {
+fs::path GetExecutableFile() {
 #ifdef _WIN32
     std::wstring path(MAX_PATH, L'\0');
     for (;;) {
         const DWORD length =
             GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
         if (length == 0) {
-            return fs::current_path();
+            return {};
         }
         if (length < path.size()) {
             path.resize(length);
-            return fs::path{path}.parent_path();
+            return fs::path{path};
         }
         path.resize(path.size() * 2);
     }
 #elif defined(__APPLE__)
+    return {};
+#else
+    // An AppImage runs from a read-only mount, so the AppImage counts.
+    if (const char* const appimage = std::getenv("APPIMAGE")) {
+        return fs::path{appimage};
+    }
+    std::error_code ec;
+    const auto executable = fs::read_symlink("/proc/self/exe", ec);
+    return ec ? fs::path{} : executable;
+#endif
+}
+
+fs::path GetExecutableDirectory() {
+#ifdef __APPLE__
     if (const auto bundle = GetBundleDirectory()) {
         return bundle->extension() == ".app" ? bundle->parent_path() : *bundle;
     }
     return fs::current_path();
 #else
-    // An AppImage runs from a read-only mount, so the folder that holds the AppImage counts.
-    if (const char* const appimage = std::getenv("APPIMAGE")) {
-        return fs::path{appimage}.parent_path();
-    }
-    std::error_code ec;
-    const auto executable = fs::read_symlink("/proc/self/exe", ec);
-    return ec ? fs::current_path() : executable.parent_path();
+    const fs::path file = GetExecutableFile();
+    return file.empty() ? fs::current_path() : file.parent_path();
 #endif
 }
 
+fs::path GetGlobalUserFolder() {
+#ifdef _WIN32
+    wchar_t appdata[MAX_PATH]{};
+    SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appdata);
+    return appdata[0] != L'\0' ? fs::path{appdata} / GLOBAL_DIR : fs::path{};
+#elif defined(__APPLE__)
+    const char* const home = std::getenv("HOME");
+    return home ? fs::path{home} / "Library" / "Application Support" / GLOBAL_DIR : fs::path{};
+#else
+    const char* const data = std::getenv("XDG_DATA_HOME");
+    if (data != nullptr && data[0] != '\0') {
+        return fs::path{data} / GLOBAL_DIR;
+    }
+    const char* const home = std::getenv("HOME");
+    return home ? fs::path{home} / ".local" / "share" / GLOBAL_DIR : fs::path{};
+#endif
+}
+
+// The file beside the executable that tells the user folder is the global one.
+constexpr auto GLOBAL_MARK = "global_userdata.txt";
+// RequestUserFolderMode's word to the executable's next start, in the environment.
+constexpr auto MODE_REQUEST = "GR2PORT_USER_FOLDER";
+constexpr auto GLOBAL_REQUEST = "global";
+constexpr auto PORTABLE_REQUEST = "portable";
+// The process RestartExecutable ran in, which the one it started waits for on Windows.
+constexpr auto RESTART_PROCESS = "GR2PORT_RESTART_PID";
+
+static bool g_global_user_folder = false;
+static UserFolderSwitch g_user_folder_switch = UserFolderSwitch::None;
+
+// Sets a variable of the environment. An empty value removes it.
+static void SetEnvironment(const char* name, const char* value) {
+#ifdef _WIN32
+    _putenv_s(name, value);
+#else
+    if (value[0] != '\0') {
+        setenv(name, value, 1);
+    } else {
+        unsetenv(name);
+    }
+#endif
+}
+
+// Moves a folder to a place that holds nothing, by a copy when the place is on another drive.
+static bool MoveFolder(const fs::path& from, const fs::path& to) {
+    std::error_code ec;
+    fs::create_directories(to.parent_path(), ec);
+    fs::rename(from, to, ec);
+    if (!ec) {
+        return true;
+    }
+    fs::copy(from, to, fs::copy_options::recursive, ec);
+    if (ec) {
+        fs::remove_all(to, ec);
+        return false;
+    }
+    fs::remove_all(from, ec);
+    return true;
+}
+
+// Whether the user folder is the global one, which the mark tells. A request for the other mode
+// is carried out first: the folder moves to the mode's place unless a folder is there already.
+static bool UseGlobalFolder(const fs::path& portable, const fs::path& global) {
+    const fs::path mark = GetExecutableDirectory() / GLOBAL_MARK;
+    std::error_code ec;
+    const bool is_global = fs::exists(mark, ec);
+    const char* const request = std::getenv(MODE_REQUEST);
+    if (request == nullptr) {
+        return is_global;
+    }
+    const bool to_global = std::string_view{request} == GLOBAL_REQUEST;
+    SetEnvironment(MODE_REQUEST, "");
+    if (to_global == is_global) {
+        return is_global;
+    }
+    const fs::path& from = to_global ? portable : global;
+    const fs::path& to = to_global ? global : portable;
+    if (fs::exists(to, ec)) {
+        g_user_folder_switch = UserFolderSwitch::Kept;
+    } else if (!fs::exists(from, ec)) {
+        // Nothing moves: the folder is made new, as at any start.
+        g_user_folder_switch = to_global ? UserFolderSwitch::None : UserFolderSwitch::GlobalMissing;
+    } else if (!MoveFolder(from, to)) {
+        g_user_folder_switch = UserFolderSwitch::Failed;
+        return is_global;
+    }
+    if (to_global) {
+        std::ofstream{mark} << "GR2port keeps its files in the " << GLOBAL_DIR
+                            << " folder of this account's application data. The Paths tab of "
+                               "the launcher's Options brings them back beside the game.\n";
+    } else {
+        fs::remove(mark, ec);
+    }
+    return to_global;
+}
+
 static auto UserPaths = [] {
-    // GR2port keeps every file of its own in userdata beside the executable, made if missing.
-    const auto user_dir = ExecutableDirectory() / PORTABLE_DIR;
+#ifdef _WIN32
+    // The run that restarted the executable holds the user folder until it ends.
+    if (const char* const process = std::getenv(RESTART_PROCESS)) {
+        if (const HANDLE handle =
+                OpenProcess(SYNCHRONIZE, FALSE, std::strtoul(process, nullptr, 10))) {
+            WaitForSingleObject(handle, INFINITE);
+            CloseHandle(handle);
+        }
+        SetEnvironment(RESTART_PROCESS, "");
+    }
+#endif
+    // GR2port keeps every file of its own in one user folder, made if missing: userdata beside
+    // the executable or, in the global mode, GR2port in the account's application data.
+    const fs::path portable = GetExecutableDirectory() / PORTABLE_DIR;
+    const fs::path global = GetGlobalUserFolder();
+    g_global_user_folder = UseGlobalFolder(portable, global);
+    const auto user_dir = g_global_user_folder ? global : portable;
 
     std::unordered_map<PathType, fs::path> paths;
 
@@ -140,6 +266,52 @@ static auto UserPaths = [] {
 
     return paths;
 }();
+
+UserFolderMode GetUserFolderMode() {
+    return g_global_user_folder ? UserFolderMode::Global : UserFolderMode::Portable;
+}
+
+UserFolderSwitch GetUserFolderSwitch() {
+    return g_user_folder_switch;
+}
+
+void RequestUserFolderMode(UserFolderMode mode) {
+    SetEnvironment(MODE_REQUEST,
+                   mode == UserFolderMode::Global ? GLOBAL_REQUEST : PORTABLE_REQUEST);
+}
+
+bool RestartExecutable() {
+#ifdef _WIN32
+    SetEnvironment(RESTART_PROCESS, std::to_string(GetCurrentProcessId()).c_str());
+    std::wstring arguments = GetCommandLineW();
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    if (!CreateProcessW(GetExecutableFile().c_str(), arguments.data(), nullptr, nullptr, FALSE, 0,
+                        nullptr, nullptr, &startup, &process)) {
+        return false;
+    }
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return true;
+#elif defined(__linux__)
+    // The kernel lists this run's arguments, each ended by a zero. The first names the program,
+    // which inside an AppImage is not the file to start.
+    std::ifstream file{"/proc/self/cmdline", std::ios::binary};
+    std::string line{std::istreambuf_iterator<char>{file}, {}};
+    std::string executable = GetExecutableFile().string();
+    std::vector<char*> arguments{executable.data()};
+    for (size_t at = std::strlen(line.c_str()) + 1; at < line.size();
+         at += std::strlen(&line[at]) + 1) {
+        arguments.push_back(&line[at]);
+    }
+    arguments.push_back(nullptr);
+    execv(executable.c_str(), arguments.data());
+    return false;
+#else
+    return false;
+#endif
+}
 
 bool ValidatePath(const fs::path& path) {
     if (path.empty()) {
