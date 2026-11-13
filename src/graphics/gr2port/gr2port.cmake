@@ -82,6 +82,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/scene.h
     ${CMAKE_CURRENT_LIST_DIR}/scene_ring.cpp
     ${CMAKE_CURRENT_LIST_DIR}/scene_ring.h
+    ${CMAKE_CURRENT_LIST_DIR}/script_timers.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/script_timers.h
     ${CMAKE_CURRENT_LIST_DIR}/self_translucent.cpp
     ${CMAKE_CURRENT_LIST_DIR}/self_translucent.h
     ${CMAKE_CURRENT_LIST_DIR}/settings.cpp

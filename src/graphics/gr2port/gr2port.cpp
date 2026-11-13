@@ -27,6 +27,7 @@
 #include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/player_control.h"
 #include "graphics/gr2port/renderer.h"
+#include "graphics/gr2port/script_timers.h"
 #include "graphics/gr2port/textures.h"
 #include "graphics/gr2port/timeline.h"
 #include "graphics/gr2port/ui_capture.h"
@@ -75,6 +76,7 @@ void PS4_SYSV_ABI OnParticleTables(u32, const Hooks::Arguments* arguments, u64) 
 void PS4_SYSV_ABI OnFrameGraph(u32, const Hooks::Registers* registers, u64) {
     Capture::OnFrame(registers->rdi, registers->rsi);
     FrameGraphDraws::SetFrameGraphRunning(true);
+    ScriptTimers::OnFrame();
 }
 
 void PS4_SYSV_ABI OnFrameGraphEnd(u32, const Hooks::Arguments*, u64) {
@@ -119,6 +121,7 @@ void Install(VAddr module_base) {
     HairFlutter::Install(module_base, c, StubAreaSize);
     GravityKick::Install(module_base, c, StubAreaSize);
     GravitySlide::Install(module_base, c, StubAreaSize);
+    ScriptTimers::Install(module_base, c, StubAreaSize);
     if (Hooks::ObserveReturn(module_base, FrameGraph, c, StubAreaSize, &OnFrameGraphEnd, 0) ==
             Hooks::Result::Mismatch ||
         Hooks::ObserveEntry(module_base, NextContext, c, StubAreaSize, &OnNextContext, 0) ==
