@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "ゲームを終了してデスクトップへ戻りますか？",
     "Update your graphics driver": "グラフィックドライバーを更新してください",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "お使いのNVIDIAグラフィックドライバーはバージョン{0}です。DLSSを使用するには、バージョン{1}以降に更新してください。",
-    "Don't show again": "今後表示しない"
+    "Don't show again": "今後表示しない",
+    "Choose custom game directory instead": "代わりにゲームフォルダーを指定する",
+    "Choose the folder that holds your game and its update": "ゲーム本体とアップデートが入っているフォルダーの選択"
   }
 }

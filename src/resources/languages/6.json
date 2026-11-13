@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "Weet je zeker dat je wilt afsluiten naar het bureaublad?",
     "Update your graphics driver": "Werk je grafische stuurprogramma bij",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Je grafische NVIDIA-stuurprogramma is versie {0}. Werk het bij naar versie {1} of nieuwer om DLSS te gebruiken.",
-    "Don't show again": "Niet meer tonen"
+    "Don't show again": "Niet meer tonen",
+    "Choose custom game directory instead": "In plaats daarvan een eigen spelmap selecteren",
+    "Choose the folder that holds your game and its update": "De map met je spel en de update selecteren"
   }
 }

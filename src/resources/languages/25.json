@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "Θέλετε σίγουρα να κάνετε έξοδο στην επιφάνεια εργασίας;",
     "Update your graphics driver": "Ενημερώστε το πρόγραμμα οδήγησης γραφικών",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Το πρόγραμμα οδήγησης γραφικών NVIDIA είναι στην έκδοση {0}. Ενημερώστε το στην έκδοση {1} ή νεότερη για να χρησιμοποιήσετε το DLSS.",
-    "Don't show again": "Να μην εμφανιστεί ξανά"
+    "Don't show again": "Να μην εμφανιστεί ξανά",
+    "Choose custom game directory instead": "Εναλλακτικά, επιλογή προσαρμοσμένου φακέλου παιχνιδιού",
+    "Choose the folder that holds your game and its update": "Επιλογή του φακέλου που περιέχει το παιχνίδι και την ενημέρωσή του"
   }
 }

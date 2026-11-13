@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "Czy na pewno chcesz wyjść do pulpitu?",
     "Update your graphics driver": "Zaktualizuj sterownik karty graficznej",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Twój sterownik karty graficznej NVIDIA ma wersję {0}. Zaktualizuj go do wersji {1} lub nowszej, aby korzystać z DLSS.",
-    "Don't show again": "Nie pokazuj ponownie"
+    "Don't show again": "Nie pokazuj ponownie",
+    "Choose custom game directory instead": "Wybierz zamiast tego własny folder gry",
+    "Choose the folder that holds your game and its update": "Wybierz folder zawierający grę i jej aktualizację"
   }
 }

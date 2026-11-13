@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "Haluatko varmasti poistua työpöydälle?",
     "Update your graphics driver": "Päivitä näytönohjaimen ajuri",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "NVIDIA-näytönohjaimesi ajurin versio on {0}. Päivitä se versioon {1} tai uudempaan, jotta voit käyttää DLSS:ää.",
-    "Don't show again": "Älä näytä uudelleen"
+    "Don't show again": "Älä näytä uudelleen",
+    "Choose custom game directory instead": "Valitse sen sijaan oma pelikansio",
+    "Choose the folder that holds your game and its update": "Valitse kansio, jossa peli ja sen päivitys ovat"
   }
 }

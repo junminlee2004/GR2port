@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "Er du sikker på at du vil avslutte til skrivebordet?",
     "Update your graphics driver": "Oppdater grafikkdriveren",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "NVIDIA-grafikkdriveren din er versjon {0}. Oppdater den til versjon {1} eller nyere for å bruke DLSS.",
-    "Don't show again": "Ikke vis igjen"
+    "Don't show again": "Ikke vis igjen",
+    "Choose custom game directory instead": "Velg en egendefinert spillmappe i stedet",
+    "Choose the folder that holds your game and its update": "Velg mappen som inneholder spillet og oppdateringen"
   }
 }

@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "Masaüstüne çıkmak istediğinden emin misin?",
     "Update your graphics driver": "Grafik sürücünü güncelle",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "NVIDIA grafik sürücünün sürümü {0}. DLSS'i kullanmak için sürüm {1} veya daha yenisine güncelle.",
-    "Don't show again": "Bir daha gösterme"
+    "Don't show again": "Bir daha gösterme",
+    "Choose custom game directory instead": "Bunun yerine özel oyun klasörü seç",
+    "Choose the folder that holds your game and its update": "Oyunu ve Güncellemesini İçeren Klasörü Seç"
   }
 }

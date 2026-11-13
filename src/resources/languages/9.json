@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "게임을 종료하고 바탕 화면으로 나가시겠습니까?",
     "Update your graphics driver": "그래픽 드라이버를 업데이트하세요",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "현재 NVIDIA 그래픽 드라이버 버전은 {0}입니다. DLSS를 사용하려면 버전 {1} 이상으로 업데이트하세요.",
-    "Don't show again": "다시 표시 안 함"
+    "Don't show again": "다시 표시 안 함",
+    "Choose custom game directory instead": "대신 사용자 지정 게임 폴더 선택",
+    "Choose the folder that holds your game and its update": "게임과 업데이트가 들어 있는 폴더 선택"
   }
 }

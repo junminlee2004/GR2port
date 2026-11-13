@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "Opravdu chcete ukončit hru a přejít na plochu?",
     "Update your graphics driver": "Aktualizujte ovladač grafické karty",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Váš ovladač grafické karty NVIDIA má verzi {0}. Chcete-li používat DLSS, aktualizujte jej na verzi {1} nebo novější.",
-    "Don't show again": "Příště nezobrazovat"
+    "Don't show again": "Příště nezobrazovat",
+    "Choose custom game directory instead": "Vybrat místo toho vlastní složku se hrou",
+    "Choose the folder that holds your game and its update": "Vybrat složku, která obsahuje hru a její aktualizaci"
   }
 }

@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "Yakin ingin keluar ke desktop?",
     "Update your graphics driver": "Perbarui driver grafis",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Driver grafis NVIDIA Anda adalah versi {0}. Perbarui ke versi {1} atau yang lebih baru untuk menggunakan DLSS.",
-    "Don't show again": "Jangan tampilkan lagi"
+    "Don't show again": "Jangan tampilkan lagi",
+    "Choose custom game directory instead": "Pilih folder game kustom sebagai gantinya",
+    "Choose the folder that holds your game and its update": "Pilih Folder yang Berisi Game dan Pembaruannya"
   }
 }

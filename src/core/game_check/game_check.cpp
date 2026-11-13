@@ -15,12 +15,16 @@
 
 #include "common/logging/log.h"
 #include "common/path_util.h"
+#include "core/emulator_settings.h"
 #include "core/file_format/psf.h"
 #include "core/file_sys/fs.h"
 #include "core/file_sys/ifile.h"
 #include "core/game_check/game_check.h"
 #include "core/language/language.h"
 #include "core/loader/elf.h"
+#if defined(_WIN32) || defined(__linux__)
+#include "launcher/launcher.h"
+#endif
 
 CMRC_DECLARE(gr2port_patches);
 
@@ -206,14 +210,32 @@ Form FormOf(std::string_view name, std::initializer_list<IBackend*> roots) {
     return folder ? Form::Folder : Form::Missing;
 }
 
-std::string NoGame(const std::filesystem::path& folder) {
+// Names the folders searched, one to a line: the executable's and, when the player chose one,
+// the chosen folder.
+std::string NoGame(const std::filesystem::path& beside, const std::filesystem::path& chosen) {
+    std::string folders = Common::FS::PathToUTF8String(beside);
+    if (!chosen.empty()) {
+        folders += '\n' + Common::FS::PathToUTF8String(chosen);
+    }
     return Say(
         "No CUSAXXXXX and/or CUSAXXXXX-patch folder found in\n{}\n\nPut Gravity Rush 2 and its "
         "1.11 update beside Gravity Rush 2\xE2\x84\xA2"
         ".exe: either two folders, the game and the update (for example CUSA04934 and "
         "CUSA04934-patch), or one folder with the update copied over the game. Folders and .zar "
         "archives both work.\n\n{}",
-        Common::FS::PathToUTF8String(folder), Language::Text(PkgNote));
+        folders, Language::Text(PkgNote));
+}
+
+// Tells the player that no game is found. Where the launcher has the dialog for it, the player
+// can choose the folder that holds the game instead, and that folder is returned.
+std::optional<std::filesystem::path> AskFolder(const std::string& text) {
+#if defined(_WIN32) || defined(__linux__)
+    LOG_ERROR(Loader, "GR2port: {}", text);
+    return Launcher::AskGameFolder(text);
+#else
+    Tell(text);
+    return std::nullopt;
+#endif
 }
 
 // A folder's or archive's own name, as the player sees it.
@@ -221,7 +243,7 @@ std::string NameOf(const std::filesystem::path& root) {
     return Common::FS::PathToUTF8String(root.filename());
 }
 
-// What a folder or archive beside the executable holds of the game.
+// What a folder or archive holds of the game.
 struct Dump {
     std::filesystem::path root;
     std::string title_id;
@@ -230,8 +252,8 @@ struct Dump {
     bool game = false;
 };
 
-// The dumps beside the executable, in the order of their names. Its param.sfo tells what a
-// folder or a .zar archive holds, whatever it is called.
+// The dumps in folder, in the order of their names. Its param.sfo tells what a folder or a .zar
+// archive holds, whatever it is called.
 std::vector<Dump> ListDumps(const std::filesystem::path& folder) {
     std::vector<std::filesystem::path> roots;
     std::error_code ignored;
@@ -362,10 +384,8 @@ std::optional<Game> Check(const std::string& id, const std::optional<std::filesy
     return Game{*root, loose_files};
 }
 
-} // namespace
-
-std::optional<Game> Find() {
-    const std::filesystem::path folder = ExecutableFolder();
+// Checks the dump in folder of the first title that has one there. Returns whether there is one.
+bool CheckIn(const std::filesystem::path& folder, std::optional<Game>& game) {
     const std::vector<Dump> dumps = ListDumps(folder);
     for (const std::string& id : TitleIds()) {
         std::optional<std::filesystem::path> root;
@@ -377,11 +397,35 @@ std::optional<Game> Find() {
             }
         }
         if (root || update) {
-            return Check(id, root, update);
+            game = Check(id, root, update);
+            return true;
         }
     }
-    Tell(NoGame(folder));
-    return std::nullopt;
+    return false;
+}
+
+} // namespace
+
+std::optional<Game> Find() {
+    const std::filesystem::path beside = ExecutableFolder();
+    std::filesystem::path chosen = EmulatorSettings.GetGameDirectory();
+    std::optional<Game> game;
+    while (!CheckIn(beside, game)) {
+        if (!chosen.empty() && CheckIn(chosen, game)) {
+            // The settings keep a chosen folder once its dump passes the checks.
+            if (game && chosen != EmulatorSettings.GetGameDirectory()) {
+                EmulatorSettings.SetGameDirectory(chosen);
+                EmulatorSettings.Save();
+            }
+            break;
+        }
+        const std::optional<std::filesystem::path> folder = AskFolder(NoGame(beside, chosen));
+        if (!folder) {
+            break;
+        }
+        chosen = *folder;
+    }
+    return game;
 }
 
 bool LooseFiles() {

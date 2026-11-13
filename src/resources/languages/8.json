@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "Вы уверены, что хотите выйти на рабочий стол?",
     "Update your graphics driver": "Обновите графический драйвер",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "Версия вашего графического драйвера NVIDIA — {0}. Обновите его до версии {1} или новее, чтобы использовать DLSS.",
-    "Don't show again": "Больше не показывать"
+    "Don't show again": "Больше не показывать",
+    "Choose custom game directory instead": "Выбрать вместо этого свою папку с игрой",
+    "Choose the folder that holds your game and its update": "Выбор папки с игрой и обновлением к ней"
   }
 }

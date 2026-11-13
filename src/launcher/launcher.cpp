@@ -10,10 +10,13 @@
 #include <utility>
 #include <windows.h>
 // windows.h first
+#include <commctrl.h>
+#include <shobjidl.h>
 #include <windowsx.h>
 
 #include "common/logging/log.h"
 #include "common/scm_rev.h"
+#include "common/string_util.h"
 #include "core/language/language.h"
 #include "launcher/art.h"
 #include "launcher/driver_notice.h"
@@ -379,6 +382,44 @@ bool Missing(DWORD id) {
     return handle == nullptr || handle == INVALID_HANDLE_VALUE;
 }
 
+// The link of the message that no game is found closes the message as OK does, and choose tells
+// the two apart.
+HRESULT CALLBACK OnNoGameEvent(HWND dialog, UINT notice, WPARAM, LPARAM, LONG_PTR choose) {
+    if (notice == TDN_HYPERLINK_CLICKED) {
+        *reinterpret_cast<bool*>(choose) = true;
+        SendMessageW(dialog, TDM_CLICK_BUTTON, IDOK, 0);
+    }
+    return S_OK;
+}
+
+// The folder the player picks in Windows' folder picker, a COM object, or nothing.
+std::optional<std::filesystem::path> PickFolder(const std::wstring& title) {
+    std::optional<std::filesystem::path> folder;
+    const bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
+    IFileOpenDialog* picker = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_PPV_ARGS(&picker)))) {
+        FILEOPENDIALOGOPTIONS options = 0;
+        picker->GetOptions(&options);
+        picker->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
+        picker->SetTitle(title.c_str());
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(picker->Show(nullptr)) && SUCCEEDED(picker->GetResult(&item))) {
+            wchar_t* path = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                folder = path;
+                CoTaskMemFree(path);
+            }
+            item->Release();
+        }
+        picker->Release();
+    }
+    if (com) {
+        CoUninitialize();
+    }
+    return folder;
+}
+
 } // namespace
 
 void AttachTerminal() {
@@ -402,6 +443,31 @@ void AttachTerminal() {
         SetStdHandle(STD_ERROR_HANDLE, console);
         freopen_s(&stream, "CONOUT$", "w", stderr);
     }
+}
+
+std::optional<std::filesystem::path> AskGameFolder(const std::string& text) {
+    // The message and the picker draw at the monitor's own scale, as the launcher's windows do.
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    const std::wstring content = Common::UTF8ToUTF16W(text);
+    const std::wstring link =
+        L"<a href=\"folder\">" + Language::Text(L"Choose custom game directory instead") + L"</a>";
+    bool choose = false;
+    TASKDIALOGCONFIG config{};
+    config.cbSize = sizeof(config);
+    config.dwFlags = TDF_ENABLE_HYPERLINKS;
+    config.dwCommonButtons = TDCBF_OK_BUTTON;
+    config.pszWindowTitle = Title;
+    config.pszMainIcon = TD_ERROR_ICON;
+    config.pszContent = content.c_str();
+    // The footer is the dialog's last row, under the OK button.
+    config.pszFooter = link.c_str();
+    config.pfCallback = &OnNoGameEvent;
+    config.lpCallbackData = reinterpret_cast<LONG_PTR>(&choose);
+    TaskDialogIndirect(&config, nullptr, nullptr, nullptr);
+    if (!choose) {
+        return std::nullopt;
+    }
+    return PickFolder(Language::Text(L"Choose the folder that holds your game and its update"));
 }
 
 bool Run() {

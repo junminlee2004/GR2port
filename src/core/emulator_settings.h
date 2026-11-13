@@ -178,6 +178,9 @@ struct GeneralSettings {
     Setting<std::filesystem::path> addon_install_dir;
     Setting<std::filesystem::path> home_dir;
     Setting<std::filesystem::path> font_dir;
+    // The folder the player chose that holds the game and its update, for when none is beside
+    // the executable.
+    Setting<std::filesystem::path> game_directory;
 
     Setting<int> volume_slider{100};
     Setting<bool> neo_mode{false};
@@ -218,7 +221,7 @@ struct GeneralSettings {
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GeneralSettings, install_dirs, addon_install_dir, home_dir,
-                                   font_dir, volume_slider, neo_mode, dev_kit_mode,
+                                   font_dir, game_directory, volume_slider, neo_mode, dev_kit_mode,
                                    extra_dmem_in_mbytes, extra_fmem_in_mbytes,
                                    trophy_popup_disabled, trophy_notification_duration, show_splash,
                                    trophy_notification_side, show_fps_counter, console_language,
@@ -738,6 +741,7 @@ public:
     }
 
     // General settings
+    SETTING_FORWARD(m_general, GameDirectory, game_directory)
     SETTING_FORWARD(m_general, VolumeSlider, volume_slider)
     SETTING_FORWARD_BOOL(m_general, Neo, neo_mode)
     SETTING_FORWARD_BOOL(m_general, DevKit, dev_kit_mode)

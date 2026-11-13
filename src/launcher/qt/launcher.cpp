@@ -7,14 +7,20 @@
 #include <string_view>
 #include <utility>
 #include <QApplication>
+#include <QDialog>
+#include <QFileDialog>
 #include <QFontMetricsF>
+#include <QGridLayout>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
+#include <QPushButton>
 #include <QScreen>
 #include <QStringList>
+#include <QStyle>
 #include <QWidget>
 #include <QWindow>
 
@@ -38,6 +44,8 @@ constexpr int MenuRight = 39;
 constexpr int VersionFontSize = 11;
 constexpr int VersionRight = 27;
 constexpr int VersionBaseline = 14;
+// The side of the icon beside the message that no game is found.
+constexpr int IconSize = 32;
 constexpr int LogoLeft = 16;
 constexpr int LogoBottom = 12;
 constexpr int LogoWidth = 290;
@@ -284,12 +292,12 @@ private:
     int pressed = -1;
 };
 
-} // namespace
-
-bool Run() {
+// What show returns, which runs with a Qt application in the launcher's style.
+template <typename Show>
+auto InApplication(Show&& show) {
     // Qt takes the desktop's locale. The game keeps the one it started in.
     const std::string locale = std::setlocale(LC_ALL, nullptr);
-    bool play = false;
+    decltype(show()) shown{};
     {
         int argc = 1;
         char name[] = "Gravity Rush 2";
@@ -302,6 +310,53 @@ bool Run() {
         QApplication::setPalette(DialogPalette());
         // The dialogs' places are fixed, left to right, in every language.
         QApplication::setLayoutDirection(Qt::LeftToRight);
+        shown = show();
+    }
+    std::setlocale(LC_ALL, locale.c_str());
+    return shown;
+}
+
+} // namespace
+
+std::optional<std::filesystem::path> AskGameFolder(const std::string& text) {
+    const QString folder = InApplication([&text] {
+        QDialog dialog;
+        dialog.setWindowTitle(QStringLiteral("Gravity Rush 2"));
+        dialog.setFont(DialogFont());
+        auto* const icon = new QLabel{&dialog};
+        icon->setPixmap(
+            dialog.style()->standardIcon(QStyle::SP_MessageBoxCritical).pixmap(IconSize, IconSize));
+        auto* const message = new QLabel{QString::fromStdString(text), &dialog};
+        message->setTextFormat(Qt::PlainText);
+        message->setWordWrap(true);
+        auto* const ok = new QPushButton{Tr("OK"), &dialog};
+        ok->setDefault(true);
+        auto* const link =
+            new QLabel{QStringLiteral("<a href=\"#\">%1</a>")
+                           .arg(Tr("Choose custom game directory instead").toHtmlEscaped()),
+                       &dialog};
+        auto* const places = new QGridLayout{&dialog};
+        places->addWidget(icon, 0, 0, Qt::AlignTop);
+        places->addWidget(message, 0, 1);
+        places->addWidget(ok, 1, 0, 1, 2, Qt::AlignHCenter);
+        places->addWidget(link, 2, 0, 1, 2, Qt::AlignHCenter);
+        bool choose = false;
+        QObject::connect(ok, &QPushButton::clicked, &dialog, &QDialog::accept);
+        QObject::connect(link, &QLabel::linkActivated, &dialog, [&dialog, &choose] {
+            choose = true;
+            dialog.accept();
+        });
+        dialog.exec();
+        return choose ? QFileDialog::getExistingDirectory(
+                            nullptr, Tr("Choose the folder that holds your game and its update"))
+                      : QString{};
+    });
+    return folder.isEmpty() ? std::nullopt
+                            : std::optional{std::filesystem::path{folder.toStdString()}};
+}
+
+bool Run() {
+    return InApplication([] {
         const Art art;
         Window window{art};
         // Centred on the primary monitor, where the desktop lets a window place itself.
@@ -310,10 +365,8 @@ bool Run() {
         window.show();
         window.activateWindow();
         QApplication::exec();
-        play = window.Play();
-    }
-    std::setlocale(LC_ALL, locale.c_str());
-    return play;
+        return window.Play();
+    });
 }
 
 } // namespace Gr2Port::Launcher

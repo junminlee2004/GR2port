@@ -273,6 +273,8 @@
     "Are you sure you want to quit to desktop?": "‫هل أنت متأكد أنك تريد الخروج إلى سطح المكتب؟‬",
     "Update your graphics driver": "‫حدّث برنامج تشغيل بطاقة الرسومات‬",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "‫إصدار برنامج تشغيل بطاقة رسومات NVIDIA لديك هو {0}. حدّثه إلى الإصدار {1} أو أحدث لاستخدام DLSS.‬",
-    "Don't show again": "‫عدم الإظهار مرة أخرى‬"
+    "Don't show again": "‫عدم الإظهار مرة أخرى‬",
+    "Choose custom game directory instead": "‫اختيار مجلد مخصص للعبة بدلاً من ذلك‬",
+    "Choose the folder that holds your game and its update": "‫اختيار المجلد الذي يحتوي على اللعبة وتحديثها‬"
   }
 }

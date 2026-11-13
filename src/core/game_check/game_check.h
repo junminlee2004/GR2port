@@ -10,9 +10,10 @@
 #include <vector>
 #include "common/types.h"
 
-// GR2port starts only Gravity Rush 2 v1.11, from the executable's own folder: the game and its
-// update, or one with the update copied over it, each a folder or a .zar archive of any name. The
-// param.sfo of each tells what it holds. The checks run at every start.
+// GR2port starts only Gravity Rush 2 v1.11, from the executable's own folder or, with nothing
+// there, from the folder the player chose: the game and its update, or one with the update copied
+// over it, each a folder or a .zar archive of any name. The param.sfo of each tells what it holds.
+// The checks run at every start.
 namespace Gr2Port::GameCheck {
 
 struct Game {
@@ -23,7 +24,7 @@ struct Game {
 };
 
 /// Finds the game and checks the dump. On a problem, tells the player in a message box and
-/// returns nothing.
+/// returns nothing. The box for no game at all lets the player choose the folder that holds it.
 std::optional<Game> Find();
 
 /// Whether Find found the four archives extracted to folders.
