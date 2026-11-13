@@ -276,6 +276,23 @@
     "Don't show again": "Ne jelenjen meg többé",
     "Choose custom game directory instead": "Egyéni játékmappa kiválasztása helyette",
     "Choose the folder that holds your game and its update": "A játékot és a frissítését tartalmazó mappa kiválasztása",
-    "Gravity Rush 2 is already running.": "A Gravity Rush 2 már fut."
+    "Gravity Rush 2 is already running.": "A Gravity Rush 2 már fut.",
+    "Paths": "Útvonalak",
+    "Game Folder": "Játék mappája",
+    "Browse...": "Tallózás...",
+    "User Data Folder": "Felhasználói adatok mappája",
+    "Portable": "Hordozható",
+    "Global": "Globális",
+    "The launcher restarts when Ok saves a change on this tab.": "Az indító újraindul, amikor ezen a lapon egy módosítás mentésre kerül.",
+    "No game or update was found in\n{0}": "Nem található játék vagy frissítés itt:\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Már volt egy mappa itt:\n{0}\nA játék mostantól ezt használja. Az itt lévő mappa\n{1}\na helyén marad.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "A globális mappa nem található itt:\n{0}\nHelyette új hordozható userdata mappa jött létre.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "A mappát nem sikerült áthelyezni ide:\n{0}\nA játék továbbra is ezt használja:\n{1}",
+    "Update Available": "Frissítés érhető el",
+    "Do you want to update now?": "Szeretnél most frissíteni?",
+    "Update": "Frissítés",
+    "Not Now": "Most nem",
+    "Downloading the update...": "Frissítés letöltése...",
+    "The update could not be installed.": "A frissítést nem sikerült telepíteni."
   }
 }

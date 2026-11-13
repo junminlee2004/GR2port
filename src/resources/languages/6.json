@@ -276,6 +276,23 @@
     "Don't show again": "Niet meer tonen",
     "Choose custom game directory instead": "In plaats daarvan een eigen spelmap selecteren",
     "Choose the folder that holds your game and its update": "De map met je spel en de update selecteren",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2 wordt al uitgevoerd."
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 wordt al uitgevoerd.",
+    "Paths": "Paden",
+    "Game Folder": "Gamemap",
+    "Browse...": "Bladeren...",
+    "User Data Folder": "Map met gebruikersgegevens",
+    "Portable": "Draagbaar",
+    "Global": "Globaal",
+    "The launcher restarts when Ok saves a change on this tab.": "De launcher start opnieuw wanneer een wijziging op dit tabblad wordt opgeslagen.",
+    "No game or update was found in\n{0}": "Geen game of update gevonden in\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Er stond al een map in\n{0}\nDe game gebruikt die nu. De map in\n{1}\nblijft waar hij is.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "De globale map is niet gevonden in\n{0}\nIn plaats daarvan is een nieuwe draagbare userdata-map gemaakt.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "De map kon niet worden verplaatst naar\n{0}\nDe game gebruikt nog steeds\n{1}",
+    "Update Available": "Update beschikbaar",
+    "Do you want to update now?": "Wil je nu updaten?",
+    "Update": "Updaten",
+    "Not Now": "Niet nu",
+    "Downloading the update...": "Update downloaden...",
+    "The update could not be installed.": "De update kon niet worden geïnstalleerd."
   }
 }

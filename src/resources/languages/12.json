@@ -276,6 +276,23 @@
     "Don't show again": "Älä näytä uudelleen",
     "Choose custom game directory instead": "Valitse sen sijaan oma pelikansio",
     "Choose the folder that holds your game and its update": "Valitse kansio, jossa peli ja sen päivitys ovat",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2 on jo käynnissä."
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 on jo käynnissä.",
+    "Paths": "Polut",
+    "Game Folder": "Pelikansio",
+    "Browse...": "Selaa...",
+    "User Data Folder": "Käyttäjätietojen kansio",
+    "Portable": "Siirrettävä",
+    "Global": "Yleinen",
+    "The launcher restarts when Ok saves a change on this tab.": "Käynnistin käynnistyy uudelleen, kun tämän välilehden muutos tallennetaan.",
+    "No game or update was found in\n{0}": "Peliä tai päivitystä ei löytynyt kansiosta\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Kansio oli jo olemassa sijainnissa\n{0}\nPeli käyttää nyt sitä. Kansio sijainnissa\n{1}\njää paikalleen.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Yleistä kansiota ei löytynyt sijainnista\n{0}\nSen sijaan luotiin uusi siirrettävä userdata-kansio.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Kansiota ei voitu siirtää sijaintiin\n{0}\nPeli käyttää edelleen sijaintia\n{1}",
+    "Update Available": "Päivitys saatavilla",
+    "Do you want to update now?": "Haluatko päivittää nyt?",
+    "Update": "Päivitä",
+    "Not Now": "Ei nyt",
+    "Downloading the update...": "Ladataan päivitystä...",
+    "The update could not be installed.": "Päivitystä ei voitu asentaa."
   }
 }

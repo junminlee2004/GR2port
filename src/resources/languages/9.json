@@ -276,6 +276,23 @@
     "Don't show again": "다시 표시 안 함",
     "Choose custom game directory instead": "대신 사용자 지정 게임 폴더 선택",
     "Choose the folder that holds your game and its update": "게임과 업데이트가 들어 있는 폴더 선택",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2가 이미 실행 중입니다."
+    "Gravity Rush 2 is already running.": "Gravity Rush 2가 이미 실행 중입니다.",
+    "Paths": "경로",
+    "Game Folder": "게임 폴더",
+    "Browse...": "찾아보기...",
+    "User Data Folder": "사용자 데이터 폴더",
+    "Portable": "포터블",
+    "Global": "전역",
+    "The launcher restarts when Ok saves a change on this tab.": "이 탭의 변경 사항을 저장하면 런처가 다시 시작됩니다.",
+    "No game or update was found in\n{0}": "다음 위치에서 게임이나 업데이트를 찾을 수 없습니다\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "다음 위치에 이미 폴더가 있었습니다\n{0}\n이제 게임이 이 폴더를 사용합니다. 다음 위치의 폴더는\n{1}\n그대로 유지됩니다.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "다음 위치에서 전역 폴더를 찾을 수 없습니다\n{0}\n대신 새 포터블 userdata 폴더를 만들었습니다.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "폴더를 다음 위치로 옮길 수 없습니다\n{0}\n게임은 계속 다음 위치를 사용합니다\n{1}",
+    "Update Available": "업데이트 가능",
+    "Do you want to update now?": "지금 업데이트하시겠습니까?",
+    "Update": "업데이트",
+    "Not Now": "나중에",
+    "Downloading the update...": "업데이트 다운로드 중...",
+    "The update could not be installed.": "업데이트를 설치할 수 없습니다."
   }
 }

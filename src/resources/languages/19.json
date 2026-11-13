@@ -276,6 +276,23 @@
     "Don't show again": "Bir daha gösterme",
     "Choose custom game directory instead": "Bunun yerine özel oyun klasörü seç",
     "Choose the folder that holds your game and its update": "Oyunu ve Güncellemesini İçeren Klasörü Seç",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2 zaten çalışıyor."
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 zaten çalışıyor.",
+    "Paths": "Yollar",
+    "Game Folder": "Oyun Klasörü",
+    "Browse...": "Gözat...",
+    "User Data Folder": "Kullanıcı Verileri Klasörü",
+    "Portable": "Taşınabilir",
+    "Global": "Genel",
+    "The launcher restarts when Ok saves a change on this tab.": "Bu sekmedeki bir değişiklik kaydedildiğinde başlatıcı yeniden başlar.",
+    "No game or update was found in\n{0}": "Şurada oyun veya güncelleme bulunamadı:\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Şurada zaten bir klasör vardı:\n{0}\nOyun artık onu kullanıyor. Şuradaki klasör\n{1}\nolduğu yerde kalıyor.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Genel klasör şurada bulunamadı:\n{0}\nBunun yerine yeni bir taşınabilir userdata klasörü oluşturuldu.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Klasör şuraya taşınamadı:\n{0}\nOyun hâlâ şunu kullanıyor:\n{1}",
+    "Update Available": "Güncelleme Var",
+    "Do you want to update now?": "Şimdi güncellemek istiyor musunuz?",
+    "Update": "Güncelle",
+    "Not Now": "Şimdi Değil",
+    "Downloading the update...": "Güncelleme indiriliyor...",
+    "The update could not be installed.": "Güncelleme yüklenemedi."
   }
 }

@@ -2,7 +2,7 @@
   "name": "日本語",
   "strings": {
     "Display": "画面",
-    "Graphics": "グラフィック",
+    "Graphics": "画質",
     "Controller": "コントローラー",
     "Mouse && Keyboard": "マウス&&キーボード",
     "DLC": "DLC",
@@ -276,6 +276,23 @@
     "Don't show again": "今後表示しない",
     "Choose custom game directory instead": "代わりにゲームフォルダーを指定する",
     "Choose the folder that holds your game and its update": "ゲーム本体とアップデートが入っているフォルダーの選択",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2はすでに起動しています。"
+    "Gravity Rush 2 is already running.": "Gravity Rush 2はすでに起動しています。",
+    "Paths": "パス",
+    "Game Folder": "ゲームフォルダー",
+    "Browse...": "参照...",
+    "User Data Folder": "ユーザーデータフォルダー",
+    "Portable": "ポータブル",
+    "Global": "グローバル",
+    "The launcher restarts when Ok saves a change on this tab.": "このタブの変更を保存すると、ランチャーが再起動します。",
+    "No game or update was found in\n{0}": "次の場所にゲームもアップデートも見つかりませんでした\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "次の場所には既にフォルダーがありました\n{0}\nゲームは今後このフォルダーを使用します。次の場所のフォルダーは\n{1}\nそのまま残ります。",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "次の場所にグローバルフォルダーが見つかりませんでした\n{0}\n代わりに新しいポータブル userdata フォルダーを作成しました。",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "フォルダーを次の場所に移動できませんでした\n{0}\nゲームは引き続き次の場所を使用します\n{1}",
+    "Update Available": "アップデートがあります",
+    "Do you want to update now?": "今すぐアップデートしますか?",
+    "Update": "アップデート",
+    "Not Now": "後で",
+    "Downloading the update...": "アップデートをダウンロード中...",
+    "The update could not be installed.": "アップデートをインストールできませんでした。"
   }
 }

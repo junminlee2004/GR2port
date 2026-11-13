@@ -119,6 +119,9 @@
     "Update your graphics driver": "Atualize o controlador gráfico",
     "Your NVIDIA graphics driver is version {0}. Update it to version {1} or newer to use DLSS.": "O seu controlador gráfico NVIDIA está na versão {0}. Atualize-o para a versão {1} ou mais recente para usar o DLSS.",
     "Don't show again": "Não voltar a mostrar",
-    "Gravity Rush 2 is already running.": "O Gravity Rush 2 já está em execução."
+    "User Data Folder": "Pasta de dados do utilizador",
+    "The launcher restarts when Ok saves a change on this tab.": "O launcher reinicia quando uma alteração neste separador é guardada.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Não foi possível mover a pasta para\n{0}\nO jogo continua a usar\n{1}",
+    "Downloading the update...": "A transferir a atualização..."
   }
 }

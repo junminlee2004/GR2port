@@ -276,6 +276,23 @@
     "Don't show again": "Příště nezobrazovat",
     "Choose custom game directory instead": "Vybrat místo toho vlastní složku se hrou",
     "Choose the folder that holds your game and its update": "Vybrat složku, která obsahuje hru a její aktualizaci",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2 už běží."
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 už běží.",
+    "Paths": "Cesty",
+    "Game Folder": "Složka hry",
+    "Browse...": "Procházet...",
+    "User Data Folder": "Složka uživatelských dat",
+    "Portable": "Přenosný",
+    "Global": "Globální",
+    "The launcher restarts when Ok saves a change on this tab.": "Spouštěč se restartuje, když se uloží změna na této kartě.",
+    "No game or update was found in\n{0}": "Hra ani aktualizace nebyla nalezena v\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Složka už existovala v\n{0}\nHra ji teď používá. Složka v\n{1}\nzůstává tam, kde je.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Globální složka nebyla nalezena v\n{0}\nMísto ní byla vytvořena nová přenosná složka userdata.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Složku se nepodařilo přesunout do\n{0}\nHra dál používá\n{1}",
+    "Update Available": "Je k dispozici aktualizace",
+    "Do you want to update now?": "Chcete aktualizovat nyní?",
+    "Update": "Aktualizovat",
+    "Not Now": "Teď ne",
+    "Downloading the update...": "Stahování aktualizace...",
+    "The update could not be installed.": "Aktualizaci se nepodařilo nainstalovat."
   }
 }

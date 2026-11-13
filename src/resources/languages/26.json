@@ -276,6 +276,23 @@
     "Don't show again": "Nu mai afișa",
     "Choose custom game directory instead": "Selectează în schimb un dosar personalizat pentru joc",
     "Choose the folder that holds your game and its update": "Selectează dosarul care conține jocul și actualizarea sa",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2 rulează deja."
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 rulează deja.",
+    "Paths": "Căi",
+    "Game Folder": "Dosarul jocului",
+    "Browse...": "Răsfoire...",
+    "User Data Folder": "Dosarul datelor de utilizator",
+    "Portable": "Portabil",
+    "Global": "Global",
+    "The launcher restarts when Ok saves a change on this tab.": "Lansatorul repornește când este salvată o modificare din această filă.",
+    "No game or update was found in\n{0}": "Nu s-a găsit niciun joc sau actualizare în\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Exista deja un dosar în\n{0}\nJocul îl folosește de acum. Dosarul din\n{1}\nrămâne unde este.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Dosarul global nu a fost găsit în\n{0}\nÎn locul lui a fost creat un nou dosar userdata portabil.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Dosarul nu a putut fi mutat în\n{0}\nJocul folosește în continuare\n{1}",
+    "Update Available": "Actualizare disponibilă",
+    "Do you want to update now?": "Vrei să actualizezi acum?",
+    "Update": "Actualizează",
+    "Not Now": "Nu acum",
+    "Downloading the update...": "Se descarcă actualizarea...",
+    "The update could not be installed.": "Actualizarea nu a putut fi instalată."
   }
 }

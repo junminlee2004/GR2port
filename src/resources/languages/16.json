@@ -276,6 +276,23 @@
     "Don't show again": "Nie pokazuj ponownie",
     "Choose custom game directory instead": "Wybierz zamiast tego własny folder gry",
     "Choose the folder that holds your game and its update": "Wybierz folder zawierający grę i jej aktualizację",
-    "Gravity Rush 2 is already running.": "Gra Gravity Rush 2 jest już uruchomiona."
+    "Gravity Rush 2 is already running.": "Gra Gravity Rush 2 jest już uruchomiona.",
+    "Paths": "Ścieżki",
+    "Game Folder": "Folder gry",
+    "Browse...": "Przeglądaj...",
+    "User Data Folder": "Folder danych użytkownika",
+    "Portable": "Przenośny",
+    "Global": "Globalny",
+    "The launcher restarts when Ok saves a change on this tab.": "Launcher uruchamia się ponownie, gdy zmiana na tej karcie zostanie zapisana.",
+    "No game or update was found in\n{0}": "Nie znaleziono gry ani aktualizacji w\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Folder już istniał w\n{0}\nGra używa go od teraz. Folder w\n{1}\npozostaje na swoim miejscu.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Nie znaleziono folderu globalnego w\n{0}\nZamiast niego utworzono nowy przenośny folder userdata.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Nie udało się przenieść folderu do\n{0}\nGra nadal używa\n{1}",
+    "Update Available": "Dostępna aktualizacja",
+    "Do you want to update now?": "Czy chcesz zaktualizować teraz?",
+    "Update": "Aktualizuj",
+    "Not Now": "Nie teraz",
+    "Downloading the update...": "Pobieranie aktualizacji...",
+    "The update could not be installed.": "Nie udało się zainstalować aktualizacji."
   }
 }

@@ -7,6 +7,7 @@
     "No key was pressed; {0} keeps its key.": "Aucune touche pressée; {0} garde sa touche.",
     "Your game files are corrupted: eboot.bin in {} is not the Gravity Rush 2 v1.11 eboot.bin that GR2port's patches fit.": "Vos fichiers de jeu sont corrompus : l'eboot.bin dans {} n'est pas l'eboot.bin v1.11 de Gravity Rush 2 auquel s'appliquent les correctifs de GR2port.",
     "Circle": "Cercle",
-    "No button was pressed; {0} keeps its button.": "Aucun bouton pressé; {0} garde son bouton."
+    "No button was pressed; {0} keeps its button.": "Aucun bouton pressé; {0} garde son bouton.",
+    "Do you want to update now?": "Voulez-vous mettre à jour maintenant?"
   }
 }

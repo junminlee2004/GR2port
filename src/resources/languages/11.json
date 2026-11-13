@@ -276,6 +276,23 @@
     "Don't show again": "不再显示",
     "Choose custom game directory instead": "改为选择自定义游戏文件夹",
     "Choose the folder that holds your game and its update": "选择存放游戏本体和更新的文件夹",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2 已在运行。"
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 已在运行。",
+    "Paths": "路径",
+    "Game Folder": "游戏文件夹",
+    "Browse...": "浏览...",
+    "User Data Folder": "用户数据文件夹",
+    "Portable": "便携",
+    "Global": "全局",
+    "The launcher restarts when Ok saves a change on this tab.": "保存此选项卡的更改后，启动器将重新启动。",
+    "No game or update was found in\n{0}": "在以下位置未找到游戏或更新\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "以下位置已有文件夹\n{0}\n游戏现在使用它。以下位置的文件夹\n{1}\n保留在原处。",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "在以下位置未找到全局文件夹\n{0}\n已改为创建新的便携 userdata 文件夹。",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "无法将文件夹移动到\n{0}\n游戏仍使用\n{1}",
+    "Update Available": "有可用更新",
+    "Do you want to update now?": "要立即更新吗？",
+    "Update": "更新",
+    "Not Now": "以后再说",
+    "Downloading the update...": "正在下载更新...",
+    "The update could not be installed.": "无法安装更新。"
   }
 }

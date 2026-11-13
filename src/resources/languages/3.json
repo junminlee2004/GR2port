@@ -276,6 +276,23 @@
     "Don't show again": "No volver a mostrar",
     "Choose custom game directory instead": "Seleccionar una carpeta de juego personalizada en su lugar",
     "Choose the folder that holds your game and its update": "Seleccionar la carpeta que contiene tu juego y su actualización",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2 ya se está ejecutando."
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 ya se está ejecutando.",
+    "Paths": "Rutas",
+    "Game Folder": "Carpeta del juego",
+    "Browse...": "Examinar...",
+    "User Data Folder": "Carpeta de datos de usuario",
+    "Portable": "Portátil",
+    "Global": "Global",
+    "The launcher restarts when Ok saves a change on this tab.": "El lanzador se reinicia al guardar un cambio de esta pestaña.",
+    "No game or update was found in\n{0}": "No se encontró ningún juego ni actualización en\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Ya había una carpeta en\n{0}\nEl juego la usa a partir de ahora. La carpeta de\n{1}\nse queda donde está.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "No se encontró la carpeta global en\n{0}\nSe creó una nueva carpeta userdata portátil en su lugar.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "No se pudo mover la carpeta a\n{0}\nEl juego sigue usando\n{1}",
+    "Update Available": "Actualización disponible",
+    "Do you want to update now?": "¿Quieres actualizar ahora?",
+    "Update": "Actualizar",
+    "Not Now": "Ahora no",
+    "Downloading the update...": "Descargando la actualización...",
+    "The update could not be installed.": "No se pudo instalar la actualización."
   }
 }

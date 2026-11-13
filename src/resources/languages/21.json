@@ -276,6 +276,23 @@
     "Don't show again": "‫عدم الإظهار مرة أخرى‬",
     "Choose custom game directory instead": "‫اختيار مجلد مخصص للعبة بدلاً من ذلك‬",
     "Choose the folder that holds your game and its update": "‫اختيار المجلد الذي يحتوي على اللعبة وتحديثها‬",
-    "Gravity Rush 2 is already running.": "‫Gravity Rush 2 قيد التشغيل بالفعل.‬"
+    "Gravity Rush 2 is already running.": "‫Gravity Rush 2 قيد التشغيل بالفعل.‬",
+    "Paths": "‫مسارات‬",
+    "Game Folder": "‫مجلد اللعبة‬",
+    "Browse...": "‫استعراض...‬",
+    "User Data Folder": "‫مجلد بيانات المستخدم‬",
+    "Portable": "‫محمول‬",
+    "Global": "‫عام‬",
+    "The launcher restarts when Ok saves a change on this tab.": "‫يُعاد تشغيل المشغّل عند حفظ تغيير في هذا التبويب.‬",
+    "No game or update was found in\n{0}": "‫لم يُعثر على لعبة أو تحديث في‬\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "‫كان هناك مجلد موجود بالفعل في‬\n{0}\n‫تستخدمه اللعبة الآن. المجلد الموجود في‬\n{1}\n‫يبقى في مكانه.‬",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "‫لم يُعثر على المجلد العام في‬\n{0}\n‫أُنشئ مجلد userdata محمول جديد بدلاً منه.‬",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "‫تعذّر نقل المجلد إلى‬\n{0}\n‫ما زالت اللعبة تستخدم‬\n{1}",
+    "Update Available": "‫يتوفر تحديث‬",
+    "Do you want to update now?": "‫هل تريد التحديث الآن؟‬",
+    "Update": "‫تحديث‬",
+    "Not Now": "‫ليس الآن‬",
+    "Downloading the update...": "‫جارٍ تنزيل التحديث...‬",
+    "The update could not be installed.": "‫تعذّر تثبيت التحديث.‬"
   }
 }

@@ -276,6 +276,23 @@
     "Don't show again": "Không hiển thị lại",
     "Choose custom game directory instead": "Chọn thư mục trò chơi tùy chỉnh thay thế",
     "Choose the folder that holds your game and its update": "Chọn thư mục chứa trò chơi và bản cập nhật",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2 hiện đang chạy."
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 hiện đang chạy.",
+    "Paths": "Vị trí",
+    "Game Folder": "Thư mục trò chơi",
+    "Browse...": "Duyệt...",
+    "User Data Folder": "Thư mục dữ liệu người dùng",
+    "Portable": "Di động",
+    "Global": "Toàn cục",
+    "The launcher restarts when Ok saves a change on this tab.": "Trình khởi chạy sẽ khởi động lại khi lưu thay đổi trong thẻ này.",
+    "No game or update was found in\n{0}": "Không tìm thấy trò chơi hay bản cập nhật trong\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Đã có sẵn một thư mục tại\n{0}\nTừ giờ trò chơi dùng thư mục đó. Thư mục tại\n{1}\nvẫn ở nguyên chỗ cũ.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Không tìm thấy thư mục toàn cục tại\n{0}\nMột thư mục userdata di động mới đã được tạo thay thế.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Không thể chuyển thư mục đến\n{0}\nTrò chơi vẫn dùng\n{1}",
+    "Update Available": "Có bản cập nhật",
+    "Do you want to update now?": "Bạn có muốn cập nhật ngay không?",
+    "Update": "Cập nhật",
+    "Not Now": "Để sau",
+    "Downloading the update...": "Đang tải bản cập nhật...",
+    "The update could not be installed.": "Không thể cài đặt bản cập nhật."
   }
 }

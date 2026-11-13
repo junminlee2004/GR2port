@@ -276,6 +276,23 @@
     "Don't show again": "Vis ikke igen",
     "Choose custom game directory instead": "Vælg en brugerdefineret spilmappe i stedet",
     "Choose the folder that holds your game and its update": "Vælg den mappe, der indeholder spillet og dets opdatering",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2 kører allerede."
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 kører allerede.",
+    "Paths": "Stier",
+    "Game Folder": "Spilmappe",
+    "Browse...": "Gennemse...",
+    "User Data Folder": "Mappe til brugerdata",
+    "Portable": "Bærbar",
+    "Global": "Global",
+    "The launcher restarts when Ok saves a change on this tab.": "Starteren genstarter, når en ændring på denne fane gemmes.",
+    "No game or update was found in\n{0}": "Intet spil eller ingen opdatering fundet i\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Der var allerede en mappe i\n{0}\nSpillet bruger den nu. Mappen i\n{1}\nbliver, hvor den er.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Den globale mappe blev ikke fundet i\n{0}\nEn ny bærbar userdata-mappe blev oprettet i stedet.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Mappen kunne ikke flyttes til\n{0}\nSpillet bruger stadig\n{1}",
+    "Update Available": "Opdatering tilgængelig",
+    "Do you want to update now?": "Vil du opdatere nu?",
+    "Update": "Opdater",
+    "Not Now": "Ikke nu",
+    "Downloading the update...": "Henter opdateringen...",
+    "The update could not be installed.": "Opdateringen kunne ikke installeres."
   }
 }

@@ -276,6 +276,23 @@
     "Don't show again": "Jangan tampilkan lagi",
     "Choose custom game directory instead": "Pilih folder game kustom sebagai gantinya",
     "Choose the folder that holds your game and its update": "Pilih Folder yang Berisi Game dan Pembaruannya",
-    "Gravity Rush 2 is already running.": "Gravity Rush 2 sudah berjalan."
+    "Gravity Rush 2 is already running.": "Gravity Rush 2 sudah berjalan.",
+    "Paths": "Jalur",
+    "Game Folder": "Folder Game",
+    "Browse...": "Telusuri...",
+    "User Data Folder": "Folder Data Pengguna",
+    "Portable": "Portabel",
+    "Global": "Global",
+    "The launcher restarts when Ok saves a change on this tab.": "Peluncur dimulai ulang saat perubahan di tab ini disimpan.",
+    "No game or update was found in\n{0}": "Game atau pembaruan tidak ditemukan di\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Sudah ada folder di\n{0}\nGame kini memakainya. Folder di\n{1}\ntetap di tempatnya.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Folder global tidak ditemukan di\n{0}\nSebagai gantinya, folder userdata portabel baru dibuat.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Folder tidak dapat dipindahkan ke\n{0}\nGame masih memakai\n{1}",
+    "Update Available": "Pembaruan Tersedia",
+    "Do you want to update now?": "Perbarui sekarang?",
+    "Update": "Perbarui",
+    "Not Now": "Nanti Saja",
+    "Downloading the update...": "Mengunduh pembaruan...",
+    "The update could not be installed.": "Pembaruan tidak dapat dipasang."
   }
 }

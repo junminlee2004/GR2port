@@ -276,6 +276,23 @@
     "Don't show again": "Больше не показывать",
     "Choose custom game directory instead": "Выбрать вместо этого свою папку с игрой",
     "Choose the folder that holds your game and its update": "Выбор папки с игрой и обновлением к ней",
-    "Gravity Rush 2 is already running.": "Игра Gravity Rush 2 уже запущена."
+    "Gravity Rush 2 is already running.": "Игра Gravity Rush 2 уже запущена.",
+    "Paths": "Пути",
+    "Game Folder": "Папка игры",
+    "Browse...": "Обзор...",
+    "User Data Folder": "Папка данных пользователя",
+    "Portable": "Портативный",
+    "Global": "Глобальный",
+    "The launcher restarts when Ok saves a change on this tab.": "Лаунчер перезапускается, когда изменение на этой вкладке сохраняется.",
+    "No game or update was found in\n{0}": "Игра или обновление не найдены в\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Папка уже существовала в\n{0}\nТеперь игра использует её. Папка в\n{1}\nостаётся на месте.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Глобальная папка не найдена в\n{0}\nВместо неё создана новая портативная папка userdata.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Не удалось переместить папку в\n{0}\nИгра по-прежнему использует\n{1}",
+    "Update Available": "Доступно обновление",
+    "Do you want to update now?": "Обновить сейчас?",
+    "Update": "Обновить",
+    "Not Now": "Не сейчас",
+    "Downloading the update...": "Загрузка обновления...",
+    "The update could not be installed.": "Не удалось установить обновление."
   }
 }

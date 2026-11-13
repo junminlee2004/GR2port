@@ -276,6 +276,23 @@
     "Don't show again": "Більше не показувати",
     "Choose custom game directory instead": "Натомість вибрати власну папку з грою",
     "Choose the folder that holds your game and its update": "Вибір папки з грою та оновленням до неї",
-    "Gravity Rush 2 is already running.": "Гру Gravity Rush 2 вже запущено."
+    "Gravity Rush 2 is already running.": "Гру Gravity Rush 2 вже запущено.",
+    "Paths": "Шляхи",
+    "Game Folder": "Папка гри",
+    "Browse...": "Огляд...",
+    "User Data Folder": "Папка даних користувача",
+    "Portable": "Портативний",
+    "Global": "Глобальний",
+    "The launcher restarts when Ok saves a change on this tab.": "Лаунчер перезапускається, коли зміну на цій вкладці збережено.",
+    "No game or update was found in\n{0}": "Гру або оновлення не знайдено в\n{0}",
+    "A folder was already at\n{0}\nThe game uses it now. The folder at\n{1}\nstays where it is.": "Папка вже існувала в\n{0}\nТепер гра використовує її. Папка в\n{1}\nзалишається на місці.",
+    "The global folder was not found at\n{0}\nA new portable userdata folder was created instead.": "Глобальну папку не знайдено в\n{0}\nЗамість неї створено нову портативну папку userdata.",
+    "The folder could not be moved to\n{0}\nThe game still uses\n{1}": "Не вдалося перемістити папку до\n{0}\nГра й далі використовує\n{1}",
+    "Update Available": "Доступне оновлення",
+    "Do you want to update now?": "Оновити зараз?",
+    "Update": "Оновити",
+    "Not Now": "Не зараз",
+    "Downloading the update...": "Завантаження оновлення...",
+    "The update could not be installed.": "Не вдалося встановити оновлення."
   }
 }
