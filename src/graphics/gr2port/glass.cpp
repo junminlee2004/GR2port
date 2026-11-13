@@ -400,7 +400,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, u64 address, vk:
         .materials = address + Scene::GlassMaterialsOffset,
         .light = address + Scene::LightOffset,
     };
-    const u64 commands = offset + Scene::CommandsOffset +
+    const u64 commands = offset + Scene::CommandsOffset() +
                          u64{Scene::FirstCommand(header, List)} * sizeof(Scene::Command);
     for (u32 pass = 0; pass < g_passes; pass++) {
         const Pipeline& pipeline = g_pipelines[pass];

@@ -57,7 +57,7 @@ u8* Begin(bool keep) {
         if (g_slots[i].state.compare_exchange_strong(expected, Writing,
                                                      std::memory_order_acquire)) {
             g_writing = i;
-            return cpu + i * SlotBytes;
+            return cpu + i * SlotBytes();
         }
     }
     g_skipped.fetch_add(1, std::memory_order_relaxed);
@@ -122,8 +122,8 @@ bool Take(u64 seen, Packet& packet) {
     packet = {
         .slot = newest,
         .frame = newest_frame,
-        .data = g_cpu.load(std::memory_order_relaxed) + newest * SlotBytes,
-        .address = g_address + newest * SlotBytes,
+        .data = g_cpu.load(std::memory_order_relaxed) + newest * SlotBytes(),
+        .address = g_address + newest * SlotBytes(),
     };
     return true;
 }

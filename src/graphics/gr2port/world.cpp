@@ -589,8 +589,8 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
     cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
     const SurfacePush push{
         .draws = address + Scene::DrawsOffset,
-        .materials = address + Scene::MaterialsOffset,
-        .layer_materials = address + Scene::LayerMaterialsOffset,
+        .materials = address + Scene::MaterialsOffset(),
+        .layer_materials = address + Scene::LayerMaterialsOffset(),
     };
     u64 first = 0;
     for (u32 list = 0; drawn && list < g_surface_pipelines.size(); list++) {
@@ -602,9 +602,9 @@ void RecordSurfaces(vk::CommandBuffer cmd, const Scene::Header& header, const u8
                                    Textures::Set(), {}, dl);
             cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
                               sizeof(push), &push, dl);
-            cmd.drawIndexedIndirect(buffer,
-                                    offset + Scene::CommandsOffset + first * sizeof(Scene::Command),
-                                    count, sizeof(Scene::Command), dl);
+            cmd.drawIndexedIndirect(
+                buffer, offset + Scene::CommandsOffset() + first * sizeof(Scene::Command), count,
+                sizeof(Scene::Command), dl);
         }
         first += count;
     }

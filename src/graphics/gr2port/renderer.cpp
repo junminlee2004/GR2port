@@ -110,9 +110,11 @@ constexpr vk::Format DepthFormat = vk::Format::eD32Sfloat;
 // The scene's size until a world frame names the game's target for its picture: the game's own.
 constexpr vk::Extent2D DefaultSceneExtent{1920, 1080};
 // A frame with more indices than this is not drawn: its items are not what the capture expects.
-constexpr u64 MaxFrameIndices = 48u << 20;
-
-static_assert(Scene::PacketBytes <= SceneRing::SlotBytes);
+// BaseFrameIndices is the limit for the base room, and it grows with the room for draws.
+constexpr u64 BaseFrameIndices = 48u << 20;
+u64 MaxFrameIndices() {
+    return BaseFrameIndices * Scene::g_room.draws / Scene::BaseRoom.draws;
+}
 
 struct CharacterPush {
     u64 draws;
@@ -368,7 +370,14 @@ bool Thread::Init() {
     swapchain = std::make_unique<Swapchain>(d);
     Splash::Show(d, *memory, *swapchain, slots[0].pool, slots[0].commands, slots[0].done,
                  slots[0].acquired);
-    scene_ring = memory->CreateBuffer(SceneRing::Slots * SceneRing::SlotBytes,
+    // A level of detail setting at its finest puts several times the items in the game's frame.
+    Scene::g_room = Settings::FinestDetail(graphics) ? Scene::MostRoom : Scene::BaseRoom;
+    LOG_INFO(Render_Vulkan,
+             "GR2port scene ring: {} slots of {} MB, each with room for {} draws, {} casters, {} "
+             "materials and {} layer materials",
+             SceneRing::Slots, SceneRing::SlotBytes() >> 20, Scene::g_room.draws,
+             Scene::g_room.casters, Scene::g_room.materials, Scene::g_room.layer_materials);
+    scene_ring = memory->CreateBuffer(SceneRing::Slots * SceneRing::SlotBytes(),
                                       vk::BufferUsageFlagBits::eStorageBuffer |
                                           vk::BufferUsageFlagBits::eIndirectBuffer |
                                           vk::BufferUsageFlagBits::eTransferSrc,
@@ -613,7 +622,7 @@ void Thread::DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const P
                       &push, dl);
     cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
     cmd.drawIndexedIndirect(scene_ring.buffer,
-                            offset + Scene::CommandsOffset +
+                            offset + Scene::CommandsOffset() +
                                 u64{Scene::FirstCommand(header, list)} * sizeof(Scene::Command),
                             count, sizeof(Scene::Command), dl);
 }
@@ -704,7 +713,7 @@ void Thread::SaveSnapshot() {
 void Thread::LogScene(const Scene::Header& header, const SceneRing::Packet& packet) {
     LogShadows(header, packet);
     LogDecals(header, packet);
-    const bool refused = header.indices > MaxFrameIndices;
+    const bool refused = header.indices > MaxFrameIndices();
     if (header.draws == 0 || (logged_scene && (!refused || logged_refusal))) {
         return;
     }
@@ -716,7 +725,7 @@ void Thread::LogScene(const Scene::Header& header, const SceneRing::Packet& pack
              refused ? "; too many indices, not drawn" : "");
     const auto* draws = reinterpret_cast<const Scene::Draw*>(packet.data + Scene::DrawsOffset);
     const auto* commands =
-        reinterpret_cast<const Scene::Command*>(packet.data + Scene::CommandsOffset);
+        reinterpret_cast<const Scene::Command*>(packet.data + Scene::CommandsOffset());
     for (u32 i = 0; i < std::min(header.draws, 4u); i++) {
         const Scene::Draw& draw = draws[commands[i].first_instance];
         const float* wvp = draw.world_view_projection;
@@ -801,7 +810,7 @@ void Thread::LogShadows(const Scene::Header& header, const SceneRing::Packet& pa
                  vp[11], vp[12], vp[13], vp[14], vp[15]);
     }
     const auto* casters =
-        reinterpret_cast<const Scene::Caster*>(packet.data + Scene::CastersOffset);
+        reinterpret_cast<const Scene::Caster*>(packet.data + Scene::CastersOffset());
     for (u32 i = 0; i < std::min(header.casters, 2u); i++) {
         const float* w = casters[i].world;
         LOG_INFO(
@@ -852,8 +861,8 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                          const SceneRing::Packet& packet, u64 offset) {
     const auto& dl = d.dispatch;
     const vk::Extent2D extent = render_extent;
-    const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices;
-    stats.refused += header.indices > MaxFrameIndices;
+    const bool drawn = header.draws != 0 && header.indices <= MaxFrameIndices();
+    stats.refused += header.indices > MaxFrameIndices();
     if (drawn) {
         MeasureMotion(packet);
         Upscaler::BeginFrame(packet.data, frame, FramesInFlight);
@@ -1239,7 +1248,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
     Textures::Update(cmd, frame, frame - FramesInFlight);
     Deformers::Update(cmd, frame, frame - FramesInFlight, header.frame);
     LogScene(header, packet);
-    const u64 offset = u64{packet.slot} * SceneRing::SlotBytes;
+    const u64 offset = u64{packet.slot} * SceneRing::SlotBytes();
     Ui::Prepare(cmd, header, packet.data, frame);
     Textures::Refresh(cmd, frame,
                       std::span{header.dynamic}.first(

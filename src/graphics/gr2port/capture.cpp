@@ -786,8 +786,8 @@ alignas(64) std::array<KnownPalette, 1u << KnownPaletteBits> g_known_palettes{};
 // half-full write-combined lines in several places for the reads between items to evict.
 alignas(64) std::array<std::array<Scene::Command, Scene::MaxDraws>,
                        static_cast<u32>(Scene::DrawList::Count)> g_commands;
-alignas(64) std::array<Scene::Command, Scene::Cascades * Scene::CasterLists *
-                                           Scene::MaxCasterCommands> g_caster_commands;
+alignas(64) std::array<std::array<Scene::Command, Scene::MaxCasterCommands>,
+                       Scene::Cascades * Scene::CasterLists> g_caster_commands;
 alignas(64) std::array<Scene::Command, Scene::MaxContours> g_contour_commands;
 alignas(64) std::array<Scene::VertexCommand, Scene::MaxLeaves> g_leaf_commands;
 alignas(
@@ -897,18 +897,18 @@ public:
     Writer(u8* packet, u64 address, u64 frame, std::chrono::steady_clock::time_point start)
         : frame{frame}, part_start{start}, packet{packet},
           draws{reinterpret_cast<Scene::Draw*>(packet + Scene::DrawsOffset)},
-          casters{reinterpret_cast<Scene::Caster*>(packet + Scene::CastersOffset)},
+          casters{reinterpret_cast<Scene::Caster*>(packet + Scene::CastersOffset())},
           palettes{packet + Scene::PalettesOffset},
           palettes_address{address + Scene::PalettesOffset},
           skin_jobs{reinterpret_cast<Scene::SkinJob*>(packet + Scene::SkinJobsOffset)},
           soft_body_jobs{reinterpret_cast<Scene::SoftBodyJob*>(packet + Scene::SoftBodyJobsOffset)},
           decals{reinterpret_cast<Scene::Decal*>(packet + Scene::DecalsOffset)},
-          materials{reinterpret_cast<Scene::Material*>(packet + Scene::MaterialsOffset)},
+          materials{reinterpret_cast<Scene::Material*>(packet + Scene::MaterialsOffset())},
           characters{reinterpret_cast<Scene::Character*>(packet + Scene::CharactersOffset)},
           contours{reinterpret_cast<Scene::Contour*>(packet + Scene::ContoursOffset)},
           leaves{reinterpret_cast<Scene::Leaf*>(packet + Scene::LeavesOffset)},
           layer_materials{
-              reinterpret_cast<Scene::LayerMaterial*>(packet + Scene::LayerMaterialsOffset)},
+              reinterpret_cast<Scene::LayerMaterial*>(packet + Scene::LayerMaterialsOffset())},
           grass{reinterpret_cast<Scene::Grass*>(packet + Scene::GrassOffset)},
           branch_jobs{reinterpret_cast<Scene::BranchJob*>(packet + Scene::BranchJobsOffset)},
           branches{reinterpret_cast<Scene::Branch*>(packet + Scene::BranchesOffset)},
@@ -929,7 +929,7 @@ public:
         constexpr u64 Bytes = sizeof(Scene::Command);
         std::memcpy(packet + Scene::WaterCommandsOffset, g_water_commands.data(),
                     header.effects.water_draws * Bytes);
-        u8* out = packet + Scene::CommandsOffset;
+        u8* out = packet + Scene::CommandsOffset();
         for (u32 list = 0; list < g_commands.size(); list++) {
             const u64 bytes = header.draw_commands[list] * Bytes;
             std::memcpy(out, g_commands[list].data(), bytes);
@@ -937,9 +937,9 @@ public:
         }
         for (u32 c = 0; c < Scene::Cascades; c++) {
             for (u32 list = 0; list < Scene::CasterLists; list++) {
-                const u32 first = (c * Scene::CasterLists + list) * Scene::MaxCasterCommands;
-                std::memcpy(packet + Scene::CasterCommandsOffset + first * Bytes,
-                            g_caster_commands.data() + first,
+                std::memcpy(packet + Scene::CasterCommandsOffset() +
+                                Scene::FirstCasterCommand(header, c, list) * Bytes,
+                            g_caster_commands[c * Scene::CasterLists + list].data(),
                             header.caster_commands[c][list] * Bytes);
             }
         }
@@ -1029,7 +1029,7 @@ public:
         const VAddr constants = Load<VAddr>(item + category.constants);
         const VAddr shape = index_buffer - ShapeIndexBuffer;
         if (submesh == 0 || index_buffer == 0 || constants == 0 ||
-            Load<u16>(submesh + SubmeshRanges) == 0 || header.draws == Scene::MaxDraws) {
+            Load<u16>(submesh + SubmeshRanges) == 0 || header.draws == Scene::g_room.draws) {
             header.dropped++;
             return;
         }
@@ -2086,7 +2086,7 @@ public:
         const VAddr range = Load<VAddr>(item + category.range);
         const VAddr shape = index_buffer - ShapeIndexBuffer;
         if (submesh == 0 || index_buffer == 0 || world == 0 ||
-            header.casters == Scene::MaxCasters) {
+            header.casters == Scene::g_room.casters) {
             header.dropped_casters++;
             return;
         }
@@ -2184,7 +2184,7 @@ public:
 
     void AddCasterCommand(u32 c, u32 list, u32 first_index, u32 count, u32 caster) {
         u32& n = header.caster_commands[c][list];
-        g_caster_commands[(c * Scene::CasterLists + list) * Scene::MaxCasterCommands + n++] = {
+        g_caster_commands[c * Scene::CasterLists + list][n++] = {
             .index_count = count,
             .instance_count = 1,
             .first_index = first_index,
@@ -2299,9 +2299,9 @@ public:
         if (run_count == 0) {
             return true;
         }
-        // Past the list's room for runs, one command draws from the first run to the last.
-        u32& extra = caster_runs[c][list];
-        if (extra + run_count - 1 > Scene::MaxCasters) {
+        // Past the region's room for runs, one command draws from the first run to the last.
+        u32& extra = caster_runs[c][Scene::g_room.packed_casters ? 0 : list];
+        if (extra + run_count - 1 > Scene::g_room.casters) {
             runs[0][1] = runs[run_count - 1][1];
             run_count = 1;
         }
@@ -2608,7 +2608,7 @@ private:
     // packet is full.
     u32 AddMainMaterial(VAddr item, u32 flags, VAddr vertex_constants, VAddr pixel_constants,
                         const Meshes::Mesh& mesh) {
-        if (header.materials == Scene::MaxMaterials) {
+        if (header.materials == Scene::g_room.materials) {
             header.dropped_materials++;
             return 0;
         }
@@ -2636,8 +2636,8 @@ private:
     // Writes a G2_BG_Layer item's layers to the packet, and a material that names them and holds
     // its gradation and hatching. Returns the material's index plus 1; 0 when the packet is full.
     u32 AddLayers(VAddr item, VAddr vertex_constants, VAddr pixel_constants) {
-        if (header.materials == Scene::MaxMaterials ||
-            header.layer_materials == Scene::MaxLayerMaterials) {
+        if (header.materials == Scene::g_room.materials ||
+            header.layer_materials == Scene::g_room.layer_materials) {
             header.dropped_materials++;
             return 0;
         }
@@ -2666,8 +2666,8 @@ private:
     // Writes a G2_BG_Gem item's constants and maps to the packet and returns the index of its
     // Material plus 1.
     u32 AddGem(VAddr item, VAddr pixel_constants) {
-        if (header.materials == Scene::MaxMaterials ||
-            header.layer_materials == Scene::MaxLayerMaterials) {
+        if (header.materials == Scene::g_room.materials ||
+            header.layer_materials == Scene::g_room.layer_materials) {
             header.dropped_materials++;
             return 0;
         }
@@ -2894,7 +2894,8 @@ private:
     }
 
     std::array<CasterClip, Scene::Cascades * Scene::CasterTables> caster_clips{};
-    // The commands each cascade's list holds beyond one per caster.
+    // The commands each cascade's list holds beyond one per caster; the lists of a cascade that
+    // share a region count in its first.
     std::array<std::array<u32, Scene::CasterLists>, Scene::Cascades> caster_runs{};
     Scene::Header header{};
     u64 frame;

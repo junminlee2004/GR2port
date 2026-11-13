@@ -221,7 +221,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
             }
             cmd.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, i + 1, dl);
             cmd.drawIndexedIndirect(buffer,
-                                    offset + Scene::CommandsOffset +
+                                    offset + Scene::CommandsOffset() +
                                         u64{Scene::FirstCommand(header, list)} *
                                             sizeof(Scene::Command),
                                     count, sizeof(Scene::Command), dl);

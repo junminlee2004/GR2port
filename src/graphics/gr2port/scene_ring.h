@@ -14,10 +14,12 @@ namespace Gr2Port::SceneRing {
 
 inline constexpr u32 Slots = 5;
 // A slot holds one packet, rounded up to whole megabytes.
-inline constexpr u64 SlotBytes = (Scene::PacketBytes + 1_MB - 1) / 1_MB * 1_MB;
+inline u64 SlotBytes() {
+    return (Scene::PacketBytes() + 1_MB - 1) / 1_MB * 1_MB;
+}
 
-/// Hands the ring's memory to the draw thread: base holds Slots slots of SlotBytes, mapped at
-/// cpu and at address on the GPU.
+/// Hands the ring's memory to the draw thread: base holds Slots slots of SlotBytes(), mapped at
+/// cpu and at address on the GPU. The packets' room stays as it is from here on.
 void Attach(u8* cpu, u64 address);
 
 /// Draw thread: a free slot to write this frame's scene into, or null.

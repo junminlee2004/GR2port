@@ -800,7 +800,7 @@ void RecordGlow(vk::CommandBuffer cmd, const Scene::Header& header, u64 packet_a
         cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
         const u32 first = Scene::FirstCommand(header, Scene::DrawList::VisionGlow);
         cmd.drawIndexedIndirect(
-            buffer, offset + Scene::CommandsOffset + u64{first} * sizeof(Scene::Command), count,
+            buffer, offset + Scene::CommandsOffset() + u64{first} * sizeof(Scene::Command), count,
             sizeof(Scene::Command), dl);
     }
     // The game draws category 9 after 25.

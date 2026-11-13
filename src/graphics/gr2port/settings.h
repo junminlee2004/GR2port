@@ -157,6 +157,14 @@ struct Graphics {
     bool pass_times{false};
 };
 
+/// Whether a level of detail setting of the environment is at its finest, four times the game's
+/// distances. The game's frame then holds several times the items: GamePatches gives the game
+/// room for them, and the renderer its packets.
+constexpr bool FinestDetail(const Graphics& graphics) {
+    return graphics.far_environment_detail >= FarDetailLevels.front() ||
+           graphics.near_environment_detail >= DetailLevels.front();
+}
+
 /// An integrated GPU's share of installed RAM when texture streaming takes the budget itself: the
 /// RAM beyond what the game's process (a working set of about 4.2 GB) and the system keep, and
 /// at least LeastRamShare.

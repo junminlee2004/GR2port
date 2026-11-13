@@ -8,11 +8,31 @@
 // The layout of a frame's scene packet in the scene ring; shaders/scene.glsl mirrors it.
 namespace Gr2Port::Scene {
 
-inline constexpr u32 MaxDraws = 32768;
-inline constexpr u32 MaxCasters = 4096;
-/// The commands of a cascade's list: one per caster, and up to MaxCasters more for the casters
+/// The draws, shadow casters, world draws with a material and world draws of four mixed layers
+/// that a packet has room for, and whether the caster command lists of a cascade share one region.
+/// Each count is a multiple of 1024, which keeps the arrays aligned.
+struct Room {
+    u32 draws;
+    u32 casters;
+    u32 materials;
+    u32 layer_materials;
+    bool packed_casters;
+};
+/// The room at the game's own level of detail, and the room with a level of detail setting at its
+/// finest, where the game's frame holds several times the items.
+inline constexpr Room BaseRoom{32768, 4096, 8192, 1024, false};
+inline constexpr Room MostRoom{49152, 16384, 49152, 4096, true};
+/// The room of this run's packets. The renderer sets it before it hands out the scene ring.
+inline Room g_room = BaseRoom;
+/// The most room, which the capture's own arrays hold.
+inline constexpr u32 MaxDraws = MostRoom.draws;
+inline constexpr u32 MaxCasters = MostRoom.casters;
+/// The commands of a region of caster commands: one per caster, and as many more for the casters
 /// drawn as several runs of their indices.
 inline constexpr u32 MaxCasterCommands = 2 * MaxCasters;
+inline u32 CasterCommands() {
+    return 2 * g_room.casters;
+}
 inline constexpr u32 Cascades = 3;
 /// The view-projections of each cascade: the plain one, and two that push casters along the light
 /// (item flags 0x10 and 0x20).
@@ -32,16 +52,13 @@ inline constexpr u32 MaxSoftBodyJobs = 512;
 inline constexpr u32 MaxSpheres = 256;
 /// Character draws with decals per packet.
 inline constexpr u32 MaxDecals = 1024;
-/// World draws with a material per packet, and the spheres that shade the world's ambient light.
-inline constexpr u32 MaxMaterials = 8192;
 /// Character draws per packet, and their outlines.
 inline constexpr u32 MaxCharacters = 1024;
 inline constexpr u32 MaxContours = 512;
+/// The spheres that shade the world's ambient light.
 inline constexpr u32 MaxOccluders = 64;
 /// Leaf draws and leaf shadow draws per packet, together.
 inline constexpr u32 MaxLeaves = 2048;
-/// World draws of four mixed layers per packet.
-inline constexpr u32 MaxLayerMaterials = 1024;
 /// Grass instances per packet, and the blades of all of them, the limit of the game's kernel.
 inline constexpr u32 MaxGrass = 256;
 inline constexpr u32 MaxBlades = 131072;
@@ -374,7 +391,7 @@ struct Header {
     u64 indices;
     u32 max_indices;
     u32 draws;
-    /// Items with no drawable mesh or palette, or past MaxDraws.
+    /// Items with no drawable mesh or palette, or past the room for draws.
     u32 dropped;
     /// The capture's time on the game's draw thread, and its parts.
     u32 capture_ns;
@@ -404,7 +421,7 @@ struct Header {
     /// Draws with decals, and draws past MaxDecals, which lose theirs.
     u32 decals;
     u32 dropped_decals;
-    /// Draws with a material, and draws past MaxMaterials, which lose theirs.
+    /// Draws with a material, and draws past the room for materials, which lose theirs.
     u32 materials;
     u32 dropped_materials;
     /// Character draws, and those past MaxCharacters, which are not drawn.
@@ -416,7 +433,7 @@ struct Header {
     /// The commands of each draw list, which follow each other in the packet.
     u32 draw_commands[static_cast<u32>(DrawList::Count)];
     /// Shadow casters written, of them skinned ones; casters with no drawable mesh or palette, or
-    /// past MaxCasters.
+    /// past the room for casters.
     u32 casters;
     u32 skinned_casters;
     u32 dropped_casters;
@@ -450,7 +467,7 @@ struct Header {
     u32 leaf_commands;
     u32 leaf_shadow_commands[Cascades];
     u32 dropped_leaves;
-    /// LayerMaterial records written; past MaxLayerMaterials draws count in dropped_materials.
+    /// LayerMaterial records written; draws past their room count in dropped_materials.
     u32 layer_materials;
     /// Grass records written, the workgroups in x of their kernel, and grass items not drawn (no
     /// record, mesh, texture or room).
@@ -1366,16 +1383,27 @@ inline u32 FirstCommand(const Header& header, DrawList list) {
     return first;
 }
 
+/// The regions of caster commands a cascade has: one for each of its lists, or one that its lists
+/// share, each list after the one before.
+inline u32 CasterRegions() {
+    return g_room.packed_casters ? 1 : CasterLists;
+}
+
+/// The index of the first command of a cascade's list in the packet's caster commands.
+inline u32 FirstCasterCommand(const Header& header, u32 cascade, u32 list) {
+    if (!g_room.packed_casters) {
+        return (cascade * CasterLists + list) * CasterCommands();
+    }
+    u32 first = cascade * CasterCommands();
+    for (u32 i = 0; i < list; i++) {
+        first += header.caster_commands[cascade][i];
+    }
+    return first;
+}
+
 inline constexpr u64 ShadowsOffset = 1024;
-inline constexpr u64 DrawsOffset = 2048;
-inline constexpr u64 CommandsOffset = DrawsOffset + MaxDraws * sizeof(Draw);
-inline constexpr u64 CastersOffset = CommandsOffset + MaxDraws * sizeof(Command);
-/// MaxCasterCommands commands per cascade and list, at
-/// (cascade * CasterLists + list) * MaxCasterCommands.
-inline constexpr u64 CasterCommandsOffset = CastersOffset + MaxCasters * sizeof(Caster);
 /// MaxPaletteRows rows of 16 bytes.
-inline constexpr u64 PalettesOffset =
-    CasterCommandsOffset + Cascades * CasterLists * MaxCasterCommands * sizeof(Command);
+inline constexpr u64 PalettesOffset = 2048;
 inline constexpr u64 SkinJobsOffset = PalettesOffset + MaxPaletteRows * 16;
 inline constexpr u64 EffectorsOffset = SkinJobsOffset + MaxSkinJobs * sizeof(SkinJob);
 inline constexpr u64 SoftBodyJobsOffset = EffectorsOffset + sizeof(Effectors);
@@ -1384,8 +1412,7 @@ inline constexpr u64 SkyOffset = DecalsOffset + MaxDecals * sizeof(Decal);
 inline constexpr u64 GradeOffset = SkyOffset + sizeof(Sky);
 inline constexpr u64 LightOffset = GradeOffset + sizeof(Grade);
 inline constexpr u64 FogOffset = LightOffset + sizeof(Light);
-inline constexpr u64 MaterialsOffset = FogOffset + sizeof(Fog);
-inline constexpr u64 CharactersOffset = MaterialsOffset + MaxMaterials * sizeof(Material);
+inline constexpr u64 CharactersOffset = FogOffset + sizeof(Fog);
 inline constexpr u64 ContoursOffset = CharactersOffset + MaxCharacters * sizeof(Character);
 inline constexpr u64 ContourCommandsOffset = ContoursOffset + MaxContours * sizeof(Contour);
 inline constexpr u64 LeavesOffset = ContourCommandsOffset + MaxContours * sizeof(Command);
@@ -1393,9 +1420,8 @@ inline constexpr u64 LeafCommandsOffset = LeavesOffset + MaxLeaves * sizeof(Leaf
 /// MaxLeaves commands per cascade, at cascade * MaxLeaves.
 inline constexpr u64 LeafShadowCommandsOffset =
     LeafCommandsOffset + MaxLeaves * sizeof(VertexCommand);
-inline constexpr u64 LayerMaterialsOffset =
+inline constexpr u64 GrassOffset =
     LeafShadowCommandsOffset + Cascades * MaxLeaves * sizeof(VertexCommand);
-inline constexpr u64 GrassOffset = LayerMaterialsOffset + MaxLayerMaterials * sizeof(LayerMaterial);
 /// The one draw of all blades. The renderer's kernel counts its vertices.
 inline constexpr u64 GrassCommandOffset = GrassOffset + MaxGrass * sizeof(Grass);
 inline constexpr u64 BranchJobsOffset = GrassCommandOffset + 16;
@@ -1467,15 +1493,36 @@ inline constexpr u64 ShadowTraceOffset =
     (CharacterGlassStatesOffset + MaxCharacterGlassDraws * sizeof(u32) + 15) & ~u64{15};
 inline constexpr u64 MotionBlurOffset = ShadowTraceOffset + sizeof(ShadowTrace);
 inline constexpr u64 CameraOffset = MotionBlurOffset + sizeof(MotionBlur);
-inline constexpr u64 PacketBytes = CameraOffset + sizeof(Camera);
-static_assert(sizeof(Header) <= ShadowsOffset && ShadowsOffset + sizeof(Shadows) <= DrawsOffset &&
-              DrawsOffset % 16 == 0 && CastersOffset % 16 == 0 && PalettesOffset % 16 == 0 &&
-              SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
+/// The arrays that take the packet's room come last, each after the one before: the draws, their
+/// commands, the casters, CasterRegions() regions of CasterCommands() commands per cascade, the
+/// world materials and the layer materials.
+inline constexpr u64 DrawsOffset = (CameraOffset + sizeof(Camera) + 63) & ~u64{63};
+inline u64 CommandsOffset() {
+    return DrawsOffset + u64{g_room.draws} * sizeof(Draw);
+}
+inline u64 CastersOffset() {
+    return CommandsOffset() + u64{g_room.draws} * sizeof(Command);
+}
+inline u64 CasterCommandsOffset() {
+    return CastersOffset() + u64{g_room.casters} * sizeof(Caster);
+}
+inline u64 MaterialsOffset() {
+    return CasterCommandsOffset() +
+           u64{Cascades} * CasterRegions() * CasterCommands() * sizeof(Command);
+}
+inline u64 LayerMaterialsOffset() {
+    return MaterialsOffset() + u64{g_room.materials} * sizeof(Material);
+}
+inline u64 PacketBytes() {
+    return LayerMaterialsOffset() + u64{g_room.layer_materials} * sizeof(LayerMaterial);
+}
+static_assert(sizeof(Header) <= ShadowsOffset &&
+              ShadowsOffset + sizeof(Shadows) <= PalettesOffset && DrawsOffset % 16 == 0 &&
+              PalettesOffset % 16 == 0 && SkinJobsOffset % 16 == 0 && EffectorsOffset % 16 == 0 &&
               SoftBodyJobsOffset % 16 == 0 && DecalsOffset % 16 == 0 && SkyOffset % 16 == 0 &&
               GradeOffset % 16 == 0 && LightOffset % 16 == 0 && FogOffset % 16 == 0 &&
-              MaterialsOffset % 16 == 0 && CharactersOffset % 16 == 0 && ContoursOffset % 16 == 0 &&
-              LeavesOffset % 16 == 0 && LeafCommandsOffset % 16 == 0 &&
-              LayerMaterialsOffset % 16 == 0 && GrassOffset % 16 == 0 &&
+              CharactersOffset % 16 == 0 && ContoursOffset % 16 == 0 && LeavesOffset % 16 == 0 &&
+              LeafCommandsOffset % 16 == 0 && GrassOffset % 16 == 0 &&
               GrassCommandOffset % 16 == 0 && BranchJobsOffset % 16 == 0 &&
               BranchesOffset % 16 == 0 && BranchCommandsOffset % 16 == 0 &&
               WorldDecalsOffset % 16 == 0 && GlassMaterialsOffset % 16 == 0 &&

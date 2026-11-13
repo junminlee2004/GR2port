@@ -243,7 +243,7 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
                vk::AccessFlagBits2::eDepthStencilAttachmentRead |
                    vk::AccessFlagBits2::eDepthStencilAttachmentWrite);
     PushConstants push{
-        .casters = address + Scene::CastersOffset,
+        .casters = address + Scene::CastersOffset(),
         .shadows = address + Scene::ShadowsOffset,
     };
     for (u32 c = 0; c < Scene::Cascades; c++) {
@@ -288,9 +288,9 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
             cmd.pushConstants(pipeline.layout, vk::ShaderStageFlagBits::eAllGraphics, 0,
                               sizeof(push), &push, dl);
             cmd.bindIndexBuffer(Meshes::IndexBuffer(), 0, vk::IndexType::eUint16, dl);
-            const u64 first = (u64{c} * Scene::CasterLists + list) * Scene::MaxCasterCommands;
+            const u64 first = Scene::FirstCasterCommand(header, c, list);
             cmd.drawIndexedIndirect(
-                buffer, offset + Scene::CasterCommandsOffset + first * sizeof(Scene::Command),
+                buffer, offset + Scene::CasterCommandsOffset() + first * sizeof(Scene::Command),
                 count, sizeof(Scene::Command), dl);
         }
         MarkPart(cmd, c, 1);

@@ -118,10 +118,13 @@ void QueueBytes(u64 address, std::string bytes) {
     });
 }
 
-std::string FloatBytes(float value) {
-    const u32 bits = std::bit_cast<u32>(value);
+std::string WordBytes(u32 bits) {
     return fmt::format("{:02x}{:02x}{:02x}{:02x}", bits & 0xff, bits >> 8 & 0xff, bits >> 16 & 0xff,
                        bits >> 24);
+}
+
+std::string FloatBytes(float value) {
+    return WordBytes(std::bit_cast<u32>(value));
 }
 
 // Queues the patch that writes a row's distances at percent of the game's; 100 keeps the row.
@@ -228,6 +231,35 @@ void QueueVideoHeap(u32 megabytes) {
     QueueBytes(VideoHeapSize, std::move(bytes));
 }
 
+// Each of the three views the game's frames take in turn holds a frame's draw items in one pool,
+// with their sort keys at its end, and the items' constants in another. The view's maker passes
+// each pool's size to the allocator and stores it in the view; a FramePool names both
+// instructions, which end with the size. A model joins a frame only while both pools have room
+// left, so in a frame with more models than they hold, which models show changes from one frame
+// to the next. A level of detail setting at its finest puts that many models in a frame.
+struct FramePool {
+    u64 size_stored;
+    std::string_view store;
+    u64 size_passed;
+    std::string_view pass;
+    u32 bytes;
+};
+constexpr std::array FramePools{
+    FramePool{0x0141d889, "c7835c0b0000", 0x0141d864, "b9", 0x400000},
+    FramePool{0x0141d7c1, "c783880b0000", 0x0141d7d4, "b9", 0x600000},
+};
+
+constexpr u32 FramePoolGrowth = 4;
+
+// Queues the patches that grow both pools to FramePoolGrowth times their size.
+void QueueFramePools() {
+    for (const FramePool& pool : FramePools) {
+        const std::string size = WordBytes(pool.bytes * FramePoolGrowth);
+        QueueBytes(pool.size_stored, std::string(pool.store) + size);
+        QueueBytes(pool.size_passed, std::string(pool.pass) + size);
+    }
+}
+
 // A gravity slide kick that hits scales the slide's velocity once, by a factor of the gravity
 // style raised to the power of the game step times 30: at the PS4's 30 frames a second the power
 // is 1 and the factor itself results. Lunar's factor is -0.3, the kick's rebound, and at any other
@@ -295,6 +327,9 @@ void ApplySettings() {
     QueueVideoHeap(heap_growth);
     QueueDetail(WorldDetailRow, WorldDetail, graphics.near_environment_detail);
     QueueDetail(CharacterDetailRow, CharacterDetail, graphics.character_detail);
+    if (Settings::FinestDetail(graphics)) {
+        QueueFramePools();
+    }
     QueueBytes(SlideKickPower, std::string(CallSkipped));
 }
 
