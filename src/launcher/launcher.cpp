@@ -3,8 +3,12 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <future>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -23,6 +27,7 @@
 #include "launcher/folder_picker.h"
 #include "launcher/launcher.h"
 #include "launcher/setup_dialog.h"
+#include "launcher/updater.h"
 
 namespace Gr2Port::Launcher {
 
@@ -63,11 +68,17 @@ constexpr std::array Entries{
     Entry{Item::Quit, L"Quit", 124},
 };
 
+// The timer the launcher looks at the updater's answer with, and its milliseconds.
+constexpr UINT_PTR UpdateTimer = 1;
+constexpr UINT UpdatePoll = 100;
+
 struct State {
     const Art* art = nullptr;
     bool play = false;
-    // The executable starts again, for a change of the Paths tab to take effect.
+    // The executable starts again, for a change of the Paths tab or an update to take effect.
     bool restart = false;
+    // The updater's answer, asked for as the launcher opens.
+    std::future<std::optional<Updater::Release>> found;
     std::wstring version;
     bool done = false;
     UINT dpi = USER_DEFAULT_SCREEN_DPI;
@@ -298,6 +309,91 @@ void ShowFolderNotice(HWND owner) {
                 MB_OK | MB_ICONWARNING);
 }
 
+// Shows a release's name and notes, and returns whether the player wants the update.
+bool AskUpdate(HWND owner, const Updater::Release& release) {
+    const std::wstring title = Language::Text(L"Update Available");
+    const std::wstring name = Common::UTF8ToUTF16W(release.name);
+    const std::wstring notes = Common::UTF8ToUTF16W(release.notes) + L"\n\n" +
+                               Language::Text(L"Do you want to update now?");
+    const std::wstring update = Language::Text(L"Update");
+    const std::wstring later = Language::Text(L"Not Now");
+    const std::array<TASKDIALOG_BUTTON, 2> buttons{
+        TASKDIALOG_BUTTON{IDYES, update.c_str()},
+        TASKDIALOG_BUTTON{IDNO, later.c_str()},
+    };
+    TASKDIALOGCONFIG config{};
+    config.cbSize = sizeof(config);
+    config.hwndParent = owner;
+    // Closing the window stands for Not Now.
+    config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW | TDF_ALLOW_DIALOG_CANCELLATION;
+    config.pszWindowTitle = title.c_str();
+    config.pszMainIcon = TD_INFORMATION_ICON;
+    config.pszMainInstruction = name.c_str();
+    config.pszContent = notes.c_str();
+    config.cButtons = static_cast<UINT>(buttons.size());
+    config.pButtons = buttons.data();
+    config.nDefaultButton = IDYES;
+    int pressed = 0;
+    return SUCCEEDED(TaskDialogIndirect(&config, &pressed, nullptr, nullptr)) && pressed == IDYES;
+}
+
+// An install as its window follows it.
+struct Installing {
+    std::shared_ptr<Updater::Download> download;
+    std::future<bool> installed;
+    bool done = false;
+};
+
+// The window's timer moves the bar and, once the install ends, closes the window as Cancel
+// does; done tells the two apart.
+HRESULT CALLBACK OnInstallEvent(HWND dialog, UINT notice, WPARAM wparam, LPARAM, LONG_PTR data) {
+    auto& installing = *reinterpret_cast<Installing*>(data);
+    if (notice == TDN_TIMER) {
+        const u64 size = installing.download->size;
+        if (size != 0) {
+            SendMessageW(dialog, TDM_SET_PROGRESS_BAR_POS,
+                         static_cast<WPARAM>(installing.download->received * 100 / size), 0);
+        }
+        if (!installing.done &&
+            installing.installed.wait_for(std::chrono::seconds{0}) == std::future_status::ready) {
+            installing.done = true;
+            SendMessageW(dialog, TDM_CLICK_BUTTON, IDCANCEL, 0);
+        }
+    } else if (notice == TDN_BUTTON_CLICKED && wparam == IDCANCEL && !installing.done) {
+        installing.download->stopped = true;
+    }
+    return S_OK;
+}
+
+// Downloads and installs a release behind a progress window. Returns whether its files are in
+// place.
+bool InstallUpdate(HWND owner, const Updater::Release& release) {
+    Installing installing;
+    installing.download = std::make_shared<Updater::Download>();
+    installing.installed = Updater::Install(release, installing.download);
+    const std::wstring title = Language::Text(L"Update Available");
+    const std::wstring text = Language::Text(L"Downloading the update...");
+    TASKDIALOGCONFIG config{};
+    config.cbSize = sizeof(config);
+    config.hwndParent = owner;
+    config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW | TDF_SHOW_PROGRESS_BAR | TDF_CALLBACK_TIMER;
+    config.dwCommonButtons = TDCBF_CANCEL_BUTTON;
+    config.pszWindowTitle = title.c_str();
+    config.pszContent = text.c_str();
+    config.pfCallback = &OnInstallEvent;
+    config.lpCallbackData = reinterpret_cast<LONG_PTR>(&installing);
+    TaskDialogIndirect(&config, nullptr, nullptr, nullptr);
+    if (installing.download->stopped) {
+        return false;
+    }
+    if (!installing.installed.get()) {
+        MessageBoxW(owner, Language::Text(L"The update could not be installed.").c_str(),
+                    title.c_str(), MB_OK | MB_ICONWARNING);
+        return false;
+    }
+    return true;
+}
+
 void Activate(HWND window, State& state, Item item) {
     switch (item) {
     case Item::Play:
@@ -407,6 +503,18 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
         return 1;
     case WM_PAINT:
         Paint(window, *state);
+        return 0;
+    case WM_TIMER:
+        // The offer waits for a dialog over the launcher to close.
+        if (IsWindowEnabled(window) &&
+            state->found.wait_for(std::chrono::seconds{0}) == std::future_status::ready) {
+            KillTimer(window, UpdateTimer);
+            const std::optional<Updater::Release> release = state->found.get();
+            if (release && AskUpdate(window, *release) && InstallUpdate(window, *release)) {
+                state->restart = true;
+                DestroyWindow(window);
+            }
+        }
         return 0;
     case WM_CLOSE:
         DestroyWindow(window);
@@ -519,6 +627,9 @@ bool Run() {
             SetForegroundWindow(window);
             ShowDriverNotice(window);
             ShowFolderNotice(window);
+            // The updater's answer comes on a thread of its own; the window looks for it.
+            state.found = Updater::Check();
+            SetTimer(window, UpdateTimer, UpdatePoll, nullptr);
             MSG message{};
             while (!state.done && GetMessageW(&message, nullptr, 0, 0) > 0) {
                 TranslateMessage(&message);

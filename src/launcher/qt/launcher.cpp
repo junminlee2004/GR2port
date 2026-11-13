@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
+#include <chrono>
 #include <clocale>
+#include <future>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -11,6 +15,7 @@
 #include <QFileDialog>
 #include <QFontMetricsF>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMessageBox>
@@ -18,10 +23,14 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QScreen>
 #include <QStringList>
 #include <QStyle>
+#include <QTextBrowser>
+#include <QTimer>
+#include <QVBoxLayout>
 #include <QWidget>
 #include <QWindow>
 
@@ -32,6 +41,7 @@
 #include "launcher/qt/setup_dialog.h"
 #include "launcher/qt/style.h"
 #include "launcher/qt/text.h"
+#include "launcher/updater.h"
 
 namespace Gr2Port::Launcher {
 
@@ -54,14 +64,19 @@ constexpr int LogoWidth = 290;
 // Menu text is white with a black outline, and all black under the pointer.
 constexpr qreal MenuOutline = 2.5;
 
+// The update window's size, and how often the launcher looks at the updater's threads.
+constexpr int UpdateWidth = 480;
+constexpr int UpdateHeight = 360;
+constexpr std::chrono::milliseconds UpdatePoll{100};
+
 enum class Item {
     Play,
     Options,
     Quit,
 };
 
-// How the launcher ends. Restart starts the executable again, for a change of the Paths tab to
-// take effect.
+// How the launcher ends. Restart starts the executable again, for a change of the Paths tab or
+// an update to take effect.
 enum class Choice {
     Quit,
     Play,
@@ -113,6 +128,70 @@ void ShowFolderNotice(QWidget* owner) {
         break;
     }
     QMessageBox::warning(owner, Tr("User Data Folder"), text);
+}
+
+// Shows a release's name and notes, and returns whether the player wants the update.
+bool AskUpdate(QWidget* owner, const Updater::Release& release) {
+    QDialog dialog{owner};
+    dialog.setWindowTitle(Tr("Update Available"));
+    dialog.setFont(DialogFont());
+    dialog.resize(UpdateWidth, UpdateHeight);
+    auto* const name = new QLabel{QString::fromStdString(release.name), &dialog};
+    name->setTextFormat(Qt::PlainText);
+    name->setWordWrap(true);
+    QFont bold = name->font();
+    bold.setBold(true);
+    name->setFont(bold);
+    auto* const notes = new QTextBrowser{&dialog};
+    notes->setMarkdown(QString::fromStdString(release.notes));
+    notes->setOpenExternalLinks(true);
+    auto* const question = new QLabel{Tr("Do you want to update now?"), &dialog};
+    auto* const update = new QPushButton{Tr("Update"), &dialog};
+    auto* const later = new QPushButton{Tr("Not Now"), &dialog};
+    update->setDefault(true);
+    auto* const buttons = new QHBoxLayout;
+    buttons->addWidget(question, 1);
+    buttons->addWidget(update);
+    buttons->addWidget(later);
+    auto* const places = new QVBoxLayout{&dialog};
+    places->addWidget(name);
+    places->addWidget(notes, 1);
+    places->addLayout(buttons);
+    QObject::connect(update, &QPushButton::clicked, &dialog, &QDialog::accept);
+    QObject::connect(later, &QPushButton::clicked, &dialog, &QDialog::reject);
+    return dialog.exec() == QDialog::Accepted;
+}
+
+// Downloads and installs a release behind a progress window. Returns whether its files are in
+// place.
+bool InstallUpdate(QWidget* owner, const Updater::Release& release) {
+    QProgressDialog progress{Tr("Downloading the update..."), Tr("Cancel"), 0, 0, owner};
+    progress.setWindowTitle(Tr("Update Available"));
+    progress.setFont(DialogFont());
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(0);
+    progress.setAutoClose(false);
+    progress.setAutoReset(false);
+    progress.show();
+    const auto download = std::make_shared<Updater::Download>();
+    std::future<bool> installed = Updater::Install(release, download);
+    while (installed.wait_for(UpdatePoll) != std::future_status::ready) {
+        // The bar counts in KB, which fit its numbers.
+        progress.setMaximum(static_cast<int>(download->size / 1024));
+        progress.setValue(static_cast<int>(download->received / 1024));
+        QApplication::processEvents();
+        if (progress.wasCanceled()) {
+            download->stopped = true;
+            return false;
+        }
+    }
+    progress.close();
+    if (!installed.get()) {
+        QMessageBox::warning(owner, Tr("Update Available"),
+                             Tr("The update could not be installed."));
+        return false;
+    }
+    return true;
 }
 
 QString VersionText() {
@@ -191,6 +270,22 @@ public:
         setFocusPolicy(Qt::StrongFocus);
         setAttribute(Qt::WA_OpaquePaintEvent);
         Layout();
+        // The updater's answer comes on a thread of its own; the window looks for it.
+        auto* const poll = new QTimer{this};
+        QObject::connect(poll, &QTimer::timeout, this, [this, poll] {
+            // The offer waits for a dialog over the launcher to close.
+            if (QApplication::activeModalWidget() != nullptr ||
+                found.wait_for(std::chrono::seconds{0}) != std::future_status::ready) {
+                return;
+            }
+            poll->stop();
+            const std::optional<Updater::Release> release = found.get();
+            if (release && AskUpdate(this, *release) && InstallUpdate(this, *release)) {
+                choice = Choice::Restart;
+                close();
+            }
+        });
+        poll->start(UpdatePoll);
     }
 
     /// How the player left the launcher.
@@ -331,6 +426,8 @@ private:
 
     const Art& art;
     Choice choice = Choice::Quit;
+    // The updater's answer, asked for as the launcher opens.
+    std::future<std::optional<Updater::Release>> found = Updater::Check();
     QString version;
     QFont menu_font;
     QFont version_font;
