@@ -18,6 +18,7 @@
 #include <fmt/format.h>
 
 #include "common/logging/log.h"
+#include "graphics/gr2port/device_lost.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/settings.h"
 
@@ -147,6 +148,7 @@ Buffer Memory::CreateBuffer(u64 size, vk::BufferUsageFlags usage, Placement plac
     }
     buffer.mapped = static_cast<u8*>(result.pMappedData);
     buffer.address = d.device.getBufferAddress({.buffer = buffer.buffer}, d.dispatch);
+    DeviceLost::AddBuffer(buffer.address, size, where);
     return buffer;
 }
 
@@ -205,6 +207,7 @@ bool Memory::Reserve(u64 bytes) {
 
 void Memory::Destroy(Buffer& buffer) {
     if (buffer.allocation != nullptr) {
+        DeviceLost::RemoveBuffer(buffer.address);
         vmaDestroyBuffer(allocator, buffer.buffer, buffer.allocation);
     }
     buffer = {};

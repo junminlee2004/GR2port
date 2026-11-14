@@ -6,6 +6,7 @@
 #include <span>
 
 #include "common/logging/log.h"
+#include "graphics/gr2port/device_lost.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/swapchain.h"
 
@@ -136,6 +137,7 @@ bool Swapchain::Acquire(vk::Semaphore acquired, u32& index) {
     }
     const auto [result, image] =
         d.device.acquireNextImageKHR(swapchain, UINT64_MAX, acquired, nullptr, d.dispatch);
+    DeviceLost::Check(d, result, "the swapchain's next image");
     if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
         return false;
     }
@@ -152,6 +154,7 @@ bool Swapchain::Present(u32 index) {
         .pImageIndices = &index,
     };
     const vk::Result result = d.queue.presentKHR(info, d.dispatch);
+    DeviceLost::Check(d, result, "the present");
     return result == vk::Result::eSuccess;
 }
 

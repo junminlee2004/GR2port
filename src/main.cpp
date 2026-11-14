@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <memory>
@@ -29,6 +30,7 @@
 #include "core/ipc/ipc.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/user_settings.h"
+#include "graphics/gr2port/device_lost.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -84,6 +86,7 @@ int main(int argc, char* argv[]) {
     bool configGlobal = false;
     bool append_log{};
     bool debugFiles = false;
+    bool gpuTrace = false;
 
     std::optional<std::filesystem::path> addGameFolder;
     std::optional<std::filesystem::path> setAddonFolder;
@@ -110,6 +113,8 @@ int main(int argc, char* argv[]) {
     app.add_flag("--log-append", append_log);
     app.add_flag("--debug-files", debugFiles,
                  "Add the developers' files to the log folder, which holds log.txt alone");
+    app.add_flag("--gpu-trace", gpuTrace,
+                 "Trace the passes the GPU begins, for the log of a lost device");
 
     app.add_option("--add-game-folder", addGameFolder)->check(CLI::ExistingDirectory);
     app.add_option("--set-addon-folder", setAddonFolder)->check(CLI::ExistingDirectory);
@@ -151,6 +156,14 @@ int main(int argc, char* argv[]) {
     Common::Log::Setup(Common::FS::LOG_FILE);
 
     LOG_INFO(Debug, "Run: {}", fmt::join(std::span(argv, argc), " "));
+
+    // GR2port: the run after one that lost the GPU device traces the GPU for its log.
+    if (gpuTrace || std::getenv("GR2PORT_GPU_TRACE") != nullptr) {
+        Gr2Port::DeviceLost::Arm("asked for");
+    } else if (Gr2Port::DeviceLost::LastRunLost(
+                   Common::FS::GetUserPath(Common::FS::PathType::LogDir) / Common::FS::LOG_FILE)) {
+        Gr2Port::DeviceLost::Arm("the last run lost the device");
+    }
 
     // GR2port: Steam hides the real gamepads from the programs it starts, which leaves its own
     // virtual pad, one without motion sensors. SDL lists every gamepad again.

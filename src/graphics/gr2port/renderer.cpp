@@ -366,6 +366,7 @@ bool Thread::Init() {
     if (!memory->Create()) {
         return false;
     }
+    DeviceLost::Start(d, *memory, FramesInFlight);
     // The window shows the game's boot picture while the pipelines below are built.
     swapchain = std::make_unique<Swapchain>(d);
     Splash::Show(d, *memory, *swapchain, slots[0].pool, slots[0].commands, slots[0].done,
@@ -1022,13 +1023,15 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
                                                                                header.background[2],
                                                                                0.0f}}},
     };
+    if (drawn) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Light);
+    }
     cmd.beginRendering({.renderArea = {{0, 0}, extent},
                         .layerCount = 1,
                         .colorAttachmentCount = 1,
                         .pColorAttachments = &lit},
                        dl);
     if (drawn) {
-        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Light);
         World::RecordLight(cmd, packet.address);
     }
     cmd.endRendering(dl);
@@ -1071,7 +1074,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     };
     cmd.beginRendering(rendering, dl);
     if (drawn) {
-        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Characters);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Characters, rendering);
         const std::array sets{Textures::Set(), Shadows::Set(), SelfTranslucent::Set()};
         DrawCharacters(cmd, Scene::DrawList::Lambert, lambert_pipeline, sets, header, packet,
                        offset, extent);
@@ -1087,7 +1090,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         PassTimes::Mark(cmd, PassTimes::Pass::Characters);
     }
     if (header.sky != 0) {
-        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Sky);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Sky, rendering);
         Look::RecordSky(cmd, packet.address);
     }
     PassTimes::Mark(cmd, PassTimes::Pass::Sky);
@@ -1097,7 +1100,7 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         CharacterGlass::Record(cmd, header, packet.data, packet.address, scene_ring.buffer, offset,
                                extent);
         PassTimes::Mark(cmd, PassTimes::Pass::CharacterGlass);
-        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Contours);
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Contours, rendering);
         if (graphics.outlines) {
             Contours::Record(cmd, header, packet.address, scene_ring.buffer, offset, extent);
         }
@@ -1237,6 +1240,7 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
     const u32 slot_index = static_cast<u32>(&slot - slots.data());
     (void)cmd.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit}, dl);
     DeviceLost::Mark(d, cmd, DeviceLost::Pass::FrameStart);
+    DeviceLost::Note(header, packet.data);
     if (timestamps) {
         cmd.resetQueryPool(timestamps, Timestamps * slot_index, Timestamps, dl);
         cmd.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, timestamps,
@@ -1262,9 +1266,9 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
     if (header.ui.only == 0) {
         RecordWorld(cmd, slot_index, header, packet, offset);
         // The game's Composite draws into its back buffer, or into the view's own target.
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::Composite);
         const vk::Extent2D world = Ui::BeginWorld(cmd, header);
         if (world.width != 0) {
-            DeviceLost::Mark(d, cmd, DeviceLost::Pass::Composite);
             Look::RecordComposite(cmd, packet.address, world);
             Ui::EndWorld(cmd);
         }
@@ -1295,12 +1299,12 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
         .storeOp = vk::AttachmentStoreOp::eStore,
         .clearValue = {.color = vk::ClearColorValue{.float32 = std::array<float, 4>{0, 0, 0, 1}}},
     };
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Present);
     cmd.beginRendering({.renderArea = {{0, 0}, swapchain->Extent()},
                         .layerCount = 1,
                         .colorAttachmentCount = 1,
                         .pColorAttachments = &picture},
                        dl);
-    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Present);
     Ui::RecordPresent(cmd, header, swapchain->Extent());
     ImGuiRelay::Record(cmd, swapchain->Extent());
     cmd.endRendering(dl);
@@ -1416,7 +1420,8 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     const u32 slot_index = next;
     Slot& slot = slots[slot_index];
     const auto wait_start = std::chrono::steady_clock::now();
-    DeviceLost::Check(d, d.device.waitForFences(slot.done, true, UINT64_MAX, dl));
+    DeviceLost::Check(d, d.device.waitForFences(slot.done, true, UINT64_MAX, dl),
+                      "the wait for an earlier frame");
     const auto wait_end = std::chrono::steady_clock::now();
     ReadTimes(slot_index);
     PassTimes::Collect(slot_index);
@@ -1462,13 +1467,14 @@ void Thread::Frame(const SceneRing::Packet& packet) {
         .pSignalSemaphoreInfos = &signal,
     };
     const vk::Result submitted = d.queue.submit2(submit, slot.done, dl);
-    DeviceLost::Check(d, submitted);
+    DeviceLost::Check(d, submitted, "the frame's submit");
     if (submitted != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "GR2port: the frame submit failed");
         SceneRing::Release(slot.scene);
         slot.scene = SceneRing::Slots;
         return;
     }
+    DeviceLost::Submitted();
     next = (next + 1) % FramesInFlight;
     frame++;
     using Ms = std::chrono::duration<double, std::milli>;
