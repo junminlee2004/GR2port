@@ -154,6 +154,17 @@ endif()
 # sirit: only the SPIR-V headers that come with it are used, so its library is not built.
 add_subdirectory(sirit EXCLUDE_FROM_ALL)
 
+# SPIRV-Tools: spirv-opt optimises GR2port's shaders at build time, and only it is built. It
+# takes the SPIR-V headers of its own release.
+if (NOT TARGET spirv-opt)
+    set(SPIRV_SKIP_TESTS ON CACHE BOOL "")
+    set(SPIRV_WERROR OFF CACHE BOOL "")
+    set(SKIP_SPIRV_TOOLS_INSTALL ON CACHE BOOL "")
+    set(SPIRV-Headers_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/spirv-headers)
+    add_subdirectory(spirv-tools EXCLUDE_FROM_ALL)
+    unset(SPIRV-Headers_SOURCE_DIR)
+endif()
+
 # half
 if (NOT TARGET half::half)
     add_library(half INTERFACE)

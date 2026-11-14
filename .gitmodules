@@ -158,3 +158,11 @@
 	path = externals/imgui
 	url = https://github.com/shadexternals/imgui.git
 	branch = docking
+[submodule "externals/spirv-tools"]
+	path = externals/spirv-tools
+	url = https://github.com/KhronosGroup/SPIRV-Tools.git
+	shallow = true
+[submodule "externals/spirv-headers"]
+	path = externals/spirv-headers
+	url = https://github.com/KhronosGroup/SPIRV-Headers.git
+	shallow = true

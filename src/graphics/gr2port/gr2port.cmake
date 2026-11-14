@@ -125,30 +125,34 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/world.cpp
     ${CMAKE_CURRENT_LIST_DIR}/world.h)
 
-# The renderer's shaders, compiled like the host shaders.
+# The renderer's shaders: glslang compiles each to a SPIR-V module, spirv-opt optimises the module
+# for speed, and the module's words become a header. A driver's compiler can take minutes over
+# a module glslang leaves as it is.
 if (TARGET glslang-standalone)
     set(GR2PORT_GLSLANG glslang-standalone)
 elseif (TARGET glslang::glslang-standalone)
     set(GR2PORT_GLSLANG glslang::glslang-standalone)
 endif()
 set(GR2PORT_DIR ${CMAKE_CURRENT_LIST_DIR})
-set(GR2PORT_HEADER_SCRIPT
-    ${PROJECT_SOURCE_DIR}/src/graphics/host_shaders/AddShaderHeaderInclude.cmake)
+set(GR2PORT_HEADER_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/shader_header.cmake)
 set(GR2PORT_SHADER_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/gr2port_shaders/include)
 set(GR2PORT_SHADER_DIR ${GR2PORT_SHADER_INCLUDE}/graphics/gr2port/shaders)
 set(GR2PORT_SHADER_HEADERS "")
 function(gr2port_add_shader FILENAME SHADER_NAME)
     set(HEADER_FILE ${GR2PORT_SHADER_DIR}/${SHADER_NAME}.h)
-    set(DEPFILE ${HEADER_FILE}.d)
+    set(SPIRV_FILE ${GR2PORT_SHADER_DIR}/${SHADER_NAME}.spv)
+    set(DEPFILE ${SPIRV_FILE}.d)
     string(TOUPPER ${SHADER_NAME} SYMBOL)
     add_custom_command(
-        OUTPUT ${HEADER_FILE}
+        OUTPUT ${SPIRV_FILE} ${HEADER_FILE}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${GR2PORT_SHADER_DIR}
         COMMAND ${GR2PORT_GLSLANG} --target-env vulkan1.3
-                -o ${HEADER_FILE} --vn ${SYMBOL} --depfile ${DEPFILE}
+                -o ${SPIRV_FILE} --depfile ${DEPFILE}
                 ${GR2PORT_DIR}/shaders/${FILENAME}
-        COMMAND ${CMAKE_COMMAND} "-DHEADER_FILE=${HEADER_FILE}" -P ${GR2PORT_HEADER_SCRIPT}
-        DEPENDS ${GR2PORT_GLSLANG} ${GR2PORT_DIR}/shaders/${FILENAME}
+        COMMAND spirv-opt -O ${SPIRV_FILE} -o ${SPIRV_FILE}
+        COMMAND ${CMAKE_COMMAND} "-DSPIRV_FILE=${SPIRV_FILE}" "-DHEADER_FILE=${HEADER_FILE}"
+                "-DSYMBOL=${SYMBOL}" -P ${GR2PORT_HEADER_SCRIPT}
+        DEPENDS ${GR2PORT_GLSLANG} spirv-opt ${GR2PORT_DIR}/shaders/${FILENAME}
                 ${GR2PORT_HEADER_SCRIPT}
         DEPFILE ${DEPFILE}
         BYPRODUCTS ${DEPFILE}
