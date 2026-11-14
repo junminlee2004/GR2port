@@ -154,6 +154,8 @@ void Switch(std::string_view game_filename, bool append_log) {
     UpdateLogFlushLevel(EmulatorSettings.GetLogFlushLevel());
 
     g_shad_file_sink->_size_limit = EmulatorSettings.GetLogSizeLimit();
+    // GR2port: the lines from before the game go to the file now, which the game's log replaces.
+    g_shad_file_sink->flush();
     g_shad_file_sink->session_file_helper_.open(
         (GetUserPath(Common::FS::PathType::LogDir) / game_filename).string(),
         !(append_log || EmulatorSettings.IsLogAppend()));
