@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdlib>
 #include <filesystem>
+#include <string>
 #include <string_view>
 
 #ifdef _WIN32
@@ -24,6 +25,7 @@
 
 // After vk_common.h, which sets the Vulkan header options.
 #include <vk_mem_alloc.h>
+#include <vulkan/vulkan_format_traits.hpp>
 
 namespace Gr2Port {
 
@@ -37,6 +39,10 @@ constexpr u64 MaxBarHeap = 512_MB;
 constexpr u64 BlockSize = 32_MB;
 // Device-local allocations at least this large are logged with the code that made them.
 constexpr u64 LoggedBytes = 8_MB;
+// The allocator makes a block in a heap while the heap's budget has room for it, and a block is
+// at least this large and at least the allocation. Without the room every buffer and image gets
+// device memory of its own, and a driver takes only a few thousand of those.
+constexpr u64 LeastBlockRoom = 16_MB;
 
 void LogLarge(const std::source_location& where, u64 bytes, std::string_view what) {
     if (bytes < LoggedBytes) {
@@ -68,6 +74,16 @@ u64 InstalledRam() {
 #endif
 }
 
+// The bytes of an image's texels, a third more with mip levels.
+u64 ImageBytes(const VkImageCreateInfo& info) {
+    const vk::Format format = static_cast<vk::Format>(info.format);
+    const std::array<u8, 3> block = vk::blockExtent(format);
+    const u64 columns = (info.extent.width + block[0] - 1) / block[0];
+    const u64 rows = (info.extent.height + block[1] - 1) / block[1];
+    const u64 bytes = columns * rows * info.extent.depth * info.arrayLayers * vk::blockSize(format);
+    return info.mipLevels > 1 ? bytes * 4 / 3 : bytes;
+}
+
 } // namespace
 
 bool Memory::Create() {
@@ -94,8 +110,21 @@ bool Memory::Create() {
     if (const char* forced = std::getenv("GR2PORT_VRAM_MB"); forced != nullptr) {
         megabytes = std::strtoull(forced, nullptr, 10);
     }
-    integrated =
-        d.gpu.getProperties(d.dispatch).deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
+    const vk::PhysicalDeviceProperties gpu = d.gpu.getProperties(d.dispatch);
+    integrated = gpu.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
+    allocation_limit = gpu.limits.maxMemoryAllocationCount;
+    const VkPhysicalDeviceMemoryProperties* properties = nullptr;
+    vmaGetMemoryProperties(allocator, &properties);
+    for (u32 i = 0; i < properties->memoryHeapCount; i++) {
+        if (properties->memoryHeaps[i].size > properties->memoryHeaps[main_heap].size) {
+            main_heap = i;
+        }
+    }
+    for (u32 i = 0; integrated && i < properties->memoryTypeCount; i++) {
+        if (properties->memoryTypes[i].heapIndex != main_heap) {
+            side_types |= 1u << i;
+        }
+    }
     if (megabytes != 0) {
         forced_budget = megabytes << 20;
         LOG_INFO(Render_Vulkan, "GR2port memory: device-local budget capped at {} MB", megabytes);
@@ -134,11 +163,20 @@ Buffer Memory::CreateBuffer(u64 size, vk::BufferUsageFlags usage, Placement plac
         allocation_info.requiredFlags =
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
     }
+    allocation_info.memoryTypeBits = TypesWithRoom(size);
     Buffer buffer{.size = size};
     VkBuffer handle = VK_NULL_HANDLE;
     VmaAllocationInfo result{};
-    if (vmaCreateBuffer(allocator, &buffer_info, &allocation_info, &handle, &buffer.allocation,
-                        &result) != VK_SUCCESS) {
+    VkResult made = vmaCreateBuffer(allocator, &buffer_info, &allocation_info, &handle,
+                                    &buffer.allocation, &result);
+    if (made != VK_SUCCESS && allocation_info.memoryTypeBits != 0) {
+        // No memory type of a heap with room takes this buffer.
+        allocation_info.memoryTypeBits = 0;
+        made = vmaCreateBuffer(allocator, &buffer_info, &allocation_info, &handle,
+                               &buffer.allocation, &result);
+    }
+    if (made != VK_SUCCESS) {
+        LogFailure(made);
         LOG_ERROR(Render_Vulkan, "GR2port: no memory for a buffer of {} bytes", size);
         return {};
     }
@@ -152,6 +190,59 @@ Buffer Memory::CreateBuffer(u64 size, vk::BufferUsageFlags usage, Placement plac
     return buffer;
 }
 
+std::string Memory::HeapList() const {
+    const VkPhysicalDeviceMemoryProperties* properties = nullptr;
+    vmaGetMemoryProperties(allocator, &properties);
+    std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> budgets{};
+    vmaGetHeapBudgets(allocator, budgets.data());
+    std::string list;
+    for (u32 i = 0; i < properties->memoryHeapCount; i++) {
+        const VkMemoryHeap& heap = properties->memoryHeaps[i];
+        std::string types;
+        for (u32 type = 0; type < properties->memoryTypeCount; type++) {
+            if (properties->memoryTypes[type].heapIndex == i) {
+                types +=
+                    fmt::format(" {}:{:#x}", type, properties->memoryTypes[type].propertyFlags);
+            }
+        }
+        list += fmt::format(
+            "{}heap {} of {} MB ({}memory types and flags{}): {} of a {} MB budget in use, {} "
+            "allocations",
+            i == 0 ? "" : "; ", i, heap.size >> 20,
+            (heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0 ? "device-local, " : "", types,
+            budgets[i].usage >> 20, budgets[i].budget >> 20, budgets[i].statistics.blockCount);
+    }
+    return list;
+}
+
+u32 Memory::TypesWithRoom(u64 bytes) {
+    if (side_types == 0) {
+        return 0;
+    }
+    const VkPhysicalDeviceMemoryProperties* properties = nullptr;
+    vmaGetMemoryProperties(allocator, &properties);
+    std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> budgets{};
+    vmaGetHeapBudgets(allocator, budgets.data());
+    u32 full = 0;
+    for (u32 i = 0; i < properties->memoryTypeCount; i++) {
+        const VmaBudget& heap = budgets[properties->memoryTypes[i].heapIndex];
+        if ((side_types >> i & 1) != 0 &&
+            heap.usage + std::max(bytes * 2, LeastBlockRoom) > heap.budget) {
+            full |= 1u << i;
+        }
+    }
+    return full == 0 ? 0 : ~full;
+}
+
+void Memory::LogFailure(VkResult result) {
+    if (logged_failure.exchange(true)) {
+        return;
+    }
+    LOG_ERROR(Render_Vulkan,
+              "GR2port memory: an allocation failed with {}; {}; the driver takes {} allocations",
+              vk::to_string(static_cast<vk::Result>(result)), HeapList(), allocation_limit);
+}
+
 void Memory::Refresh(u64 frame) {
     vmaSetCurrentFrameIndex(allocator, static_cast<u32>(frame));
     const VkPhysicalDeviceMemoryProperties* properties = nullptr;
@@ -159,12 +250,6 @@ void Memory::Refresh(u64 frame) {
     std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> budgets{};
     vmaGetHeapBudgets(allocator, budgets.data());
     device_budget = {};
-    u32 main_heap = 0;
-    for (u32 i = 0; i < properties->memoryHeapCount; i++) {
-        if (properties->memoryHeaps[i].size > properties->memoryHeaps[main_heap].size) {
-            main_heap = i;
-        }
-    }
     const VmaBudget& main = budgets[main_heap];
     for (u32 i = 0; i < properties->memoryHeapCount; i++) {
         const VkMemoryHeap& heap = properties->memoryHeaps[i];
@@ -229,21 +314,12 @@ Image Memory::CreateImage(vk::Format format, vk::Extent2D extent, vk::ImageUsage
         .usage = static_cast<VkImageUsageFlags>(usage),
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
-    const VmaAllocationCreateInfo allocation_info{
-        .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-    };
     Image image{.format = format, .extent = extent};
-    VkImage handle = VK_NULL_HANDLE;
-    VmaAllocationInfo result{};
-    if (vmaCreateImage(allocator, &image_info, &allocation_info, &handle, &image.allocation,
-                       &result) != VK_SUCCESS) {
+    if (!AllocateImage(image_info, true, image)) {
         LOG_ERROR(Render_Vulkan, "GR2port: no memory for a {}x{} {} image", extent.width,
                   extent.height, vk::to_string(format));
         return {};
     }
-    image.image = handle;
-    image.size = result.size;
     LogLarge(where, image.size,
              fmt::format("a {}x{} {} image", extent.width, extent.height, vk::to_string(format)));
     const vk::ImageViewCreateInfo view_info{
@@ -270,21 +346,12 @@ Image Memory::CreateVolume(vk::Format format, vk::Extent3D extent, vk::ImageUsag
         .usage = static_cast<VkImageUsageFlags>(usage),
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
-    const VmaAllocationCreateInfo allocation_info{
-        .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-    };
     Image image{.format = format, .extent = {extent.width, extent.height}};
-    VkImage handle = VK_NULL_HANDLE;
-    VmaAllocationInfo result{};
-    if (vmaCreateImage(allocator, &image_info, &allocation_info, &handle, &image.allocation,
-                       &result) != VK_SUCCESS) {
+    if (!AllocateImage(image_info, true, image)) {
         LOG_ERROR(Render_Vulkan, "GR2port: no memory for a {}x{}x{} {} volume", extent.width,
                   extent.height, extent.depth, vk::to_string(format));
         return {};
     }
-    image.image = handle;
-    image.size = result.size;
     LogLarge(where, image.size,
              fmt::format("a {}x{}x{} {} volume", extent.width, extent.height, extent.depth,
                          vk::to_string(format)));
@@ -316,19 +383,10 @@ Image Memory::CreateTexture(vk::Format format, vk::Extent2D extent, u32 levels,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
     // Thousands of small textures share the allocator's blocks.
-    const VmaAllocationCreateInfo allocation_info{
-        .flags = dedicated ? VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT : 0u,
-        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-    };
     Image image{.format = format, .extent = extent};
-    VkImage handle = VK_NULL_HANDLE;
-    VmaAllocationInfo result{};
-    if (vmaCreateImage(allocator, &image_info, &allocation_info, &handle, &image.allocation,
-                       &result) != VK_SUCCESS) {
+    if (!AllocateImage(image_info, dedicated, image)) {
         return {};
     }
-    image.image = handle;
-    image.size = result.size;
     const vk::ImageViewCreateInfo view_info{
         .image = image.image,
         .viewType = cube ? vk::ImageViewType::eCube : vk::ImageViewType::e2D,
@@ -338,6 +396,31 @@ Image Memory::CreateTexture(vk::Format format, vk::Extent2D extent, u32 levels,
     };
     image.view = d.device.createImageView(view_info, nullptr, d.dispatch).value;
     return image;
+}
+
+bool Memory::AllocateImage(const VkImageCreateInfo& image_info, bool dedicated, Image& image) {
+    VmaAllocationCreateInfo allocation_info{
+        .flags = dedicated ? VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT : 0u,
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+        .memoryTypeBits = TypesWithRoom(ImageBytes(image_info)),
+    };
+    VkImage handle = VK_NULL_HANDLE;
+    VmaAllocationInfo result{};
+    VkResult made = vmaCreateImage(allocator, &image_info, &allocation_info, &handle,
+                                   &image.allocation, &result);
+    if (made != VK_SUCCESS && allocation_info.memoryTypeBits != 0) {
+        // No memory type of a heap with room takes this image.
+        allocation_info.memoryTypeBits = 0;
+        made = vmaCreateImage(allocator, &image_info, &allocation_info, &handle, &image.allocation,
+                              &result);
+    }
+    if (made != VK_SUCCESS) {
+        LogFailure(made);
+        return false;
+    }
+    image.image = handle;
+    image.size = result.size;
+    return true;
 }
 
 void Memory::Destroy(Image& image) {

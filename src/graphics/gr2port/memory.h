@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <atomic>
 #include <source_location>
+#include <string>
 
 #include "graphics/gr2port/device.h"
 
@@ -93,13 +95,28 @@ public:
     void Destroy(Image& image);
 
 private:
+    /// The memory types an allocation of bytes may take, or 0 for any: an integrated GPU's
+    /// heaps beside its largest are left out while their budgets lack the room.
+    u32 TypesWithRoom(u64 bytes);
+    /// Creates image_info's image, in memory of its own if dedicated; false without memory.
+    bool AllocateImage(const VkImageCreateInfo& image_info, bool dedicated, Image& image);
+    /// Logs once what a failed allocation returned, and the heaps and allocations then.
+    void LogFailure(VkResult result);
+    /// Each heap's size, memory types, use, budget and allocations, for the log.
+    std::string HeapList() const;
+
     const Device& d;
     VmaAllocator allocator = nullptr;
     u64 forced_budget = ~u64{0};
     bool integrated = false;
+    /// The largest heap, and the memory types of an integrated GPU's other heaps.
+    u32 main_heap = 0;
+    u32 side_types = 0;
+    u32 allocation_limit = 0;
     Budget device_budget{};
     u64 reserved = 0;
     bool logged_full = false;
+    std::atomic<bool> logged_failure = false;
 };
 
 } // namespace Gr2Port
