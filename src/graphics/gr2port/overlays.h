@@ -7,6 +7,8 @@
 #include <optional>
 #include <string>
 
+#include "common/types.h"
+
 namespace Gr2Port {
 
 /// Around the emulator's own Vulkan instance: overlay layers stay out of it, so they see only the
@@ -24,5 +26,10 @@ private:
 
 /// Logs whether an overlay's hooks are in the process.
 void LogOverlays();
+
+/// Render thread, at start and now and then: once RTSS's hook is in the process, its opens of
+/// display adapters other than the renderer's, named by PCI vendor and device, fail at once
+/// instead of reaching Windows.
+void KeepOverlayOffOtherAdapters(u32 vendor, u32 device);
 
 } // namespace Gr2Port

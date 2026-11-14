@@ -290,6 +290,9 @@ private:
     Pipeline vision_pipeline;
     Pipeline character_glow_pipeline;
     u32 next = 0;
+    // The GPU's PCI vendor and device.
+    u32 gpu_vendor = 0;
+    u32 gpu_device = 0;
     // The number of the next frame to submit; frames up to frame - FramesInFlight are done once
     // the frame's slot is free.
     u64 frame = FramesInFlight;
@@ -367,6 +370,9 @@ bool Thread::Init() {
         return false;
     }
     DeviceLost::Start(d, *memory, FramesInFlight);
+    const vk::PhysicalDeviceProperties gpu = d.gpu.getProperties(d.dispatch);
+    gpu_vendor = gpu.vendorID;
+    gpu_device = gpu.deviceID;
     // The window shows the game's boot picture while the pipelines below are built.
     swapchain = std::make_unique<Swapchain>(d);
     Splash::Show(d, *memory, *swapchain, slots[0].pool, slots[0].commands, slots[0].done,
@@ -1682,6 +1688,8 @@ void Thread::Report() {
              "GR2port memory: device-local {} MB of a {} MB budget used by the process, {} MB by "
              "the renderer",
              budget.usage >> 20, budget.budget >> 20, budget.own >> 20);
+    // An overlay can enter the process after the renderer started.
+    KeepOverlayOffOtherAdapters(gpu_vendor, gpu_device);
     const auto log_gaps = [&](const char* what, std::array<u32, ReportFrames>& gaps) {
         const std::span sorted = std::span{gaps}.first(stats.frames);
         std::ranges::sort(sorted);
@@ -1738,6 +1746,7 @@ void Thread::Run() {
         return;
     }
     LogOverlays();
+    KeepOverlayOffOtherAdapters(gpu_vendor, gpu_device);
     u64 seen = 0;
     stats.game_frames = Capture::Frames();
     bool drawn = false;
