@@ -18633,9 +18633,11 @@
             <Line Type="bytes32" Address="0x00845f38" Value="0x00000000"/>
         </PatchList>
     </Metadata>
-    <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="Swap Confirm/Cancel to Western layout (Cross confirms)" Category="Essentials" Note="Boot-time init picks the confirm and cancel buttons from a region-indexed table; this makes that lookup always take the Americas/Europe branch, so Cross confirms and Circle cancels. Both buttons come from a single pair of globals, so menus, gameplay prompts and on-screen button glyphs all follow. Region, language and text are untouched." Author="Junmin Lee" PatchVer="1.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
+    <Metadata Title="Gravity Rush 2 (Gravity Daze 2)" Name="Swap Confirm/Cancel to Western layout (Cross confirms)" Category="Essentials" Note="Boot-time init picks the confirm and cancel buttons from a region-indexed table; this makes that lookup always take the Americas/Europe branch, so Cross confirms and Circle cancels. Both buttons come from a single pair of globals, so menus, gameplay prompts and on-screen button glyphs all follow. The map's area title places Japanese, Korean and Chinese text by the confirm button; here it goes by the region, so those titles stay centred. Region, language and text are untouched." Author="Junmin Lee" PatchVer="1.1" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
         <PatchList>
             <Line Type="bytes" Address="0x00846601" Value="eb19"/>
+            <Line Type="bytes" Address="0x012bacd7" Value="8b052b4ba200b9620000000fa3c10f83c9000000488b050e4ba200668138454e0f84b70000006690"/>
+            <Line Type="bytes" Address="0x012baf86" Value="8b057c48a200b9620000000fa3c10f8303010000488b055f48a200668138454e0f84f1000000660f1f84000000000090"/>
         </PatchList>
     </Metadata>
     <Metadata Title="Gravity Rush 2" Name="Performance: half pedestrian density" Category="Performance" Note="Halves the ambient overworld crowd - pedestrians, birds and patrol robots - to about 59% of stock density; enable only one density toggle." Author="junminlee2004" PatchVer="1.0" AppVer="01.11" AppElf="eboot.bin" isEnabled="false">
