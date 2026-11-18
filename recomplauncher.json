@@ -1,0 +1,71 @@
+{
+    "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+    "format": 1,
+    "repo": "junminlee2004/GR2port",
+    "name": "GR2port",
+    "requires": [
+        "start",
+        "settings.args",
+        "settings.choices"
+    ],
+    "game": {
+        "kind": "folder",
+        "label": "The folder that holds your Gravity Rush 2 dump and its 1.11 update: the game folder and the update folder (for example CUSA04934 and CUSA04934-patch) side by side, as folders or .zar archives. Extract .pkg files first."
+    },
+    "start": {
+        "program": [
+            "Gravity Rush 2™.exe"
+        ],
+        "args": [
+            "-nolauncher",
+            "--game",
+            "{game}"
+        ]
+    },
+    "settings": [
+        {
+            "id": "window",
+            "label": "Window",
+            "help": "Windowed runs the game in a window. Fullscreen fills the screen. Game's option keeps what you set in the game's own Setup screen.",
+            "in": "args",
+            "choices": [
+                {
+                    "label": "Game's option",
+                    "args": []
+                },
+                {
+                    "label": "Windowed",
+                    "args": [
+                        "--fullscreen",
+                        "false"
+                    ]
+                },
+                {
+                    "label": "Fullscreen",
+                    "args": [
+                        "--fullscreen",
+                        "true"
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "fps_counter",
+            "label": "FPS counter",
+            "help": "Shows the frame rate in the corner of the game.",
+            "in": "args",
+            "choices": [
+                {
+                    "label": "Off",
+                    "args": []
+                },
+                {
+                    "label": "On",
+                    "args": [
+                        "--show-fps"
+                    ]
+                }
+            ]
+        }
+    ]
+}

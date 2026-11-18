@@ -90,6 +90,7 @@ int main(int argc, char* argv[]) {
 
     std::optional<std::filesystem::path> addGameFolder;
     std::optional<std::filesystem::path> setAddonFolder;
+    std::optional<std::filesystem::path> gameFolder;
     std::optional<std::string> patchFile;
 
     std::vector<std::pair<std::filesystem::path, std::string>> mounts;
@@ -118,6 +119,9 @@ int main(int argc, char* argv[]) {
 
     app.add_option("--add-game-folder", addGameFolder)->check(CLI::ExistingDirectory);
     app.add_option("--set-addon-folder", setAddonFolder)->check(CLI::ExistingDirectory);
+    app.add_option("--game", gameFolder,
+                   "Folder that holds the game dump and its 1.11 update (same as Setup > Paths)")
+        ->check(CLI::ExistingDirectory);
     app.add_option("--mount", mounts, "Mount source to destination");
     app.add_option("-e,--env", env_vars, "Environment variables to pass to the guest");
 
@@ -188,6 +192,11 @@ int main(int argc, char* argv[]) {
         EmulatorSettings.Save();
         LOG_INFO(Config, "Addon folder successfully saved.");
         return 0;
+    }
+
+    // --game gives the same folder the Paths tab sets, so Find() and everything after it work as before.
+    if (gameFolder) {
+        EmulatorSettings.SetGameDirectory(*gameFolder);
     }
 
     if (!Gr2Port::GameCheck::HoldUserFolder()) {
