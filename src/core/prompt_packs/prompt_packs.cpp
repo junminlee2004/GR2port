@@ -35,8 +35,10 @@
 #include "core/emulator_settings.h"
 #include "core/file_sys/fs.h"
 #include "core/game_check/game_patches.h"
+#include "core/prompt_packs/gnf.h"
 #include "core/prompt_packs/keyboard_prompts.h"
 #include "core/prompt_packs/pad_prompts.h"
+#include "core/prompt_packs/photo_prompts.h"
 #include "core/prompt_packs/prompt_packs.h"
 #include "input/input_handler.h"
 #include "input/selected_pad.h"
@@ -120,6 +122,10 @@ struct PackSet {
     // and the pad whose names they show.
     std::optional<Pack> pad_blank;
     std::string pad_layout;
+    // The pad whose photo mode prompts follow the photo functions' changed pad bindings, and those
+    // bindings (Photo).
+    std::string photo_layout;
+    Input::PadBindings::Map photo;
 };
 
 // A mod pack of Gravity Rush 2 and the GR2Fork setting that turns it off. Mods are on unless the
@@ -230,11 +236,16 @@ std::string ConnectedPadLayout() {
     return layout.empty() ? "off" : layout;
 }
 
+// The player's input config.
+std::filesystem::path PlayerInputConfig() {
+    const std::string serial{Common::ElfInfo::Instance().GameSerial()};
+    return Input::GetInputConfigFile(EmulatorSettings.IsUseUnifiedInputConfig() ? "default"
+                                                                                : serial);
+}
+
 // The pad bindings of the player's input config.
 Input::PadBindings::Map PlayerPadBindings() {
-    const std::string serial{Common::ElfInfo::Instance().GameSerial()};
-    return Input::PadBindings::Read(
-        Input::GetInputConfigFile(EmulatorSettings.IsUseUnifiedInputConfig() ? "default" : serial));
+    return Input::PadBindings::Read(PlayerInputConfig());
 }
 
 // The layout GR2 starts with: the launcher's choice, else the connected pad's. "playstation" is the
@@ -622,6 +633,23 @@ PackSet LoadPacks() {
         if (auto blank = LoadPack(game, "keyboard", "layout"); blank && blank->has_slots) {
             set.pad_blank = std::move(*blank);
             set.pad_layout = layout == "off" ? "playstation" : layout;
+        }
+    }
+    // The photo functions' prompts follow their pad bindings, drawn from the layout's own icons;
+    // a back paddle takes a shoulder key of the keyboard pack's.
+    if (layout != "keyboard" &&
+        (layout == "off" || std::find(Layouts.begin(), Layouts.end(), layout) != Layouts.end())) {
+        const std::string photo_layout = layout == "off" ? "playstation" : layout;
+        if (auto photo = Input::PadBindings::ReadPhoto(PlayerInputConfig());
+            Photo::Changed(photo_layout, photo)) {
+            set.photo_layout = photo_layout;
+            set.photo = std::move(photo);
+            if (!set.pad_blank && Photo::UsesPaddle(set.photo)) {
+                if (auto blank = LoadPack(game, "keyboard", "layout"); blank && blank->has_slots) {
+                    set.pad_blank = std::move(*blank);
+                    set.pad_layout = photo_layout;
+                }
+            }
         }
     }
     const auto mods = Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "prompt_mods" / game;
@@ -1058,6 +1086,11 @@ std::unordered_map<std::string, std::shared_ptr<const Overlay>> BuildOverlays(
         want(std::string(KeyFontArchive), std::string(KeyFontArchiveName),
              std::string(KeyFontPath));
     }
+    if (!set.photo_layout.empty()) {
+        for (const std::string& path : Photo::Members()) {
+            want(std::string(KeyFontArchive), std::string(KeyFontArchiveName), path);
+        }
+    }
     for (const Pack& pack : set.packs) {
         for (const Member& member : pack.members) {
             want(member.archive, member.archive_name, member.path);
@@ -1112,11 +1145,11 @@ std::unordered_map<std::string, std::shared_ptr<const Overlay>> BuildOverlays(
             }
         }
     }
+    std::map<MemberKey, std::vector<u8>> blank;
+    std::optional<std::vector<u8>> font;
     if (set.pad_blank) {
-        std::map<MemberKey, std::vector<u8>> blank;
         std::vector<MemberKey> blank_order;
-        const auto font =
-            ReadOriginal(archives, std::string(KeyFontArchive), std::string(KeyFontPath));
+        font = ReadOriginal(archives, std::string(KeyFontArchive), std::string(KeyFontPath));
         if (font && ApplyPack(*set.pad_blank, archives, blank, blank_order)) {
             // The prompts are drawn into the members as the layout left them, the game's own
             // where it left them alone.
@@ -1132,6 +1165,38 @@ std::unordered_map<std::string, std::shared_ptr<const Overlay>> BuildOverlays(
             const std::set<std::string> changed = Pad::Changed(bindings);
             Keyboard::Compose(set.pad_blank->dir / "slots.json", *font,
                               Pad::Labels(set.pad_layout, bindings), members, &changed, &blank);
+        }
+    }
+    if (!set.photo_layout.empty()) {
+        const auto read = [&](const std::string& path) -> std::optional<std::vector<u8>> {
+            const MemberKey key{std::string(KeyFontArchive), path};
+            if (const auto member = members.find(key); member != members.end()) {
+                return member->second;
+            }
+            return ReadOriginal(archives, key.first, key.second);
+        };
+        // The keyboard pack's L1 key with text on it in place of the key's name.
+        const auto shoulder_key = [&](const std::string& text) -> std::optional<std::vector<u8>> {
+            const MemberKey key{std::string(KeyFontArchive), "gcd/photomode_key_07.gnf"};
+            const auto empty = blank.find(key);
+            if (!set.pad_blank || !font || empty == blank.end()) {
+                return std::nullopt;
+            }
+            std::map<MemberKey, std::vector<u8>> drawn{{key, empty->second}};
+            const std::set<std::string> only{"L1"};
+            Keyboard::Compose(set.pad_blank->dir / "slots.json", *font,
+                              {{"L1", Keyboard::Label{text, {}, {}}}}, drawn, &only, &blank);
+            const std::vector<u8>& bytes = drawn.at(key);
+            const auto texture = Gnf::Parse(bytes);
+            return texture ? std::optional{Gnf::Decode(bytes, *texture)} : std::nullopt;
+        };
+        for (auto& [path, bytes] :
+             Photo::Compose(set.photo_layout, set.photo, read, shoulder_key)) {
+            const MemberKey key{std::string(KeyFontArchive), path};
+            if (!members.contains(key)) {
+                order.push_back(key);
+            }
+            members[key] = std::move(bytes);
         }
     }
 
