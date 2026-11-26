@@ -181,6 +181,11 @@ constexpr std::array Returning{
     // from the player's objects.
     Hooks::Entry{0x429820, 6, Hooks::FramePrologue},
     Hooks::Entry{0x42bf10, 6, Hooks::FramePrologue},
+    // The frame graph's deformer passes, FUN_01421700 for each kind: the begin, record and end
+    // functions of a kind bind and dispatch its programs and write the words of the dispatch into
+    // the constants the record's builder took for this frame, which nothing reads. Capture reads
+    // the records when the frame graph starts.
+    Hooks::Entry{0x1421700, 6, Hooks::FramePrologue},
 };
 
 // In place of FUN_00414c00: the room from the buffer's next free word, or null if the buffer has
