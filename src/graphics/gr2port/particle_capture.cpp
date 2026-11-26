@@ -1163,6 +1163,23 @@ Fill g_filling;
 Fill g_filled;
 std::atomic<u32> g_filled_sequence{0};
 
+// A table of the simulation that is zeros but for the lines marked: the manager zeroed its bytes,
+// then the last fill of it wrote those lines, while the engine had freed buffers as often as freed
+// counts. Each slot of the manager's ring has its two tables.
+struct ZeroedTable {
+    VAddr table = 0;
+    u64 bytes = 0;
+    u32 freed = 0;
+    TableLines lines{};
+};
+std::array<ZeroedTable, 8> g_zeroed_tables;
+u32 g_next_zeroed = 0;
+// The tables the manager zeroed for the fill in progress, on the thread that fills.
+std::array<ZeroedTable, 2> g_zeroing;
+u32 g_zeroing_count = 0;
+// How many buffers the engine has freed.
+std::atomic<u32> g_freed{0};
+
 // What the packet of one of the ring's slots holds of a table: a bit for each line that may not
 // be all zeros. A slot's packet keeps what the last frame in it wrote.
 struct HeldTable {
@@ -1288,10 +1305,55 @@ void OnTablesFilled(VAddr manager) {
         fill.effects = effects;
         fill.owners = owners;
     }
+    // A table the manager zeroed for this fill is zeros but for the lines the fill wrote.
+    for (u32 i = 0; i < g_zeroing_count && !fill.broken; i++) {
+        ZeroedTable& zeroed = g_zeroing[i];
+        if (zeroed.table == fill.effects || zeroed.table == fill.owners) {
+            zeroed.lines = zeroed.table == fill.effects ? fill.effect_lines : fill.owner_lines;
+            g_zeroed_tables[g_next_zeroed] = zeroed;
+            g_next_zeroed = (g_next_zeroed + 1) % g_zeroed_tables.size();
+        }
+    }
+    g_zeroing_count = 0;
     g_filled_sequence.fetch_add(1, std::memory_order_acq_rel);
     std::memcpy(static_cast<void*>(&g_filled), &fill, sizeof(fill));
     g_filled_sequence.fetch_add(1, std::memory_order_release);
     fill = {};
+}
+
+void* PS4_SYSV_ABI ClearTable(void* table, s32 value, u64 bytes) {
+    const VAddr address = reinterpret_cast<VAddr>(table);
+    const u32 freed = g_freed.load(std::memory_order_acquire);
+    const auto zeroed = std::ranges::find(g_zeroed_tables, address, &ZeroedTable::table);
+    if (address != 0 && zeroed != g_zeroed_tables.end() && value == 0 && zeroed->bytes == bytes &&
+        zeroed->freed == freed) {
+        auto* const out = static_cast<u8*>(table);
+        for (u64 word = 0; word < zeroed->lines.size(); word++) {
+            for (u64 written = zeroed->lines[word]; written != 0; written &= written - 1) {
+                const u64 at = (word * 64 + std::countr_zero(written)) * TableLine;
+                if (at < bytes) {
+                    std::memset(out + at, 0, std::min(TableLine, bytes - at));
+                }
+            }
+        }
+    } else {
+        std::memset(table, value, bytes);
+    }
+    // The coming fill writes the table anew.
+    if (zeroed != g_zeroed_tables.end()) {
+        zeroed->table = 0;
+    }
+    if (value == 0 && g_zeroing_count < g_zeroing.size()) {
+        ZeroedTable& zeroing = g_zeroing[g_zeroing_count++];
+        zeroing.table = address;
+        zeroing.bytes = bytes;
+        zeroing.freed = freed;
+    }
+    return table;
+}
+
+void OnBufferFreed() {
+    g_freed.fetch_add(1, std::memory_order_acq_rel);
 }
 
 void Write(VAddr fx, VAddr view, u8* packet, Scene::Header& header) {

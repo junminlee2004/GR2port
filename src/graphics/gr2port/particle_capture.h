@@ -25,4 +25,12 @@ void OnEffectFilled(u32 effect, VAddr record, VAddr owners);
 /// When manager, the engine's, has filled the simulation's tables, FUN_00766b70.
 void OnTablesFilled(VAddr manager);
 
+/// In place of the memset with which FUN_00766b70 zeros a table of the simulation before it fills
+/// it: when the table holds zeros but for the lines its last fill wrote, zeros those lines alone.
+void* PS4_SYSV_ABI ClearTable(void* table, s32 value, u64 bytes);
+
+/// When the engine frees the memory of a buffer, FUN_00771390: a table found at an address since
+/// may be another one.
+void OnBufferFreed();
+
 } // namespace Gr2Port::ParticleCapture

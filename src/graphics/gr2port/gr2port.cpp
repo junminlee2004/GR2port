@@ -102,6 +102,19 @@ void PS4_SYSV_ABI OnParticleTables(u32, const Hooks::Arguments* arguments, u64) 
     ParticleCapture::OnTablesFilled(arguments->rdi);
 }
 
+// Before it fills them, FUN_00766b70 zeros the owners and the effects of the ring's slot with
+// memset: call memset at 0x766bd7 and at 0x766c20. FUN_00771390 frees the memory of a buffer, the
+// tables' among others.
+constexpr Hooks::Entry ClearOwners{0x766bd7, 5, {0xe8, 0xd4, 0x17, 0x09, 0x01}};
+constexpr VAddr ClearOwnersNext = 0x766bdc;
+constexpr Hooks::Entry ClearEffects{0x766c20, 5, {0xe8, 0x8b, 0x17, 0x09, 0x01}};
+constexpr VAddr ClearEffectsNext = 0x766c25;
+constexpr Hooks::Entry FreeBuffer{0x771390, 6, Hooks::FramePrologueR14};
+
+void PS4_SYSV_ABI OnFreeBuffer(u32, const Hooks::Registers*, u64) {
+    ParticleCapture::OnBufferFreed();
+}
+
 // FUN_0142ec00(T + 0xa0, view, ...): rdi is the frame graph, rsi the view the frame draws.
 void PS4_SYSV_ABI OnFrameGraph(u32, const Hooks::Registers* registers, u64) {
     Capture::OnFrame(registers->rdi, registers->rsi);
@@ -204,11 +217,31 @@ void Install(VAddr module_base) {
         LOG_ERROR(Render_Vulkan, "GR2port: the particle manager is not the expected code");
     }
     // Without these the capture reads the whole of the simulation's tables each frame.
-    if (Hooks::ObserveReturn(module_base, ParticleEffect, c, StubAreaSize, &OnParticleEffect, 0) ==
-            Hooks::Result::Mismatch ||
-        Hooks::ObserveReturn(module_base, ParticleTables, c, StubAreaSize, &OnParticleTables, 0) ==
-            Hooks::Result::Mismatch) {
+    const Hooks::Result effect_filled =
+        Hooks::ObserveReturn(module_base, ParticleEffect, c, StubAreaSize, &OnParticleEffect, 0);
+    const Hooks::Result tables_filled =
+        Hooks::ObserveReturn(module_base, ParticleTables, c, StubAreaSize, &OnParticleTables, 0);
+    if (effect_filled == Hooks::Result::Mismatch || tables_filled == Hooks::Result::Mismatch) {
         LOG_ERROR(Render_Vulkan, "GR2port: the particle tables' fill is not the expected code");
+    } else if (Hooks::Hooked(effect_filled) && Hooks::Hooked(tables_filled) &&
+               Hooks::Hooked(Hooks::ObserveEntry(module_base, FreeBuffer, c, StubAreaSize,
+                                                 &OnFreeBuffer, 0))) {
+        // The manager zeros the lines a table's last fill wrote, not the whole table.
+        using namespace Xbyak::util;
+        const auto clear = [&](VAddr next) {
+            const void* stub = c.getCurr();
+            c.mov(rax, reinterpret_cast<u64>(&ParticleCapture::ClearTable));
+            c.call(rax);
+            c.jmp(Hooks::Code(module_base, next));
+            return stub;
+        };
+        if (Hooks::Replace(module_base, ClearOwners, c, StubAreaSize, clear(ClearOwnersNext)) !=
+                Hooks::Result::Hooked ||
+            Hooks::Replace(module_base, ClearEffects, c, StubAreaSize, clear(ClearEffectsNext)) !=
+                Hooks::Result::Hooked) {
+            LOG_ERROR(Render_Vulkan,
+                      "GR2port: the particle tables' zeroing is not the expected code");
+        }
     }
     if (!Meshes::Install(module_base, c, StubAreaSize) ||
         !Textures::Install(module_base, c, StubAreaSize)) {
