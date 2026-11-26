@@ -1,8 +1,12 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
+#include <cstring>
 #include <span>
+#include <utility>
+#include <vector>
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/frame_graph_draws.h"
@@ -188,6 +192,13 @@ constexpr std::array Returning{
     Hooks::Entry{0x1421700, 6, Hooks::FramePrologue},
 };
 
+// The draw thread sorts the frame's item keys and its deformer list with FUN_017b9330(first, last,
+// depth), the standard library's sort of u32 words. A radix sort leaves the same words in the
+// same order, since words that compare equal are the same.
+constexpr Hooks::Entry SortWords{0x17b9330, 6, Hooks::FramePrologue};
+// Below this many words the standard library's sort is the quicker.
+constexpr size_t RadixSortWords = 256;
+
 // In place of FUN_00414c00: the room from the buffer's next free word, or null if the buffer has
 // none.
 u32* PS4_SYSV_ABI OnAllocate(CommandBuffer* commands, u32 bytes, u32 alignment) {
@@ -206,6 +217,49 @@ u32* PS4_SYSV_ABI OnAllocate(CommandBuffer* commands, u32 bytes, u32 alignment) 
     }
     commands->next = reinterpret_cast<u32*>(data) + words;
     return reinterpret_cast<u32*>(data);
+}
+
+// In place of FUN_017b9330: sorts the words from first to last a byte at a time, from the lowest,
+// passing over a byte that all of them share.
+void PS4_SYSV_ABI OnSortWords(u32* first, u32* last, s64) {
+    const size_t count = static_cast<size_t>(last - first);
+    if (count < RadixSortWords) {
+        std::sort(first, last);
+        return;
+    }
+    thread_local std::vector<u32> scratch;
+    if (scratch.size() < count) {
+        scratch.resize(count);
+    }
+    std::array<std::array<u32, 256>, 4> places{};
+    for (size_t i = 0; i < count; i++) {
+        const u32 word = first[i];
+        places[0][word & 0xff]++;
+        places[1][(word >> 8) & 0xff]++;
+        places[2][(word >> 16) & 0xff]++;
+        places[3][word >> 24]++;
+    }
+    u32* in = first;
+    u32* out = scratch.data();
+    for (u32 byte = 0; byte < places.size(); byte++) {
+        const u32 shift = byte * 8;
+        std::array<u32, 256>& place = places[byte];
+        if (place[(in[0] >> shift) & 0xff] == count) {
+            continue;
+        }
+        u32 next = 0;
+        for (u32& words : place) {
+            next += std::exchange(words, next);
+        }
+        for (size_t i = 0; i < count; i++) {
+            const u32 word = in[i];
+            out[place[(word >> shift) & 0xff]++] = word;
+        }
+        std::swap(in, out);
+    }
+    if (in != first) {
+        std::memcpy(first, in, count * sizeof(u32));
+    }
 }
 
 } // namespace
@@ -228,6 +282,11 @@ void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
                        reinterpret_cast<const void*>(&OnAllocate)) != Hooks::Result::Hooked) {
         LOG_ERROR(Render_Vulkan, "GR2port: the function at {:#x} is not the expected code",
                   Allocator.address);
+    }
+    if (Hooks::Replace(module_base, SortWords, c, capacity,
+                       reinterpret_cast<const void*>(&OnSortWords)) != Hooks::Result::Hooked) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the function at {:#x} is not the expected code",
+                  SortWords.address);
     }
 }
 
