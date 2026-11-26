@@ -124,6 +124,12 @@ pad_down = pad_down
 pad_left = pad_left
 pad_right = pad_right
 
+# Photo mode's Hide UI, Open Collection and Open Picture Roll, while the camera is out: two
+# buttons, the first held while the second is pressed, or a back paddle alone.
+gr2_hide_ui_pad = l3, r2
+gr2_collection_pad = l3, l1
+gr2_picture_roll_pad = l3, r1
+
 axis_left_x = axis_left_x
 axis_left_y = axis_left_y
 axis_right_x = axis_right_x
@@ -464,6 +470,78 @@ static InputID ParseSwipeComboInput(const std::string& token, const char* slot_n
     return id;
 }
 
+// GR2port: the photo mode's Hide UI, Open Collection and Open Picture Roll on the pad, which act
+// only while the camera is out: an input held with a second one pressed, or a back paddle alone.
+// Keys: gr2_hide_ui_pad, gr2_collection_pad and gr2_picture_roll_pad. A function without its line
+// is the swipe combos' hold input with R2, L1 or R1.
+struct PhotoBinding {
+    // The input held, or none for a back paddle alone.
+    InputID hold;
+    // The input pressed, or none when the function has no binding.
+    InputID press;
+};
+struct PhotoFunction {
+    std::string_view key;
+    u32 function;
+    InputType default_type;
+    u32 default_press;
+};
+static constexpr std::array<PhotoFunction, 3> photo_functions{{
+    {"gr2_hide_ui_pad", GR2_HIDE_UI, InputType::Axis, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER},
+    {"gr2_collection_pad", GR2_COLLECTION, InputType::Controller, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER},
+    {"gr2_picture_roll_pad", GR2_PICTURE_ROLL, InputType::Controller,
+     SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER},
+}};
+// The functions' bindings from their lines; none for a function without one.
+static std::array<std::optional<PhotoBinding>, photo_functions.size()> photo_bindings;
+
+static bool IsPaddleInput(const InputID& id) {
+    return id.type == InputType::Controller && (id.sdl_id == SDL_GAMEPAD_BUTTON_LEFT_PADDLE1 ||
+                                                id.sdl_id == SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1 ||
+                                                id.sdl_id == SDL_GAMEPAD_BUTTON_LEFT_PADDLE2 ||
+                                                id.sdl_id == SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2);
+}
+
+// A photo binding's inputs: "unmapped", two pad buttons or triggers, the first held while the
+// second is pressed, or a back paddle alone. One other button, which the function would take from
+// whatever the button does, binds nothing.
+static PhotoBinding ParsePhotoBinding(const std::string& inputs, std::string_view key,
+                                      int line_number) {
+    if (inputs.empty() || inputs == "unmapped") {
+        return {};
+    }
+    std::vector<InputID> ids;
+    for (const auto token : std::views::split(inputs, ',')) {
+        std::string name(token.begin(), token.end());
+        const InputBinding binding = GetBindingFromString(name);
+        InputID id;
+        if (binding.KeyCount() == 1) {
+            id = *std::ranges::find_if(binding.keys, [](const InputID& k) { return k.IsValid(); });
+        }
+        const bool pad =
+            (id.type == InputType::Controller && id.sdl_id < SDL_GAMEPAD_BUTTON_COUNT) ||
+            (id.type == InputType::Axis && (id.sdl_id == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ||
+                                            id.sdl_id == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+        if (!pad) {
+            LOG_WARNING(Input, "{} at line {}: \"{}\" is not a pad button; the function is unbound",
+                        key, line_number, name);
+            return {};
+        }
+        ids.push_back(id);
+    }
+    if (ids.size() == 1 && IsPaddleInput(ids[0])) {
+        return {InputID(), ids[0]};
+    }
+    if (ids.size() == 2 && ids[0] != ids[1]) {
+        return {ids[0], ids[1]};
+    }
+    LOG_WARNING(Input,
+                "{} at line {}: \"{}\" is neither two buttons nor a back paddle; the function is "
+                "unbound",
+                key, line_number, inputs);
+    return {};
+}
+
 void ParseInputConfig(const std::string game_id = "") {
     std::string game_id_or_default =
         EmulatorSettings.IsUseUnifiedInputConfig() ? "default" : game_id;
@@ -474,6 +552,7 @@ void ParseInputConfig(const std::string game_id = "") {
     // we can fall back to default
     connections.clear();
     swipe_combo = TouchpadSwipeComboConfig{};
+    photo_bindings = {};
     float mouse_deadzone_offset = 0.5;
     float mouse_speed = 1;
     float mouse_speed_offset = 0.125;
@@ -664,6 +743,12 @@ void ParseInputConfig(const std::string game_id = "") {
         } else if (output_string == "touchpad_swipe_combo_right") {
             swipe_combo.dir_keys[BUTTON_SWIPE_RIGHT] =
                 ParseSwipeComboInput(input_string, "right", lineCount);
+            return;
+        } else if (const auto photo =
+                       std::ranges::find(photo_functions, output_string, &PhotoFunction::key);
+                   photo != photo_functions.end()) {
+            photo_bindings[photo - photo_functions.begin()] =
+                ParsePhotoBinding(input_string, photo->key, lineCount);
             return;
         } else if (output_string == "mouse_default_mode") {
             if (input_string == "joystick") {
@@ -1393,46 +1478,48 @@ static void ProcessTouchpadSwipeCombo() {
     }
 }
 
-// GR2port: while the camera is out, the hold input of the swipe combos with R2 hides the photo
-// mode's screen drawing, and with L1 or R1 clicks the touch pad's bottom left or bottom right
-// corner, which open Collection and Picture Roll. The button's own mappings stay off from that
-// press until its release.
+// GR2port: while the camera is out, Hide UI's pad binding hides the photo mode's screen drawing,
+// and Open Collection's and Open Picture Roll's click the touch pad's bottom left or bottom right
+// corner, which open Collection and Picture Roll. A binding's pressed input keeps its own mappings
+// off from that press until its release.
 static void ProcessPhotoCombos() {
-    struct Combo {
-        InputID input;
-        u32 function;
+    struct State {
         bool down = false;
         bool owned = false;
     };
-    static std::array<Combo, 3> combos{{
-        {InputID(InputType::Axis, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER), GR2_HIDE_UI},
-        {InputID(InputType::Controller, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER), GR2_COLLECTION},
-        {InputID(InputType::Controller, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER), GR2_PICTURE_ROLL},
-    }};
-    const bool hold_down = swipe_combo.hold.IsValid() && IsHeld(FindPressed(swipe_combo.hold));
+    static std::array<State, photo_functions.size()> states;
     const bool camera_out = Gr2Port::PhotoUi::CameraOut();
     GameController* const controller = ControllerOutput::controllers[0];
-    for (Combo& combo : combos) {
-        const auto it = FindPressed(combo.input);
+    for (size_t i = 0; i < photo_functions.size(); i++) {
+        const PhotoFunction& function = photo_functions[i];
+        const InputID default_press(function.default_type, function.default_press);
+        const PhotoBinding binding = photo_bindings[i].value_or(
+            swipe_combo.hold.IsValid() && swipe_combo.hold != default_press
+                ? PhotoBinding{swipe_combo.hold, default_press}
+                : PhotoBinding{});
+        State& state = states[i];
+        const auto it = binding.press.IsValid() ? FindPressed(binding.press) : pressed_keys.end();
         const bool down = IsHeld(it);
-        if (down && !combo.down && hold_down && camera_out) {
-            combo.owned = true;
-            if (combo.function == GR2_HIDE_UI) {
+        const bool held = !binding.hold.IsValid() || IsHeld(FindPressed(binding.hold));
+        if (down && !state.down && held && camera_out) {
+            state.owned = true;
+            if (function.function == GR2_HIDE_UI) {
                 Gr2Port::PhotoUi::ToggleHidden();
             } else {
-                GameFunctions::PhotoCorner(controller, combo.function == GR2_PICTURE_ROLL, true);
+                GameFunctions::PhotoCorner(controller, function.function == GR2_PICTURE_ROLL, true);
             }
         }
-        if (!down && combo.owned) {
-            combo.owned = false;
-            if (combo.function != GR2_HIDE_UI) {
-                GameFunctions::PhotoCorner(controller, combo.function == GR2_PICTURE_ROLL, false);
+        if (!down && state.owned) {
+            state.owned = false;
+            if (function.function != GR2_HIDE_UI) {
+                GameFunctions::PhotoCorner(controller, function.function == GR2_PICTURE_ROLL,
+                                           false);
             }
         }
-        if (combo.owned && it != pressed_keys.end()) {
+        if (state.owned && it != pressed_keys.end()) {
             it->second = true;
         }
-        combo.down = down;
+        state.down = down;
     }
 }
 

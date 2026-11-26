@@ -258,11 +258,12 @@ bool SaveKeyBindings(const std::filesystem::path& file, const KeyBindings& keys)
 }
 
 PadBindings DefaultPadBindings() {
-    return {Input::PadBindings::Defaults(), {}};
+    return {Input::PadBindings::Defaults(), {}, Input::PadBindings::PhotoDefaults()};
 }
 
 PadBindings ReadPadBindings(const std::filesystem::path& file) {
-    return {Input::PadBindings::Read(file), Input::PadBindings::ReadPaddles(file)};
+    return {Input::PadBindings::Read(file), Input::PadBindings::ReadPaddles(file),
+            Input::PadBindings::ReadPhoto(file)};
 }
 
 bool SavePadBindings(const std::filesystem::path& file, const PadBindings& bindings) {
@@ -274,7 +275,8 @@ bool SavePadBindings(const std::filesystem::path& file, const PadBindings& bindi
     {
         std::ifstream in(file);
         for (std::string line; std::getline(in, line);) {
-            if (Input::PadBindings::ParseLine(Compact(line))) {
+            if (Input::PadBindings::ParseLine(Compact(line)) ||
+                Input::PadBindings::IsPhotoLine(Compact(line))) {
                 block_at = block_at.value_or(lines.size());
                 continue;
             }
@@ -299,6 +301,16 @@ bool SavePadBindings(const std::filesystem::path& file, const PadBindings& bindi
             bound != bindings.paddles.end() && !bound->second.empty()) {
             block.push_back(bound->second + " = " + std::string(paddle));
         }
+    }
+    for (const std::string_view function : Input::PadBindings::PhotoFunctions()) {
+        const auto bound = bindings.photo.find(function);
+        std::string inputs = bound == bindings.photo.end() || bound->second.empty()
+                                 ? std::string{"unmapped"}
+                                 : bound->second;
+        if (const auto comma = inputs.find(','); comma != std::string::npos) {
+            inputs.replace(comma, 1, ", ");
+        }
+        block.push_back(std::string(function) + " = " + inputs);
     }
     const size_t at = block_at.value_or(lines.size());
     if (at < lines.size() && !blank(lines[at])) {

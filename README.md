@@ -109,7 +109,7 @@ F1 | Trophy list
 
 ## Controls
 
-The mouse turns the camera (native mouse input). Keys can be changed in the launcher under Setup > Mouse & Keyboard > Key Bindings, and controller buttons under Setup > Controller > Button Bindings.
+The mouse turns the camera (native mouse input). Keys can be changed in the launcher under Setup > Mouse & Keyboard > Key Bindings, and controller buttons under Setup > Controller > Button Bindings. There, Hide UI, Open Collection and Open Picture Roll take a combination of two buttons held down together, or a back paddle; they work only while the camera is out, and their prompts show the buttons they are on.
 
 | Game Function | Controller | Keyboard & Mouse |
 |---|---|---|

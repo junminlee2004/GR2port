@@ -67,6 +67,8 @@ struct Editor {
     bool pad = false;
     Input::PadBindings::Map buttons;
     Input::PadBindings::Map paddles;
+    // The photo functions' pad bindings (Input::PadBindings::PhotoFunctions), compact.
+    Input::PadBindings::Map photo;
     std::string layout;
     u32 type = 0;
     u32 game_type = 0;
@@ -382,6 +384,8 @@ struct Capture {
     bool pad = false;
     // Takes up to three keys or pad buttons held together, once they are all released.
     bool combination = false;
+    // Takes two pad buttons held together or one alone, for a photo function.
+    bool photo = false;
     int seconds_left = CaptureSeconds;
     bool done = false;
     std::string key;
@@ -414,7 +418,8 @@ void Press(Capture& capture, std::string input) {
     if (input.empty() || (!capture.pad && !Input::string_to_keyboard_key_map.contains(input))) {
         return;
     }
-    if (capture.inputs.size() < CombinationInputs &&
+    const size_t most = capture.photo ? 2 : CombinationInputs;
+    if (capture.inputs.size() < most &&
         std::ranges::find(capture.inputs, input) == capture.inputs.end()) {
         capture.inputs.push_back(input);
     }
@@ -565,7 +570,11 @@ LRESULT CALLBACK CaptureProc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         const std::vector<std::wstring> values{capture->function,
                                                std::to_wstring(capture->seconds_left)};
         const std::wstring text =
-            capture->combination
+            capture->photo
+                ? Tr(L"Hold down two buttons on the controller together to bind a combination to\n"
+                     L"{0}\nor press a back paddle.\n\nNothing changes in {1} s.",
+                     values)
+            : capture->combination
                 ? (capture->pad ? Tr(L"Hold up to three buttons on the controller together for\n"
                                      L"{0}\n\nNothing changes in {1} s.",
                                      values)
@@ -588,9 +597,10 @@ LRESULT CALLBACK CaptureProc(HWND window, UINT message, WPARAM wparam, LPARAM lp
 }
 
 // Waits for a key or mouse button over owner, or a pad button when pad is set, or a combination of
-// them when combination is set. Empty when the countdown ends first.
+// them when combination is set, or two pad buttons or one for a photo function when photo is set.
+// Empty when the countdown ends first.
 std::string CaptureKey(HWND owner, const Editor& editor, const std::wstring& function, bool pad,
-                       bool combination = false) {
+                       bool combination = false, bool photo = false) {
     const HINSTANCE instance = GetModuleHandleW(nullptr);
     WNDCLASSEXW capture_class{};
     capture_class.cbSize = sizeof(capture_class);
@@ -614,7 +624,7 @@ std::string CaptureKey(HWND owner, const Editor& editor, const std::wstring& fun
     }
     // The pads move no window while the popup reads them.
     const PadCommands::Pause pause;
-    Capture capture{function, editor.font, pad, combination};
+    Capture capture{function, editor.font, pad, combination || photo, photo};
     const bool gamepads = pad && SDL_InitSubSystem(SDL_INIT_GAMEPAD);
     if (gamepads) {
         int count = 0;
@@ -682,9 +692,39 @@ void SetCell(HWND list, int row, int column, const std::wstring& text) {
     SendMessageW(list, LVM_SETITEMTEXTW, row, reinterpret_cast<LPARAM>(&item));
 }
 
+// The input config name of a photo function's pad binding, after its key line's
+// ("gr2_hide_ui" -> "gr2_hide_ui_pad"); empty for a function without one.
+std::string PhotoName(const Game::Function& function) {
+    std::string name = std::string(function.name) + "_pad";
+    const auto photo = Input::PadBindings::PhotoFunctions();
+    return std::ranges::find(photo, name) != photo.end() ? name : std::string{};
+}
+
+// A photo function's name in the launcher, for the status line.
+std::wstring PhotoLabel(std::string_view photo) {
+    for (const Game::Function& function : Game::Functions()) {
+        if (PhotoName(function) == photo) {
+            return Tr(Wide(function.label));
+        }
+    }
+    return {};
+}
+
+// A photo function's binding as the layout's prompts name it ("LS + RT"), or a dash for none.
+std::wstring PhotoText(const Editor& editor, const std::string& photo, std::string_view layout) {
+    const auto bound = editor.photo.find(photo);
+    return bound == editor.photo.end() || bound->second.empty()
+               ? PadText(layout, {})
+               : CombinationText(bound->second, true, layout);
+}
+
 // The pad button bound to the PlayStation button a function is on in the type shown, then the
-// back paddles that press it too; blank for a function on a stick, a flick or a combination.
+// back paddles that press it too, or a photo function's binding; blank for a function on a stick,
+// a flick or a combination.
 std::wstring PadCell(const Editor& editor, const Game::Function& function) {
+    if (const std::string photo = PhotoName(function); !photo.empty()) {
+        return PhotoText(editor, photo, editor.layout);
+    }
     const std::string_view button = GameButton(function, editor.type);
     if (button.empty()) {
         return {};
@@ -703,12 +743,17 @@ std::wstring PadCell(const Editor& editor, const Game::Function& function) {
     return names.empty() ? PadText(editor.layout, {}) : names;
 }
 
-// The pad column shows the type's pad inputs; the key column is the same in every type, and the
-// button column shows the pad button of each function's PlayStation button.
+// The pad column shows the type's pad inputs, and a photo function's binding by its PlayStation
+// names; the key column is the same in every type, and the button column shows the pad button of
+// each function's PlayStation button.
 void ShowRows(const Editor& editor) {
     const auto functions = Game::Functions();
     for (size_t i = 0; i < functions.size(); ++i) {
-        SetCell(editor.list, static_cast<int>(i), 1, Tr(Wide(functions[i].pad[editor.type])));
+        const std::string photo = PhotoName(functions[i]);
+        SetCell(editor.list, static_cast<int>(i), 1,
+                !photo.empty() && editor.photo.contains(photo)
+                    ? PhotoText(editor, photo, "playstation")
+                    : Tr(Wide(functions[i].pad[editor.type])));
         SetCell(editor.list, static_cast<int>(i), 2,
                 editor.pad ? PadCell(editor, functions[i]) : KeyText(editor.keys[i]));
     }
@@ -739,11 +784,59 @@ std::wstring FunctionsOn(const Editor& editor, std::string_view button) {
     return names;
 }
 
+// A back paddle given to something else no longer does the photo function it did alone; adds
+// those functions to the status line.
+void FreePaddle(Editor& editor, std::string_view paddle, std::wstring& status) {
+    for (auto& [photo, bound] : editor.photo) {
+        if (bound == paddle) {
+            bound.clear();
+            status += L" " + Tr(L"{0} has no button now.", {PhotoLabel(photo)});
+        }
+    }
+}
+
+// Takes two pad buttons held together, the first held while the second is pressed, or a back
+// paddle, for a photo function. A binding another photo function had moves to this one, and a
+// back paddle stops pressing the PlayStation button it pressed.
+void ChangePhotoBinding(HWND window, Editor& editor, const std::string& photo,
+                        const std::wstring& label) {
+    std::string inputs = CaptureKey(window, editor, label, true, false, true);
+    std::erase_if(inputs, [](unsigned char c) { return std::isspace(c) != 0; });
+    if (inputs.empty()) {
+        ShowStatus(window, Tr(L"No button was pressed; {0} keeps its button.", {label}));
+        return;
+    }
+    if (!Input::PadBindings::IsPhotoBinding(inputs)) {
+        ShowStatus(window, Tr(L"{0} takes two buttons held together or a back paddle.", {label}));
+        return;
+    }
+    std::wstring status =
+        Tr(L"{0} now does {1}.", {CombinationText(inputs, true, editor.layout), label});
+    for (auto& [other, bound] : editor.photo) {
+        if (other != photo && bound == inputs) {
+            bound.clear();
+            status += L" " + Tr(L"{0} has no button now.", {PhotoLabel(other)});
+        }
+    }
+    if (const auto paddle = editor.paddles.find(inputs); paddle != editor.paddles.end()) {
+        status += L" " + Tr(L"{0} no longer does {1}.",
+                            {PadText(editor.layout, inputs), FunctionsOn(editor, paddle->second)});
+        editor.paddles.erase(paddle);
+    }
+    editor.photo[photo] = std::move(inputs);
+    ShowRows(editor);
+    ShowStatus(window, status);
+}
+
 // Takes a pad button for the selected function's PlayStation button. A pad button that another
 // PlayStation button had moves to this one, and a back paddle presses it beside its pad button.
 void ChangeButton(HWND window, Editor& editor, int row) {
     const Game::Function& function = Game::Functions()[row];
     const std::wstring label = Tr(Wide(function.label));
+    if (const std::string photo = PhotoName(function); !photo.empty()) {
+        ChangePhotoBinding(window, editor, photo, label);
+        return;
+    }
     const std::string_view button = GameButton(function, editor.type);
     if (button.empty()) {
         ShowStatus(window,
@@ -757,8 +850,10 @@ void ChangeButton(HWND window, Editor& editor, int row) {
     }
     if (Input::PadBindings::IsPaddle(input)) {
         editor.paddles[input] = std::string(button);
+        std::wstring status = Tr(L"{0} now also does {1}.", {PadText(editor.layout, input), label});
+        FreePaddle(editor, input, status);
         ShowRows(editor);
-        ShowStatus(window, Tr(L"{0} now also does {1}.", {PadText(editor.layout, input), label}));
+        ShowStatus(window, status);
         return;
     }
     std::wstring status = Tr(L"{0} now does {1}.", {PadText(editor.layout, input), label});
@@ -923,6 +1018,9 @@ INT_PTR CALLBACK EditorProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
             if (const int row = SelectedRow(*editor); row >= 0) {
                 if (!editor->pad) {
                     editor->keys[row].clear();
+                } else if (const std::string photo = PhotoName(Game::Functions()[row]);
+                           !photo.empty()) {
+                    editor->photo[photo].clear();
                 } else if (const std::string_view button =
                                GameButton(Game::Functions()[row], editor->type);
                            !button.empty()) {
@@ -937,6 +1035,7 @@ INT_PTR CALLBACK EditorProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
             if (editor->pad) {
                 editor->buttons = DefaultPadBindings().buttons;
                 editor->paddles.clear();
+                editor->photo = DefaultPadBindings().photo;
             } else {
                 editor->keys = DefaultKeyBindings();
             }
@@ -968,7 +1067,8 @@ INT_PTR CALLBACK EditorProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
 
 } // namespace
 
-std::optional<KeyBindings> EditKeyBindings(HWND owner, const KeyBindings& keys, u32 control_type) {
+std::optional<KeyBindings> EditKeyBindings(HWND owner, const KeyBindings& keys, u32 control_type,
+                                           const PadBindings& pad) {
     struct alignas(4) Template {
         DLGTEMPLATE header;
         WORD menu;
@@ -981,6 +1081,7 @@ std::optional<KeyBindings> EditKeyBindings(HWND owner, const KeyBindings& keys, 
 
     Editor editor;
     editor.keys = keys;
+    editor.photo = pad.photo;
     editor.keys.resize(Game::Functions().size());
     editor.game_type = std::min(control_type, Game::TypeCount - 1);
     editor.type = editor.game_type;
@@ -1010,6 +1111,7 @@ std::optional<PadBindings> EditPadBindings(HWND owner, const PadBindings& bindin
     editor.pad = true;
     editor.buttons = bindings.buttons;
     editor.paddles = bindings.paddles;
+    editor.photo = bindings.photo;
     editor.layout = layout;
     editor.keys.resize(Game::Functions().size());
     editor.game_type = std::min(control_type, Game::TypeCount - 1);
@@ -1021,7 +1123,7 @@ std::optional<PadBindings> EditPadBindings(HWND owner, const PadBindings& bindin
     if (result != IDOK) {
         return std::nullopt;
     }
-    return PadBindings{editor.buttons, editor.paddles};
+    return PadBindings{editor.buttons, editor.paddles, editor.photo};
 }
 
 std::string CaptureCombination(HWND owner, HFONT font, UINT dpi, const std::wstring& function,

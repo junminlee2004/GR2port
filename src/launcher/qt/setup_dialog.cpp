@@ -1642,7 +1642,10 @@ void BuildMouse(Dialog& dialog, QWidget* page) {
     QObject::connect(key_bindings, &QPushButton::clicked, dialog.window, [&dialog] {
         const KeyBindings keys =
             dialog.key_bindings ? *dialog.key_bindings : ReadKeyBindings(dialog.input_config);
-        if (auto edited = EditKeyBindings(dialog.window, keys, dialog.values.mouse.control_type)) {
+        const PadBindings pad =
+            dialog.pad_bindings ? *dialog.pad_bindings : ReadPadBindings(dialog.input_config);
+        if (auto edited =
+                EditKeyBindings(dialog.window, keys, dialog.values.mouse.control_type, pad)) {
             dialog.key_bindings = std::move(edited);
         }
     });

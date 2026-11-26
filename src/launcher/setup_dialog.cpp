@@ -2648,7 +2648,10 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
         if (code == BN_CLICKED) {
             const KeyBindings keys =
                 dialog.key_bindings ? *dialog.key_bindings : ReadKeyBindings(dialog.input_config);
-            if (auto edited = EditKeyBindings(window, keys, dialog.values.mouse.control_type)) {
+            const PadBindings pad =
+                dialog.pad_bindings ? *dialog.pad_bindings : ReadPadBindings(dialog.input_config);
+            if (auto edited =
+                    EditKeyBindings(window, keys, dialog.values.mouse.control_type, pad)) {
                 dialog.key_bindings = std::move(edited);
             }
         }

@@ -348,14 +348,16 @@ std::string_view GameButton(const Game::Function& function, u32 type) {
 // ------------------------------------------------------------------------------- key capture
 
 // A popup that takes the next key or mouse button, or a pad button when pad_buttons is true, or
-// up to three keys or pad buttons held together when combination_wanted is true, or nothing when
-// the countdown ends.
+// up to three keys or pad buttons held together when combination_wanted is true, or two pad
+// buttons held together or one alone for a photo function when photo_wanted is true, or nothing
+// when the countdown ends.
 class Capture : public QDialog {
 public:
     Capture(QWidget* owner, QString function_name, bool pad_buttons,
-            bool combination_wanted = false)
+            bool combination_wanted = false, bool photo_wanted = false)
         : QDialog{owner, Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint},
-          function{std::move(function_name)}, pad{pad_buttons}, combination{combination_wanted} {
+          function{std::move(function_name)}, pad{pad_buttons},
+          combination{combination_wanted || photo_wanted}, photo{photo_wanted} {
         setModal(true);
         setFixedSize(CaptureWidth, CaptureHeight);
         setFont(DialogFont());
@@ -504,12 +506,14 @@ protected:
 private:
     void ShowText() {
         const std::string_view text =
-            combination ? (pad ? "Hold up to three buttons on the controller together for\n{0}\n\n"
-                                 "Nothing changes in {1} s."
-                               : "Hold up to three keys together for\n{0}\n\nNothing changes in "
-                                 "{1} s.")
-            : pad       ? "Press a button on the controller for\n{0}\n\nNothing changes in {1} s."
-                        : "Press a key or mouse button for\n{0}\n\nNothing changes in {1} s.";
+            photo ? "Hold down two buttons on the controller together to bind a combination to\n"
+                    "{0}\nor press a back paddle.\n\nNothing changes in {1} s."
+            : combination
+                ? (pad ? "Hold up to three buttons on the controller together for\n{0}\n\n"
+                         "Nothing changes in {1} s."
+                       : "Hold up to three keys together for\n{0}\n\nNothing changes in {1} s.")
+            : pad ? "Press a button on the controller for\n{0}\n\nNothing changes in {1} s."
+                  : "Press a key or mouse button for\n{0}\n\nNothing changes in {1} s.";
         label->setText(Tr(text, {function.toStdString(), std::to_string(seconds_left)}));
     }
 
@@ -561,7 +565,8 @@ private:
         if (input.empty() || (!pad && !Input::string_to_keyboard_key_map.contains(input))) {
             return;
         }
-        if (inputs.size() < CombinationInputs && std::ranges::find(inputs, input) == inputs.end()) {
+        const size_t most = photo ? 2 : CombinationInputs;
+        if (inputs.size() < most && std::ranges::find(inputs, input) == inputs.end()) {
             inputs.push_back(input);
         }
         down.insert(std::move(input));
@@ -603,6 +608,8 @@ private:
     // Takes a pad button instead of a key or mouse button.
     bool pad = false;
     bool combination = false;
+    // Takes two pad buttons or one, for a photo function.
+    bool photo = false;
     QLabel* label = nullptr;
     QTimer timer;
     QTimer pad_timer;
@@ -626,6 +633,8 @@ struct Editor {
     bool pad = false;
     Input::PadBindings::Map buttons;
     Input::PadBindings::Map paddles;
+    // The photo functions' pad bindings (Input::PadBindings::PhotoFunctions), compact.
+    Input::PadBindings::Map photo;
     std::string layout;
     u32 type = 0;
     u32 game_type = 0;
@@ -634,9 +643,39 @@ struct Editor {
     QLabel* status = nullptr;
 };
 
+// The input config name of a photo function's pad binding, after its key line's
+// ("gr2_hide_ui" -> "gr2_hide_ui_pad"); empty for a function without one.
+std::string PhotoName(const Game::Function& function) {
+    std::string name = std::string(function.name) + "_pad";
+    const auto photo = Input::PadBindings::PhotoFunctions();
+    return std::ranges::find(photo, name) != photo.end() ? name : std::string{};
+}
+
+// A photo function's name in the launcher, for the status line.
+QString PhotoLabel(std::string_view photo) {
+    for (const Game::Function& function : Game::Functions()) {
+        if (PhotoName(function) == photo) {
+            return Tr(function.label);
+        }
+    }
+    return {};
+}
+
+// A photo function's binding as the layout's prompts name it ("LS + RT"), or a dash for none.
+QString PhotoText(const Editor& editor, const std::string& photo, std::string_view layout) {
+    const auto bound = editor.photo.find(photo);
+    return bound == editor.photo.end() || bound->second.empty()
+               ? PadText(layout, {})
+               : CombinationText(bound->second, true, layout);
+}
+
 // The pad button bound to the PlayStation button a function is on in the type shown, then the
-// back paddles that press it too; blank for a function on a stick, a flick or a combination.
+// back paddles that press it too, or a photo function's binding; blank for a function on a stick,
+// a flick or a combination.
 QString PadCell(const Editor& editor, const Game::Function& function) {
+    if (const std::string photo = PhotoName(function); !photo.empty()) {
+        return PhotoText(editor, photo, editor.layout);
+    }
     const std::string_view button = GameButton(function, editor.type);
     if (button.empty()) {
         return {};
@@ -655,13 +694,17 @@ QString PadCell(const Editor& editor, const Game::Function& function) {
     return names.isEmpty() ? PadText(editor.layout, {}) : names.join(QStringLiteral(", "));
 }
 
-// The pad column shows the type's pad inputs; the key column is the same in every type, and the
-// button column shows the pad button of each function's PlayStation button.
+// The pad column shows the type's pad inputs, and a photo function's binding by its PlayStation
+// names; the key column is the same in every type, and the button column shows the pad button of
+// each function's PlayStation button.
 void ShowRows(const Editor& editor) {
     const auto functions = Game::Functions();
     for (size_t i = 0; i < functions.size(); ++i) {
         const int row = static_cast<int>(i);
-        editor.list->item(row, 1)->setText(Tr(functions[i].pad[editor.type]));
+        const std::string photo = PhotoName(functions[i]);
+        editor.list->item(row, 1)->setText(!photo.empty() && editor.photo.contains(photo)
+                                               ? PhotoText(editor, photo, "playstation")
+                                               : Tr(functions[i].pad[editor.type]));
         editor.list->item(row, 2)->setText(editor.pad ? PadCell(editor, functions[i])
                                                       : KeyText(editor.keys[i]));
     }
@@ -685,11 +728,66 @@ QString FunctionsOn(const Editor& editor, std::string_view button) {
     return names;
 }
 
+// A back paddle given to something else no longer does the photo function it did alone; adds
+// those functions to the status line.
+void FreePaddle(Editor& editor, std::string_view paddle, QString& status) {
+    for (auto& [photo, bound] : editor.photo) {
+        if (bound == paddle) {
+            bound.clear();
+            status +=
+                QLatin1Char(' ') + Tr("{0} has no button now.", {PhotoLabel(photo).toStdString()});
+        }
+    }
+}
+
+// Takes two pad buttons held together, the first held while the second is pressed, or a back
+// paddle, for a photo function. A binding another photo function had moves to this one, and a
+// back paddle stops pressing the PlayStation button it pressed.
+void ChangePhotoBinding(Editor& editor, const std::string& photo, const QString& label) {
+    Capture capture{editor.dialog, label, true, false, true};
+    capture.exec();
+    std::string inputs = capture.key;
+    std::erase_if(inputs, [](unsigned char c) { return std::isspace(c) != 0; });
+    if (inputs.empty()) {
+        editor.status->setText(
+            Tr("No button was pressed; {0} keeps its button.", {label.toStdString()}));
+        return;
+    }
+    if (!Input::PadBindings::IsPhotoBinding(inputs)) {
+        editor.status->setText(
+            Tr("{0} takes two buttons held together or a back paddle.", {label.toStdString()}));
+        return;
+    }
+    QString status =
+        Tr("{0} now does {1}.",
+           {CombinationText(inputs, true, editor.layout).toStdString(), label.toStdString()});
+    for (auto& [other, bound] : editor.photo) {
+        if (other != photo && bound == inputs) {
+            bound.clear();
+            status +=
+                QLatin1Char(' ') + Tr("{0} has no button now.", {PhotoLabel(other).toStdString()});
+        }
+    }
+    if (const auto paddle = editor.paddles.find(inputs); paddle != editor.paddles.end()) {
+        status += QLatin1Char(' ') + Tr("{0} no longer does {1}.",
+                                        {PadText(editor.layout, inputs).toStdString(),
+                                         FunctionsOn(editor, paddle->second).toStdString()});
+        editor.paddles.erase(paddle);
+    }
+    editor.photo[photo] = std::move(inputs);
+    ShowRows(editor);
+    editor.status->setText(status);
+}
+
 // Takes a pad button for the selected function's PlayStation button. A pad button that another
 // PlayStation button had moves to this one, and a back paddle presses it beside its pad button.
 void ChangeButton(Editor& editor, int row) {
     const Game::Function& function = Game::Functions()[row];
     const QString label = Tr(function.label);
+    if (const std::string photo = PhotoName(function); !photo.empty()) {
+        ChangePhotoBinding(editor, photo, label);
+        return;
+    }
     const std::string_view button = GameButton(function, editor.type);
     if (button.empty()) {
         editor.status->setText(Tr("{0} is not on one button in {1}.",
@@ -706,10 +804,11 @@ void ChangeButton(Editor& editor, int row) {
     }
     if (Input::PadBindings::IsPaddle(input)) {
         editor.paddles[input] = std::string(button);
+        QString status = Tr("{0} now also does {1}.",
+                            {PadText(editor.layout, input).toStdString(), label.toStdString()});
+        FreePaddle(editor, input, status);
         ShowRows(editor);
-        editor.status->setText(
-            Tr("{0} now also does {1}.",
-               {PadText(editor.layout, input).toStdString(), label.toStdString()}));
+        editor.status->setText(status);
         return;
     }
     QString status =
@@ -855,6 +954,9 @@ bool ShowEditor(QWidget* owner, Editor& editor, u32 control_type) {
         if (const int row = SelectedRow(editor); row >= 0) {
             if (!editor.pad) {
                 editor.keys[row].clear();
+            } else if (const std::string photo = PhotoName(Game::Functions()[row]);
+                       !photo.empty()) {
+                editor.photo[photo].clear();
             } else if (const std::string_view button =
                            GameButton(Game::Functions()[row], editor.type);
                        !button.empty()) {
@@ -869,6 +971,7 @@ bool ShowEditor(QWidget* owner, Editor& editor, u32 control_type) {
         if (editor.pad) {
             editor.buttons = DefaultPadBindings().buttons;
             editor.paddles.clear();
+            editor.photo = DefaultPadBindings().photo;
         } else {
             editor.keys = DefaultKeyBindings();
         }
@@ -886,9 +989,10 @@ bool ShowEditor(QWidget* owner, Editor& editor, u32 control_type) {
 } // namespace
 
 std::optional<KeyBindings> EditKeyBindings(QWidget* owner, const KeyBindings& keys,
-                                           u32 control_type) {
+                                           u32 control_type, const PadBindings& pad) {
     Editor editor;
     editor.keys = keys;
+    editor.photo = pad.photo;
     if (!ShowEditor(owner, editor, control_type)) {
         return std::nullopt;
     }
@@ -901,11 +1005,12 @@ std::optional<PadBindings> EditPadBindings(QWidget* owner, const PadBindings& bi
     editor.pad = true;
     editor.buttons = bindings.buttons;
     editor.paddles = bindings.paddles;
+    editor.photo = bindings.photo;
     editor.layout = layout;
     if (!ShowEditor(owner, editor, control_type)) {
         return std::nullopt;
     }
-    return PadBindings{editor.buttons, editor.paddles};
+    return PadBindings{editor.buttons, editor.paddles, editor.photo};
 }
 
 std::string CaptureCombination(QWidget* owner, const QString& function, bool pad) {

@@ -30,6 +30,11 @@ constexpr std::array<std::string_view, 4> PaddleInputs{
     "rpaddle_low",
 };
 
+// The photo functions and the button each presses with the hold input without a line.
+constexpr std::array<std::string_view, 3> PhotoNames{"gr2_hide_ui_pad", "gr2_collection_pad",
+                                                     "gr2_picture_roll_pad"};
+constexpr std::array<std::string_view, 3> PhotoPresses{"r2", "l1", "r1"};
+
 std::string Compact(std::string_view line) {
     std::string compact{line.substr(0, line.find('#'))};
     std::erase_if(compact, [](unsigned char c) { return std::isspace(c) != 0; });
@@ -109,6 +114,77 @@ Map ReadPaddles(const std::filesystem::path& file) {
         }
     }
     return paddles;
+}
+
+std::span<const std::string_view> PhotoFunctions() {
+    return PhotoNames;
+}
+
+bool IsPhotoBinding(std::string_view inputs) {
+    const auto comma = inputs.find(',');
+    if (comma == std::string_view::npos) {
+        return IsPaddle(inputs);
+    }
+    const std::string_view hold = inputs.substr(0, comma);
+    const std::string_view press = inputs.substr(comma + 1);
+    return hold != press && (IsPadInput(hold) || IsPaddle(hold)) &&
+           (IsPadInput(press) || IsPaddle(press));
+}
+
+Map PhotoDefaults(std::string_view hold) {
+    Map bindings;
+    for (size_t i = 0; i < PhotoNames.size(); ++i) {
+        bindings.emplace(PhotoNames[i],
+                         hold.empty() || hold == PhotoPresses[i]
+                             ? std::string{}
+                             : std::string(hold) + "," + std::string(PhotoPresses[i]));
+    }
+    return bindings;
+}
+
+bool IsPhotoLine(std::string_view compact) {
+    const auto equal = compact.find('=');
+    return equal != std::string_view::npos &&
+           std::ranges::find(PhotoNames, compact.substr(0, equal)) != PhotoNames.end();
+}
+
+std::optional<std::pair<std::string, std::string>> ParsePhotoLine(std::string_view compact) {
+    const auto equal = compact.find('=');
+    if (equal == std::string_view::npos) {
+        return std::nullopt;
+    }
+    const std::string_view function = compact.substr(0, equal);
+    const std::string_view inputs = compact.substr(equal + 1);
+    if (std::ranges::find(PhotoNames, function) == PhotoNames.end() ||
+        (inputs != "unmapped" && !IsPhotoBinding(inputs))) {
+        return std::nullopt;
+    }
+    return std::pair{std::string(function),
+                     inputs == "unmapped" ? std::string{} : std::string(inputs)};
+}
+
+Map ReadPhoto(const std::filesystem::path& file) {
+    // The swipe combos' hold input: its last line that names one pad input.
+    std::string hold = "l3";
+    Map read;
+    std::ifstream in(file);
+    for (std::string line; std::getline(in, line);) {
+        const std::string compact = Compact(line);
+        if (compact.starts_with("touchpad_swipe_combo_hold=")) {
+            const std::string input = compact.substr(compact.find('=') + 1);
+            if (input == "unmapped" || IsPadInput(input) || IsPaddle(input)) {
+                hold = input == "unmapped" ? std::string{} : input;
+            }
+        } else if (auto photo = ParsePhotoLine(compact)) {
+            // A function's last line counts, as in the game.
+            read[std::move(photo->first)] = std::move(photo->second);
+        }
+    }
+    Map bindings = PhotoDefaults(hold);
+    for (auto& [function, binding] : read) {
+        bindings[function] = std::move(binding);
+    }
+    return bindings;
 }
 
 } // namespace Input::PadBindings

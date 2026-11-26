@@ -15,10 +15,10 @@ class QWidget;
 
 namespace Gr2Port::Launcher {
 
-/// Shows the Key Bindings dialog over owner, opened on the control type the game used last.
-/// Returns the edited keys on OK.
+/// Shows the Key Bindings dialog over owner, opened on the control type the game used last, with
+/// the photo functions' pad bindings from pad. Returns the edited keys on OK.
 std::optional<KeyBindings> EditKeyBindings(QWidget* owner, const KeyBindings& keys,
-                                           u32 control_type);
+                                           u32 control_type, const PadBindings& pad);
 
 /// Shows the Button Bindings dialog over owner, opened on the control type the game used last,
 /// naming the pad's buttons as layout's prompts show them ("xbox", "switch", ...). Returns the

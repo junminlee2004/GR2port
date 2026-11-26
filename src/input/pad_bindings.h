@@ -49,4 +49,28 @@ Map Read(const std::filesystem::path& file);
 /// first line counts; a paddle left out presses none.
 Map ReadPaddles(const std::filesystem::path& file);
 
+/// The photo mode's functions with a pad binding of their own, by the input config's names: Hide
+/// UI, Open Collection and Open Picture Roll. Each acts only while the camera is out, on two pad
+/// buttons, the first held while the second is pressed ("l3, r2"), or on a back paddle alone.
+std::span<const std::string_view> PhotoFunctions();
+
+/// Whether inputs, compact ("l3,r2"), is a photo function's binding: two different pad buttons or
+/// a back paddle alone.
+bool IsPhotoBinding(std::string_view inputs);
+
+/// The photo functions' bindings without their lines: the swipe combos' hold input, hold, with R2,
+/// L1 and R1, compact. None when hold is empty.
+Map PhotoDefaults(std::string_view hold = "l3");
+
+/// A photo function's line without its comment and spaces: the function and its compact binding,
+/// empty for unmapped.
+std::optional<std::pair<std::string, std::string>> ParsePhotoLine(std::string_view compact);
+
+/// The photo functions' bindings from the input config's lines, a function's last one; a function
+/// without one has its default, from the config's swipe combo hold input.
+Map ReadPhoto(const std::filesystem::path& file);
+
+/// Whether a line without its comment and spaces is a photo function's, whatever its inputs.
+bool IsPhotoLine(std::string_view compact);
+
 } // namespace Input::PadBindings
