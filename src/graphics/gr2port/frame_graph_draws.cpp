@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/frame_graph_draws.h"
 #include "graphics/gr2port/hooks.h"
 
@@ -209,8 +210,9 @@ u32* PS4_SYSV_ABI OnAllocate(CommandBuffer* commands, u32 bytes, u32 alignment) 
     };
     VAddr data = start();
     if (data + words * sizeof(u32) > reinterpret_cast<VAddr>(commands->end)) {
-        if (commands->make_room(commands, static_cast<u32>(words + align / sizeof(u32)),
-                                commands->argument) == 0) {
+        if (Core::Recompiled::Call(commands->make_room, commands,
+                                   static_cast<u32>(words + align / sizeof(u32)),
+                                   commands->argument) == 0) {
             return nullptr;
         }
         data = start();
