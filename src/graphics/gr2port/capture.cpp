@@ -17,6 +17,7 @@
 
 #include "common/logging/log.h"
 #include "common/memory_patcher.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/catcher_note.h"
@@ -3977,7 +3978,7 @@ void UpdateScreens(VAddr view) {
         }
         const auto update =
             reinterpret_cast<PlayerUpdateFunction>(Load<VAddr>(Load<VAddr>(player) + PlayerUpdate));
-        update(player);
+        Core::Recompiled::Call(update, player);
     }
 }
 

@@ -314,13 +314,16 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LogSettings, append, enable, filter, flush_le
 struct DebugSettings {
     Setting<bool> debug_dump{false};         // specific
     Setting<std::string> config_version{""}; // specific
+    // Recompiled mode: the library of the C recompiled from the executable. Empty runs the
+    // executable natively.
+    Setting<std::string> recompiled_library{""};
 
     std::vector<OverrideItem> GetOverrideableFields() const {
         return std::vector<OverrideItem>{
             make_override<DebugSettings>("debug_dump", &DebugSettings::debug_dump)};
     }
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(DebugSettings, debug_dump, config_version)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(DebugSettings, debug_dump, config_version, recompiled_library)
 
 // -------------------------------
 // Input settings
@@ -808,6 +811,7 @@ public:
     // Debug settings
     SETTING_FORWARD_BOOL(m_debug, DebugDump, debug_dump)
     SETTING_FORWARD(m_debug, ConfigVersion, config_version)
+    SETTING_FORWARD(m_debug, RecompiledLibrary, recompiled_library)
 
     // GPU Settings
     SETTING_FORWARD_BOOL(m_gpu, VkRecordThread, vk_record_thread)

@@ -6,6 +6,7 @@
 #include <bit>
 #include <cstring>
 
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/ui_items_internal.h"
 
 // The text items: a layout's text boxes and the menu kit's strings. Each draws its glyph mesh, a
@@ -290,7 +291,7 @@ Draw GlyphDraw(VAddr shader, VAddr pixel, bool comic, VAddr vertices, VAddr indi
 }
 
 u32 BuildGlyphs(VAddr mesh) {
-    return reinterpret_cast<BuildMeshFunction>(Game(BuildMesh))(mesh);
+    return Core::Recompiled::Call(reinterpret_cast<BuildMeshFunction>(Game(BuildMesh)), mesh);
 }
 
 // The style record of a text object's style name.
@@ -298,8 +299,8 @@ VAddr StyleRecord(VAddr text) {
     const VAddr name = Load<u64>(text + TextStyleNameCapacity) >= 16
                            ? Load<VAddr>(text + TextStyleName)
                            : text + TextStyleName;
-    return reinterpret_cast<FindStyleFunction>(Game(FindStyle))(
-        Load<VAddr>(Game(Styles)), reinterpret_cast<const char*>(name));
+    return Core::Recompiled::Call(reinterpret_cast<FindStyleFunction>(Game(FindStyle)),
+                                  Load<VAddr>(Game(Styles)), reinterpret_cast<const char*>(name));
 }
 
 // FUN_013e6be0: builds its glyph mesh when its text changed, then draws it through FUN_013e7300

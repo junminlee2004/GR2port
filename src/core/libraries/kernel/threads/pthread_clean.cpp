@@ -3,6 +3,7 @@
 
 #include "core/libraries/kernel/threads/pthread.h"
 #include "core/libraries/libs.h"
+#include "core/recompiled/recompiled.h"
 
 namespace Libraries::Kernel {
 
@@ -33,7 +34,7 @@ void PS4_SYSV_ABI posix_pthread_cleanup_pop(int execute) {
         PthreadCleanup* old = curthread->cleanup.front();
         curthread->cleanup.pop_front();
         if (execute) {
-            old->routine(old->routine_arg);
+            Core::Recompiled::Call(old->routine, old->routine_arg);
         }
         if (old->onheap) {
             delete old;

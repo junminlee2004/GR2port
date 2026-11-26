@@ -5,6 +5,7 @@
 #include "common/arch.h"
 #include "common/assert.h"
 #include "core/libraries/kernel/threads/pthread.h"
+#include "core/recompiled/recompiled.h"
 #include "core/tls.h"
 
 #ifdef _WIN32
@@ -215,7 +216,12 @@ Tcb* GetTcbBase() {
 thread_local std::once_flag init_tls_flag;
 
 void InitializeTLS() {
-    std::call_once(init_tls_flag, [] { SetTcbBase(Libraries::Kernel::g_curthread->tcb); });
+    std::call_once(init_tls_flag, [] {
+        SetTcbBase(Libraries::Kernel::g_curthread->tcb);
+        if (Recompiled::Enabled()) {
+            Recompiled::SetThreadPointer(Libraries::Kernel::g_curthread->tcb);
+        }
+    });
 }
 
 } // namespace Core

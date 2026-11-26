@@ -11,6 +11,9 @@
 namespace Core::Loader {
 class SymbolsResolver;
 }
+namespace Core::Recompiled {
+class HostFiber;
+}
 namespace Libraries::Fiber {
 
 #define ORBIS_FIBER_MAX_NAME_LENGTH (31)
@@ -44,6 +47,8 @@ struct OrbisFiberContext {
     u64 arg_on_run_to;
     u64 arg_on_return;
     u64 return_val;
+    // Recompiled mode: the side of the thread that runs the fibers, which they return to.
+    Core::Recompiled::HostFiber* thread_side;
 };
 
 struct OrbisFiberData {
@@ -70,6 +75,8 @@ struct OrbisFiber {
     void* context_start;
     void* context_end;
     u32 magic_end;
+    // Recompiled mode: the fiber's host stack and guest CPU state, from its first run on.
+    Core::Recompiled::HostFiber* host_fiber;
 };
 static_assert(sizeof(OrbisFiber) <= 256);
 

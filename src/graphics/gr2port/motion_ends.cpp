@@ -9,6 +9,7 @@
 #include <xbyak/xbyak.h>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/motion_ends.h"
 
@@ -166,7 +167,7 @@ void StopHeld(u64 events) {
         g_held_events = 0;
     }
     for (const s32 sound : sounds) {
-        g_stop(0.0f, sound);
+        Core::Recompiled::Call(g_stop, 0.0f, sound);
     }
 }
 
@@ -212,7 +213,7 @@ void PS4_SYSV_ABI OnEventsEnded(u64 character, u64 motion) {
             Store<u64>(character + CharacterSoundsEnd, begin);
         }
     }
-    g_events_ended(character, motion);
+    Core::Recompiled::Call(g_events_ended, character, motion);
 }
 
 // The game clears a character's events on its own: the held sounds stop with the others.
@@ -240,7 +241,7 @@ u64 PS4_SYSV_ABI OnPlay(float blend, u64 player, u64 layer, u64 motion, u64 repe
             }
         }
     }
-    const u64 played = g_play(blend, player, layer, motion, repeats, flags);
+    const u64 played = Core::Recompiled::Call(g_play, blend, player, layer, motion, repeats, flags);
     if (replaced != 0) {
         g_replacing = LastMotion(replaced);
     }

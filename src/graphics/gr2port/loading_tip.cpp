@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/loading_tip.h"
 #include "graphics/gr2port/menu_kit.h"
@@ -131,11 +132,11 @@ void Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
 
 u64 FindText(u64 texts, const char* key, GraphicsMenu::FindTextFunction find) {
     if (std::strcmp(key, TipKey) != 0) {
-        return find(texts, key);
+        return Core::Recompiled::Call(find, texts, key);
     }
     std::scoped_lock lock{g_record_mutex};
     if (g_record.empty()) {
-        const u64 model = find(texts, ModelKey);
+        const u64 model = Core::Recompiled::Call(find, texts, ModelKey);
         if (model == 0) {
             return 0;
         }

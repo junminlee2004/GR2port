@@ -8,6 +8,7 @@
 #include <xbyak/xbyak.h>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/script_timers.h"
 #include "graphics/gr2port/scripted_moves.h"
@@ -110,7 +111,7 @@ Position ReadPosition(VAddr address) {
 void SetWorldPosition(VAddr object, const Position& position) {
     std::memcpy(reinterpret_cast<void*>(object + WorldPosition), position.data(), sizeof(position));
     *reinterpret_cast<u8*>(object + TransformFlags) |= TransformChanged;
-    g_local_from_world(object);
+    Core::Recompiled::Call(g_local_from_world, object);
     (*reinterpret_cast<u32*>(object + MoveCount))++;
 }
 
@@ -119,7 +120,7 @@ bool IsGone(const Move& move) {
 }
 
 void PS4_SYSV_ABI OnScriptMove(VAddr object) {
-    g_local_from_world(object);
+    Core::Recompiled::Call(g_local_from_world, object);
     const Position position = ReadPosition(object + WorldPosition);
     Move* unused = nullptr;
     for (Move& move : g_moves) {

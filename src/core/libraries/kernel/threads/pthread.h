@@ -305,6 +305,10 @@ struct Pthread {
     int refcount;
     PthreadEntryFunc start_routine;
     void* arg;
+    // Recompiled mode: the floating-point control words of the creating thread, which a new
+    // thread starts with.
+    u32 creator_mxcsr;
+    u16 creator_fcw;
     std::unique_ptr<Core::NativeThread> native_thr;
     PthreadAttr attr;
     std::atomic_bool cancel_enable;

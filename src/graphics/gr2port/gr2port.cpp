@@ -13,6 +13,7 @@
 #include "core/game_check/game_patches.h"
 #include "core/libraries/error_codes.h"
 #include "core/memory.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/camera_reach.h"
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/catcher_outside.h"
@@ -138,14 +139,21 @@ void Install(VAddr module_base) {
     }
     void* area =
         reinterpret_cast<void*>(module_base + MemoryPatcher::g_eboot_image_size + StubAreaOffset);
+    // In recompiled mode the stubs are guest code, which only the runtime executes.
+    const bool recompiled = Core::Recompiled::Enabled();
     if (Core::Memory::Instance()->MapMemory(
             &area, reinterpret_cast<VAddr>(area), StubAreaSize,
-            Core::MemoryProt::CpuReadWrite | Core::MemoryProt::CpuExec,
+            recompiled ? Core::MemoryProt::CpuReadWrite
+                       : Core::MemoryProt::CpuReadWrite | Core::MemoryProt::CpuExec,
             Core::MemoryMapFlags::NoFlags, Core::VMAType::Code, "GR2port") != ORBIS_OK ||
         reinterpret_cast<VAddr>(area) + StubAreaSize - module_base >
             std::numeric_limits<s32>::max()) {
         LOG_ERROR(Render_Vulkan, "GR2port: no memory for the hook stubs near the executable");
         return;
+    }
+    if (recompiled) {
+        Core::Recompiled::AddGuestCode(reinterpret_cast<VAddr>(area), StubAreaSize);
+        Core::Recompiled::AddHookCode(reinterpret_cast<VAddr>(area), StubAreaSize);
     }
     Xbyak::CodeGenerator c(StubAreaSize, area);
     // Without these the draw thread waits forever on the frame counters of its contexts.
@@ -251,6 +259,9 @@ void Install(VAddr module_base) {
         LOG_ERROR(Render_Vulkan, "GR2port: the movie update is not the expected code");
     }
     FrameGraphDraws::Install(module_base, c, StubAreaSize);
+    if (recompiled) {
+        Core::Recompiled::LoadHookLibrary();
+    }
     Renderer::Start();
     LOG_INFO(Render_Vulkan, "GR2port: renderer started");
 }

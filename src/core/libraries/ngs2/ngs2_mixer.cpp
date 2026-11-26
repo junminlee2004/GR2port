@@ -10,6 +10,7 @@
 #include <vector>
 #include "core/libraries/ngs2/ngs2_mixer.h"
 #include "core/libraries/ngs2/ngs2_vag_coefs.h"
+#include "core/recompiled/recompiled.h"
 
 extern "C" {
 #include <decoder.h>
@@ -1689,7 +1690,7 @@ void RunUserFx(System& system, Voice& voice) {
     context.num_channels = voice.channels;
     context.grain_samples = system.grain;
     context.sample_rate = system.sample_rate;
-    voice.fx(&context);
+    Core::Recompiled::Call(voice.fx, &context);
     voice.fx_first = false;
 }
 

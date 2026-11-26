@@ -10,6 +10,7 @@
 #include <xbyak/xbyak.h>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/timeline.h"
 
@@ -218,7 +219,7 @@ void PS4_SYSV_ABI OnCurves(float frame, u64 object, u32 name, u64 curves) {
     if (Playing() && frame == static_cast<float>(Read<s32>(t_node + NodeCount))) {
         frame = std::min(frame + Fraction(), static_cast<float>(Read<s32>(t_node + NodeEnd)));
     }
-    g_curves(frame, object, name, curves);
+    Core::Recompiled::Call(g_curves, frame, object, name, curves);
 }
 
 bool Unset(const u8* camera) {
@@ -231,18 +232,18 @@ bool Unset(const u8* camera) {
 
 void PS4_SYSV_ABI OnApply(u64 node, u64 data) {
     if (Read<u64>(g_base + ActiveNode - Hooks::CodeBase) != node || data == 0) {
-        g_apply(node, data);
+        Core::Recompiled::Call(g_apply, node, data);
         return;
     }
     std::scoped_lock lock{g_camera_mutex};
     const auto* camera = reinterpret_cast<const u8*>(data);
     if (data == node + NodeCamera && Unset(camera) && g_has_last_camera) {
-        g_apply(node, reinterpret_cast<u64>(g_last_camera.data()));
+        Core::Recompiled::Call(g_apply, node, reinterpret_cast<u64>(g_last_camera.data()));
         return;
     }
     std::memcpy(g_last_camera.data(), camera, CameraBytes);
     g_has_last_camera = true;
-    g_apply(node, data);
+    Core::Recompiled::Call(g_apply, node, data);
 }
 
 enum class Use { None, AddToEax, AddToEdx, OrIntoBl };

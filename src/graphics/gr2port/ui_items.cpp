@@ -7,6 +7,7 @@
 #include <xbyak/xbyak.h>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/ui_items.h"
 #include "graphics/gr2port/ui_items_internal.h"
@@ -220,7 +221,7 @@ void RunItem(VAddr item, bool kept) {
         LOG_INFO(Render_Vulkan, "GR2port UI: draw item of virtual table {:#x} not read",
                  vtable - g_base + Hooks::CodeBase);
     }
-    Load<ItemFunctionPointer>(vtable + ItemFunction)(item);
+    Core::Recompiled::Call(Load<ItemFunctionPointer>(vtable + ItemFunction), item);
     if (known && kind->after != nullptr) {
         kind->after(item);
     }

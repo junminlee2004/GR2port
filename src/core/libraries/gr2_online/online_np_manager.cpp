@@ -14,6 +14,7 @@
 #include "core/libraries/np/np_error.h"
 #include "core/libraries/np/np_manager.h"
 #include "core/linker.h"
+#include "core/recompiled/recompiled.h"
 
 // The emulator's library defines these; its header does not declare them.
 namespace Libraries::Np::NpManager {
@@ -87,15 +88,16 @@ void Deliver() {
     if (state_func) {
         LOG_INFO(Lib_NpManager, "Gravity Rush 2: toolkit is told {}",
                  signed_in ? "SignedIn" : "SignedOut");
-        state_func(user_id, signed_in ? OrbisNpState::SignedIn : OrbisNpState::SignedOut,
-                   state_arg);
+        Core::Recompiled::Call(state_func, user_id,
+                               signed_in ? OrbisNpState::SignedIn : OrbisNpState::SignedOut,
+                               state_arg);
     }
     // The toolkit waits for both: signed in alone does not start it.
     if (reach_func) {
-        reach_func(user_id,
-                   signed_in ? OrbisNpReachabilityState::Reachable
-                             : OrbisNpReachabilityState::Unavailable,
-                   reach_arg);
+        Core::Recompiled::Call(reach_func, user_id,
+                               signed_in ? OrbisNpReachabilityState::Reachable
+                                         : OrbisNpReachabilityState::Unavailable,
+                               reach_arg);
     }
 }
 

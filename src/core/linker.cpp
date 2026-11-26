@@ -27,6 +27,7 @@
 #include "core/libraries/sysmodule/sysmodule_internal.h"
 #include "core/linker.h"
 #include "core/memory.h"
+#include "core/recompiled/recompiled.h"
 #include "core/tls.h"
 #include "graphics/gr2port/gr2port.h"
 #include "ipc/ipc.h"
@@ -42,6 +43,13 @@ static PS4_SYSV_ABI void ProgramExitFunc() {
 }
 
 static PS4_SYSV_ABI void* RunMainEntry [[noreturn]](EntryParams* params) {
+    // Recompiled mode: the entry runs on the thread's guest stack, which no host code uses then.
+    if (Recompiled::Enabled()) {
+        const auto* thread = Libraries::Kernel::g_curthread;
+        Recompiled::RunEntry(params->entry_addr, params,
+                             reinterpret_cast<const void*>(&ProgramExitFunc),
+                             thread->attr.stackaddr_attr, thread->attr.stacksize_attr);
+    }
 #ifdef ARCH_X86_64
     // Start shared library modules
     asm volatile("andq $-16, %%rsp\n" // Align to 16 bytes
@@ -456,7 +464,8 @@ void* Linker::TlsGetAddr(u64 module_index, u64 offset) {
         const u32 init_image_size = module->tls.init_image_size;
         u8* dest{};
         if (heap_api && heap_api->heap_malloc) {
-            dest = reinterpret_cast<u8*>(heap_api->heap_malloc(module->tls.image_size));
+            dest = reinterpret_cast<u8*>(
+                Recompiled::Call(heap_api->heap_malloc, module->tls.image_size));
         } else {
             dest = reinterpret_cast<u8*>(std::malloc(module->tls.image_size));
         }
@@ -491,7 +500,7 @@ void* Linker::AllocateTlsForThread(bool is_primary) {
         ASSERT_MSG(ret == 0, "Unable to allocate TLS+TCB for the primary thread");
     } else {
         if (heap_api && heap_api->heap_malloc) {
-            addr_out = heap_api->heap_malloc(total_tls_size);
+            addr_out = Recompiled::Call(heap_api->heap_malloc, total_tls_size);
         } else {
             addr_out = std::malloc(total_tls_size);
         }
@@ -501,7 +510,7 @@ void* Linker::AllocateTlsForThread(bool is_primary) {
 
 void Linker::FreeTlsForNonPrimaryThread(void* pointer) {
     if (heap_api && heap_api->heap_free) {
-        heap_api->heap_free(pointer);
+        Recompiled::Call(heap_api->heap_free, pointer);
     } else {
         std::free(pointer);
     }

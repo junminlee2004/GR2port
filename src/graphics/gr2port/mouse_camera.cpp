@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "input/mouse_look.h"
 
 #include "graphics/gr2port/hooks.h"
@@ -242,10 +243,10 @@ bool TurnByMouse(VAddr orientation, const Quaternion& frame, const Speeds& speed
 }
 
 bool PS4_SYSV_ABI OnTurn(float weight, u64 state, u64 orientation, u64 frame, u64 up, u64 out) {
-    const VAddr caller = reinterpret_cast<VAddr>(__builtin_return_address(0));
+    const VAddr caller = Core::Recompiled::GuestCaller(__builtin_return_address(0));
     const bool shifting = caller >= g_base + ShiftCameraStart - Hooks::CodeBase &&
                           caller < g_base + ShiftCameraEnd - Hooks::CodeBase;
-    const bool turned = g_turn(weight, state, orientation, frame, up, out);
+    const bool turned = Core::Recompiled::Call(g_turn, weight, state, orientation, frame, up, out);
     // The stick turns the gravity shift camera about its own axes at any pitch, so the mouse turns
     // it in its own frame.
     Quaternion base;

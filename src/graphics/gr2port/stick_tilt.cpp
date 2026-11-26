@@ -11,6 +11,7 @@
 
 #include "common/logging/log.h"
 #include "common/singleton.h"
+#include "core/recompiled/recompiled.h"
 #include "input/controller.h"
 
 #include "graphics/gr2port/hooks.h"
@@ -119,13 +120,13 @@ std::array<float, 2> PadRightStick() {
 u64 PS4_SYSV_ABI OnTilt(u64 input, u64 reset) {
     const auto stick = Load<std::array<float, 2>>(input + RightStick);
     if (static_cast<u8>(reset) != 0 || (stick[0] == 0.0f && stick[1] == 0.0f) || PadHasGyro()) {
-        return g_tilt(input, reset);
+        return Core::Recompiled::Call(g_tilt, input, reset);
     }
     const float limit =
         std::sin(Load<float>(input + MaxDegrees) * (std::numbers::pi_v<float> / 360.0f));
     const auto reference = Load<Quaternion>(input + Reference);
     Store(input + Reference, Multiply(Turn(stick, limit), reference));
-    const u64 result = g_tilt(input, reset);
+    const u64 result = Core::Recompiled::Call(g_tilt, input, reset);
     Store(input + Reference, reference);
     return result;
 }
@@ -136,13 +137,13 @@ u64 PS4_SYSV_ABI OnComicPage(u64 page) {
     g_comic_page_time.store(Clock::now().time_since_epoch().count(), std::memory_order_relaxed);
     const auto stick = PadRightStick();
     if ((stick[0] == 0.0f && stick[1] == 0.0f) || PadHasGyro()) {
-        return g_comic_page(page);
+        return Core::Recompiled::Call(g_comic_page, page);
     }
     const float amount = std::sin(ComicLimitAngle) / ComicScale;
     const auto reference = Load<Quaternion>(page + ComicReference);
     const Quaternion turned = Multiply(Turn(stick, amount), reference);
     Store(page + ComicReference, turned);
-    const u64 result = g_comic_page(page);
+    const u64 result = Core::Recompiled::Call(g_comic_page, page);
     const auto after = Load<Quaternion>(page + ComicReference);
     if (std::memcmp(&after, &turned, sizeof(turned)) == 0) {
         Store(page + ComicReference, reference);

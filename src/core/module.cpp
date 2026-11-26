@@ -13,10 +13,12 @@
 #include "core/aerolib/aerolib.h"
 #include "core/cpu_patches.h"
 #include "core/libraries/error_codes.h"
+#include "core/libraries/gr2_online/online_patches.h"
 #include "core/loader/dwarf.h"
 #include "core/memory.h"
 #include "core/module.h"
 #include "core/prompt_packs/prompt_packs.h"
+#include "core/recompiled/recompiled.h"
 #include "core/tls.h"
 #include "graphics/gr2port/gr2port.h"
 
@@ -104,7 +106,7 @@ Module::~Module() = default;
 s32 Module::Start(u64 args, const void* argp, void* param) {
     LOG_INFO(Core_Linker, "Module started : {}", name);
     const VAddr addr = dynamic_info.init_virtual_addr + GetBaseAddress();
-    return reinterpret_cast<EntryFunc>(addr)(args, argp, param);
+    return Recompiled::Call(reinterpret_cast<EntryFunc>(addr), args, argp, param);
 }
 
 void Module::LoadModuleToMemory(u32& max_tls_index) {
@@ -129,14 +131,16 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
     LOG_INFO(Core_Linker, "Loading module {} to {}", name, fmt::ptr(*out_addr));
 
 #ifdef ARCH_X86_64
-    // Initialize trampoline generator.
-    VAddr trampoline_vaddr = base_virtual_addr + aligned_base_size;
-    void* trampoline_addr = std::bit_cast<void*>(trampoline_vaddr);
-    result = memory->MapMemory(&trampoline_addr, trampoline_vaddr, TrampolineSize,
-                               MemoryProt::CpuReadWrite | MemoryProt::CpuExec,
-                               MemoryMapFlags::Fixed, VMAType::Code, name);
-    ASSERT_MSG(result == ORBIS_OK, "Failed to map trampoline area for module {}", name);
-    RegisterPatchModule(*out_addr, aligned_base_size, trampoline_addr, TrampolineSize);
+    // Initialize trampoline generator. Recompiled mode has no CPU patches.
+    if (!Recompiled::Enabled()) {
+        VAddr trampoline_vaddr = base_virtual_addr + aligned_base_size;
+        void* trampoline_addr = std::bit_cast<void*>(trampoline_vaddr);
+        result = memory->MapMemory(&trampoline_addr, trampoline_vaddr, TrampolineSize,
+                                   MemoryProt::CpuReadWrite | MemoryProt::CpuExec,
+                                   MemoryMapFlags::Fixed, VMAType::Code, name);
+        ASSERT_MSG(result == ORBIS_OK, "Failed to map trampoline area for module {}", name);
+        RegisterPatchModule(*out_addr, aligned_base_size, trampoline_addr, TrampolineSize);
+    }
 #endif
 
     LOG_INFO(Core_Linker, "======== Load Module to Memory ========");
@@ -157,7 +161,8 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
             if ((phdr.p_flags & PF_WRITE) != 0) {
                 segment_prot |= MemoryProt::CpuWrite;
             }
-            if ((phdr.p_flags & PF_EXEC) != 0) {
+            // In recompiled mode only the runtime executes guest code.
+            if ((phdr.p_flags & PF_EXEC) != 0 && !Recompiled::Enabled()) {
                 segment_prot |= MemoryProt::CpuExec;
             }
 
@@ -167,6 +172,9 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
             ASSERT_MSG(result == ORBIS_OK, "Failed to map segment at {:#x} for module {}",
                        segment_vaddr, name);
             elf.LoadSegment(segment_vaddr, phdr.p_offset, phdr.p_filesz);
+            if ((phdr.p_flags & PF_EXEC) != 0 && Recompiled::Enabled()) {
+                Recompiled::AddGuestCode(segment_vaddr, segment_size);
+            }
         }
         if (info.num_segments < 4) {
             auto& segment = info.segments[info.num_segments++];
@@ -207,7 +215,7 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
 
             add_segment(elf_pheader[i]);
 #ifdef ARCH_X86_64
-            if (elf_pheader[i].p_flags & PF_EXEC) {
+            if ((elf_pheader[i].p_flags & PF_EXEC) && !Recompiled::Enabled()) {
                 PrePatchInstructions(segment_addr, segment_file_size);
                 if (use_static_patching) {
                     executable_segments.emplace_back(segment_addr, segment_file_size);
@@ -376,7 +384,7 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
 #ifdef ARCH_X86_64
     // The game's memory patches are applied first, so that the code decoded here is the code
     // that executes.
-    if (use_static_patching) {
+    if (use_static_patching && !Recompiled::Enabled()) {
         const bool red_zone_protection = WindowsGuestRedZoneProtection::IsStaticPatchingEnabled();
         RedZonePatchResult total{};
         for (const auto& [segment_addr, segment_size] : executable_segments) {
@@ -436,7 +444,18 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
         }
     }
 #endif
+    // Recompiled mode: the executable is patched now, and its recompiled C loads before the hooks,
+    // which go into the recompiled functions. The online patches come later.
+    const bool recompiled_executable =
+        Recompiled::Enabled() && base_virtual_addr == MemoryPatcher::g_eboot_address;
+    if (recompiled_executable) {
+        Libraries::Gr2Online::Patches::ExcludeSites(base_virtual_addr);
+        Recompiled::LoadLibrary(base_virtual_addr);
+    }
     Gr2Port::Install(base_virtual_addr);
+    if (Recompiled::Enabled() && !recompiled_executable) {
+        Recompiled::LoadModuleLibrary(name, base_virtual_addr);
+    }
 }
 
 void Module::LoadDynamicInfo() {

@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/sound_delay.h"
 
@@ -30,7 +31,8 @@ SetPreDelayFunction g_set_pre_delay = nullptr;
 s32 PS4_SYSV_ABI OnSetPreDelay(float seconds, s32 instance) {
     float share;
     std::memcpy(&share, Hooks::Code(g_module_base, FrameShare), sizeof(share));
-    return g_set_pre_delay(seconds - PictureFrames * (1.0f - share) / FrameRate, instance);
+    return Core::Recompiled::Call(g_set_pre_delay,
+                                  seconds - PictureFrames * (1.0f - share) / FrameRate, instance);
 }
 
 } // namespace

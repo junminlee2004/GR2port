@@ -9,6 +9,7 @@
 #include "core/libraries/avplayer/avplayer_error.h"
 #include "core/libraries/avplayer/avplayer_state.h"
 #include "core/libraries/kernel/process.h"
+#include "core/recompiled/recompiled.h"
 
 #include <magic_enum/magic_enum.hpp>
 
@@ -94,7 +95,7 @@ void AvPlayerState::DefaultEventCallback(void* opaque, AvPlayerEvents event_id, 
     const auto callback = self->m_event_replacement.event_callback;
     const auto ptr = self->m_event_replacement.object_ptr;
     if (callback != nullptr) {
-        callback(ptr, event_id, 0, event_data);
+        Core::Recompiled::Call(callback, ptr, event_id, 0, event_data);
     }
 }
 
@@ -436,7 +437,7 @@ void AvPlayerState::EmitEvent(AvPlayerEvents event_id, void* event_data) {
     const auto callback = m_init_data.event_replacement.event_callback;
     if (callback) {
         const auto ptr = m_init_data.event_replacement.object_ptr;
-        callback(ptr, event_id, 0, event_data);
+        Core::Recompiled::Call(callback, ptr, event_id, 0, event_data);
     }
 }
 

@@ -40,6 +40,10 @@ cmake_dependent_option(ENABLE_SYSTEM_VULKAN "Enable the system Vulkan driver" OF
 option(ENABLE_UPDATER "Enables the options to updater" ON)
 option(ENABLE_TESTS "Build unit tests (requires GTest)" OFF)
 option(ENABLE_SYSTEM_LIBRARIES "Enable building against system libraries" OFF)
+# Recompiled mode: the game runs from the C recompiled from its executable, and a CPU runtime
+# library executes every other guest instruction. CPU_RUNTIME_DIR is a checkout of that library.
+option(ENABLE_RECOMPILED_MODE "Build recompiled mode (needs CPU_RUNTIME_DIR)" OFF)
+set(CPU_RUNTIME_DIR "" CACHE PATH "The CPU runtime library's checkout, for recompiled mode")
 
 # First, determine whether to use CMAKE_OSX_ARCHITECTURES or CMAKE_SYSTEM_PROCESSOR.
 if (APPLE AND CMAKE_OSX_ARCHITECTURES)
@@ -993,6 +997,8 @@ set(CORE src/core/aerolib/stubs.cpp
          src/core/module.cpp
          src/core/module.h
          src/core/platform.h
+         src/core/recompiled/recompiled.cpp
+         src/core/recompiled/recompiled.h
          src/core/signals.cpp
          src/core/signals.h
          src/core/thread.cpp
@@ -1128,6 +1134,25 @@ target_link_libraries(gr2port PRIVATE libprotobuf)
 target_link_libraries(gr2port PRIVATE ZArchive::zarchive)
 target_link_libraries(gr2port PRIVATE zstd::libzstd)
 target_include_directories(gr2port PRIVATE "${SHADNET_PROTO_OUT}")
+
+if (ENABLE_RECOMPILED_MODE)
+    if (NOT EXISTS "${CPU_RUNTIME_DIR}/src/cpu/guest_cpu.h")
+        message(FATAL_ERROR "Recompiled mode: CPU_RUNTIME_DIR must name the CPU runtime library's checkout")
+    endif()
+    # The library's own build: C11 with GNU extensions, its x86-64 paths enabled on Linux too.
+    file(GLOB CPU_RUNTIME_SOURCES "${CPU_RUNTIME_DIR}/src/cpu/*.c")
+    add_library(cpu_runtime STATIC ${CPU_RUNTIME_SOURCES} "${CPU_RUNTIME_DIR}/src/cpu/hostcall.S")
+    target_include_directories(cpu_runtime PUBLIC "${CPU_RUNTIME_DIR}/src/cpu")
+    # GR2port's Zydis tells a displacement's presence by its size (Zydis 4.1: has_displacement).
+    target_compile_definitions(cpu_runtime PRIVATE HAVE_GUEST_CPU=1 _GNU_SOURCE has_displacement=size)
+    target_compile_options(cpu_runtime PRIVATE $<$<COMPILE_LANGUAGE:C>:-std=gnu11> -Wno-unused-parameter)
+    if (ARCHITECTURE STREQUAL "x86_64")
+        target_compile_options(cpu_runtime PRIVATE -mcx16)
+    endif()
+    target_link_libraries(cpu_runtime PRIVATE Zydis::Zydis ${CMAKE_DL_LIBS} m)
+    target_link_libraries(gr2port PRIVATE cpu_runtime)
+    target_compile_definitions(gr2port PRIVATE ENABLE_RECOMPILED_MODE)
+endif()
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
     target_link_libraries(gr2port PRIVATE "/usr/lib/libusb.so")

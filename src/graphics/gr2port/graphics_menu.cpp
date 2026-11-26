@@ -18,6 +18,7 @@
 
 #include "common/logging/log.h"
 #include "core/game_check/game_patches.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/camera_menu.h"
 #include "graphics/gr2port/field_of_view.h"
 
@@ -1052,7 +1053,7 @@ void PS4_SYSV_ABI OnSlideRows(u64 system, u32 mode) {
             }
         }
     }
-    g_slide_rows(system, mode);
+    Core::Recompiled::Call(g_slide_rows, system, mode);
     CameraMenu::Slide(system, mode);
     if (!own || mode > SlideRest) {
         return;
@@ -1422,7 +1423,7 @@ u64 PS4_SYSV_ABI OnPlaceRows(u64 system) {
             g_broken = true;
         }
     }
-    const u64 placed = g_place_rows(system);
+    const u64 placed = Core::Recompiled::Call(g_place_rows, system);
     if (placed != 0 && !g_broken && system == g_system && !g_entry.hung && RowsLoaded()) {
         HangEntry(system);
         PlaceSlots(system);
@@ -1436,17 +1437,17 @@ void PS4_SYSV_ABI OnSystemFrame(u64 page) {
     const u64 system = Read<u64>(Game(SystemObject));
     if (g_broken || system == 0 || system != g_system || !g_entry.hung ||
         Read<u8>(page + PageActive) == 0) {
-        g_system_frame(page);
+        Core::Recompiled::Call(g_system_frame, page);
         return;
     }
     const u64 input = Read<u64>(Read<u64>(Game(PauseMenu)) + PauseMenuInput);
     if (Run(page, system, input)) {
         const u8 enabled = Read<u8>(input + InputEnabled);
         Write<u8>(input + InputEnabled, 0);
-        g_system_frame(page);
+        Core::Recompiled::Call(g_system_frame, page);
         Write<u8>(input + InputEnabled, enabled);
     } else {
-        g_system_frame(page);
+        Core::Recompiled::Call(g_system_frame, page);
     }
     Tick(system);
 }
@@ -1463,7 +1464,7 @@ void PS4_SYSV_ABI OnEndSystem(u64 system) {
         g_thumb = -1.0f;
         UiCapture::SetScrollBar({});
     }
-    g_end_system(system);
+    Core::Recompiled::Call(g_end_system, system);
 }
 
 template <typename Function>
@@ -1542,7 +1543,7 @@ u64 FindText(u64 texts, const char* key, FindTextFunction find) {
     } else {
         return 0;
     }
-    const u64 record = find(texts, model);
+    const u64 record = Core::Recompiled::Call(find, texts, model);
     if (record == 0) {
         return 0;
     }
@@ -1562,11 +1563,11 @@ void AfterDrawClip(u64 handle, u64 context, DrawFunction draw) {
     }
     const s32 category = Read<s32>(system + SystemCategory);
     if (category == MenuCategory && g_entry.hung) {
-        draw(HandleOf(g_entry), context);
+        Core::Recompiled::Call(draw, HandleOf(g_entry), context);
     } else if (category == PageCategory && g_phase != Phase::List) {
         for (const OwnRow& slot : g_slots) {
             if (slot.hung) {
-                draw(HandleOf(slot), context);
+                Core::Recompiled::Call(draw, HandleOf(slot), context);
             }
         }
     }

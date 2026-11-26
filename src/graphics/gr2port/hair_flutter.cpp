@@ -11,6 +11,7 @@
 #include <xbyak/xbyak.h>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/hair_flutter.h"
 #include "graphics/gr2port/hooks.h"
 
@@ -420,7 +421,7 @@ void PS4_SYSV_ABI StrandStep(u8* chain) {
     const float frames = StepFrames();
     const s32 nodes = Field<s32>(chain, StrandNodes);
     if (nodes < 1 || nodes > StrandMostNodes) {
-        g_strand_step(chain);
+        Core::Recompiled::Call(g_strand_step, chain);
         return;
     }
     const auto drags = Field<const float*>(chain, StrandDrags);
@@ -428,7 +429,7 @@ void PS4_SYSV_ABI StrandStep(u8* chain) {
     if (!(frames > 0.0f) || frames >= 1.0f) {
         std::copy_n(drags, nodes, drag_rates.drags.begin());
         SetField(chain, StrandDrags, drag_rates.drags.data());
-        g_strand_step(chain);
+        Core::Recompiled::Call(g_strand_step, chain);
         SetField(chain, StrandDrags, drags);
         return;
     }
@@ -480,7 +481,7 @@ void PS4_SYSV_ABI StrandStep(u8* chain) {
     SetField(chain, StrandPasses, passes);
     SetField(chain, StrandMorePasses, 0);
     t_strand_wave_push = wave_push;
-    g_strand_step(chain);
+    Core::Recompiled::Call(g_strand_step, chain);
     SetField(chain, StrandGravities, gravities);
     SetField(chain, StrandDrags, drags);
     SetField(chain, StrandPulls, pulls);
@@ -502,11 +503,11 @@ void PS4_SYSV_ABI StrandWave(float speed, float size, u8* waves, float* push) {
         const_cast<u8*>(Hooks::Code(g_module_base, StrandWaveFunction)));
     const float frames = StepFrames();
     if (!(frames > 0.0f) || frames >= 1.0f) {
-        function(speed, size, waves, push);
+        Core::Recompiled::Call(function, speed, size, waves, push);
         return;
     }
     const float frame_speed = speed / frames;
-    function(frame_speed, size, waves, push);
+    Core::Recompiled::Call(function, frame_speed, size, waves, push);
     for (u32 i = 0; i < 4; i++) {
         push[i] *= t_strand_wave_push;
     }

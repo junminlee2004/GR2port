@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <array>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -11,6 +13,7 @@
 #include "common/logging/log.h"
 #include "core/aerolib/aerolib.h"
 #include "core/aerolib/stubs.h"
+#include "core/recompiled/recompiled.h"
 
 namespace Core::AeroLib {
 
@@ -23,7 +26,14 @@ struct StubEntry {
     const NidEntry* nid = nullptr;
     std::string nid_unknown;
     std::unique_ptr<Xbyak::CodeGenerator> code;
+    // Recompiled mode: the stub, in guest code.
+    const u8* guest_code = nullptr;
 };
+
+// The stub's address: guest code in recompiled mode, host code otherwise.
+static u64 StubAddress(const StubEntry& e) {
+    return reinterpret_cast<u64>(e.guest_code != nullptr ? e.guest_code : e.code->getCode());
+}
 
 static std::vector<StubEntry> g_stub_entries;
 static std::mutex g_stub_mutex;
@@ -54,21 +64,36 @@ u64 GetStub(const char* nid) {
         if (auto const& it = std::ranges::find_if(
                 g_stub_entries, [entry](StubEntry const& en) { return en.nid && en.nid == entry; });
             it != g_stub_entries.end()) {
-            return reinterpret_cast<u64>(it->code->getCode());
+            return StubAddress(*it);
         }
         e.nid = entry;
     } else {
         e.nid_unknown = nid;
     }
 
-    e.code = std::make_unique<Xbyak::CodeGenerator>(32, Xbyak::AutoGrow);
-    e.code->mov(e.code->rdi, index);
-    e.code->mov(e.code->rax, reinterpret_cast<u64>(&CommonStub));
-    e.code->jmp(e.code->rax);
-    e.code->ready();
+    if (Core::Recompiled::Enabled()) {
+        // mov rdi, index; mov rax, CommonStub; jmp rax.
+        std::array<u8, 22> stub{0x48, 0xbf};
+        const u64 handler = reinterpret_cast<u64>(&CommonStub);
+        std::memcpy(stub.data() + 2, &index, sizeof(index));
+        stub[10] = 0x48;
+        stub[11] = 0xb8;
+        std::memcpy(stub.data() + 12, &handler, sizeof(handler));
+        stub[20] = 0xff;
+        stub[21] = 0xe0;
+        u8* code = Core::Recompiled::AllocateGuestCode(stub.size());
+        std::memcpy(code, stub.data(), stub.size());
+        e.guest_code = code;
+    } else {
+        e.code = std::make_unique<Xbyak::CodeGenerator>(32, Xbyak::AutoGrow);
+        e.code->mov(e.code->rdi, index);
+        e.code->mov(e.code->rax, reinterpret_cast<u64>(&CommonStub));
+        e.code->jmp(e.code->rax);
+        e.code->ready();
+    }
 
     g_stub_entries.push_back(std::move(e));
-    return reinterpret_cast<u64>(g_stub_entries.back().code->getCode());
+    return StubAddress(g_stub_entries.back());
 }
 
 } // namespace Core::AeroLib

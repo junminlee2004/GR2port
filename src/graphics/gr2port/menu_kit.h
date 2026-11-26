@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "common/types.h"
+#include "core/recompiled/recompiled.h"
 
 // What GR2port's rows in the game's menus share: the game's code and data by GoldHEN address, the
 // pad input its menus read, its clips, text records, sounds and dialog.
@@ -101,10 +102,21 @@ void Write(VAddr address, T value) {
     std::memcpy(reinterpret_cast<void*>(address), &value, sizeof(T));
 }
 
+/// A function of the game, which a call runs through Core::Recompiled::Call.
+template <typename Function>
+struct GameFunction {
+    Function function;
+
+    template <typename... Args>
+    auto operator()(Args... args) const {
+        return Core::Recompiled::Call(function, args...);
+    }
+};
+
 /// The game's function at a GoldHEN address.
 template <typename Function>
-Function Call(VAddr address) {
-    return reinterpret_cast<Function>(Game(address));
+GameFunction<Function> Call(VAddr address) {
+    return {reinterpret_cast<Function>(Game(address))};
 }
 
 /// The record of text in the style of the game's record model.

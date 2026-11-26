@@ -6,6 +6,7 @@
 #include <bit>
 #include <immintrin.h>
 
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/ui_items_internal.h"
 
 // The screen drawing's full-screen passes: the HUD glow's fill, threshold, blurs and composite,
@@ -271,7 +272,8 @@ std::array<float, BlurTaps> BlurWeights(float sigma) {
     const float inverse = Reciprocal(sigma == 0.0f ? std::bit_cast<float>(SmallestSigma) : sigma);
     std::array<float, BlurTaps> weights;
     for (u32 k = 0; k < BlurTaps; k++) {
-        weights[k] = exponential(inverse * (-0.5f * static_cast<float>(k * k)));
+        weights[k] =
+            Core::Recompiled::Call(exponential, inverse * (-0.5f * static_cast<float>(k * k)));
     }
     constexpr u32 Half = BlurTaps / 2;
     std::array<float, Half> pairs;

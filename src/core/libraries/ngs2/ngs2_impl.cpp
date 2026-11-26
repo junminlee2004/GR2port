@@ -10,6 +10,7 @@
 #include "common/logging/log.h"
 #include "core/libraries/error_codes.h"
 #include "core/libraries/kernel/kernel.h"
+#include "core/recompiled/recompiled.h"
 
 using namespace Libraries::Kernel;
 
@@ -129,7 +130,7 @@ s32 SystemCleanup(OrbisNgs2Handle systemHandle, OrbisNgs2ContextBufferInfo* outI
     // The handle names nothing from here on.
     MemoryClear(block, sizeof(Block));
     if (hostFree) {
-        hostFree(&buffer);
+        Core::Recompiled::Call(hostFree, &buffer);
     }
     if (outInfo) {
         *outInfo = buffer;
@@ -282,7 +283,7 @@ s32 RackCleanup(OrbisNgs2Handle rackHandle, OrbisNgs2ContextBufferInfo* outInfo)
     // The handles of the rack and of its voices name nothing from here on.
     MemoryClear(block, sizeof(Block) + numVoices * sizeof(Slot));
     if (hostFree) {
-        hostFree(&buffer);
+        Core::Recompiled::Call(hostFree, &buffer);
     }
     if (outInfo) {
         *outInfo = buffer;

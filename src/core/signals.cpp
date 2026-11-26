@@ -12,6 +12,7 @@
 #include "core/libraries/kernel/kernel.h"
 #include "core/libraries/kernel/threads/exception.h"
 #include "core/libraries/kernel/threads/pthread.h"
+#include "core/recompiled/recompiled.h"
 #include "core/signals.h"
 
 #include "graphics/gr2port/fault_report.h"
@@ -24,6 +25,8 @@ static constexpr DWORD MS_VC_EXCEPTION = 0x406D1388;
 static constexpr DWORD MS_CPP_EXCEPTION = 0xE06D7363;
 #else
 #include <csignal>
+#include <cstdio>
+#include <dlfcn.h>
 #include <pthread.h>
 #ifdef ARCH_X86_64
 #include <Zydis/Formatter.h>
@@ -272,6 +275,51 @@ static s32 NativeSiCodeToGuest(s32 sig, s32 code) {
     }
 }
 
+#if defined(__linux__) && defined(ARCH_X86_64)
+// The module of a host address and the address's offset in it, for reports.
+static const char* HostModule(u64 address, u64* offset) {
+    Dl_info module{};
+    if (dladdr(reinterpret_cast<void*>(address), &module) != 0 && module.dli_fbase) {
+        *offset = address - reinterpret_cast<u64>(module.dli_fbase);
+        return module.dli_fname;
+    }
+    *offset = address;
+    return "?";
+}
+#endif
+
+// Recompiled mode, on a fault at address that nothing handles. Names the host code that faulted
+// and, when the thread is in a host function guest code called, the guest's return address of
+// that call. On an execution fault the host code that faulted is the caller of address (the return
+// address on top of the stack): host code calls guest code only through the runtime, and guest
+// code calls anything else through the runtime's host call, so an execution fault in guest code is
+// a direct call of it that was missed, and one elsewhere a guest call of what is not code. All on
+// stderr, ahead of the crash path, which can end the process before the log is written.
+static void ReportRecompiledFault(void* raw_context, void* address, bool is_exec) {
+#if defined(__linux__) && defined(ARCH_X86_64)
+    const auto* context = reinterpret_cast<const ucontext_t*>(raw_context);
+    const u64 host = is_exec ? *reinterpret_cast<const u64*>(context->uc_mcontext.gregs[REG_RSP])
+                             : static_cast<u64>(context->uc_mcontext.gregs[REG_RIP]);
+    u64 offset = 0;
+    const char* name = HostModule(host, &offset);
+    const char* what = !is_exec ? "faulted at"
+                       : Recompiled::IsGuestCode(reinterpret_cast<VAddr>(address))
+                           ? "called guest code at"
+                           : "executed";
+    std::fprintf(stderr,
+                 "Recompiled mode: host code at %#llx (%s + %#llx) %s %p; the guest's host call "
+                 "returns to %#llx\n",
+                 static_cast<unsigned long long>(host), name,
+                 static_cast<unsigned long long>(offset), what, address,
+                 static_cast<unsigned long long>(Recompiled::ImportReturn()));
+    std::fflush(stderr);
+#else
+    (void)raw_context;
+    (void)address;
+    (void)is_exec;
+#endif
+}
+
 void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
     using namespace Libraries::Kernel;
     auto* thread = g_curthread;
@@ -297,6 +345,9 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
         const bool is_write = Common::IsWriteError(raw_context);
         const bool is_exec = Common::IsExecuteError(raw_context);
         if (!signals->DispatchAccessViolation(raw_context, info->si_addr)) {
+            if (Recompiled::Enabled()) {
+                ReportRecompiledFault(raw_context, info->si_addr, is_exec);
+            }
             // The guest's own handler runs with guest signals deliverable again.
             sigset_t guest_signal;
             sigemptyset(&guest_signal);

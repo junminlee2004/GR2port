@@ -9,6 +9,7 @@
 #include "core/libraries/kernel/threads/exception.h"
 #include "core/libraries/kernel/threads/pthread.h"
 #include "core/libraries/libs.h"
+#include "core/recompiled/recompiled.h"
 #include "core/signals.h"
 
 #ifdef _WIN64
@@ -567,7 +568,7 @@ void PS4_SYSV_ABI sceCallbackHandler(int sig, Siginfo* info, Ucontext* context) 
     if (!cb) {
         UNREACHABLE(); // should be impossible unless race conditions perhaps
     }
-    cb(sig, context);
+    Core::Recompiled::Call(cb, sig, context);
 }
 
 // libkernel has a check in sceKernelInstallExceptionHandler and sceKernelRemoveExceptionHandler for

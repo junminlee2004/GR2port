@@ -14,6 +14,7 @@
 #include "common/logging/log.h"
 #include "core/language/language.h"
 
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/exit_rows.h"
 #include "graphics/gr2port/graphics_menu.h"
 #include "graphics/gr2port/hooks.h"
@@ -252,7 +253,7 @@ u64 PS4_SYSV_ABI OnFindText(u64 texts, const char* key) {
         return LoadingTip::FindText(texts, key, g_find_text);
     }
     if (key == nullptr || std::strncmp(key, KeyPrefix, sizeof(KeyPrefix) - 1) != 0) {
-        return g_find_text(texts, key);
+        return Core::Recompiled::Call(g_find_text, texts, key);
     }
     for (size_t i = 0; i < Records.size(); ++i) {
         if (std::strcmp(key, Records[i].key) != 0) {
@@ -260,7 +261,7 @@ u64 PS4_SYSV_ABI OnFindText(u64 texts, const char* key) {
         }
         std::scoped_lock lock{g_records_mutex};
         if (g_records[i].empty()) {
-            const u64 model = g_find_text(texts, Records[i].model);
+            const u64 model = Core::Recompiled::Call(g_find_text, texts, Records[i].model);
             if (model == 0) {
                 return 0;
             }
@@ -268,7 +269,7 @@ u64 PS4_SYSV_ABI OnFindText(u64 texts, const char* key) {
         }
         return reinterpret_cast<u64>(g_records[i].data());
     }
-    return g_find_text(texts, key);
+    return Core::Recompiled::Call(g_find_text, texts, key);
 }
 
 bool IsShown(const Button& button) {
@@ -359,11 +360,11 @@ void End(Row& row) {
 // Runs a menu's frame; with masked, the menu reads no input in it.
 u64 Update(ObjectFunction update, u64 menu, u64 input, bool masked) {
     if (!masked) {
-        return update(menu);
+        return Core::Recompiled::Call(update, menu);
     }
     const u8 enabled = Read<u8>(input + InputEnabled);
     Write<u8>(input + InputEnabled, 0);
-    const u64 result = update(menu);
+    const u64 result = Core::Recompiled::Call(update, menu);
     Write<u8>(input + InputEnabled, enabled);
     return result;
 }
@@ -371,7 +372,7 @@ u64 Update(ObjectFunction update, u64 menu, u64 input, bool masked) {
 void PS4_SYSV_ABI OnMakeButton(float width, float left, float right, Button* button,
                                const char* asset, const char* key, const char* selected_key,
                                u8 selected, u8 flag, u8 disabled) {
-    const VAddr caller = reinterpret_cast<VAddr>(__builtin_return_address(0));
+    const VAddr caller = Core::Recompiled::GuestCaller(__builtin_return_address(0));
     Row* row = nullptr;
     if (std::strncmp(key, PageKeys, sizeof(PageKeys) - 1) == 0) {
         row = &g_page;
@@ -379,39 +380,41 @@ void PS4_SYSV_ABI OnMakeButton(float width, float left, float right, Button* but
         row = &g_title;
     }
     if (row == nullptr) {
-        g_make_button(width, left, right, button, asset, key, selected_key, selected, flag,
-                      disabled);
+        Core::Recompiled::Call(g_make_button, width, left, right, button, asset, key, selected_key,
+                               selected, flag, disabled);
         return;
     }
     // The list's rows are as long as its widest text needs, the added row's among them.
     float own_width = 0.0f;
     Call<MeasureFunction>(MeasureText)(&own_width, nullptr, 0, row->keys[0]);
     width = std::max(width, own_width);
-    g_make_button(width, left, right, button, asset, key, selected_key, selected, flag, disabled);
+    Core::Recompiled::Call(g_make_button, width, left, right, button, asset, key, selected_key,
+                           selected, flag, disabled);
     if (std::strcmp(key, row->last_key) == 0) {
         End(*row);
-        g_make_button(width, left, right, &row->button, asset, row->keys[0], row->keys[1], 0, 0, 0);
+        Core::Recompiled::Call(g_make_button, width, left, right, &row->button, asset, row->keys[0],
+                               row->keys[1], 0, 0, 0);
         row->made = true;
     }
 }
 
 void PS4_SYSV_ABI OnTickButton(Button* button) {
-    g_tick_button(button);
+    Core::Recompiled::Call(g_tick_button, button);
     for (Row* const row : {&g_page, &g_title}) {
         if (row->made && button == row->anchor) {
             Place(*row);
-            g_tick_button(&row->button);
+            Core::Recompiled::Call(g_tick_button, &row->button);
         }
     }
 }
 
 void PS4_SYSV_ABI OnDrawClip(u64 handle, u64 context) {
-    g_draw_clip(handle, context);
+    Core::Recompiled::Call(g_draw_clip, handle, context);
     GraphicsMenu::AfterDrawClip(handle, context, g_draw_clip);
     for (const Row* const row : {&g_page, &g_title}) {
         if (row->made && row->anchor != nullptr && handle == row->anchor->handle &&
             row->button.state != ButtonLoading && row->button.state != ButtonHidden) {
-            g_draw_clip(row->button.handle, context);
+            Core::Recompiled::Call(g_draw_clip, row->button.handle, context);
         }
     }
 }
@@ -419,7 +422,7 @@ void PS4_SYSV_ABI OnDrawClip(u64 handle, u64 context) {
 u64 PS4_SYSV_ABI OnUpdatePage(u64 page) {
     Row& row = g_page;
     if (!row.made) {
-        return g_update_page(page);
+        return Core::Recompiled::Call(g_update_page, page);
     }
     const std::array<Button*, 3> rows = Read<std::array<Button*, 3>>(page + PageRows);
     row.anchor = rows[2];
@@ -509,7 +512,7 @@ u64 PS4_SYSV_ABI OnUpdatePage(u64 page) {
 
 u64 PS4_SYSV_ABI OnEndPage(u64 page) {
     End(g_page);
-    return g_end_page(page);
+    return Core::Recompiled::Call(g_end_page, page);
 }
 
 // Adds the row's caption to the title menu's captions, hidden as the menu makes its own.
@@ -637,7 +640,7 @@ void SteerTitle(Row& row, u64 menu, u64 input) {
 }
 
 u64 PS4_SYSV_ABI OnReadInput(u64 input) {
-    const u64 result = g_read_input(input);
+    const u64 result = Core::Recompiled::Call(g_read_input, input);
     if (g_title_menu != 0 && input == Read<u64>(g_title_menu + TitleInput)) {
         SteerTitle(g_title, g_title_menu, input);
     }
@@ -647,7 +650,7 @@ u64 PS4_SYSV_ABI OnReadInput(u64 input) {
 u64 PS4_SYSV_ABI OnUpdateTitle(u64 menu) {
     Row& row = g_title;
     if (!row.made) {
-        return g_update_title(menu);
+        return Core::Recompiled::Call(g_update_title, menu);
     }
     const auto rows = Read<std::array<Button*, TitleRowCount>>(menu + TitleRows);
     row.anchor = rows[TitleAnchorRow];
@@ -662,7 +665,7 @@ u64 PS4_SYSV_ABI OnUpdateTitle(u64 menu) {
         }
     }
     g_title_menu = menu;
-    const u64 result = g_update_title(menu);
+    const u64 result = Core::Recompiled::Call(g_update_title, menu);
     g_title_menu = 0;
     if (std::ranges::any_of(
             rows, [](const Button* button) { return button->state == ButtonSlidingOut; })) {
@@ -677,7 +680,7 @@ u64 PS4_SYSV_ABI OnUpdateTitle(u64 menu) {
 
 u64 PS4_SYSV_ABI OnEndTitle(u64 menu) {
     End(g_title);
-    return g_end_title(menu);
+    return Core::Recompiled::Call(g_end_title, menu);
 }
 
 template <typename Function>

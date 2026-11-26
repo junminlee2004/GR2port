@@ -24,6 +24,7 @@
 #include "core/libraries/kernel/threads/thread_state.h"
 #include "core/libraries/libs.h"
 #include "core/memory.h"
+#include "core/recompiled/recompiled.h"
 #include "core/signals.h"
 
 #if defined(ARCH_X86_64) || defined(__arm64__) || defined(__aarch64__)
@@ -106,13 +107,13 @@ void PS4_SYSV_ABI posix_pthread_exit(void* status) {
     while (!curthread->cleanup.empty()) {
         PthreadCleanup* old = curthread->cleanup.front();
         curthread->cleanup.pop_front();
-        old->routine(old->routine_arg);
+        Core::Recompiled::Call(old->routine, old->routine_arg);
         if (old->onheap) {
             delete old;
         }
     }
     if (ThreadDtors) {
-        (ThreadDtors)();
+        Core::Recompiled::Call(ThreadDtors);
     }
     ExitThread();
 }
@@ -279,9 +280,22 @@ static void* RunThread(void* arg) {
 #endif
 
     /* Run the current thread's start routine with argument: */
-    auto* const stack =
-        (void*)(((size_t)curthread->attr.stackaddr_attr + curthread->attr.stacksize_attr) & (~15));
-    void* ret = _runOnAnotherStack(curthread->arg, (void*)curthread->start_routine, stack);
+    void* ret;
+    const auto start = reinterpret_cast<VAddr>(curthread->start_routine);
+    if (Core::Recompiled::Enabled()) {
+        // A guest start routine runs on the guest stack, a host one on the host thread's.
+        Core::Recompiled::SetFpControl(curthread->creator_mxcsr, curthread->creator_fcw);
+        ret =
+            Core::Recompiled::IsGuestCode(start)
+                ? Core::Recompiled::RunThread(start, curthread->arg, curthread->attr.stackaddr_attr,
+                                              curthread->attr.stacksize_attr)
+                : curthread->start_routine(curthread->arg);
+    } else {
+        auto* const stack =
+            (void*)(((size_t)curthread->attr.stackaddr_attr + curthread->attr.stacksize_attr) &
+                    (~15));
+        ret = _runOnAnotherStack(curthread->arg, (void*)curthread->start_routine, stack);
+    }
 
     /* Remove thread from tracking */
     DebugState.RemoveCurrentThreadFromGuestList();
@@ -341,6 +355,9 @@ int PS4_SYSV_ABI posix_pthread_create_name_np(PthreadT* thread, const PthreadAtt
     new_thread->magic = Pthread::ThrMagic;
     new_thread->start_routine = start_routine;
     new_thread->arg = arg;
+    if (Core::Recompiled::Enabled()) {
+        Core::Recompiled::GetFpControl(&new_thread->creator_mxcsr, &new_thread->creator_fcw);
+    }
     new_thread->cancel_enable = true;
     new_thread->cancel_async = false;
 
@@ -474,7 +491,7 @@ int PS4_SYSV_ABI posix_pthread_once(PthreadOnce* once_control,
 
     PthreadCleanup cup{once_cancel_handler, once_control, 0};
     g_curthread->cleanup.push_front(&cup);
-    init_routine();
+    Core::Recompiled::Call(init_routine);
     g_curthread->cleanup.pop_front();
 
     auto state = PthreadOnceState::InProgress;
@@ -1002,12 +1019,12 @@ static void PS4_SYSV_ABI CallbackWrapper(void* arg) {
     if (a.action->sa_flags & POSIX_SA_SIGINFO) {
         auto sigaction_handler = a.action->__sigaction_handler.sigaction;
         if (sigaction_handler != nullptr) {
-            sigaction_handler(a.sig, a.info, a.context);
+            Core::Recompiled::Call(sigaction_handler, a.sig, a.info, a.context);
         }
     } else {
         auto signal_handler = a.action->__sigaction_handler.handler;
         if (signal_handler != nullptr) {
-            signal_handler(a.sig);
+            Core::Recompiled::Call(signal_handler, a.sig);
         }
     }
 }

@@ -11,6 +11,7 @@
 #include <xbyak/xbyak.h>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/menu_kit.h"
 #include "graphics/gr2port/photo_ui.h"
@@ -122,7 +123,7 @@ void PS4_SYSV_ABI DrawGesture(void* window) {
     const VAddr memory = MenuKit::Read<VAddr>(MenuKit::Game(ItemPools) + u64{pool} * sizeof(VAddr));
     const VAddr taken = MenuKit::Game(ItemPoolTaken) + u64{pool} * sizeof(u32);
     const VAddr first = memory + MenuKit::Read<u32>(taken);
-    g_gesture_draw(window);
+    Core::Recompiled::Call(g_gesture_draw, window);
     g_gesture_items[pool].first.store(first, std::memory_order_relaxed);
     g_gesture_items[pool].end.store(memory + MenuKit::Read<u32>(taken), std::memory_order_relaxed);
 }
@@ -209,11 +210,11 @@ bool RouteItems(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
 
 u64 FindText(u64 texts, const char* key, GraphicsMenu::FindTextFunction find) {
     if (std::strcmp(key, RowKey) != 0) {
-        return find(texts, key);
+        return Core::Recompiled::Call(find, texts, key);
     }
     std::scoped_lock lock{g_record_mutex};
     if (g_record.empty()) {
-        const u64 model = find(texts, ModelKey);
+        const u64 model = Core::Recompiled::Call(find, texts, ModelKey);
         if (model == 0) {
             return 0;
         }

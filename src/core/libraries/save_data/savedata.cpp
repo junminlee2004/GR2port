@@ -27,6 +27,7 @@
 #include "core/libraries/save_data/savedata_error.h"
 #include "core/libraries/system/msgdialog.h"
 #include "core/libraries/system/msgdialog_ui.h"
+#include "core/recompiled/recompiled.h"
 #include "save_backup.h"
 #include "save_instance.h"
 #include "save_memory.h"
@@ -336,7 +337,7 @@ void DispatchBackupEvent(const Backup::BackupRequest& request) {
     SCOPE_EXIT {
         g_in_backup_callback = was_in_callback;
     };
-    g_event_callback(&event, g_event_userdata);
+    Core::Recompiled::Call(g_event_callback, &event, g_event_userdata);
 }
 
 static bool g_initialized = false;

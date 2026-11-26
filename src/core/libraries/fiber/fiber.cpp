@@ -4,6 +4,7 @@
 #include "fiber.h"
 
 #include <map>
+#include <memory>
 #include <mutex>
 
 #include "common/elf_info.h"
@@ -12,6 +13,7 @@
 #include "core/libraries/kernel/threads/pthread.h"
 #include "core/libraries/kernel/threads/thread_state.h"
 #include "core/libraries/libs.h"
+#include "core/recompiled/recompiled.h"
 #include "core/tls.h"
 
 namespace Libraries::Fiber {
@@ -26,6 +28,39 @@ static std::atomic<u32> context_size_check = false;
 
 OrbisFiberContext* GetFiberContext() {
     return Core::GetTcbBase()->tcb_fiber;
+}
+
+// Recompiled mode: a fiber's first code, on its own host stack. As _sceFiberSwitchEntry, it
+// makes the fiber it was switched from idle and calls the entry, which must not return.
+static void RecompiledFiberMain(void* arg) {
+    auto* fiber = static_cast<OrbisFiber*>(arg);
+    OrbisFiberContext* g_ctx = GetFiberContext();
+    if (g_ctx->prev_fiber) {
+        g_ctx->prev_fiber->state = FiberState::Idle;
+        g_ctx->prev_fiber = nullptr;
+    }
+    if (fiber->flags & FiberFlags::SetFpuRegs) {
+        Core::Recompiled::SetFpControl(0x9fc0, 0x037f);
+    }
+    Core::Recompiled::RunFiber(reinterpret_cast<VAddr>(fiber->entry), fiber->arg_on_initialize,
+                               g_ctx->arg_on_run_to, fiber->context_start, fiber->size_context);
+    g_ctx = GetFiberContext();
+    g_ctx->return_val = 1;
+    fiber->host_fiber->SwitchTo(*g_ctx->thread_side);
+    UNREACHABLE();
+}
+
+// Recompiled mode: leaves from for fiber, which goes on where it switched away or starts.
+// Returns when a switch comes back to from.
+static void RecompiledSwitchToFiber(Core::Recompiled::HostFiber& from, OrbisFiber* fiber,
+                                    u64 arg_on_run_to, OrbisFiberContext* ctx) {
+    ASSERT_MSG(fiber->addr_context != nullptr,
+               "Recompiled mode: fiber {} has no context of its own", fiber->name);
+    if (fiber->host_fiber == nullptr) {
+        fiber->host_fiber = new Core::Recompiled::HostFiber(&RecompiledFiberMain, fiber);
+    }
+    ctx->arg_on_run_to = arg_on_run_to;
+    from.SwitchTo(*fiber->host_fiber);
 }
 
 #ifdef _WIN32
@@ -265,6 +300,7 @@ s32 PS4_SYSV_ABI sceFiberInitializeImpl(OrbisFiber* fiber, const char* name, Orb
     fiber->size_context = size_context;
     fiber->context = nullptr;
     fiber->flags = user_flags;
+    fiber->host_fiber = nullptr;
 
     /*
         A low stack area is problematic, as we can easily
@@ -330,6 +366,8 @@ s32 PS4_SYSV_ABI sceFiberFinalize(OrbisFiber* fiber) {
     if (fiber->addr_context) {
         ReleaseStack(fiber);
     }
+    delete fiber->host_fiber;
+    fiber->host_fiber = nullptr;
     return ORBIS_OK;
 }
 
@@ -370,7 +408,17 @@ s32 PS4_SYSV_ABI sceFiberRunImpl(OrbisFiber* fiber, void* addr_context, u64 size
 
     tcb->tcb_fiber = &ctx;
 
-    s32 jmp = _sceFiberSetJmp(&ctx);
+    // Recompiled mode: the fiber runs on its own host stack and returns to this side.
+    std::unique_ptr<Core::Recompiled::HostFiber> thread_side;
+    s32 jmp = 0;
+    if (Core::Recompiled::Enabled()) {
+        thread_side = std::make_unique<Core::Recompiled::HostFiber>();
+        ctx.thread_side = thread_side.get();
+        RecompiledSwitchToFiber(*thread_side, fiber, arg_on_run_to, &ctx);
+        jmp = 1;
+    } else {
+        jmp = _sceFiberSetJmp(&ctx);
+    }
     if (!jmp) {
         if (fiber->addr_context) {
             _sceFiberSwitchToFiber(fiber, arg_on_run_to, &ctx);
@@ -440,18 +488,26 @@ s32 PS4_SYSV_ABI sceFiberSwitchImpl(OrbisFiber* fiber, void* addr_context, u64 s
     }
 
     OrbisFiber* cur_fiber = g_ctx->current_fiber;
-    if (cur_fiber->addr_context == nullptr) {
-        _sceFiberSwitch(cur_fiber, fiber, arg_on_run_to, g_ctx);
-        __builtin_trap();
-    }
-
-    OrbisFiberContext ctx{};
-    s32 jmp = _sceFiberSetJmp(&ctx);
-    if (!jmp) {
-        cur_fiber->context = &ctx;
+    if (Core::Recompiled::Enabled()) {
+        // As _sceFiberSwitch, on the fibers' own host stacks.
         _sceFiberCheckStackOverflow(g_ctx);
-        _sceFiberSwitch(cur_fiber, fiber, arg_on_run_to, g_ctx);
-        __builtin_trap();
+        g_ctx->prev_fiber = cur_fiber;
+        g_ctx->current_fiber = fiber;
+        RecompiledSwitchToFiber(*cur_fiber->host_fiber, fiber, arg_on_run_to, g_ctx);
+    } else {
+        if (cur_fiber->addr_context == nullptr) {
+            _sceFiberSwitch(cur_fiber, fiber, arg_on_run_to, g_ctx);
+            __builtin_trap();
+        }
+
+        OrbisFiberContext ctx{};
+        s32 jmp = _sceFiberSetJmp(&ctx);
+        if (!jmp) {
+            cur_fiber->context = &ctx;
+            _sceFiberCheckStackOverflow(g_ctx);
+            _sceFiberSwitch(cur_fiber, fiber, arg_on_run_to, g_ctx);
+            __builtin_trap();
+        }
     }
 
     g_ctx = GetFiberContext();
@@ -488,6 +544,21 @@ s32 PS4_SYSV_ABI sceFiberReturnToThread(u64 arg_on_return, u64* arg_on_run) {
     }
 
     OrbisFiber* cur_fiber = g_ctx->current_fiber;
+    if (Core::Recompiled::Enabled()) {
+        // As _sceFiberTerminate: back to the side that runs the fiber, from its own host stack.
+        _sceFiberCheckStackOverflow(g_ctx);
+        g_ctx->arg_on_return = arg_on_return;
+        cur_fiber->host_fiber->SwitchTo(*g_ctx->thread_side);
+        g_ctx = GetFiberContext();
+        if (g_ctx->prev_fiber) {
+            g_ctx->prev_fiber->state = FiberState::Idle;
+            g_ctx->prev_fiber = nullptr;
+        }
+        if (arg_on_run) {
+            *arg_on_run = g_ctx->arg_on_run_to;
+        }
+        return ORBIS_OK;
+    }
     if (cur_fiber->addr_context) {
         OrbisFiberContext ctx{};
         s32 jmp = _sceFiberSetJmp(&ctx);

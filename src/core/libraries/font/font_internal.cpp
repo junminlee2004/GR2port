@@ -14,6 +14,7 @@
 #include "core/emulator_settings.h"
 #include "core/libraries/font/fontft_internal.h"
 #include "core/libraries/kernel/kernel.h"
+#include "core/recompiled/recompiled.h"
 #include "imgui/notifications_layer.h"
 #include "imgui/renderer/font_data.h"
 
@@ -809,7 +810,7 @@ void RemoveLibState(Libraries::Font::OrbisFontLib lib) {
         if (free_fn) {
             const auto free_fn_guest =
                 reinterpret_cast<void(PS4_SYSV_ABI*)(void* object, void* p)>(free_fn);
-            free_fn_guest(alloc_ctx, p);
+            Core::Recompiled::Call(free_fn_guest, alloc_ctx, p);
             return;
         }
         std::free(p);

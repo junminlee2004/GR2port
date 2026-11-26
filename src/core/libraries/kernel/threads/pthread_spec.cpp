@@ -5,6 +5,7 @@
 #include "core/libraries/kernel/posix_error.h"
 #include "core/libraries/kernel/threads/pthread.h"
 #include "core/libraries/libs.h"
+#include "core/recompiled/recompiled.h"
 
 namespace Libraries::Kernel {
 
@@ -85,7 +86,7 @@ void _thread_cleanupspecific() {
                  * destructor:
                  */
                 lk.unlock();
-                destructor(data);
+                Core::Recompiled::Call(destructor, data);
                 lk.lock();
             }
         }

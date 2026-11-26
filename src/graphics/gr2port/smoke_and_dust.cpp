@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/smoke_and_dust.h"
@@ -45,9 +46,9 @@ SpawnFunction g_spawn = nullptr;
 VAddr g_registry_load = 0;
 
 u64* PS4_SYSV_ABI SpawnEffect(u64* out, VAddr library, u32 hash) {
-    const VAddr caller = reinterpret_cast<VAddr>(__builtin_return_address(0));
+    const VAddr caller = Core::Recompiled::GuestCaller(__builtin_return_address(0));
     const bool refused = caller != g_registry_load && std::ranges::binary_search(SmokeHashes, hash);
-    return g_spawn(out, library, refused ? NoEffect : hash);
+    return Core::Recompiled::Call(g_spawn, out, library, refused ? NoEffect : hash);
 }
 
 } // namespace

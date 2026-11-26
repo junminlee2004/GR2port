@@ -4,6 +4,7 @@
 #include <array>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/part_hits.h"
 
@@ -88,9 +89,9 @@ bool Lands(Contact& contact, u32 frame) {
 }
 
 void PS4_SYSV_ABI OnPartEvent(VAddr part, VAddr event) {
-    const VAddr caller = reinterpret_cast<VAddr>(__builtin_return_address(0));
+    const VAddr caller = Core::Recompiled::GuestCaller(__builtin_return_address(0));
     if (*reinterpret_cast<const u8*>(part + NoHitPause) == 0 || !IsHit(event)) {
-        g_part_event(part, event);
+        Core::Recompiled::Call(g_part_event, part, event);
         return;
     }
     const VAddr attacker = *reinterpret_cast<const VAddr*>(event + HitAttacker);
@@ -117,7 +118,7 @@ void PS4_SYSV_ABI OnPartEvent(VAddr part, VAddr event) {
         *reinterpret_cast<u64*>(event + HitResult) = contact->result;
         return;
     }
-    g_part_event(part, event);
+    Core::Recompiled::Call(g_part_event, part, event);
     contact->result = *reinterpret_cast<const u64*>(event + HitResult);
 }
 

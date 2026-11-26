@@ -12,6 +12,7 @@
 #include <xbyak/xbyak.h>
 
 #include "common/logging/log.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/camera_menu.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/menu_kit.h"
@@ -481,7 +482,7 @@ void ShowBar() {
 
 void PS4_SYSV_ABI OnCameraPage(u64 page) {
     if (!g_hung || Read<u64>(Game(SystemObject)) != g_system) {
-        g_camera_page(page);
+        Core::Recompiled::Call(g_camera_page, page);
         return;
     }
     const u64 input = Read<u64>(Read<u64>(Game(PauseMenu)) + PauseMenuInput);
@@ -492,14 +493,14 @@ void PS4_SYSV_ABI OnCameraPage(u64 page) {
     if (state == PageInput && Steer(input)) {
         const u8 enabled = Read<u8>(input + InputEnabled);
         Write<u8>(input + InputEnabled, 0);
-        g_camera_page(page);
+        Core::Recompiled::Call(g_camera_page, page);
         Write<u8>(input + InputEnabled, enabled);
         // The page's input code sets the repeats' pace from its own counts.
         if (std::max(g_right, g_left) >= FastRepeats) {
             Write<u32>(input + InputRepeatFrames, FastFrames);
         }
     } else {
-        g_camera_page(page);
+        Core::Recompiled::Call(g_camera_page, page);
     }
     const s32 next = Read<s32>(page + PageState);
     if (state == PageInput && next == PageReset) {
@@ -597,7 +598,7 @@ void Draw(u64 system, u64 context, DrawFunction draw) {
         return;
     }
     for (const Slider& slider : g_sliders) {
-        draw(Read<u64>(Object(slider) + RowHandle), context);
+        Core::Recompiled::Call(draw, Read<u64>(Object(slider) + RowHandle), context);
     }
 }
 

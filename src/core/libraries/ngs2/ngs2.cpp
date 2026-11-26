@@ -13,6 +13,7 @@
 #include "core/libraries/ngs2/ngs2_mixer.h"
 #include "core/libraries/ngs2/ngs2_pan.h"
 #include "core/libraries/ngs2/ngs2_report.h"
+#include "core/recompiled/recompiled.h"
 
 namespace Libraries::Ngs2 {
 
@@ -84,14 +85,14 @@ s32 PS4_SYSV_ABI sceNgs2RackCreateWithAllocator(OrbisNgs2Handle systemHandle, u3
         return result;
     }
     bufferInfo.userData = allocator->userData;
-    result = allocator->allocHandler(&bufferInfo);
+    result = Core::Recompiled::Call(allocator->allocHandler, &bufferInfo);
     if (result < 0) {
         return result;
     }
     const OrbisNgs2BufferFreeHandler hostFree = allocator->freeHandler;
     result = RackSetup(systemHandle, rackId, option, &bufferInfo, hostFree, outHandle);
     if (result < 0 && hostFree) {
-        hostFree(&bufferInfo);
+        Core::Recompiled::Call(hostFree, &bufferInfo);
     }
     return result;
 }
@@ -184,13 +185,13 @@ s32 PS4_SYSV_ABI sceNgs2SystemCreateWithAllocator(const OrbisNgs2SystemOption* o
             result = SystemSetup(option, &bufferInfo, 0, 0);
             if (result >= 0) {
                 bufferInfo.userData = allocator->userData;
-                result = hostAlloc(&bufferInfo);
+                result = Core::Recompiled::Call(hostAlloc, &bufferInfo);
                 if (result >= 0) {
                     OrbisNgs2Handle* handleCopy = outHandle;
                     result = SystemSetup(option, &bufferInfo, hostFree, handleCopy);
                     if (result < 0) {
                         if (hostFree) {
-                            hostFree(&bufferInfo);
+                            Core::Recompiled::Call(hostFree, &bufferInfo);
                         }
                     }
                 }

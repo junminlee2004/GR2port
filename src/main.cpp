@@ -27,6 +27,7 @@
 #include "core/game_check/start_report.h"
 #include "core/ipc/ipc.h"
 #include "core/prompt_packs/prompt_packs.h"
+#include "core/recompiled/recompiled.h"
 #include "core/user_settings.h"
 #include "graphics/gr2port/catcher.h"
 #include "graphics/gr2port/catcher_crash.h"
@@ -186,6 +187,7 @@ int main(int argc, char* argv[]) {
     // Load configurations
     EmulatorSettings.Load();
     UserSettings.Load();
+    Core::Recompiled::Configure();
 
     // ---- Utility commands ----
     if (addGameFolder) {

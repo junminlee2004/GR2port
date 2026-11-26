@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -15,6 +16,7 @@
 #include "core/libraries/gr2_online/online_host.h"
 #include "core/libraries/gr2_online/online_patches.h"
 #include "core/linker.h"
+#include "core/recompiled/recompiled.h"
 #include "core/tls.h"
 
 // The only platform code of this folder. Gives the host pages that hold [addr, addr + size) read
@@ -62,12 +64,15 @@ constexpr u8 Rax = 0;
 constexpr u8 Rcx = 1;
 constexpr u8 Rsi = 6;
 
-// A site that gets fixed bytes.
+// A site that gets fixed bytes. If answer is set, the bytes make the function return it at
+// once, and recompiled mode returns it from a hook at the function's entry instead, so the
+// function keeps its recompiled C.
 struct Site {
     std::string_view what;
     u64 va;
     std::span<const u8> expect;
     std::span<const u8> bytes;
+    std::optional<u64> answer{};
 };
 
 // The start of the function, up to the load of the stack guard: push rbp; mov rbp, rsp;
@@ -87,7 +92,7 @@ constexpr Site Sites[] = {
     // The game draws a category of served content only when this function says that the
     // category is switched on, and the switches come from a table that stays empty here: mines
     // and every category of the Announcements screen would stay hidden. It answers 1.
-    {"render gate", 0xe827a0, GateProlog, GateOpen},
+    {"render gate", 0xe827a0, GateProlog, GateOpen, 1},
     // A deferred teardown of the challenge screen frees the name of the challenger's ghost,
     // which was freed before and whose chunk was handed out again in between, and the C library
     // of the game aborts on that. The call goes; the instruction after it still clears the
@@ -194,7 +199,7 @@ void PS4_SYSV_ABI FreeGuard(void* mspace, void* ptr) {
             return;
         }
     }
-    next(mspace, ptr);
+    Core::Recompiled::Call(next, mspace, ptr);
 }
 
 std::mutex mutex;
@@ -219,12 +224,14 @@ void Write(std::string_view what, u64 addr, std::span<const u8> expect, std::spa
         return;
     }
     // The emulator maps the pages of a module writable, so a refusal here decides nothing: the
-    // bytes are written in any case and the read-back tells.
-    const bool allowed = HostProtect(addr, bytes.size(), true);
+    // bytes are written in any case and the read-back tells. In recompiled mode only the runtime
+    // executes the game's code, so its pages stay unexecutable.
+    const bool allowed = HostProtect(addr, bytes.size(), !Core::Recompiled::Enabled());
     auto* site = reinterpret_cast<volatile u8*>(addr);
     for (u64 i = 0; i < bytes.size(); ++i) {
         site[i] = bytes[i];
     }
+    Core::Recompiled::Invalidate(addr, bytes.size());
     const char* note = allowed ? "" : " (the host refused the protection change)";
     if (Holds(addr, bytes)) {
         LOG_INFO(Lib_Http, "Gravity Rush 2: {} at {:#x}: PATCHED{}", what, addr, note);
@@ -232,6 +239,33 @@ void Write(std::string_view what, u64 addr, std::span<const u8> expect, std::spa
         LOG_ERROR(Lib_Http, "Gravity Rush 2: {} at {:#x}: FAILED, the bytes did not stay{}", what,
                   addr, note);
     }
+}
+
+// Recompiled mode: the hook at the entry of a site's function, which returns the site's answer
+// (data) as the site's bytes would.
+void ReturnAnswer(Core::Recompiled::HookCpu* cpu, void* data,
+                  void (*)(Core::Recompiled::HookCpu* cpu)) {
+    using Core::Recompiled::HookCpu;
+    cpu->r[HookCpu::Rax] = *static_cast<const u64*>(data);
+    cpu->rip = *reinterpret_cast<const u64*>(cpu->r[HookCpu::Rsp]);
+    cpu->r[HookCpu::Rsp] += 8;
+}
+
+// Recompiled mode: hooks the entry of the function of a site that has an answer. If the
+// function cannot be hooked, the site gets its bytes, as a write to the code after the
+// recompiled C loaded.
+void Answer(const Site& site, u64 addr) {
+    if (!Holds(addr, site.expect)) {
+        LOG_ERROR(Lib_Http, "Gravity Rush 2: {} at {:#x}: MISMATCH, left alone", site.what, addr);
+        return;
+    }
+    if (Core::Recompiled::HookEntry(addr, &ReturnAnswer, const_cast<u64*>(&*site.answer), 0)) {
+        LOG_INFO(Lib_Http, "Gravity Rush 2: {} at {:#x}: PATCHED (the function answers {})",
+                 site.what, addr, *site.answer);
+        return;
+    }
+    Core::Recompiled::CheckWrite(addr, site.bytes.size());
+    Write(site.what, addr, site.expect, site.bytes);
 }
 
 // movabs reg, value
@@ -251,15 +285,18 @@ u8* Jmp(u8* out, u8 reg) {
 
 void Reroute(const NameSite& site, u64 base) {
     const u64 addr = base + (site.va - ListingBase);
+    // Recompiled mode: only the runtime executes the game's code, so the stub is guest code.
+    u8* const stub =
+        Core::Recompiled::Enabled() ? Core::Recompiled::AllocateGuestCode(32) : site.stub;
     if (Holds(addr, site.expect)) {
-        u8* out = std::copy(site.replay.begin(), site.replay.end(), site.stub);
+        u8* out = std::copy(site.replay.begin(), site.replay.end(), stub);
         out = MovAbs(out, site.name_reg, reinterpret_cast<u64>(site.name));
         out = MovAbs(out, Rax, base + (site.target - ListingBase));
         out = Jmp(out, Rax);
         // The stub is emulator data. A jump into a page that must not be executed faults, so
         // without the permission the site stays as it is.
-        if (!HostProtect(reinterpret_cast<u64>(site.stub), static_cast<u64>(out - site.stub),
-                         true)) {
+        if (!Core::Recompiled::Enabled() &&
+            !HostProtect(reinterpret_cast<u64>(stub), static_cast<u64>(out - stub), true)) {
             LOG_ERROR(Lib_Http, "Gravity Rush 2: {} at {:#x}: FAILED, its stub may not be executed",
                       site.what, addr);
             return;
@@ -267,7 +304,7 @@ void Reroute(const NameSite& site, u64 base) {
     }
     std::array<u8, 13> jump;
     jump.fill(Nop);
-    Jmp(MovAbs(jump.data(), site.via, reinterpret_cast<u64>(site.stub)), site.via);
+    Jmp(MovAbs(jump.data(), site.via, reinterpret_cast<u64>(stub)), site.via);
     Write(site.what, addr, site.expect, std::span<const u8>{jump.data(), site.size});
 }
 
@@ -338,7 +375,12 @@ void Apply() {
             return;
         }
         for (const Site& site : Sites) {
-            Write(site.what, base + (site.va - ListingBase), site.expect, site.bytes);
+            const u64 addr = base + (site.va - ListingBase);
+            if (site.answer && Core::Recompiled::Enabled()) {
+                Answer(site, addr);
+            } else {
+                Write(site.what, addr, site.expect, site.bytes);
+            }
         }
         for (const NameSite& site : NameSites) {
             Reroute(site, base);
@@ -347,6 +389,17 @@ void Apply() {
     }
     if (!guard_done) {
         guard_done = InstallFreeGuard(base);
+    }
+}
+
+void ExcludeSites(u64 base) {
+    for (const Site& site : Sites) {
+        if (!site.answer) {
+            Core::Recompiled::Exclude(base + (site.va - ListingBase), site.bytes.size());
+        }
+    }
+    for (const NameSite& site : NameSites) {
+        Core::Recompiled::Exclude(base + (site.va - ListingBase), site.size);
     }
 }
 

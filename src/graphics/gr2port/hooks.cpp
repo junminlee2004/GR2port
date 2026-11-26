@@ -6,6 +6,7 @@
 #include <xbyak/xbyak.h>
 
 #include "common/memory_patcher.h"
+#include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/hooks.h"
 
 namespace Gr2Port::Hooks {
@@ -68,11 +69,74 @@ u8* Expected(VAddr module_base, const Entry& entry) {
 
 void Patch(const Site& site, const Entry& entry, const u8* stub) {
     const auto displacement = static_cast<s32>(stub - (site.entry + JmpSize));
+    Core::Recompiled::CheckWrite(reinterpret_cast<VAddr>(site.entry), entry.size);
     site.entry[0] = 0xe9;
     std::memcpy(site.entry + 1, &displacement, sizeof(displacement));
     if (!site.chained) {
         std::memset(site.entry + JmpSize, 0xcc, entry.size - JmpSize);
     }
+}
+
+// Recompiled mode: hooks of a recompiled function's entry that observe or replace its calls
+// without a write to its code. The other hooks write the code, which the recompiled C runs from
+// its hook points.
+struct EntryHookData {
+    EntryObserver entry_observer;
+    ReturnObserver return_observer;
+    const void* target;
+    u32 id;
+};
+
+using Core::Recompiled::HookCpu;
+
+void RunEntryObserver(HookCpu* cpu, void* data, void (*function)(HookCpu* cpu)) {
+    const auto& hook = *static_cast<const EntryHookData*>(data);
+    Registers registers{};
+    std::memcpy(&registers.xmm0, cpu->v[0], sizeof(registers.xmm0));
+    registers.r11 = cpu->r[HookCpu::R11];
+    registers.r10 = cpu->r[HookCpu::R10];
+    registers.rax = cpu->r[HookCpu::Rax];
+    registers.r9 = cpu->r[HookCpu::R9];
+    registers.r8 = cpu->r[HookCpu::R8];
+    registers.rcx = cpu->r[HookCpu::Rcx];
+    registers.rdx = cpu->r[HookCpu::Rdx];
+    registers.rsi = cpu->r[HookCpu::Rsi];
+    registers.rdi = cpu->r[HookCpu::Rdi];
+    registers.ret =
+        Core::Recompiled::GuestReturn(*reinterpret_cast<const u64*>(cpu->r[HookCpu::Rsp]));
+    hook.entry_observer(hook.id, &registers, cpu->r[HookCpu::Rbp]);
+    function(cpu);
+}
+
+void RunReturnObserver(HookCpu* cpu, void* data, void (*function)(HookCpu* cpu)) {
+    const auto& hook = *static_cast<const EntryHookData*>(data);
+    const Arguments arguments{cpu->r[HookCpu::R9],  cpu->r[HookCpu::R8],  cpu->r[HookCpu::Rcx],
+                              cpu->r[HookCpu::Rdx], cpu->r[HookCpu::Rsi], cpu->r[HookCpu::Rdi]};
+    function(cpu);
+    hook.return_observer(hook.id, &arguments, cpu->r[HookCpu::Rax]);
+}
+
+void RunReplacement(HookCpu* cpu, void* data, void (*)(HookCpu* cpu)) {
+    Core::Recompiled::CallHost(cpu, static_cast<const EntryHookData*>(data)->target);
+}
+
+// Recompiled mode: whether hook runs at each call of the recompiled function at the entry, which
+// holds the instructions the entry expects or the jump of an earlier hook. If unhooked is not
+// null, a call of it runs the function as it ran before.
+bool HookRecompiled(VAddr module_base, const Entry& entry, Core::Recompiled::EntryHook hook,
+                    const EntryHookData& data, const void* unhooked) {
+    const u8* const site = At(module_base, entry);
+    if (!Core::Recompiled::Enabled() || site == nullptr ||
+        (site[0] != 0xe9 && std::memcmp(site, entry.bytes.data(), entry.size) != 0)) {
+        return false;
+    }
+    auto* const kept = new EntryHookData{data};
+    if (!Core::Recompiled::HookEntry(reinterpret_cast<VAddr>(site), hook, kept,
+                                     reinterpret_cast<VAddr>(unhooked))) {
+        delete kept;
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -84,6 +148,12 @@ bool Holds(VAddr module_base, const Entry& entry) {
 Result ObserveEntry(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator& c, size_t capacity,
                     EntryObserver observer, u32 id) {
     using namespace Xbyak::util;
+    if (HookRecompiled(
+            module_base, entry, &RunEntryObserver,
+            {.entry_observer = observer, .return_observer = nullptr, .target = nullptr, .id = id},
+            nullptr)) {
+        return At(module_base, entry)[0] == 0xe9 ? Result::Chained : Result::Hooked;
+    }
     Site site{};
     const Result result = Prepare(module_base, entry, c, capacity, site);
     if (!Hooked(result)) {
@@ -122,6 +192,12 @@ Result ObserveEntry(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator&
 Result ObserveReturn(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator& c,
                      size_t capacity, ReturnObserver observer, u32 id) {
     using namespace Xbyak::util;
+    if (HookRecompiled(
+            module_base, entry, &RunReturnObserver,
+            {.entry_observer = nullptr, .return_observer = observer, .target = nullptr, .id = id},
+            nullptr)) {
+        return At(module_base, entry)[0] == 0xe9 ? Result::Chained : Result::Hooked;
+    }
     Site site{};
     const Result result = Prepare(module_base, entry, c, capacity, site);
     if (!Hooked(result)) {
@@ -183,6 +259,15 @@ Result Replace(VAddr module_base, const Entry& entry, Xbyak::CodeGenerator& c, s
         }
         c.jmp(site + entry.size);
     }
+    // Recompiled mode: a host function replaces the calls of the recompiled function, and the
+    // trampoline's run the function.
+    if (!Core::Recompiled::IsGuestCode(reinterpret_cast<VAddr>(target)) &&
+        HookRecompiled(
+            module_base, entry, &RunReplacement,
+            {.entry_observer = nullptr, .return_observer = nullptr, .target = target, .id = 0},
+            original != nullptr ? *original : nullptr)) {
+        return Result::Hooked;
+    }
     // jmp [rip]: the target's address follows the instruction.
     const u8* stub = c.getCurr();
     c.db(0xff);
@@ -198,6 +283,7 @@ Result Return(VAddr module_base, const Entry& entry) {
     if (site == nullptr || entry.size == 0) {
         return Result::Mismatch;
     }
+    Core::Recompiled::CheckWrite(reinterpret_cast<VAddr>(site), entry.size);
     site[0] = ReturnOpcode;
     return Result::Hooked;
 }
@@ -211,7 +297,12 @@ Result SetReturning(VAddr module_base, const Entry& entry, bool returning) {
         std::memcmp(site + 1, entry.bytes.data() + 1, entry.size - 1) != 0) {
         return Result::Mismatch;
     }
+    // Recompiled mode: the recompiled C reads the byte at its hook point; without one, the runtime
+    // runs the function and sees each write.
+    const VAddr address = reinterpret_cast<VAddr>(site);
+    Core::Recompiled::CheckWrite(address, entry.size);
     site[0] = returning ? ReturnOpcode : entry.bytes[0];
+    Core::Recompiled::Invalidate(address, 1);
     return Result::Hooked;
 }
 
