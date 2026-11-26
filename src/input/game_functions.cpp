@@ -90,6 +90,24 @@ constexpr Function Table[]{
      "touchpad_swipe_right", "x"},
 };
 
+// The Button Bindings dialog remaps every function on a pad output together. Two functions with
+// the same output cannot be rebound apart: that was the Hide UI / Reset Camera collision of v1.13.
+consteval bool UniquePadOutputs() {
+    constexpr size_t count = sizeof(Table) / sizeof(Table[0]);
+    for (size_t i = 0; i < count; ++i) {
+        if (Table[i].output.empty()) {
+            continue;
+        }
+        for (size_t j = i + 1; j < count; ++j) {
+            if (Table[i].output == Table[j].output) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+static_assert(UniquePadOutputs(), "Game functions must not share a pad output");
+
 std::atomic<u32> g_type{TypeA};
 // -1 until the game reports it.
 std::atomic<s32> g_style{-1};
