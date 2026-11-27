@@ -1017,11 +1017,11 @@ set(CORE src/core/aerolib/stubs.cpp
          ${NET_LIB}
 )
 
+set(CORE ${CORE} ${FIBER_LIB})
 if (ARCHITECTURE STREQUAL "x86_64")
     set(CORE ${CORE}
              src/core/cpu_patches.cpp
-             src/core/cpu_patches.h
-             ${FIBER_LIB})
+             src/core/cpu_patches.h)
 endif()
 
 set(GRAPHICS src/graphics/amdgpu/pixel_format.cpp
@@ -1152,6 +1152,12 @@ if (ENABLE_RECOMPILED_MODE)
     target_link_libraries(cpu_runtime PRIVATE Zydis::Zydis ${CMAKE_DL_LIBS} m)
     target_link_libraries(gr2port PRIVATE cpu_runtime)
     target_compile_definitions(gr2port PRIVATE ENABLE_RECOMPILED_MODE)
+endif()
+
+if (NOT ARCHITECTURE STREQUAL "x86_64")
+    # Xbyak writes the hooks' x86-64 guest code on every host. It takes 32-bit mode from a host
+    # that is not x86-64 unless told.
+    target_compile_definitions(gr2port PRIVATE XBYAK64)
 endif()
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")

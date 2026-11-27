@@ -1328,7 +1328,7 @@ int PS4_SYSV_ABI posix_pthread_get_user_context_np(PthreadT thread, Ucontext* ct
         got_state = true;
 #endif
     } else {
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(ARCH_X86_64)
         if (thread->native_thr) {
             pthread_t pthr = reinterpret_cast<pthread_t>(thread->native_thr->GetHandle());
             if (pthr) {

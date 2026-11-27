@@ -4,7 +4,11 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+
+#include "common/arch.h"
+#ifdef ARCH_X86_64
 #include <immintrin.h>
+#endif
 
 #include "core/recompiled/recompiled.h"
 #include "graphics/gr2port/ui_items_internal.h"
@@ -259,7 +263,12 @@ Draw Conversion(VAddr frame, VAddr target, u32 blend) {
 
 // 1 / x as the game computes it: rcpps, then one Newton step. rcpss gives each lane's rcpps.
 float Reciprocal(float x) {
+#ifdef ARCH_X86_64
     const float guess = _mm_cvtss_f32(_mm_rcp_ss(_mm_set_ss(x)));
+#else
+    // The recompiled C of the game divides for rcpps on this architecture.
+    const float guess = 1.0f / x;
+#endif
     const float error = 1.0f - x * guess;
     return guess + guess * error;
 }

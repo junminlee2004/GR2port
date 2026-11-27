@@ -52,6 +52,9 @@ bool IsExecuteError(void* ctx) {
     return ((EXCEPTION_POINTERS*)ctx)->ExceptionRecord->ExceptionInformation[0] == 0xf;
 #elif defined(__APPLE__) && defined(ARCH_X86_64)
     return ((ucontext_t*)ctx)->uc_mcontext->__es.__err & 0x10;
+#elif defined(__APPLE__) && defined(ARCH_ARM64)
+    // The syndrome's exception class: 0x20 is an instruction abort from user code.
+    return (((ucontext_t*)ctx)->uc_mcontext->__es.__esr >> 26) == 0x20;
 #elif defined(__FreeBSD__) && defined(ARCH_X86_64)
     return ((ucontext_t*)ctx)->uc_mcontext.mc_err & 0x10;
 #elif defined(ARCH_X86_64)

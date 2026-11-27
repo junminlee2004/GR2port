@@ -198,9 +198,7 @@ void InitHLELibs(Core::Loader::SymbolsResolver* sym) {
             {"libSceVideoRecording.sprx", Libraries::VideoRecording::RegisterLib},
             {"libSceInvitationDialog.sprx", Libraries::InvitationDialog::RegisterLib},
             {"libSceNpUtility.sprx", Libraries::Np::NpUtility::RegisterLib},
-#ifdef ARCH_X86_64
             {"libSceFiber.sprx", Libraries::Fiber::RegisterLib},
-#endif
             // Loading libSceSsl is locked behind a title workaround that currently applies to
             // nothing.
             // {"libSceSsl.sprx", Libraries::Ssl::RegisterLib},

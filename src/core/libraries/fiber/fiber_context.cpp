@@ -3,9 +3,9 @@
 
 #include "common/types.h"
 
+// Native mode's switch between guest contexts. Only x86-64 has a native mode.
 #if defined(__x86_64__)
 asm(".att_syntax prefix");
-#endif
 
 asm(R"(
 .global _sceFiberSetJmp
@@ -127,3 +127,4 @@ _sceFiberSwitchEntry:
     call _sceFiberForceQuit
     ret
 )");
+#endif

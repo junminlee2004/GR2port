@@ -104,7 +104,9 @@ Ucontext::Ucontext(siginfo_t const* inf, ucontext_t* raw_context) {
     uc_mcontext.mc_addr = reinterpret_cast<uint64_t>(inf->si_addr);
 #endif
 #else
-#error "ucontext_t conversion not implemented for current architecture."
+    // The host's registers are not the guest's on this architecture: the guest's context holds
+    // the fault's address alone.
+    uc_mcontext.mc_addr = reinterpret_cast<uint64_t>(inf->si_addr);
 #endif
 }
 #else
@@ -226,9 +228,8 @@ void Ucontext::SyncHostFromGuest() {
     // regs[REG_CSGSFS] |= (greg_t{uc_mcontext.mc_gs} << 16);
     regs[REG_RIP] = uc_mcontext.mc_rip;
 #endif
-#else
-#error "ucontext_t conversion not implemented for current architecture."
 #endif
+    // On any other architecture the guest's context holds none of the host's registers.
 }
 
 std::array<Sigaction, 128> PosixActions{};

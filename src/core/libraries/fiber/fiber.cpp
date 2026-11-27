@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 
+#include "common/arch.h"
 #include "common/elf_info.h"
 #include "common/logging/log.h"
 #include "core/libraries/fiber/fiber_error.h"
@@ -135,6 +136,22 @@ extern "C" s32 PS4_SYSV_ABI _sceFiberLongJmp(OrbisFiberContext* ctx) asm("_sceFi
 extern "C" void PS4_SYSV_ABI _sceFiberSwitchEntry(OrbisFiberData* data,
                                                   bool set_fpu) asm("_sceFiberSwitchEntry");
 extern "C" void PS4_SYSV_ABI _sceFiberForceQuit(u64 ret) asm("_sceFiberForceQuit");
+
+#ifndef ARCH_X86_64
+// The three above are x86-64 code (fiber_context.cpp), for native mode. Any other architecture
+// runs the game in recompiled mode alone, which switches host stacks instead.
+extern "C" s32 PS4_SYSV_ABI _sceFiberSetJmp(OrbisFiberContext*) {
+    UNREACHABLE_MSG("Fibers have no native mode on this architecture");
+}
+
+extern "C" s32 PS4_SYSV_ABI _sceFiberLongJmp(OrbisFiberContext*) {
+    UNREACHABLE_MSG("Fibers have no native mode on this architecture");
+}
+
+extern "C" void PS4_SYSV_ABI _sceFiberSwitchEntry(OrbisFiberData*, bool) {
+    UNREACHABLE_MSG("Fibers have no native mode on this architecture");
+}
+#endif
 
 extern "C" void __attribute__((used)) PS4_SYSV_ABI _sceFiberForceQuit(u64 ret) {
     OrbisFiberContext* g_ctx = GetFiberContext();

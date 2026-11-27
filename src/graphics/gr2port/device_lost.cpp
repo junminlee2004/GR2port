@@ -17,7 +17,11 @@
 #include <vector>
 
 #include <fmt/format.h>
+
+#include "common/arch.h"
+#ifdef ARCH_X86_64
 #include <immintrin.h>
+#endif
 
 #include "common/logging/log.h"
 #include "common/path_util.h"
@@ -148,8 +152,13 @@ template <typename T>
 T Load(const u8* record, u64 offset) {
     const uintptr_t at = reinterpret_cast<uintptr_t>(record) + offset;
     alignas(16) std::array<u8, 16> block;
+#ifdef ARCH_X86_64
     _mm_store_si128(reinterpret_cast<__m128i*>(block.data()),
                     _mm_stream_load_si128(reinterpret_cast<__m128i*>(at & ~uintptr_t{15})));
+#else
+    // No streaming load on this architecture: a plain one.
+    std::memcpy(block.data(), reinterpret_cast<const void*>(at & ~uintptr_t{15}), block.size());
+#endif
     T value;
     std::memcpy(&value, block.data() + (at & 15), sizeof(value));
     return value;
