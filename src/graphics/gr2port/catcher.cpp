@@ -70,6 +70,8 @@ constexpr u32 FullFrames = 6;
 constexpr u32 NamedPasses = 6;
 // The driver's messages and the watch's lines logged at most.
 constexpr u32 MaxMessages = 400;
+// The driver's first error messages come with the calls of the thread that made the call.
+constexpr u32 StackedErrors = 16;
 constexpr u32 MaxWatchLines = 600;
 // The watch looks this often, at a frame the GPU has had for FirstLook, and logs a frame the GPU
 // has had for FirstStall, then at each doubling.
@@ -325,13 +327,21 @@ VKAPI_ATTR VkBool32 VKAPI_CALL OnMessage(VkDebugUtilsMessageSeverityFlagBitsEXT 
     }
     const bool error = (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0;
     const bool warning = (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != 0;
-    const std::string text = fmt::format(
+    std::string text = fmt::format(
         "GR2port catcher: driver message {} ({}, type {:#x}, {}): {}", number,
         error     ? "error"
         : warning ? "warning"
                   : "note",
         static_cast<u32>(types), data->pMessageIdName != nullptr ? data->pMessageIdName : "no name",
         data->pMessage != nullptr ? data->pMessage : "");
+#ifdef _WIN32
+    static std::atomic<u32> stacked{0};
+    if (error && stacked.fetch_add(1) < StackedErrors) {
+        CONTEXT context{};
+        RtlCaptureContext(&context);
+        text += fmt::format("\nThe call came from: {}", Stacks::Of(&context));
+    }
+#endif
     if (error) {
         LOG_ERROR(Render_Vulkan, "{}", text);
         Common::Log::Flush();
