@@ -29,7 +29,18 @@ NativeThread::~NativeThread() {}
 int NativeThread::Create(ThreadFunc func, void* arg) {
 #ifndef _WIN64
     pthread_t* pthr = reinterpret_cast<pthread_t*>(&native_handle);
+#ifdef __APPLE__
+    // macOS gives a new thread 512 KB of stack, where Linux gives 8 MB. In recompiled mode the
+    // recompiled C takes a frame of the host thread's stack for each guest call.
+    pthread_attr_t attributes;
+    pthread_attr_init(&attributes);
+    pthread_attr_setstacksize(&attributes, 8_MB);
+    const int result = pthread_create(pthr, &attributes, func, arg);
+    pthread_attr_destroy(&attributes);
+    return result;
+#else
     return pthread_create(pthr, nullptr, func, arg);
+#endif
 #else
     native_handle = CreateThread(nullptr, 0, func, arg, 0, nullptr);
     if (native_handle == nullptr) {

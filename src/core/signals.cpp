@@ -275,7 +275,7 @@ static s32 NativeSiCodeToGuest(s32 sig, s32 code) {
     }
 }
 
-#if defined(__linux__) && defined(ARCH_X86_64)
+#if (defined(__linux__) && defined(ARCH_X86_64)) || (defined(__APPLE__) && defined(ARCH_ARM64))
 // The module of a host address and the address's offset in it, for reports.
 static const char* HostModule(u64 address, u64* offset) {
     Dl_info module{};
@@ -296,10 +296,15 @@ static const char* HostModule(u64 address, u64* offset) {
 // a direct call of it that was missed, and one elsewhere a guest call of what is not code. All on
 // stderr, ahead of the crash path, which can end the process before the log is written.
 static void ReportRecompiledFault(void* raw_context, void* address, bool is_exec) {
-#if defined(__linux__) && defined(ARCH_X86_64)
+#if (defined(__linux__) && defined(ARCH_X86_64)) || (defined(__APPLE__) && defined(ARCH_ARM64))
     const auto* context = reinterpret_cast<const ucontext_t*>(raw_context);
+#ifdef ARCH_X86_64
     const u64 host = is_exec ? *reinterpret_cast<const u64*>(context->uc_mcontext.gregs[REG_RSP])
                              : static_cast<u64>(context->uc_mcontext.gregs[REG_RIP]);
+#else
+    // A call's return address is in the link register.
+    const u64 host = is_exec ? context->uc_mcontext->__ss.__lr : context->uc_mcontext->__ss.__pc;
+#endif
     u64 offset = 0;
     const char* name = HostModule(host, &offset);
     const char* what = !is_exec ? "faulted at"
@@ -321,6 +326,11 @@ static void ReportRecompiledFault(void* raw_context, void* address, bool is_exec
 }
 
 void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
+    // On arm64 the runtime's translated code faults on an unaligned ordered access, and the
+    // runtime then makes the access.
+    if (sig == SIGBUS && Recompiled::HandleAlignmentFault(raw_context)) {
+        return;
+    }
     using namespace Libraries::Kernel;
     auto* thread = g_curthread;
     const auto* signals = Signals::Instance();

@@ -88,6 +88,10 @@ void LoadModuleLibrary(const std::string& name, VAddr image_base);
 /// Recompiled mode: gives the calling thread its guest thread pointer.
 void SetThreadPointer(void* tcb);
 
+/// In a bus error's handler, with its context: whether the fault is an unaligned access of the
+/// runtime's translated code (arm64), which the call then makes.
+bool HandleAlignmentFault(void* context);
+
 /// Recompiled mode: the floating-point control words of the calling thread's guest code.
 void GetFpControl(u32* mxcsr, u16* fcw);
 

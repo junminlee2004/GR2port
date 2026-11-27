@@ -105,6 +105,50 @@ RecompiledFiberStart:
     callq *%r13
     ud2
 )");
+#elif defined(ENABLE_RECOMPILED_MODE) && defined(__APPLE__) && defined(__aarch64__)
+// Saves the callee-saved registers (x19-x30 and d8-d15, 160 bytes) on the calling stack, stores
+// its pointer in *save, and goes on with the registers saved on the stack at load.
+extern "C" void RecompiledSwitchStack(void** save, void* load);
+// A fiber's first code on its own stack: calls entry (x20) with arg (x19).
+extern "C" void RecompiledFiberStart();
+asm(R"(
+.text
+.p2align 2
+.globl _RecompiledSwitchStack
+_RecompiledSwitchStack:
+    sub sp, sp, #160
+    stp x19, x20, [sp, #0]
+    stp x21, x22, [sp, #16]
+    stp x23, x24, [sp, #32]
+    stp x25, x26, [sp, #48]
+    stp x27, x28, [sp, #64]
+    stp x29, x30, [sp, #80]
+    stp d8, d9, [sp, #96]
+    stp d10, d11, [sp, #112]
+    stp d12, d13, [sp, #128]
+    stp d14, d15, [sp, #144]
+    mov x9, sp
+    str x9, [x0]
+    mov sp, x1
+    ldp x19, x20, [sp, #0]
+    ldp x21, x22, [sp, #16]
+    ldp x23, x24, [sp, #32]
+    ldp x25, x26, [sp, #48]
+    ldp x27, x28, [sp, #64]
+    ldp x29, x30, [sp, #80]
+    ldp d8, d9, [sp, #96]
+    ldp d10, d11, [sp, #112]
+    ldp d12, d13, [sp, #128]
+    ldp d14, d15, [sp, #144]
+    add sp, sp, #160
+    ret
+
+.globl _RecompiledFiberStart
+_RecompiledFiberStart:
+    mov x0, x19
+    blr x20
+    brk #1
+)");
 #endif
 
 void Configure() {
@@ -212,6 +256,10 @@ void SetThreadPointer(void* tcb) {
     guest_cpu_set_thread_pointer(reinterpret_cast<uintptr_t>(tcb));
 }
 
+bool HandleAlignmentFault(void* context) {
+    return guest_cpu_handle_alignment_fault(context) != 0;
+}
+
 void GetFpControl(u32* mxcsr, u16* fcw) {
     guest_cpu_get_fp_control(mxcsr, fcw);
 }
@@ -282,13 +330,22 @@ HostFiber::HostFiber(void (*entry)(void*), void* arg) : context{guest_cpu_contex
     ASSERT_MSG(stack != MAP_FAILED, "Recompiled mode: no memory for a fiber's host stack");
     // The lowest pages fault when the stack overflows.
     ASSERT(mprotect(stack, FiberGuardSize, PROT_NONE) == 0);
+    u64* const top = static_cast<u64*>(stack) + stack_size / sizeof(u64);
+#if defined(__x86_64__)
     // What the first switch to the fiber pops: r15, r14, r13 = entry, r12 = arg, rbx, rbp and the
     // return address. FiberStart then calls entry with the stack aligned as a call needs.
-    u64* const top = static_cast<u64*>(stack) + stack_size / sizeof(u64);
     u64* const frame = top - 9;
     frame[2] = reinterpret_cast<u64>(entry);
     frame[3] = reinterpret_cast<u64>(arg);
     frame[6] = reinterpret_cast<u64>(&RecompiledFiberStart);
+#else
+    // What the first switch to the fiber loads: x19 = arg, x20 = entry and x30, where it returns
+    // to, in a frame of 20 registers that leaves the stack aligned to 16 bytes.
+    u64* const frame = top - 20;
+    frame[0] = reinterpret_cast<u64>(arg);
+    frame[1] = reinterpret_cast<u64>(entry);
+    frame[11] = reinterpret_cast<u64>(&RecompiledFiberStart);
+#endif
     stack_pointer = frame;
 }
 
@@ -340,6 +397,10 @@ void LoadLibrary(VAddr) {}
 void LoadModuleLibrary(const std::string&, VAddr) {}
 
 void SetThreadPointer(void*) {}
+
+bool HandleAlignmentFault(void*) {
+    return false;
+}
 
 void GetFpControl(u32* mxcsr, u16* fcw) {
     *mxcsr = 0x1f80;
