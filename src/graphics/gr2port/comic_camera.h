@@ -18,10 +18,19 @@ class CodeGenerator;
 // the move takes as long at every frame rate. On a comic's last page the menu waits 20 frames for
 // the panel's animation to start before it can end the comic, and that wait takes the same time at
 // every frame rate too.
+//
+// The game starts a panel's animation once the camera's gaps to the panel are small. On a page
+// that turns its own panels, as a chapter's title page does, the menu asks for the next panel on
+// each frame with no animation playing, and a request during a move ends the move. A 30 fps
+// frame's step of 0.2 leaves the title's camera 0.94 from its panel, under the 1 that starts the
+// title's animation, and a 60 fps frame's shorter step leaves 1.05, which would let the next
+// frame's request end the move before the title shows. The game's tests take the gaps a 30 fps
+// frame's step would leave, so a move's first frame passes them when it does at 30 fps.
 namespace Gr2Port::ComicCamera {
 
-/// Hooks the move's frame counts, both of its fractions and the last page's wait. They read the
-/// fps patch's frame time, so they go in only above 30 fps. Returns whether all hooks went in.
+/// Hooks the move's frame counts, both of its fractions, its gaps and the last page's wait. They
+/// read the fps patch's frame time, so they go in only above 30 fps. Returns whether all hooks
+/// went in.
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 
 } // namespace Gr2Port::ComicCamera
