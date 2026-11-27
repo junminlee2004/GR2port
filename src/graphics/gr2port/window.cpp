@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <mutex>
 #include <set>
 #include <utility>
@@ -18,6 +19,7 @@
 #endif
 
 #include "common/logging/log.h"
+#include "common/path_util.h"
 #include "input/controller.h"
 #include "input/input_mouse.h"
 
@@ -222,6 +224,11 @@ SDL_Window* Open() {
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN, true);
     // The renderer shows it with its first picture.
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIDDEN_BOOLEAN, true);
+#ifdef __APPLE__
+    // SDL loads the Vulkan loader as it creates the window, and the loader finds the driver that
+    // ships beside the executable through this.
+    setenv("VK_DRIVER_FILES", Common::FS::GetExecutableDirectory().string().c_str(), 1);
+#endif
     g_window = SDL_CreateWindowWithProperties(props);
     SDL_DestroyProperties(props);
     if (g_window == nullptr) {

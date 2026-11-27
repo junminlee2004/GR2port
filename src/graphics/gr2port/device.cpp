@@ -10,6 +10,9 @@
 #include <string_view>
 #include <vector>
 
+#ifdef __APPLE__
+#include <SDL3/SDL_init.h>
+#endif
 #include <SDL3/SDL_vulkan.h>
 
 #include "common/logging/log.h"
@@ -280,12 +283,43 @@ void ImageBarrier(const Device& device, vk::CommandBuffer cmd, vk::Image image,
                          device.dispatch);
 }
 
+#ifdef __APPLE__
+namespace {
+
+// A window's surface to make, and whether it was made.
+struct SurfaceRequest {
+    SDL_Window* window;
+    VkInstance instance;
+    VkSurfaceKHR surface;
+    bool made;
+};
+
+void SDLCALL CreateSurfaceOnMainThread(void* data) {
+    auto* request = static_cast<SurfaceRequest*>(data);
+    request->made =
+        SDL_Vulkan_CreateSurface(request->window, request->instance, nullptr, &request->surface);
+}
+
+} // namespace
+#endif
+
 bool CreateDevice(SDL_Window* window, Device& d) {
     if (!CreateInstance(d)) {
         return false;
     }
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    if (!SDL_Vulkan_CreateSurface(window, d.instance, nullptr, &surface)) {
+#ifdef __APPLE__
+    // SDL makes the surface's view and its Metal layer, which macOS shows only when the main
+    // thread makes them: a layer from a thread without a run loop never reaches the screen, and
+    // the window stays black while the frames are presented.
+    SurfaceRequest request{window, d.instance, VK_NULL_HANDLE, false};
+    const bool made =
+        SDL_RunOnMainThread(&CreateSurfaceOnMainThread, &request, true) && request.made;
+    surface = request.surface;
+#else
+    const bool made = SDL_Vulkan_CreateSurface(window, d.instance, nullptr, &surface);
+#endif
+    if (!made) {
         LOG_ERROR(Render_Vulkan, "GR2port: no surface: {}", SDL_GetError());
         return false;
     }
