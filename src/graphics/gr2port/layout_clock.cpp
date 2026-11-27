@@ -21,8 +21,21 @@ constexpr VAddr StepRoundingNext = 0x13e5708;
 // real frame's time once per game frame.
 constexpr VAddr FramePhase = 0x1f7c604;
 
-// The stub and its constants.
-constexpr size_t StubBytes = 64;
+// FUN_01773340 starts a comic page's caption with a speed in seconds a 30 fps frame: 1/30, and
+// -1/6 to play it back when the page goes back before the caption's panel. The fps patch loads
+// the frame's time in place of 1/30, and calls its own code for -5 times the frame's time in place
+// of -1/6. An animation's step already takes the speed times the frame's share of a 30 fps frame.
+constexpr Hooks::Entry CaptionSpeed{0x1773471, 8, {0xc5, 0xfa, 0x10, 0x05, 0x9f, 0x91, 0x80, 0x00}};
+constexpr VAddr CaptionSpeedNext = 0x1773479;
+constexpr Hooks::Entry CaptionBackSpeed{
+    0x17734b6, 8, {0xe8, 0x45, 0xca, 0x2e, 0x00, 0x0f, 0x1f, 0x00}};
+constexpr VAddr CaptionBackSpeedNext = 0x17734be;
+// The game's two speeds, floats.
+constexpr VAddr ForwardSpeed = 0x18c37b4;
+constexpr VAddr BackSpeed = 0x18c37b8;
+
+// The stubs and their constants.
+constexpr size_t StubBytes = 96;
 
 } // namespace
 
@@ -35,8 +48,7 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     const auto code = [module_base](VAddr address) { return Hooks::Code(module_base, address); };
     Xbyak::Label whole_tick, one, half;
 
-    // The fps patch scales the speed of a comic's caption layout on top of its step, which leaves
-    // it under one tick a frame at 360 fps. A step that short keeps the game's rounding.
+    // A step under one tick keeps the game's rounding.
     const void* stub = c.getCurr();
     c.vcomiss(xmm1, dword[rip + one]);
     c.jae(whole_tick);
@@ -51,6 +63,19 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     c.dd(std::bit_cast<u32>(0.5f));
     if (Hooks::Replace(module_base, StepRounding, c, capacity, stub) != Hooks::Result::Hooked) {
         LOG_ERROR(Render_Vulkan, "GR2port: the layout clock's rounding is not the expected code");
+        return false;
+    }
+
+    // The caption takes the game's speeds, so its step is the frame's time once.
+    const void* forward = c.getCurr();
+    c.vmovss(xmm0, dword[rip + code(ForwardSpeed)]);
+    c.jmp(code(CaptionSpeedNext));
+    const void* back = c.getCurr();
+    c.vmovss(xmm0, dword[rip + code(BackSpeed)]);
+    c.jmp(code(CaptionBackSpeedNext));
+    if (Hooks::Replace(module_base, CaptionSpeed, c, capacity, forward) != Hooks::Result::Hooked ||
+        Hooks::Replace(module_base, CaptionBackSpeed, c, capacity, back) != Hooks::Result::Hooked) {
+        LOG_ERROR(Render_Vulkan, "GR2port: the comic caption's speeds are not the expected code");
         return false;
     }
     return true;
