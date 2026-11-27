@@ -7,6 +7,7 @@
 #extension GL_KHR_shader_subgroup_basic : require
 #extension GL_KHR_shader_subgroup_ballot : require
 
+#include "catcher.glsl"
 #include "reconvergence.glsl"
 #include "scene.glsl"
 #include "point_lights.glsl"
@@ -30,6 +31,7 @@ layout(push_constant) uniform Constants {
     LightGrid grid;
     // 1 for the bloom's glow draws, category 9.
     uint glow_pass;
+    CATCHER_PUSH
 };
 
 layout(location = 0) in vec3 view_position;
@@ -360,5 +362,6 @@ void main() MAXIMALLY_RECONVERGES {
             return;
         }
     }
+    CatcherCountLanes(CountCharacterTurns)
     Shade(draw_index);
 }

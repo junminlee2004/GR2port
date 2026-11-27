@@ -14,6 +14,7 @@
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/catcher.h"
+#include "graphics/gr2port/catcher_counts.h"
 #include "graphics/gr2port/catcher_marks.h"
 #include "graphics/gr2port/device.h"
 #include "graphics/gr2port/graphics_menu.h"
@@ -408,6 +409,7 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     d.dispatch.init(device);
     if (Catcher::On) {
         Catcher::Marks::Install(d);
+        Catcher::Counts::Install(d);
     }
     Upscaler::OnDeviceCreated(d);
     d.queue = device.getQueue(d.queue_family, 0, d.dispatch);

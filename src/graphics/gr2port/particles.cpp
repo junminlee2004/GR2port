@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "common/logging/log.h"
+#include "graphics/gr2port/catcher_counts.h"
+#include "graphics/gr2port/catcher_note.h"
 #include "graphics/gr2port/device_lost.h"
 #include "graphics/gr2port/fog.h"
 #include "graphics/gr2port/look.h"
@@ -26,6 +28,7 @@
 #include "graphics/gr2port/shaders/color_backup_comp.h"
 #include "graphics/gr2port/shaders/emitter_color_comp.h"
 #include "graphics/gr2port/shaders/fullscreen_vert.h"
+#include "graphics/gr2port/shaders/gpu_emitter_spawn_catcher_comp.h"
 #include "graphics/gr2port/shaders/gpu_emitter_spawn_comp.h"
 #include "graphics/gr2port/shaders/gpu_object_update_comp.h"
 #include "graphics/gr2port/shaders/gpu_particle_clear_comp.h"
@@ -382,7 +385,12 @@ void Build() {
     batch.Add(g_step_pipeline, PARTICLE_STEP_COMP, sizeof(StepPush));
     batch.Add(g_clear, GPU_PARTICLE_CLEAR_COMP, sizeof(u64));
     batch.Add(g_move, GPU_PARTICLE_MOVE_COMP, sizeof(MovePush), compute_sets);
-    batch.Add(g_spawn, GPU_EMITTER_SPAWN_COMP, sizeof(SpawnPush), compute_sets);
+    // The catcher's build counts the spawns its limits cut.
+    static_assert(sizeof(SpawnPush) <= Catcher::Counts::Offset);
+    batch.Add(g_spawn,
+              Catcher::On ? std::span<const u32>{GPU_EMITTER_SPAWN_CATCHER_COMP}
+                          : std::span<const u32>{GPU_EMITTER_SPAWN_COMP},
+              Catcher::Counts::PushBytes(sizeof(SpawnPush)), compute_sets);
     batch.Add(g_sample, GPU_SAMPLE_MESH_COMP, sizeof(SamplePush));
     batch.Add(g_sample_skinned, GPU_SAMPLE_SKINNED_MESH_COMP, sizeof(SamplePush));
     batch.Add(g_emitter_color, EMITTER_COLOR_COMP, sizeof(EmitterColorPush), compute_sets);
@@ -656,6 +664,7 @@ void Build() {
         return;
     }
     LOG_INFO(Render_Vulkan, "GR2port particles: pipelines built in {} ms", ms);
+    Catcher::Counts::Counting(g_spawn, vk::ShaderStageFlagBits::eCompute);
     SavePipelineCache(d);
     g_ready.store(true, std::memory_order_release);
 }

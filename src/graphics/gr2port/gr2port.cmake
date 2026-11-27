@@ -18,6 +18,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/device.cpp
     ${CMAKE_CURRENT_LIST_DIR}/catcher.cpp
     ${CMAKE_CURRENT_LIST_DIR}/catcher.h
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_counts.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_counts.h
     ${CMAKE_CURRENT_LIST_DIR}/catcher_crash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/catcher_crash.h
     ${CMAKE_CURRENT_LIST_DIR}/catcher_marks.cpp
@@ -273,6 +275,20 @@ gr2port_add_shader(character.frag character_reconverging_frag -DMAXIMAL_RECONVER
 gr2port_add_shader(character_depth.frag character_depth_reconverging_frag -DMAXIMAL_RECONVERGENCE)
 gr2port_add_shader(world.frag world_reconverging_frag -DMAXIMAL_RECONVERGENCE)
 gr2port_add_shader(world_alpha.frag world_alpha_reconverging_frag -DMAXIMAL_RECONVERGENCE)
+# The programs whose loops have limits once more, for the GPU Crash Catcher: they count the limits
+# they reach.
+gr2port_add_shader(character.frag character_catcher_frag -DCATCHER)
+gr2port_add_shader(character.frag character_reconverging_catcher_frag -DMAXIMAL_RECONVERGENCE
+                   -DCATCHER)
+gr2port_add_shader(character_depth.frag character_depth_catcher_frag -DCATCHER)
+gr2port_add_shader(character_depth.frag character_depth_reconverging_catcher_frag
+                   -DMAXIMAL_RECONVERGENCE -DCATCHER)
+gr2port_add_shader(world.frag world_catcher_frag -DCATCHER)
+gr2port_add_shader(world.frag world_reconverging_catcher_frag -DMAXIMAL_RECONVERGENCE -DCATCHER)
+gr2port_add_shader(world_alpha.frag world_alpha_catcher_frag -DCATCHER)
+gr2port_add_shader(world_alpha.frag world_alpha_reconverging_catcher_frag -DMAXIMAL_RECONVERGENCE
+                   -DCATCHER)
+gr2port_add_shader(gpu_emitter_spawn.comp gpu_emitter_spawn_catcher_comp -DCATCHER)
 gr2port_add_shader(world_decal.vert world_decal_vert)
 gr2port_add_shader(world_decal.frag world_decal_frag)
 gr2port_add_shader(glass.vert glass_vert)

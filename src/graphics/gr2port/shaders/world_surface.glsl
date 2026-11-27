@@ -3,6 +3,7 @@
 
 // A world surface's pixel, for world.frag and, with ALPHA_TEST, world_alpha.frag.
 
+#include "catcher.glsl"
 #include "reconvergence.glsl"
 #include "scene.glsl"
 #include "surface.glsl"
@@ -15,6 +16,7 @@ layout(push_constant) uniform Constants {
     Draws scene_draws;
     Materials scene_materials;
     LayerMaterials scene_layers;
+    CATCHER_PUSH
 };
 
 layout(location = 0) in vec3 normal;
@@ -312,5 +314,6 @@ void main() MAXIMALLY_RECONVERGES {
             return;
         }
     }
+    CatcherCountLanes(CountWorldTurns)
     Shade(draw_index);
 }

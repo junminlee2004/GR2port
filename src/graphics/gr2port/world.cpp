@@ -6,6 +6,8 @@
 #include <utility>
 
 #include "common/logging/log.h"
+#include "graphics/gr2port/catcher_counts.h"
+#include "graphics/gr2port/catcher_note.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/metaballs.h"
@@ -18,12 +20,16 @@
 #include "graphics/gr2port/shaders/fullscreen_vert.h"
 #include "graphics/gr2port/shaders/occlusion_comp.h"
 #include "graphics/gr2port/shaders/occlusion_depth_comp.h"
+#include "graphics/gr2port/shaders/world_alpha_catcher_frag.h"
 #include "graphics/gr2port/shaders/world_alpha_frag.h"
+#include "graphics/gr2port/shaders/world_alpha_reconverging_catcher_frag.h"
 #include "graphics/gr2port/shaders/world_alpha_reconverging_frag.h"
+#include "graphics/gr2port/shaders/world_catcher_frag.h"
 #include "graphics/gr2port/shaders/world_decal_frag.h"
 #include "graphics/gr2port/shaders/world_decal_vert.h"
 #include "graphics/gr2port/shaders/world_frag.h"
 #include "graphics/gr2port/shaders/world_lines_comp.h"
+#include "graphics/gr2port/shaders/world_reconverging_catcher_frag.h"
 #include "graphics/gr2port/shaders/world_reconverging_frag.h"
 #include "graphics/gr2port/shaders/world_vert.h"
 #include "graphics/gr2port/shadow_trace.h"
@@ -211,17 +217,21 @@ void WrittenBarrier(vk::CommandBuffer cmd) {
 
 Pipeline CreateSurfacePipeline(const Device& d, vk::Format depth_format,
                                std::span<const u32> fragment, vk::CullModeFlags cull) {
+    static_assert(sizeof(SurfacePush) <= Catcher::Counts::Offset);
     const std::array texture_set{Textures::SetLayout()};
-    return CreateGraphicsPipeline(d, {
-                                         .vertex = WORLD_VERT,
-                                         .fragment = fragment,
-                                         .colors = SurfaceFormats,
-                                         .depth = depth_format,
-                                         .cull = cull,
-                                         .depth_test = true,
-                                         .push_constant_bytes = sizeof(SurfacePush),
-                                         .set_layouts = texture_set,
-                                     });
+    const Pipeline pipeline = CreateGraphicsPipeline(
+        d, {
+               .vertex = WORLD_VERT,
+               .fragment = fragment,
+               .colors = SurfaceFormats,
+               .depth = depth_format,
+               .cull = cull,
+               .depth_test = true,
+               .push_constant_bytes = Catcher::Counts::PushBytes(sizeof(SurfacePush)),
+               .set_layouts = texture_set,
+           });
+    Catcher::Counts::Counting(pipeline, vk::ShaderStageFlagBits::eAllGraphics);
+    return pipeline;
 }
 
 // The game's Decal pass, with the surfaces drawn so far as attachments and depth readable: the back
@@ -348,6 +358,14 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
     if (device.maximal_reconvergence) {
         opaque = WORLD_RECONVERGING_FRAG;
         tested = WORLD_ALPHA_RECONVERGING_FRAG;
+    }
+    // The catcher's builds count the lanes the per-draw loop's turns do not reach.
+    if (Catcher::On && device.maximal_reconvergence) {
+        opaque = WORLD_RECONVERGING_CATCHER_FRAG;
+        tested = WORLD_ALPHA_RECONVERGING_CATCHER_FRAG;
+    } else if (Catcher::On) {
+        opaque = WORLD_CATCHER_FRAG;
+        tested = WORLD_ALPHA_CATCHER_FRAG;
     }
     g_surface_pipelines = {CreateSurfacePipeline(device, depth_format, opaque, Back),
                            CreateSurfacePipeline(device, depth_format, opaque, None),

@@ -26,6 +26,7 @@
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/capture_math.h"
 #include "graphics/gr2port/catcher.h"
+#include "graphics/gr2port/catcher_counts.h"
 #include "graphics/gr2port/catcher_note.h"
 #include "graphics/gr2port/catcher_test.h"
 #include "graphics/gr2port/character_glass.h"
@@ -57,9 +58,13 @@
 #include "graphics/gr2port/screenshot.h"
 #include "graphics/gr2port/self_translucent.h"
 #include "graphics/gr2port/settings.h"
+#include "graphics/gr2port/shaders/character_catcher_frag.h"
+#include "graphics/gr2port/shaders/character_depth_catcher_frag.h"
 #include "graphics/gr2port/shaders/character_depth_frag.h"
+#include "graphics/gr2port/shaders/character_depth_reconverging_catcher_frag.h"
 #include "graphics/gr2port/shaders/character_depth_reconverging_frag.h"
 #include "graphics/gr2port/shaders/character_frag.h"
+#include "graphics/gr2port/shaders/character_reconverging_catcher_frag.h"
 #include "graphics/gr2port/shaders/character_reconverging_frag.h"
 #include "graphics/gr2port/shaders/character_vert.h"
 #include "graphics/gr2port/shaders/interior_frag.h"
@@ -437,6 +442,16 @@ bool Thread::Init() {
         character_fragment = CHARACTER_RECONVERGING_FRAG;
         character_depth_fragment = CHARACTER_DEPTH_RECONVERGING_FRAG;
     }
+    // The catcher's builds count the lanes the per-draw loop's turns do not reach.
+    static_assert(sizeof(CharacterPush) <= Catcher::Counts::Offset);
+    const u32 character_push = Catcher::Counts::PushBytes(sizeof(CharacterPush));
+    if (Catcher::On && d.maximal_reconvergence) {
+        character_fragment = CHARACTER_RECONVERGING_CATCHER_FRAG;
+        character_depth_fragment = CHARACTER_DEPTH_RECONVERGING_CATCHER_FRAG;
+    } else if (Catcher::On) {
+        character_fragment = CHARACTER_CATCHER_FRAG;
+        character_depth_fragment = CHARACTER_DEPTH_CATCHER_FRAG;
+    }
     character_pipeline = CreateGraphicsPipeline(d, {
                                                        .vertex = CHARACTER_VERT,
                                                        .fragment = character_fragment,
@@ -444,20 +459,19 @@ bool Thread::Init() {
                                                        .depth = DepthFormat,
                                                        .cull = vk::CullModeFlagBits::eBack,
                                                        .depth_test = true,
-                                                       .push_constant_bytes = sizeof(CharacterPush),
+                                                       .push_constant_bytes = character_push,
                                                        .set_layouts = set_layouts,
                                                    });
     const std::array depth_set_layouts{Textures::SetLayout()};
-    character_depth_pipeline =
-        CreateGraphicsPipeline(d, {
-                                      .vertex = CHARACTER_VERT,
-                                      .fragment = character_depth_fragment,
-                                      .depth = DepthFormat,
-                                      .cull = vk::CullModeFlagBits::eBack,
-                                      .depth_test = true,
-                                      .push_constant_bytes = sizeof(CharacterPush),
-                                      .set_layouts = depth_set_layouts,
-                                  });
+    character_depth_pipeline = CreateGraphicsPipeline(d, {
+                                                             .vertex = CHARACTER_VERT,
+                                                             .fragment = character_depth_fragment,
+                                                             .depth = DepthFormat,
+                                                             .cull = vk::CullModeFlagBits::eBack,
+                                                             .depth_test = true,
+                                                             .push_constant_bytes = character_push,
+                                                             .set_layouts = depth_set_layouts,
+                                                         });
     interior_pipeline =
         CreateGraphicsPipeline(d, {
                                       .vertex = CHARACTER_VERT,
@@ -525,9 +539,13 @@ bool Thread::Init() {
                                       .depth_write = false,
                                       .depth_compare = vk::CompareOp::eGreaterOrEqual,
                                       .blend = &Look::GlowBlend,
-                                      .push_constant_bytes = sizeof(CharacterPush),
+                                      .push_constant_bytes = character_push,
                                       .set_layouts = set_layouts,
                                   });
+    for (const Pipeline* counting :
+         {&character_pipeline, &character_depth_pipeline, &character_glow_pipeline}) {
+        Catcher::Counts::Counting(*counting, vk::ShaderStageFlagBits::eAllGraphics);
+    }
     if (!character_pipeline.pipeline || !character_depth_pipeline.pipeline ||
         !interior_pipeline.pipeline || !interior_depth_pipeline.pipeline ||
         !lambert_pipeline.pipeline || !lambert_depth_pipeline.pipeline ||

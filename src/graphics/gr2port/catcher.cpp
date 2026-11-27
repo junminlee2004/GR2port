@@ -28,6 +28,7 @@
 #include "common/path_util.h"
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/catcher.h"
+#include "graphics/gr2port/catcher_counts.h"
 #include "graphics/gr2port/catcher_crash.h"
 #include "graphics/gr2port/catcher_marks.h"
 #include "graphics/gr2port/catcher_note.h"
@@ -955,6 +956,7 @@ void LogDevice(const Device& d) {
 
 void Start(Memory& memory) {
     Marks::Start(memory);
+    Counts::Start(memory);
     g_memory = &memory;
     g_since = Clock::now();
     g_call_since.store(Ticks(g_since));
@@ -1066,6 +1068,7 @@ void BeginFrame(const Scene::Header& header) {
 
 void EndFrame(bool submitted, u32 slot) {
     Enter(Call::Idle);
+    Counts::Log();
     g_current.frame = DeviceLost::Frame();
     g_current.submitted = submitted;
     if (g_memory != nullptr) {
@@ -1118,6 +1121,7 @@ void ReportLoss(const Device& device) {
     }
     LOG_ERROR(Render_Vulkan, "GR2port catcher: now: {}", DescribeTrace());
     Marks::Report();
+    Counts::Report();
     Common::Log::Flush();
     const u64 count = std::min<u64>(g_kept_count, KeptFrames);
     LOG_ERROR(Render_Vulkan, "GR2port catcher: the last {} frames, the oldest first", count);

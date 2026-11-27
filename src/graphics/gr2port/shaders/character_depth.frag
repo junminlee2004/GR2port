@@ -7,6 +7,7 @@
 #extension GL_KHR_shader_subgroup_basic : require
 #extension GL_KHR_shader_subgroup_ballot : require
 
+#include "catcher.glsl"
 #include "reconvergence.glsl"
 #include "scene.glsl"
 
@@ -20,6 +21,7 @@ layout(push_constant) uniform Constants {
     Decals scene_decals;
     Light light;
     vec2 target_inverse;
+    CATCHER_PUSH
 };
 
 layout(location = 3) in vec2 texcoord;
@@ -64,5 +66,6 @@ void main() MAXIMALLY_RECONVERGES {
             return;
         }
     }
+    CatcherCountLanes(CountCharacterDepthTurns)
     Shade(draw_index);
 }
