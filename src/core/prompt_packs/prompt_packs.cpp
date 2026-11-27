@@ -161,6 +161,10 @@ constexpr std::array<Uint16, 11> SteamControllerProducts{
     0x1101, 0x1102, 0x1105, 0x1106, 0x1142, 0x1201, 0x1202, 0x1302, 0x1303, 0x1304, 0x1305,
 };
 
+// 8BitDo's pads. In the modes whose gyro SDL reads, SDL gives them no type of pad; their face
+// buttons carry the Xbox letters.
+constexpr Uint16 EightBitDoVendor = 0x2DC8;
+
 std::string LayoutOfType(SDL_GamepadType type) {
     switch (type) {
     case SDL_GAMEPAD_TYPE_XBOX360:
@@ -199,15 +203,33 @@ std::string LayoutOfPad(SDL_JoystickID id) {
     if (layout.empty()) {
         layout = LayoutOfType(type);
     }
+    if (layout.empty() && vendor == EightBitDoVendor) {
+        layout = "xbox";
+    }
     const char* type_name = SDL_GetGamepadStringForType(type);
     LOG_INFO(Input, "Pad {:04x}:{:04x} ({}): button prompt layout \"{}\"", vendor, product,
              type_name != nullptr ? type_name : "unknown", layout);
     return layout;
 }
 
+// Whether a connected pad has a gyro sensor.
+bool PadHasGyro(SDL_JoystickID id) {
+    SDL_Gamepad* const pad = SDL_OpenGamepad(id);
+    if (pad == nullptr) {
+        return false;
+    }
+    const bool gyro = SDL_GamepadHasSensor(pad, SDL_SENSOR_GYRO);
+    SDL_CloseGamepad(pad);
+    return gyro;
+}
+
 // The layout of the pad that plays as player 1, else of the first pad with a layout; "off" for a
 // PlayStation pad, which keeps the game's own prompts, and "keyboard" when no pad is connected.
-std::string ConnectedPadLayout() {
+// If gyro is not null, it receives whether that pad has a gyro sensor.
+std::string ConnectedPadLayout(bool* gyro = nullptr) {
+    if (gyro != nullptr) {
+        *gyro = false;
+    }
     if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD)) {
         LOG_WARNING(Input, "Cannot check the pad type: {}", SDL_GetError());
         return "off";
@@ -224,12 +246,18 @@ std::string ConnectedPadLayout() {
         const auto chosen = std::find_if(ids, ids + count, [&](SDL_JoystickID id) {
             return !picked.empty() && Input::SelectedPad::GuidOf(id) == picked;
         });
+        SDL_JoystickID pad = 0;
         if (chosen != ids + count) {
-            layout = LayoutOfPad(*chosen);
+            pad = *chosen;
+            layout = LayoutOfPad(pad);
         } else {
             for (int i = 0; i < count && layout.empty(); ++i) {
-                layout = LayoutOfPad(ids[i]);
+                pad = ids[i];
+                layout = LayoutOfPad(pad);
             }
+        }
+        if (gyro != nullptr && pad != 0) {
+            *gyro = PadHasGyro(pad);
         }
         SDL_free(ids);
     }
@@ -250,8 +278,9 @@ Input::PadBindings::Map PlayerPadBindings() {
 }
 
 // The layout GR2 starts with: the launcher's choice, else the connected pad's. "playstation" is the
-// game's own prompts.
-std::string StartLayout() {
+// game's own prompts. gyro receives whether the connected pad has a gyro sensor.
+std::string StartLayout(bool& gyro) {
+    const std::string connected = ConnectedPadLayout(&gyro);
     const std::string prompts = Gr2Port::Settings::Get().mouse.prompts;
     if (prompts == "playstation") {
         return "off";
@@ -259,7 +288,7 @@ std::string StartLayout() {
     if (std::find(Layouts.begin(), Layouts.end(), prompts) != Layouts.end()) {
         return prompts;
     }
-    return ConnectedPadLayout();
+    return connected;
 }
 
 // Writes the embedded folder at from, with all it holds, to the folder to.
@@ -605,6 +634,33 @@ std::optional<Pack> LoadPack(const std::string& game, const std::string& folder,
     return pack;
 }
 
+// The Xbox pack's text says the motion controls are not supported. The Switch pack's text is the
+// same but for those records, which it leaves as the game has them: the pack takes it for a pad
+// with a gyro.
+void TakeMotionText(const std::string& game, Pack& pack) {
+    const auto worded = LoadPack(game, "switch", "layout");
+    if (!worded) {
+        return;
+    }
+    u32 taken = 0;
+    for (Member& member : pack.members) {
+        if (!member.path.ends_with(".txb")) {
+            continue;
+        }
+        const auto same = std::ranges::find_if(worded->members, [&member](const Member& other) {
+            return other.archive == member.archive && other.path == member.path;
+        });
+        if (same != worded->members.end()) {
+            member = *same;
+            ++taken;
+        }
+    }
+    LOG_INFO(Loader,
+             "Prompt packs: the pad has a gyro, so {} text members of the {} pack keep the motion "
+             "controls' wording",
+             taken, pack.name);
+}
+
 PackSet LoadPacks() {
     PackSet set;
     const bool is_gr2 = Common::IsGravityRush2();
@@ -613,12 +669,16 @@ PackSet LoadPacks() {
     }
     const std::string game = is_gr2 ? "GR2" : "GRR";
     // GR2 shows the buttons of the pad that plays it.
-    const std::string layout = is_gr2 ? StartLayout() : ReadLayout("grrPromptLayout");
+    bool gyro = false;
+    const std::string layout = is_gr2 ? StartLayout(gyro) : ReadLayout("grrPromptLayout");
     // GR2's own PlayStation prompts take the playstation pack: the icons of GR2port's own
     // functions, in the game's art.
     if (std::find(Layouts.begin(), Layouts.end(), layout) != Layouts.end() ||
         (is_gr2 && layout == "off")) {
         if (auto pack = LoadPack(game, layout == "off" ? "playstation" : layout, "layout")) {
+            if (is_gr2 && layout == "xbox" && gyro && EmulatorSettings.IsMotionControlsEnabled()) {
+                TakeMotionText(game, *pack);
+            }
             set.layout = set.packs.size();
             set.packs.push_back(std::move(*pack));
         }
