@@ -588,6 +588,11 @@ u64 Frame() {
     return g_frame.load(std::memory_order_relaxed);
 }
 
+Pass Current() {
+    const FrameNote& note = g_frames[g_frame.load(std::memory_order_relaxed) % KeptFrames];
+    return note.marks == 0 ? Pass::FrameStart : static_cast<Pass>(note.passes[note.marks - 1]);
+}
+
 bool Crumbs(std::array<u32, static_cast<u32>(Pass::Count)>& crumbs) {
     if (!g_armed || g_crumbs.mapped == nullptr) {
         return false;

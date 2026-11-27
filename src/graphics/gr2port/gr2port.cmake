@@ -20,6 +20,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/catcher.h
     ${CMAKE_CURRENT_LIST_DIR}/catcher_crash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/catcher_crash.h
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_marks.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/catcher_marks.h
     ${CMAKE_CURRENT_LIST_DIR}/catcher_outside.cpp
     ${CMAKE_CURRENT_LIST_DIR}/catcher_outside.h
     ${CMAKE_CURRENT_LIST_DIR}/catcher_stacks.cpp

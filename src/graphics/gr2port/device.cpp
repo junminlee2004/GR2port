@@ -14,6 +14,7 @@
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/catcher.h"
+#include "graphics/gr2port/catcher_marks.h"
 #include "graphics/gr2port/device.h"
 #include "graphics/gr2port/graphics_menu.h"
 #include "graphics/gr2port/pipeline.h"
@@ -337,6 +338,9 @@ bool CreateDevice(SDL_Window* window, Device& d) {
             if (d.driver_diagnostics) {
                 extensions.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
             }
+        } else if (Catcher::On && name == VK_AMD_BUFFER_MARKER_EXTENSION_NAME) {
+            d.buffer_marker = true;
+            extensions.push_back(VK_AMD_BUFFER_MARKER_EXTENSION_NAME);
         } else if (name == VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME) {
             vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT supported_blend;
             vk::PhysicalDeviceFeatures2 query{.pNext = &supported_blend};
@@ -402,6 +406,9 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     }
     d.device = device;
     d.dispatch.init(device);
+    if (Catcher::On) {
+        Catcher::Marks::Install(d);
+    }
     Upscaler::OnDeviceCreated(d);
     d.queue = device.getQueue(d.queue_family, 0, d.dispatch);
     if (probe) {

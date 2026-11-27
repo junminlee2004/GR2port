@@ -29,6 +29,7 @@
 #include "graphics/gr2port/capture.h"
 #include "graphics/gr2port/catcher.h"
 #include "graphics/gr2port/catcher_crash.h"
+#include "graphics/gr2port/catcher_marks.h"
 #include "graphics/gr2port/catcher_note.h"
 #include "graphics/gr2port/catcher_outside.h"
 #include "graphics/gr2port/catcher_stacks.h"
@@ -703,9 +704,9 @@ void Watch() {
                 }
                 const u32 call = g_call.load(std::memory_order_relaxed);
                 line += fmt::format(
-                    ". {}. The render thread has been in {} for {:.0f} ms, and the driver has "
+                    ". {}. {}. The render thread has been in {} for {:.0f} ms, and the driver has "
                     "answered its wait {} times with \"not yet\"; the game has started {} frames",
-                    DescribeTrace(), CallNames[call],
+                    DescribeTrace(), Marks::DescribeProgress(), CallNames[call],
                     MsSince(g_call_since.load(std::memory_order_relaxed)),
                     g_wait_answers.load(std::memory_order_relaxed), Capture::Frames());
                 LogWatch(std::move(line), true);
@@ -945,13 +946,15 @@ void LogDevice(const Device& d) {
     }
     LOG_INFO(Render_Vulkan,
              "GR2port catcher: the device has checkpoints {}, fault information {}, the fault's "
-             "binary {}, the driver's own diagnostics {}, memory budget {}",
-             d.checkpoints, d.device_fault, d.fault_binary, d.driver_diagnostics, d.memory_budget);
+             "binary {}, the driver's own diagnostics {}, buffer markers {}, memory budget {}",
+             d.checkpoints, d.device_fault, d.fault_binary, d.driver_diagnostics, d.buffer_marker,
+             d.memory_budget);
     LogSystem();
     Common::Log::Flush();
 }
 
 void Start(Memory& memory) {
+    Marks::Start(memory);
     g_memory = &memory;
     g_since = Clock::now();
     g_call_since.store(Ticks(g_since));
@@ -1114,6 +1117,7 @@ void ReportLoss(const Device& device) {
         LOG_ERROR(Render_Vulkan, "GR2port catcher: now: {}", DescribeProgress(slot));
     }
     LOG_ERROR(Render_Vulkan, "GR2port catcher: now: {}", DescribeTrace());
+    Marks::Report();
     Common::Log::Flush();
     const u64 count = std::min<u64>(g_kept_count, KeptFrames);
     LOG_ERROR(Render_Vulkan, "GR2port catcher: the last {} frames, the oldest first", count);

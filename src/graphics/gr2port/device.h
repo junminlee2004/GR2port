@@ -39,6 +39,8 @@ struct Device {
     /// The driver tracks resources and marks its own checkpoints for that record
     /// (VK_NV_device_diagnostics_config).
     bool driver_diagnostics = false;
+    /// With the catcher on, the GPU writes numbers between commands (VK_AMD_buffer_marker).
+    bool buffer_marker = false;
     /// A colour attachment's blend enable and equation can be dynamic state
     /// (VK_EXT_extended_dynamic_state3).
     bool dynamic_blend = false;

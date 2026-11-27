@@ -67,6 +67,9 @@ const char* Name(Pass pass);
 /// The number of the frame recorded last.
 u64 Frame();
 
+/// Render thread: the pass marked last.
+Pass Current();
+
 /// Any thread, with the trace on: the last frame that began each pass, by its low half. False
 /// without the trace.
 bool Crumbs(std::array<u32, static_cast<u32>(Pass::Count)>& crumbs);
