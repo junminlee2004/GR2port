@@ -555,7 +555,8 @@ constexpr std::array<const wchar_t*, 5> UpscaleQualityChoices{L"Native AA", L"Qu
 
 // The Graphics tab: the preset across the top, each pass's choice in two columns of rows 26
 // pixels apart, then the note. The page scrolls to the note's end, down to GraphicsPageBottom.
-// Quality choices are in the order of Settings::Quality; switches put On first.
+// The shadows' choices are in the order of ShadowQualities, the fog's in the order of
+// Settings::Quality; switches put On first.
 constexpr int PresetTop = 88;
 constexpr int PassTop = 118;
 constexpr int PassStep = 26;
@@ -567,7 +568,11 @@ constexpr int TextureStreamingListWidth = 280;
 // driver's budget, as Auto does.
 constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  4096,  6144, 8192,
                                                     10240, 11264, 12288, 16384, 24576, 32768};
-constexpr std::array<const wchar_t*, 4> QualityChoices{L"PS4 Original", L"Medium", L"Low", L"Off"};
+constexpr std::array<const wchar_t*, 5> ShadowChoices{L"Max", L"PS4 Original", L"Medium", L"Low",
+                                                      L"Off"};
+constexpr std::array ShadowQualities{Settings::Quality::Max, Settings::Quality::Original,
+                                     Settings::Quality::Medium, Settings::Quality::Low,
+                                     Settings::Quality::Off};
 constexpr std::array<const wchar_t*, 3> FogChoices{L"PS4 Original", L"Medium", L"Low"};
 constexpr std::array<const wchar_t*, 2> SwitchChoices{L"On", L"Off"};
 // Ambient occlusion and motion blur offer three qualities each, in the order of their choices.
@@ -629,7 +634,7 @@ struct GraphicsRow {
 
 // The left column, then the right; Texture Streaming's choices come from the GPU.
 constexpr std::array GraphicsRows{
-    GraphicsRow{IdShadowsLabel, IdShadows, L"Shadows", LeftColumn, 0, QualityChoices},
+    GraphicsRow{IdShadowsLabel, IdShadows, L"Shadows", LeftColumn, 0, ShadowChoices},
     GraphicsRow{IdFogLabel, IdFog, L"Volumetric Fog", LeftColumn, 1, FogChoices},
     GraphicsRow{IdFogShadowsLabel, IdFogShadows, L"Fog Shadows", LeftColumn, 2, SwitchChoices},
     GraphicsRow{IdOcclusionLabel, IdOcclusion, L"Ambient Occlusion", LeftColumn, 3,
@@ -1543,7 +1548,7 @@ void ReadChoice(HWND combo, const std::array<Value, Count>& values, Value& value
 
 // A value the choices lack shows as the choice the renderer draws it as.
 void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
-    Select(Item(dialog, IdShadows), static_cast<int>(graphics.shadows));
+    Select(Item(dialog, IdShadows), IndexOf(ShadowQualities, graphics.shadows, 1));
     Select(Item(dialog, IdFog),
            std::min(static_cast<int>(graphics.fog), static_cast<int>(FogChoices.size()) - 1));
     Select(Item(dialog, IdFogShadows), graphics.fog_shadows ? 0 : 1);
@@ -1590,10 +1595,7 @@ void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
 // The passes as shown, with the preset they and the Display tab's sizes match.
 Settings::Graphics ReadGraphics(const Dialog& dialog) {
     Settings::Graphics graphics = dialog.values.graphics;
-    const int shadows = Selected(Item(dialog, IdShadows));
-    if (shadows >= 0 && shadows < static_cast<int>(QualityChoices.size())) {
-        graphics.shadows = static_cast<Settings::Quality>(shadows);
-    }
+    ReadChoice(Item(dialog, IdShadows), ShadowQualities, graphics.shadows);
     const int fog = Selected(Item(dialog, IdFog));
     if (fog >= 0 && fog < static_cast<int>(FogChoices.size())) {
         graphics.fog = static_cast<Settings::Quality>(fog);
@@ -1652,8 +1654,8 @@ void ShowPreset(const Dialog& dialog) {
 
 void ShowTextureStreaming(const Dialog& dialog, u32 megabytes);
 
-// Shows a preset's passes and, for the one that sets them, its aspect and render size and its
-// handheld settings.
+// Shows a preset's passes and, for those that set them, its aspect and render size, its handheld
+// settings, its texture budget and its shadow draw distance.
 void ApplyPreset(const Dialog& dialog, int index) {
     if (index < 0 || index >= static_cast<int>(Settings::Presets.size())) {
         return;
@@ -1676,8 +1678,12 @@ void ApplyPreset(const Dialog& dialog, int index) {
         Check(dialog, IdGyroSwap, true);
         Check(dialog, IdGyroYaw, true);
     }
-    if (preset.texture_streaming_mb != 0) {
-        ShowTextureStreaming(dialog, preset.texture_streaming_mb);
+    if (preset.texture_streaming_mb) {
+        ShowTextureStreaming(dialog, *preset.texture_streaming_mb);
+    }
+    if (preset.shadow_distance) {
+        Select(Item(dialog, IdShadowDistance),
+               IndexOf(Settings::ShadowDistanceLevels, *preset.shadow_distance, OwnShadowDistance));
     }
 }
 
@@ -2558,6 +2564,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
     case IdNearDetail:
     case IdCharacterDetail:
     case IdDistortion:
+    case IdShadowDistance:
     case IdAspect:
     case IdRenderSize:
     case IdTextureStreaming:

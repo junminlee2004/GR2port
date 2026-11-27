@@ -86,11 +86,13 @@ struct Mouse {
 };
 
 /// A pass's quality: Original draws it as the game does, the lower ones cost less and show less.
+/// Max, which only the shadows offer, draws finer than the game.
 enum class Quality : u32 {
     Original,
     Medium,
     Low,
     Off,
+    Max,
 };
 
 /// The temporal upscaler that replaces the game's antialiasing. With one on, the scene draws at the
@@ -141,14 +143,16 @@ inline constexpr std::array<u32, 8> HdrPaperWhiteLevels{80, 100, 120, 150, 200, 
 /// What the renderer draws and how finely. A preset sets them all; "custom" is any other mix.
 struct Graphics {
     std::string preset{"ps4"};
-    /// The sun's shadow maps: Original 2048, 2048 and 4096 texels a side, Medium 2048 for each,
-    /// Low 1024, 1024 and 2048; Off draws no shadows. Medium keeps three quarters of the game's
-    /// casting distances and Low half, so smaller and farther objects cast no shadow.
+    /// The sun's shadow maps: Max 4096, 4096 and 8192 texels a side, Original 2048, 2048 and 4096,
+    /// Medium 2048 for each, Low 1024, 1024 and 2048; Off draws no shadows. Medium keeps three
+    /// quarters of the game's casting distances and Low half, so smaller and farther objects cast
+    /// no shadow.
     Quality shadows{Quality::Original};
     /// How far the sun's shadows reach, in percent of the game's distances for the scene, a
     /// ShadowDistanceLevels entry: every casting distance, and above 100 the far shadow map's end.
     /// Above 100 the game's frame holds more casters: GamePatches gives the game room for them,
-    /// and the renderer its packets. It takes effect at the next start. Presets leave it.
+    /// and the renderer its packets. It takes effect at the next start. The Max preset sets 200;
+    /// the others leave it.
     u32 shadow_distance{100};
     /// The fog's grid of cells: Original 160 x 90 x 128, Medium 120 x 68 x 96, Low 80 x 45 x 64.
     Quality fog{Quality::Original};
@@ -207,7 +211,7 @@ struct Graphics {
     bool hud_crosshair{true};
     /// Texture streaming: the device memory GR2port keeps within, in MB; 0 takes the budget the
     /// driver gives the process, or on an integrated GPU its share of RAM. With less, textures
-    /// keep fewer mip levels. The Steam Deck preset sets 4 GB; the others leave it.
+    /// keep fewer mip levels. The Steam Deck preset sets 4 GB and Max 0; the others leave it.
     u32 texture_streaming_mb{0};
     /// If pass_times is true, the renderer times each pass on the GPU and writes a line per report
     /// in the log and a row per frame in gr2port_pass_times.csv in the log folder. The renderer
@@ -255,17 +259,25 @@ struct Preset {
     bool smoke_and_dust{true};
     bool distortion{true};
     u32 anisotropic_filtering;
+    /// The level of detail distances, a FarDetailLevels and two DetailLevels entries.
+    u32 far_environment_detail{100};
+    u32 near_environment_detail{100};
+    u32 character_detail{100};
     /// The aspect and render size the preset also sets, or empty to leave them.
     std::string_view aspect;
     std::string_view render_size;
     /// Also sets VSync off and the gyro fixes of a device held upright, as GR2fork's Steam Deck
     /// preset does: Swap Gyro Yaw/Roll and Invert Gyro Yaw.
     bool handheld{false};
-    /// The texture streaming budget the preset also sets, in MB, or 0 to leave it.
-    u32 texture_streaming_mb{0};
+    /// The texture streaming budget the preset also sets, in MB with 0 for Auto, or none to leave
+    /// it.
+    std::optional<u32> texture_streaming_mb;
+    /// The shadow draw distance the preset also sets, a ShadowDistanceLevels entry, or none to
+    /// leave it.
+    std::optional<u32> shadow_distance;
 };
 
-/// From the cheapest to the game's own.
+/// From the cheapest to the finest; PS4 Original is the game's own.
 inline constexpr std::array Presets{
     Preset{.key = "lowest",
            .name = "Lowest",
@@ -341,6 +353,26 @@ inline constexpr std::array Presets{
            .fog_shadows = true,
            .half_resolution_particles = false,
            .anisotropic_filtering = 2},
+    // Every pass, level of detail and shadow distance at its finest, and the whole texture budget.
+    Preset{.key = "max",
+           .name = "Max",
+           .shadows = Quality::Max,
+           .fog = Quality::Original,
+           .ambient_occlusion = Quality::Original,
+           .motion_blur = Quality::Original,
+           .antialiasing = true,
+           .bloom = true,
+           .outlines = true,
+           .decals = true,
+           .glass_refraction = true,
+           .fog_shadows = true,
+           .half_resolution_particles = false,
+           .anisotropic_filtering = 16,
+           .far_environment_detail = FarDetailLevels.front(),
+           .near_environment_detail = DetailLevels.front(),
+           .character_detail = DetailLevels.front(),
+           .texture_streaming_mb = 0,
+           .shadow_distance = ShadowDistanceLevels.back()},
 };
 
 /// The preset's passes, with its key.

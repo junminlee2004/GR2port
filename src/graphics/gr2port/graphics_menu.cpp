@@ -292,29 +292,28 @@ Names DetailNames(const Values&) {
     return Choices({"400%", "200%", "150%", "PS4 Original", "75%", "50%", "25%"});
 }
 
-template <size_t Count>
-int IndexOf(const std::array<u32, Count>& levels, u32 level, int fallback) {
+template <typename Value, size_t Count>
+int IndexOf(const std::array<Value, Count>& levels, Value level, int fallback) {
     const auto found = std::ranges::find(levels, level);
     return found != levels.end() ? static_cast<int>(found - levels.begin()) : fallback;
 }
 
-// As the launcher's preset: its passes and detail, the shape, size and texture budget it sets,
-// and no VSync for a handheld. The field of view, the screen shake, the shadow draw distance and
-// the upscaler stay.
+// As the launcher's preset: its passes and detail, the shape, size, texture budget and shadow
+// draw distance it sets, and no VSync for a handheld. The field of view, the screen shake and the
+// upscaler stay.
 void ApplyPreset(Values& values, const Settings::Preset& preset) {
     Settings::Graphics graphics = Settings::FromPreset(preset);
     graphics.field_of_view = values.graphics.field_of_view;
     graphics.screen_shake = values.graphics.screen_shake;
-    graphics.shadow_distance = values.graphics.shadow_distance;
+    graphics.shadow_distance = preset.shadow_distance.value_or(values.graphics.shadow_distance);
     graphics.upscaler = values.graphics.upscaler;
     graphics.upscale_quality = values.graphics.upscale_quality;
     graphics.upscale_sharpening = values.graphics.upscale_sharpening;
     graphics.hud_gravity_meter = values.graphics.hud_gravity_meter;
     graphics.hud_health_bar = values.graphics.hud_health_bar;
     graphics.hud_crosshair = values.graphics.hud_crosshair;
-    graphics.texture_streaming_mb = preset.texture_streaming_mb != 0
-                                        ? preset.texture_streaming_mb
-                                        : values.graphics.texture_streaming_mb;
+    graphics.texture_streaming_mb =
+        preset.texture_streaming_mb.value_or(values.graphics.texture_streaming_mb);
     graphics.pass_times = values.graphics.pass_times;
     values.graphics = graphics;
     if (!preset.aspect.empty()) {
@@ -377,6 +376,8 @@ std::vector<Window::Size> Resolutions(const Values& values) {
     return sizes;
 }
 
+constexpr std::array<Quality, 5> ShadowQualities{Quality::Max, Quality::Original, Quality::Medium,
+                                                 Quality::Low, Quality::Off};
 constexpr std::array<Quality, 3> OcclusionQualities{Quality::Original, Quality::Medium,
                                                     Quality::Off};
 constexpr std::array<Quality, 3> BlurQualities{Quality::Original, Quality::Low, Quality::Off};
@@ -438,9 +439,10 @@ const std::array<Setting, 34> Table{{
     {"HUD Crosshair", &SwitchNames,
      [](const Values& values) { return values.graphics.hud_crosshair ? 0 : 1; },
      [](Values& values, int choice) { values.graphics.hud_crosshair = choice == 0; }},
-    {"Shadows", [](const Values&) { return Choices({"PS4 Original", "Medium", "Low", "Off"}); },
-     [](const Values& values) { return static_cast<int>(values.graphics.shadows); },
-     [](Values& values, int choice) { values.graphics.shadows = static_cast<Quality>(choice); }},
+    {"Shadows",
+     [](const Values&) { return Choices({"Max", "PS4 Original", "Medium", "Low", "Off"}); },
+     [](const Values& values) { return IndexOf(ShadowQualities, values.graphics.shadows, 1); },
+     [](Values& values, int choice) { values.graphics.shadows = ShadowQualities[choice]; }},
     {"Shadow Draw Distance",
      [](const Values&) {
          Names names;

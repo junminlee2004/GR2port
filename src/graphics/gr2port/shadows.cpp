@@ -22,10 +22,12 @@ namespace Gr2Port::Shadows {
 
 namespace {
 
-// A map for each of the first two cascades and a map for the last, their sides by shadow quality:
-// the game's 2048 and 4096, then 2048 and 2048, then 1024 and 2048.
+// A map for each of the first two cascades and a map for the last, their sides by shadow quality
+// in the order of Settings::Quality: the game's 2048 and 4096, then 2048 and 2048, then 1024 and
+// 2048 for Low and for Off, and twice the game's for Max.
 constexpr u32 LastCascade = Scene::Cascades - 1;
-constexpr std::array<std::array<u32, 2>, 3> MapSides{{{2048, 4096}, {2048, 2048}, {1024, 2048}}};
+constexpr std::array<std::array<u32, 2>, 5> MapSides{
+    {{2048, 4096}, {2048, 2048}, {1024, 2048}, {1024, 2048}, {4096, 8192}}};
 u32 g_array_size = MapSides[0][0];
 u32 g_last_size = MapSides[0][1];
 // With shadows off the maps stay clear: every point is lit.
@@ -60,6 +62,14 @@ bool AlphaTested(u32 list) {
 
 u32 MapSize(u32 cascade) {
     return cascade == LastCascade ? g_last_size : g_array_size;
+}
+
+// How many times finer than the game's the cascade's map is, at least 1. The slope part of the
+// depth bias counts texels, so a finer map takes that many times the game's slope factor to keep
+// its bias in depth, which the taps at the game's offsets need.
+float Finer(u32 cascade) {
+    const u32 game_size = cascade == LastCascade ? MapSides[0][1] : MapSides[0][0];
+    return std::max(static_cast<float>(MapSize(cascade)) / static_cast<float>(game_size), 1.0f);
 }
 
 bool CullsBackFaces(u32 list) {
@@ -177,7 +187,7 @@ bool Choose(Settings::Quality quality) {
     const Device& d = *g_device;
     const auto& dl = d.dispatch;
     const bool casters = quality != Settings::Quality::Off;
-    const auto& sides = MapSides[std::min(static_cast<u32>(quality), 2u)];
+    const auto& sides = MapSides[static_cast<u32>(quality)];
     // Without casters the maps only clear, at the sizes they have.
     if (g_maps.image && (!casters || (sides[0] == g_array_size && sides[1] == g_last_size))) {
         g_draw_casters = casters;
@@ -292,7 +302,8 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
                            dl);
         cmd.setViewport(0, viewport, dl);
         cmd.setScissor(0, scissor, dl);
-        cmd.setDepthBias(header.depth_bias[c][0], 0.0f, header.depth_bias[c][1] * SlopeScale, dl);
+        cmd.setDepthBias(header.depth_bias[c][0], 0.0f,
+                         header.depth_bias[c][1] * SlopeScale * Finer(c), dl);
         push.cascade = c;
         for (u32 list = 0; list < Scene::CasterLists; list++) {
             if (list == 2) {

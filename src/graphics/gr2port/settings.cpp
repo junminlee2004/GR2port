@@ -58,6 +58,12 @@ constexpr std::pair<Quality, std::string_view> QualityNames[] = {
     {Quality::Off, "off"},
 };
 
+// The shadows also take Max.
+constexpr std::pair<Quality, std::string_view> ShadowQualityNames[] = {
+    {Quality::Original, "original"}, {Quality::Medium, "medium"}, {Quality::Low, "low"},
+    {Quality::Off, "off"},           {Quality::Max, "max"},
+};
+
 constexpr std::pair<Upscaler, std::string_view> UpscalerNames[] = {
     {Upscaler::Off, "off"},   {Upscaler::Fsr3, "fsr3"}, {Upscaler::Fsr4, "fsr4"},
     {Upscaler::Dlss, "dlss"}, {Upscaler::Xess, "xess"},
@@ -110,7 +116,7 @@ void ReadGraphics(const json& section, Graphics& graphics) {
         preset != section.end() && preset->is_string()) {
         graphics.preset = preset->get<std::string>();
     }
-    graphics.shadows = ReadName(section, "shadow_quality", graphics.shadows, QualityNames);
+    graphics.shadows = ReadName(section, "shadow_quality", graphics.shadows, ShadowQualityNames);
     graphics.fog = ReadName(section, "fog_quality", graphics.fog, QualityNames);
     if (graphics.fog == Quality::Off) {
         graphics.fog = Quality::Low;
@@ -280,7 +286,7 @@ json ToJson(const Values& values) {
         {"special_attack_camera_sensitivity", values.mouse.special_attack_camera},
         {"panther_camera_sensitivity", values.mouse.panther_camera},
         {"graphics_preset", values.graphics.preset},
-        {"shadow_quality", NameOf(values.graphics.shadows, QualityNames)},
+        {"shadow_quality", NameOf(values.graphics.shadows, ShadowQualityNames)},
         {"fog_quality", NameOf(values.graphics.fog, QualityNames)},
         {"ambient_occlusion", NameOf(values.graphics.ambient_occlusion, QualityNames)},
         {"motion_blur", NameOf(values.graphics.motion_blur, QualityNames)},
@@ -368,6 +374,9 @@ Graphics FromPreset(const Preset& preset) {
         .smoke_and_dust = preset.smoke_and_dust,
         .distortion = preset.distortion,
         .anisotropic_filtering = preset.anisotropic_filtering,
+        .far_environment_detail = preset.far_environment_detail,
+        .near_environment_detail = preset.near_environment_detail,
+        .character_detail = preset.character_detail,
     };
 }
 
@@ -391,9 +400,11 @@ std::string_view MatchPreset(const Game& game, const Graphics& graphics) {
             passes.character_detail == graphics.character_detail;
         const bool same_size = preset.aspect.empty() || (preset.aspect == game.aspect &&
                                                          preset.render_size == game.render_size);
-        const bool same_streaming = preset.texture_streaming_mb == 0 ||
-                                    preset.texture_streaming_mb == graphics.texture_streaming_mb;
-        if (same_passes && same_size && same_streaming) {
+        const bool same_streaming = !preset.texture_streaming_mb ||
+                                    *preset.texture_streaming_mb == graphics.texture_streaming_mb;
+        const bool same_distance =
+            !preset.shadow_distance || *preset.shadow_distance == graphics.shadow_distance;
+        if (same_passes && same_size && same_streaming && same_distance) {
             return preset.key;
         }
     }

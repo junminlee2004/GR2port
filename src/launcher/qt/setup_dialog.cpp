@@ -328,7 +328,8 @@ constexpr std::array<std::string_view, 5> UpscaleQualityChoices{"Native AA", "Qu
 
 // The Graphics tab: the preset across the top, each pass's choice in two columns of rows 26
 // pixels apart, then the note. The page scrolls to the note's end, down to GraphicsPageBottom.
-// Quality choices are in the order of Settings::Quality; switches put On first.
+// The shadows' choices are in the order of ShadowQualities, the fog's in the order of
+// Settings::Quality; switches put On first.
 constexpr int PresetTop = 88;
 constexpr int PassTop = 118;
 constexpr int PassStep = 26;
@@ -338,7 +339,11 @@ constexpr int GraphicsPageBottom = 514;
 // driver's budget, as Auto does.
 constexpr std::array<u32, 13> TextureStreamingSizes{1024,  1536,  2048,  3072,  4096,  6144, 8192,
                                                     10240, 11264, 12288, 16384, 24576, 32768};
-constexpr std::array<std::string_view, 4> QualityChoices{"PS4 Original", "Medium", "Low", "Off"};
+constexpr std::array<std::string_view, 5> ShadowChoices{"Max", "PS4 Original", "Medium", "Low",
+                                                        "Off"};
+constexpr std::array ShadowQualities{Settings::Quality::Max, Settings::Quality::Original,
+                                     Settings::Quality::Medium, Settings::Quality::Low,
+                                     Settings::Quality::Off};
 constexpr std::array<std::string_view, 3> FogChoices{"PS4 Original", "Medium", "Low"};
 constexpr std::array<std::string_view, 2> SwitchChoices{"On", "Off"};
 // Ambient occlusion and motion blur offer three qualities each, in the order of their choices.
@@ -1000,7 +1005,7 @@ void ReadChoice(const QComboBox* combo, const std::array<Value, Count>& values, 
 
 // A value the choices lack shows as the choice the renderer draws it as.
 void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
-    dialog.shadows->setCurrentIndex(static_cast<int>(graphics.shadows));
+    dialog.shadows->setCurrentIndex(IndexOf(ShadowQualities, graphics.shadows, 1));
     dialog.fog->setCurrentIndex(
         std::min(static_cast<int>(graphics.fog), static_cast<int>(FogChoices.size()) - 1));
     dialog.fog_shadows->setCurrentIndex(graphics.fog_shadows ? 0 : 1);
@@ -1047,10 +1052,7 @@ void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
 // The passes as shown, with the preset they and the Display tab's sizes match.
 Settings::Graphics ReadGraphics(const Dialog& dialog) {
     Settings::Graphics graphics = dialog.values.graphics;
-    const int shadows = dialog.shadows->currentIndex();
-    if (shadows >= 0 && shadows < static_cast<int>(QualityChoices.size())) {
-        graphics.shadows = static_cast<Settings::Quality>(shadows);
-    }
+    ReadChoice(dialog.shadows, ShadowQualities, graphics.shadows);
     const int fog = dialog.fog->currentIndex();
     if (fog >= 0 && fog < static_cast<int>(FogChoices.size())) {
         graphics.fog = static_cast<Settings::Quality>(fog);
@@ -1105,8 +1107,8 @@ void ShowPreset(const Dialog& dialog) {
 
 void ShowTextureStreaming(const Dialog& dialog, u32 megabytes);
 
-// Shows a preset's passes and, for the one that sets them, its aspect and render size and its
-// handheld settings.
+// Shows a preset's passes and, for those that set them, its aspect and render size, its handheld
+// settings, its texture budget and its shadow draw distance.
 void ApplyPreset(const Dialog& dialog, int index) {
     if (index < 0 || index >= static_cast<int>(Settings::Presets.size())) {
         return;
@@ -1129,8 +1131,12 @@ void ApplyPreset(const Dialog& dialog, int index) {
         dialog.toggles[GyroSwapToggle]->setChecked(true);
         dialog.toggles[GyroYawToggle]->setChecked(true);
     }
-    if (preset.texture_streaming_mb != 0) {
-        ShowTextureStreaming(dialog, preset.texture_streaming_mb);
+    if (preset.texture_streaming_mb) {
+        ShowTextureStreaming(dialog, *preset.texture_streaming_mb);
+    }
+    if (preset.shadow_distance) {
+        dialog.shadow_distance->setCurrentIndex(
+            IndexOf(Settings::ShadowDistanceLevels, *preset.shadow_distance, OwnShadowDistance));
     }
 }
 
@@ -1480,7 +1486,7 @@ void BuildGraphics(Dialog& dialog, QWidget* page) {
         }
         return combo;
     };
-    dialog.shadows = row("Shadows", LeftColumn, 0, QualityChoices);
+    dialog.shadows = row("Shadows", LeftColumn, 0, ShadowChoices);
     dialog.fog = row("Volumetric Fog", LeftColumn, 1, FogChoices);
     dialog.fog_shadows = row("Fog Shadows", LeftColumn, 2, SwitchChoices);
     dialog.occlusion = row("Ambient Occlusion", LeftColumn, 3, OcclusionChoices);
@@ -2163,7 +2169,8 @@ void Build(Dialog& dialog) {
                                    dialog.far_detail,
                                    dialog.near_detail,
                                    dialog.character_detail,
-                                   dialog.distortion}) {
+                                   dialog.distortion,
+                                   dialog.shadow_distance}) {
         QObject::connect(combo, &QComboBox::activated, window, [&dialog] { ShowPreset(dialog); });
     }
     QObject::connect(defaults, &QPushButton::clicked, window, [&dialog] { SetDefaults(dialog); });
