@@ -111,7 +111,8 @@ std::array<float, 2> PadRightStick() {
     const u64 user = Load<u64>(g_module_base + PadUser - Hooks::CodeBase);
     const auto state_of =
         reinterpret_cast<PadStateFunction>(Load<u64>(Load<u64>(manager) + PadState));
-    const u64 state = state_of(manager, user, (user & 0xff00000000ULL) != 0 ? 1 : 0);
+    const u64 state =
+        Core::Recompiled::Call(state_of, manager, user, (user & 0xff00000000ULL) != 0 ? 1 : 0);
     return Load<std::array<float, 2>>(state + StateRightStick);
 }
 

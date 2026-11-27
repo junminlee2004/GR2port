@@ -217,8 +217,8 @@ u64 ClipOf(u64 row) {
 }
 
 template <typename Function>
-Function Method(u64 row, u64 slot) {
-    return reinterpret_cast<Function>(Read<u64>(Read<u64>(row) + slot));
+GameFunction<Function> Method(u64 row, u64 slot) {
+    return {reinterpret_cast<Function>(Read<u64>(Read<u64>(row) + slot))};
 }
 
 void Show(u64 row, bool shown) {
