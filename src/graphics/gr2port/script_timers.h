@@ -24,8 +24,8 @@ bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 void OnFrame();
 
 /// Above 30 fps, after Install: hooks the scripts' wait and setTransform. The scripts' counts of
-/// 30 fps frames step on frames that complete one, and so do a cage's steps. Returns whether the
-/// hooks went in.
+/// 30 fps frames step on frames that complete one, and so do a cage's steps and the passes of a
+/// few functions. Returns whether the hooks went in.
 bool InstallFrameCounts(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 
 /// Each frame, after the scripts: places each moving cage between its last two steps, by how far

@@ -12,16 +12,11 @@
 #include "common/logging/log.h"
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/script_timers.h"
+#include "graphics/gr2port/settings.h"
 
 namespace Gr2Port::ScriptTimers {
 
 namespace {
-
-// The game step's time in seconds, a float.
-constexpr VAddr StepTime = 0x1efb104;
-
-// The frames per second the scripts count at.
-constexpr float ScriptRate = 30.0f;
 
 // void LoadFunction(LoadState*, Proto*) of Lua 5.2's undump: it fills the function, and calls
 // itself for each function inside it.
@@ -66,6 +61,13 @@ constexpr std::array Timers{
     // le_rainbow.lua, LeRainbow._setCountTime's task: subtracts 1 once a frame from the time the
     // rainbow stays up after it fades in, 18000 calls.
     Timer{233, 245, 19, "time", 1.0},
+    // ep06_e.lua, the task of the damage to Lei Elgona while Kat puts out the fires in Episode 6:
+    // once a frame it adds a rate to des_point for each fire still burning, and the gauge shows
+    // des_point out of 100. The rate is one of four, by how many enemies are left.
+    Timer{708, 777, 111, "des_point", 0.001},
+    Timer{708, 777, 111, "des_point", 0.0015},
+    Timer{708, 777, 111, "des_point", 0.002},
+    Timer{708, 777, 111, "des_point", 0.003},
 };
 
 // The step constant of a loaded timer function.
@@ -75,9 +77,10 @@ struct Loaded {
     double step;
 };
 
-// A count of 30 fps frames in a script function that runs every frame, because it renews a hold
-// that lasts a frame or reads a value of one frame: the function's first and last line and
-// instruction count, and the index of the instruction that steps the count.
+// A count of 30 fps frames in a script function that runs every frame: the function's first and
+// last line and instruction count, and the index of the instruction that steps the count. The rest
+// of the function keeps running every frame, which a hold renewed each frame or a value of one
+// frame needs.
 struct FrameCount {
     u32 first_line;
     u32 last_line;
@@ -96,9 +99,57 @@ constexpr std::array FrameCounts{
     FrameCount{239, 282, 84, 42},
     FrameCount{914, 966, 120, 61},
     FrameCount{173, 225, 120, 61},
-    // sm01_b.lua and sm01_c.lua: the 300 frames to the enemies' next attack.
+    // sm01_b.lua, sm01_c.lua and sm01_d.lua: the 300 frames to the enemies' next attack.
     FrameCount{125, 801, 1086, 515},
     FrameCount{206, 1291, 1792, 367},
+    FrameCount{118, 472, 557, 369},
+    // cm11.lua and sm07_com_a.lua: the caution meter that rises while Kat is in a bomb's sensor and
+    // falls while she is out of it, by a speed a frame.
+    FrameCount{970, 1160, 184, 31},
+    FrameCount{970, 1160, 184, 54},
+    FrameCount{677, 865, 155, 51},
+    FrameCount{677, 865, 155, 72},
+    // sm40_a.lua: the 20 frames out of range before the dog stops following.
+    FrameCount{694, 730, 62, 42},
+    // sm41_b.lua: the frames before the markers on the last boxes appear.
+    FrameCount{156, 457, 516, 294},
+    // sm44_c2.lua: the frames Kat stays near the father, up to FOLLOW_CLEAR_TIME.
+    FrameCount{148, 456, 472, 212},
+    // ep12_u.lua: the 600 frames Kat can stay in two or more of a moving wall's four sensors before
+    // the walls crush her, and the 5 frames out of them that start the 600 again.
+    FrameCount{984, 1029, 99, 66},
+    FrameCount{984, 1029, 99, 77},
+    // ep10_e.lua: the 30 frames between the shots of a cannon that shells Kat, each a tenth of her
+    // life.
+    FrameCount{1398, 1511, 155, 146},
+    // sm19_b.lua: the 300 frames between the cries Kat hears within CRYING_DISTANCE, each with a
+    // sound, a caption and a turn of the camera.
+    FrameCount{131, 1002, 1107, 632},
+    // ep07_j.lua: the frames between the timed captions of a fight, and the 900 between its hints.
+    FrameCount{197, 310, 155, 77},
+    FrameCount{197, 310, 155, 85},
+    // sm40_c.lua: the seconds, 30 frames each, before a photo hint shows and between its repeats
+    // while Kat is in the hint's sensor.
+    FrameCount{1040, 1079, 51, 38},
+};
+
+// A script function whose passes each stand for a 30 fps frame, where a held count would not do:
+// the function's first and last line and instruction count. Its waits last until a frame that
+// completes a 30 fps frame.
+struct WholeFrames {
+    u32 first_line;
+    u32 last_line;
+    u32 code_size;
+};
+
+constexpr std::array WholeFrameFunctions{
+    // sm33_c.lua: the frames Kat stays 15 m or more from the girl with her out of sight. At 150 a
+    // caption warns Kat and at 300 the mission starts over, each when the count equals the number,
+    // which a held count would repeat on every frame it holds.
+    WholeFrames{219, 277, 90},
+    // dm04_f.lua: while Kat stands on a damaging floor, each pass takes a 30th of FLOOR_DAMAGE_RATE
+    // times her full life.
+    WholeFrames{529, 562, 43},
 };
 
 // cage_controller.lua, Cage._move: each pass of its loop moves the cage one 30 fps frame's step
@@ -120,13 +171,15 @@ constexpr u64 LocalPosition = 0x2a0;
 constexpr u64 TransformFlags = 0x328;
 constexpr u8 TransformChanged = 1;
 
-// Lua 5.2 instructions: the opcode, the operand C with its flag of a constant, and the jump
-// offset.
+// Lua 5.2 instructions: the opcode, the operands B and C with their flag of a constant, and the
+// jump offset.
 constexpr u32 OpcodeMask = 0x3f;
+constexpr u32 OpMove = 0;
 constexpr u32 OpAdd = 13;
 constexpr u32 OpSub = 14;
 constexpr u32 OpJump = 23;
 constexpr u32 OpForLoop = 32;
+constexpr u32 OperandBShift = 23;
 constexpr u32 OperandCShift = 14;
 constexpr u32 OperandCMask = 0x1ff;
 constexpr u32 OperandConstant = 0x100;
@@ -150,18 +203,23 @@ constexpr VAddr LuaYield = 0x78b430;
 constexpr size_t WaitStubBytes = 112;
 
 // The frame rate patches' flag of a frame that completes a 30 fps frame, how far the frame is into
-// the next 30 fps frame from 0 to 1, and the game's count of frames.
+// the next 30 fps frame from 0 to 1, and the game's count of frames. The patches of more than
+// 30 fps also keep the frame's length in 30 fps frames, at most 1, which leaves out the game's
+// slow motion.
+constexpr VAddr FrameShare = 0x1f7c600;
 constexpr VAddr WholeFrame = 0x1f7c608;
 constexpr VAddr FramePhase = 0x1f7c604;
 constexpr VAddr GameFrames = 0x1f302e4;
 
-// A loaded function with a frame count or a cage's steps: the instruction that steps the count, as
-// the script has it and with the count held. The instruction is null for a cage.
+// A loaded function with a frame count, a cage's steps or whole frames: the instruction that steps
+// the count, as the script has it and with the count held. The instruction is null for the other
+// two.
 struct Stepped {
     std::atomic<u64> function;
     u32* instruction;
     u32 counting;
     u32 held;
+    bool whole_frames;
 };
 
 using Position = std::array<float, 4>;
@@ -183,6 +241,7 @@ VAddr g_base = 0;
 std::mutex g_mutex;
 std::array<Loaded, 8> g_loaded{};
 bool g_counts_hooked = false;
+bool g_frame_share = false;
 std::atomic<u32> g_stepped_count{0};
 std::array<Stepped, 16> g_stepped{};
 std::array<CageRide, 8> g_rides{};
@@ -230,16 +289,23 @@ bool IsNumber(u64 constant, double value) {
     return Read<u32>(constant + ConstantType) == NumberType && Read<double>(constant) == value;
 }
 
-// The instruction that leaves a count where it is: a for loop's jump back without its step, or an
-// addition of 1 made an addition of the function's constant 0. Returns 0 for any other.
+// The instruction that leaves a count where it is: a for loop's jump back without its step, an
+// addition of 1 made an addition of the function's constant 0, or an addition of a register made
+// a copy of the count. Returns 0 for any other.
 u32 HeldInstruction(u64 function, u32 instruction) {
     const u32 opcode = instruction & OpcodeMask;
     if (opcode == OpForLoop) {
         return OpJump | (instruction & JumpOffsetMask);
     }
-    const u32 operand = (instruction >> OperandCShift) & OperandCMask;
-    if ((opcode != OpAdd && opcode != OpSub) || (operand & OperandConstant) == 0) {
+    if (opcode != OpAdd && opcode != OpSub) {
         return 0;
+    }
+    const u32 operand = (instruction >> OperandCShift) & OperandCMask;
+    if ((operand & OperandConstant) == 0) {
+        if (((instruction >> OperandBShift) & OperandConstant) != 0) {
+            return 0;
+        }
+        return OpMove | (instruction & ~(OpcodeMask | (OperandCMask << OperandCShift)));
     }
     const u64 constants = Read<u64>(function + Constants);
     const u32 count = std::min(Read<u32>(function + ConstantCount), OperandConstant);
@@ -256,13 +322,14 @@ u32 HeldInstruction(u64 function, u32 instruction) {
     return 0;
 }
 
-void AddStepped(u64 function, u32* instruction, u32 counting, u32 held) {
+void AddStepped(u64 function, u32* instruction, u32 counting, u32 held, bool whole_frames) {
     std::scoped_lock lock{g_mutex};
     for (Stepped& stepped : g_stepped) {
         if (stepped.function.load(std::memory_order_relaxed) == 0) {
             stepped.instruction = instruction;
             stepped.counting = counting;
             stepped.held = held;
+            stepped.whole_frames = whole_frames;
             stepped.function.store(function, std::memory_order_relaxed);
             g_stepped_count.fetch_add(1, std::memory_order_relaxed);
             return;
@@ -272,8 +339,15 @@ void AddStepped(u64 function, u32* instruction, u32 counting, u32 held) {
 
 void AddFrameCount(u64 function, u32 first_line, u32 last_line, u32 code_size) {
     if (first_line == CageFirstLine && last_line == CageLastLine && code_size == CageCodeSize) {
-        AddStepped(function, nullptr, 0, 0);
+        AddStepped(function, nullptr, 0, 0, false);
         return;
+    }
+    for (const WholeFrames& whole : WholeFrameFunctions) {
+        if (whole.first_line == first_line && whole.last_line == last_line &&
+            whole.code_size == code_size) {
+            AddStepped(function, nullptr, 0, 0, true);
+            return;
+        }
     }
     for (const FrameCount& count : FrameCounts) {
         if (count.first_line != first_line || count.last_line != last_line ||
@@ -283,9 +357,8 @@ void AddFrameCount(u64 function, u32 first_line, u32 last_line, u32 code_size) {
         u32* const code = Read<u32*>(function + Code);
         const u32 held = HeldInstruction(function, code[count.pc]);
         if (held != 0) {
-            AddStepped(function, code + count.pc, code[count.pc], held);
+            AddStepped(function, code + count.pc, code[count.pc], held, false);
         }
-        return;
     }
 }
 
@@ -311,7 +384,6 @@ void PS4_SYSV_ABI OnLoaded(u32, const Hooks::Arguments* arguments, u64) {
         if (free != g_loaded.end()) {
             *free = {function, constant, timer.step};
         }
-        return;
     }
 }
 
@@ -359,7 +431,7 @@ void PS4_SYSV_ABI OnSetTransform(u32, const Hooks::Registers* registers, u64) {
     }
     const u64 function = Read<u64>(Read<u64>(Read<u64>(caller)) + ClosureFunction);
     const bool is_cage = std::ranges::any_of(g_stepped, [function](const Stepped& stepped) {
-        return stepped.instruction == nullptr &&
+        return stepped.instruction == nullptr && !stepped.whole_frames &&
                stepped.function.load(std::memory_order_relaxed) == function;
     });
     if (!is_cage || NextInstruction(caller, function) != CageStepSet) {
@@ -411,6 +483,9 @@ u32 PS4_SYSV_ABI OnWait(u64 state) {
         if (stepped.function.load(std::memory_order_relaxed) != function) {
             return 0;
         }
+        if (stepped.whole_frames) {
+            return 1;
+        }
         if (stepped.instruction == nullptr) {
             if (NextInstruction(caller, function) != CageStepEnd) {
                 return 0;
@@ -424,7 +499,6 @@ u32 PS4_SYSV_ABI OnWait(u64 state) {
             return 1;
         }
         *stepped.instruction = IsWholeFrame() ? stepped.counting : stepped.held;
-        return 0;
     }
     return 0;
 }
@@ -433,6 +507,8 @@ u32 PS4_SYSV_ABI OnWait(u64 state) {
 
 bool Install(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
     g_base = module_base;
+    // At the game's own 30 fps the timers keep their stock steps.
+    g_frame_share = Settings::Get().game.frame_rate > 30;
     const Hooks::Result loaded =
         Hooks::ObserveReturn(module_base, LoadFunction, c, capacity, &OnLoaded, 0);
     if (!Hooks::Hooked(loaded)) {
@@ -460,8 +536,9 @@ bool InstallFrameCounts(VAddr module_base, Xbyak::CodeGenerator& c, size_t capac
     }
     const auto code = [module_base](VAddr address) { return Hooks::Code(module_base, address); };
 
-    // A cage's wait yields to its own continuation, which yields again until a whole frame and then
-    // returns through the game's continuation.
+    // A cage's wait, and each wait of a function that runs on whole frames, yields to its own
+    // continuation, which yields again until a whole frame and then returns through the game's
+    // continuation.
     const void* stub = c.getCurr();
     Xbyak::Label hold;
     Xbyak::Label resume;
@@ -531,11 +608,10 @@ void PlaceCages() {
 }
 
 void OnFrame() {
-    if (g_base == 0) {
+    if (g_base == 0 || !g_frame_share) {
         return;
     }
-    const float step = Read<float>(g_base + StepTime - Hooks::CodeBase);
-    const double frames = std::clamp(static_cast<double>(step * ScriptRate), 0.0, 1.0);
+    const double frames = Read<float>(g_base + FrameShare - Hooks::CodeBase);
     std::scoped_lock lock{g_mutex};
     for (const Loaded& loaded : g_loaded) {
         if (loaded.function != 0) {
