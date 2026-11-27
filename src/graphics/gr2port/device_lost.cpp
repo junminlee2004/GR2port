@@ -678,6 +678,18 @@ void Mark(const Device& device, vk::CommandBuffer cmd, Pass pass) {
         cmd.setCheckpointNV(reinterpret_cast<const void*>(marker), device.dispatch);
     }
     if (g_armed) {
+        // With the catcher on: the last frame's mark of the pass wrote the same word.
+        if (Catcher::On) {
+            const vk::MemoryBarrier2 written{
+                .srcStageMask = vk::PipelineStageFlagBits2::eClear,
+                .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+                .dstStageMask = vk::PipelineStageFlagBits2::eClear,
+                .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            };
+            const vk::DependencyInfo dependency{.memoryBarrierCount = 1,
+                                                .pMemoryBarriers = &written};
+            cmd.pipelineBarrier2(dependency, device.dispatch);
+        }
         cmd.fillBuffer(g_crumbs.buffer, static_cast<u64>(pass) * sizeof(u32), sizeof(u32),
                        static_cast<u32>(frame), device.dispatch);
     }
