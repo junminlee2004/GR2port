@@ -342,6 +342,9 @@
     "HUD Crosshair": "HUD: Tanda Bidik",
     "Left Trigger Deadzone": "Zona Mati Pemicu Kiri",
     "Right Trigger Deadzone": "Zona Mati Pemicu Kanan",
-    "Min Deadzone (def:1 max:126)": "Zona Mati Min (bawaan:1 maks:126)"
+    "Min Deadzone (def:1 max:126)": "Zona Mati Min (bawaan:1 maks:126)",
+    "Rotate Camera": "Putar Kamera",
+    "Rotate Camera (Photo Mode)": "Putar Kamera (Mode Foto)",
+    "L3 + right stick": "L3 + stik kanan"
   }
 }

@@ -342,6 +342,9 @@
     "HUD Crosshair": "HUD เป้าเล็ง",
     "Left Trigger Deadzone": "เดดโซนของทริกเกอร์ซ้าย",
     "Right Trigger Deadzone": "เดดโซนของทริกเกอร์ขวา",
-    "Min Deadzone (def:1 max:126)": "เดดโซนต่ำสุด (ค่าเริ่มต้น:1 สูงสุด:126)"
+    "Min Deadzone (def:1 max:126)": "เดดโซนต่ำสุด (ค่าเริ่มต้น:1 สูงสุด:126)",
+    "Rotate Camera": "หมุนกล้อง",
+    "Rotate Camera (Photo Mode)": "หมุนกล้อง (โหมดถ่ายภาพ)",
+    "L3 + right stick": "L3 + สติ๊กขวา"
   }
 }

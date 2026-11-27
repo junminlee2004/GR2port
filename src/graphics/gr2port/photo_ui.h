@@ -16,16 +16,18 @@ class CodeGenerator;
 // in the screen drawing over the view through Kat's camera. Hide UI, L3 + R2 on a pad, hides the
 // screen drawing over the picture while the camera is out, but for the gesture window, and shows
 // it again. Putting the camera away shows it again too. The left control list shows Hide UI and
-// its buttons under its Filter Effect row, in a row of the game's own.
+// its buttons under its Filter Effect row, in a row of the game's own, and under that the buttons
+// of Rotate Camera, PhotoTilt's roll and tilt of the camera.
 namespace Gr2Port::PhotoUi {
 
-/// The start of the key of the Hide UI row's text.
+/// The start of the keys of the added rows' texts.
 inline constexpr char KeyPrefix[] = "gr2port_photo_";
 
 /// At the executable's load.
 void Install(VAddr module_base);
 
-/// Adds the Hide UI row to the control list. ExitRows' text hook calls FindText.
+/// Adds the Hide UI and Rotate Camera rows to the control list. ExitRows' text hook calls
+/// FindText.
 bool AddRow(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity);
 
 /// Sends every draw item of the draw thread's walk through UiItems::RunItem, which reads it for the

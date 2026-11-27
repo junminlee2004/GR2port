@@ -141,7 +141,7 @@ std::optional<Label> KeyLabel(std::string_view name) {
 }
 
 // Config outputs that slots name, and the slot button each one labels.
-constexpr std::array<std::pair<std::string_view, std::string_view>, 20> Outputs{{
+constexpr std::array<std::pair<std::string_view, std::string_view>, 21> Outputs{{
     {"cross", "cross"},
     {"circle", "circle"},
     {"square", "square"},
@@ -162,6 +162,7 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 20> Outputs{
     {"gr2_hide_ui", "hide_ui"},
     {"gr2_collection", "collection"},
     {"gr2_picture_roll", "picture_roll"},
+    {"gr2_rotate_camera", "rotate_camera"},
 }};
 
 // The left stick's four directions, in the order the move label lists them: up, left, down, right.
@@ -172,7 +173,7 @@ const Label Unbound{{}, "minus"};
 
 // The config outputs a line's key labels. A game function labels its pad input; Evade and the
 // styles label the R2 and touch pad prompts of the control type the game used last; the photo
-// mode's Hide UI, Open Collection and Open Picture Roll label prompts of their own.
+// mode's Hide UI, Open Collection, Open Picture Roll and Rotate Camera label prompts of their own.
 std::vector<std::string_view> LabelledOutputs(std::string_view output, u32 type) {
     const Input::GameFunctions::Function* const function = Input::GameFunctions::Find(output);
     if (function == nullptr) {
@@ -181,7 +182,8 @@ std::vector<std::string_view> LabelledOutputs(std::string_view output, u32 type)
     if (!function->output.empty()) {
         return {function->output};
     }
-    if (output == "gr2_hide_ui" || output == "gr2_collection" || output == "gr2_picture_roll") {
+    if (output == "gr2_hide_ui" || output == "gr2_collection" || output == "gr2_picture_roll" ||
+        output == "gr2_rotate_camera") {
         return {output};
     }
     const bool type_a = type == 0;

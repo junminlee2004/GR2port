@@ -342,6 +342,9 @@
     "HUD Crosshair": "HUD: tâm ngắm",
     "Left Trigger Deadzone": "Vùng chết cò trái",
     "Right Trigger Deadzone": "Vùng chết cò phải",
-    "Min Deadzone (def:1 max:126)": "Vùng chết tối thiểu (mặc định:1 tối đa:126)"
+    "Min Deadzone (def:1 max:126)": "Vùng chết tối thiểu (mặc định:1 tối đa:126)",
+    "Rotate Camera": "Xoay camera",
+    "Rotate Camera (Photo Mode)": "Xoay camera (chế độ chụp ảnh)",
+    "L3 + right stick": "L3 + cần phải"
   }
 }

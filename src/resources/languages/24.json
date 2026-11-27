@@ -342,6 +342,9 @@
     "HUD Crosshair": "HUD: célkereszt",
     "Left Trigger Deadzone": "Bal ravasz holtzónája",
     "Right Trigger Deadzone": "Jobb ravasz holtzónája",
-    "Min Deadzone (def:1 max:126)": "Min. holtzóna (alap:1 max:126)"
+    "Min Deadzone (def:1 max:126)": "Min. holtzóna (alap:1 max:126)",
+    "Rotate Camera": "Kamera forgatása",
+    "Rotate Camera (Photo Mode)": "Kamera forgatása (fotó mód)",
+    "L3 + right stick": "L3 + jobb kar"
   }
 }

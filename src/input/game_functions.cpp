@@ -80,6 +80,7 @@ constexpr Function Table[]{
     {"gr2_hide_ui", "Hide UI (Photo Mode)", Same("L3 + R2"), "", "h"},
     {"gr2_collection", "Open Collection (Photo Mode)", Same("L3 + L1"), "", "lbracket"},
     {"gr2_picture_roll", "Open Picture Roll (Photo Mode)", Same("L3 + R1"), "", "rbracket"},
+    {"gr2_rotate_camera", "Rotate Camera (Photo Mode)", Same("L3 + right stick"), "", "t"},
     {"gr2_flick_up", "Flick Up (Touch Pad)", Same("Flick the touch pad up"), "touchpad_swipe_up",
      ""},
     {"gr2_flick_down", "Flick Down (Touch Pad)", Same("Flick the touch pad down"),

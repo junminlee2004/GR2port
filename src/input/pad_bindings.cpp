@@ -30,10 +30,12 @@ constexpr std::array<std::string_view, 4> PaddleInputs{
     "rpaddle_low",
 };
 
-// The photo functions and the button each presses with the hold input without a line.
-constexpr std::array<std::string_view, 3> PhotoNames{"gr2_hide_ui_pad", "gr2_collection_pad",
-                                                     "gr2_picture_roll_pad"};
-constexpr std::array<std::string_view, 3> PhotoPresses{"r2", "l1", "r1"};
+// The photo functions and the button each presses with the hold input without a line; none for
+// Rotate Camera, which the hold input does alone.
+constexpr std::string_view RotateCamera = "gr2_rotate_camera_pad";
+constexpr std::array<std::string_view, 4> PhotoNames{"gr2_hide_ui_pad", "gr2_collection_pad",
+                                                     "gr2_picture_roll_pad", RotateCamera};
+constexpr std::array<std::string_view, 4> PhotoPresses{"r2", "l1", "r1", ""};
 
 std::string Compact(std::string_view line) {
     std::string compact{line.substr(0, line.find('#'))};
@@ -120,8 +122,11 @@ std::span<const std::string_view> PhotoFunctions() {
     return PhotoNames;
 }
 
-bool IsPhotoBinding(std::string_view inputs) {
+bool IsPhotoBinding(std::string_view function, std::string_view inputs) {
     const auto comma = inputs.find(',');
+    if (function == RotateCamera) {
+        return comma == std::string_view::npos && (IsPadInput(inputs) || IsPaddle(inputs));
+    }
     if (comma == std::string_view::npos) {
         return IsPaddle(inputs);
     }
@@ -131,13 +136,21 @@ bool IsPhotoBinding(std::string_view inputs) {
            (IsPadInput(press) || IsPaddle(press));
 }
 
+bool IsHeldAlone(std::string_view function) {
+    return function == RotateCamera;
+}
+
 Map PhotoDefaults(std::string_view hold) {
     Map bindings;
     for (size_t i = 0; i < PhotoNames.size(); ++i) {
-        bindings.emplace(PhotoNames[i],
-                         hold.empty() || hold == PhotoPresses[i]
-                             ? std::string{}
-                             : std::string(hold) + "," + std::string(PhotoPresses[i]));
+        std::string binding;
+        if (!hold.empty() && hold != PhotoPresses[i]) {
+            binding = hold;
+            if (!PhotoPresses[i].empty()) {
+                binding += "," + std::string(PhotoPresses[i]);
+            }
+        }
+        bindings.emplace(PhotoNames[i], std::move(binding));
     }
     return bindings;
 }
@@ -156,7 +169,7 @@ std::optional<std::pair<std::string, std::string>> ParsePhotoLine(std::string_vi
     const std::string_view function = compact.substr(0, equal);
     const std::string_view inputs = compact.substr(equal + 1);
     if (std::ranges::find(PhotoNames, function) == PhotoNames.end() ||
-        (inputs != "unmapped" && !IsPhotoBinding(inputs))) {
+        (inputs != "unmapped" && !IsPhotoBinding(function, inputs))) {
         return std::nullopt;
     }
     return std::pair{std::string(function),

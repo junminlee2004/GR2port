@@ -30,6 +30,7 @@
 #include "core/emulator_settings.h"
 #include "core/emulator_state.h"
 #include "core/prompt_packs/prompt_packs.h"
+#include "graphics/gr2port/photo_tilt.h"
 #include "graphics/gr2port/photo_ui.h"
 #include "graphics/gr2port/screenshot.h"
 #include "imgui/trophy_list_layer.h"
@@ -97,6 +98,7 @@ gr2_zoom_in = unmapped
 gr2_hide_ui = h
 gr2_collection = lbracket
 gr2_picture_roll = rbracket
+gr2_rotate_camera = t
 gr2_flick_up = unmapped
 gr2_flick_down = unmapped
 gr2_flick_left = z
@@ -129,6 +131,9 @@ pad_right = pad_right
 gr2_hide_ui_pad = l3, r2
 gr2_collection_pad = l3, l1
 gr2_picture_roll_pad = l3, r1
+# Photo mode's Rotate Camera, while the camera is out: one button, held while the right stick
+# rolls and tilts the camera.
+gr2_rotate_camera_pad = l3
 
 axis_left_x = axis_left_x
 axis_left_y = axis_left_y
@@ -495,11 +500,36 @@ static constexpr std::array<PhotoFunction, 3> photo_functions{{
 // The functions' bindings from their lines; none for a function without one.
 static std::array<std::optional<PhotoBinding>, photo_functions.size()> photo_bindings;
 
+// GR2port: the photo mode's Rotate Camera on the pad: while the camera is out and its input is
+// held, the right stick rolls and tilts the camera. Key: gr2_rotate_camera_pad, one pad button,
+// trigger or back paddle. Without its line it is the swipe combos' hold input.
+static constexpr std::string_view photo_turn_key = "gr2_rotate_camera_pad";
+static std::optional<InputID> photo_turn_hold;
+
 static bool IsPaddleInput(const InputID& id) {
     return id.type == InputType::Controller && (id.sdl_id == SDL_GAMEPAD_BUTTON_LEFT_PADDLE1 ||
                                                 id.sdl_id == SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1 ||
                                                 id.sdl_id == SDL_GAMEPAD_BUTTON_LEFT_PADDLE2 ||
                                                 id.sdl_id == SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2);
+}
+
+// The pad button, trigger or back paddle that name names in a photo function's line; none, with a
+// warning, for anything else.
+static InputID ParsePadInput(std::string name, std::string_view key, int line_number) {
+    const InputBinding binding = GetBindingFromString(name);
+    InputID id;
+    if (binding.KeyCount() == 1) {
+        id = *std::ranges::find_if(binding.keys, [](const InputID& k) { return k.IsValid(); });
+    }
+    const bool pad = (id.type == InputType::Controller && id.sdl_id < SDL_GAMEPAD_BUTTON_COUNT) ||
+                     (id.type == InputType::Axis && (id.sdl_id == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ||
+                                                     id.sdl_id == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+    if (!pad) {
+        LOG_WARNING(Input, "{} at line {}: \"{}\" is not a pad button; the function is unbound",
+                    key, line_number, name);
+        return {};
+    }
+    return id;
 }
 
 // A photo binding's inputs: "unmapped", two pad buttons or triggers, the first held while the
@@ -512,19 +542,8 @@ static PhotoBinding ParsePhotoBinding(const std::string& inputs, std::string_vie
     }
     std::vector<InputID> ids;
     for (const auto token : std::views::split(inputs, ',')) {
-        std::string name(token.begin(), token.end());
-        const InputBinding binding = GetBindingFromString(name);
-        InputID id;
-        if (binding.KeyCount() == 1) {
-            id = *std::ranges::find_if(binding.keys, [](const InputID& k) { return k.IsValid(); });
-        }
-        const bool pad =
-            (id.type == InputType::Controller && id.sdl_id < SDL_GAMEPAD_BUTTON_COUNT) ||
-            (id.type == InputType::Axis && (id.sdl_id == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ||
-                                            id.sdl_id == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
-        if (!pad) {
-            LOG_WARNING(Input, "{} at line {}: \"{}\" is not a pad button; the function is unbound",
-                        key, line_number, name);
+        const InputID id = ParsePadInput(std::string(token.begin(), token.end()), key, line_number);
+        if (!id.IsValid()) {
             return {};
         }
         ids.push_back(id);
@@ -553,6 +572,7 @@ void ParseInputConfig(const std::string game_id = "") {
     connections.clear();
     swipe_combo = TouchpadSwipeComboConfig{};
     photo_bindings = {};
+    photo_turn_hold.reset();
     float mouse_deadzone_offset = 0.5;
     float mouse_speed = 1;
     float mouse_speed_offset = 0.125;
@@ -749,6 +769,11 @@ void ParseInputConfig(const std::string game_id = "") {
                    photo != photo_functions.end()) {
             photo_bindings[photo - photo_functions.begin()] =
                 ParsePhotoBinding(input_string, photo->key, lineCount);
+            return;
+        } else if (output_string == photo_turn_key) {
+            photo_turn_hold = input_string.empty() || input_string == "unmapped"
+                                  ? InputID()
+                                  : ParsePadInput(input_string, photo_turn_key, lineCount);
             return;
         } else if (output_string == "mouse_default_mode") {
             if (input_string == "joystick") {
@@ -1240,6 +1265,9 @@ void ControllerOutput::FinalizeUpdate(u8 gamepad_index) {
         case GR2_PICTURE_ROLL:
             GameFunctions::PhotoCorner(controller, button == GR2_PICTURE_ROLL, new_button_state);
             break;
+        case GR2_ROTATE_CAMERA:
+            Gr2Port::PhotoTilt::SetKey(new_button_state);
+            break;
         default: // is a normal key (hopefully)
             controller->Button(SDLGamepadToOrbisButton(button), new_button_state);
             break;
@@ -1523,6 +1551,24 @@ static void ProcessPhotoCombos() {
     }
 }
 
+// GR2port: while the camera is out and Rotate Camera's input is held, the right stick turns the
+// photo mode's camera and its own mappings stay off.
+static void ProcessPhotoTurn() {
+    const InputID hold = photo_turn_hold.value_or(swipe_combo.hold);
+    std::array<float, 2> tilt{};
+    if (hold.IsValid() && Gr2Port::PhotoUi::CameraOut() && IsHeld(FindPressed(hold))) {
+        constexpr std::array<u32, 2> axes{SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY};
+        for (size_t i = 0; i < axes.size(); i++) {
+            if (const auto it = FindPressed(InputID(InputType::Axis, axes[i]));
+                it != pressed_keys.end()) {
+                tilt[i] = static_cast<float>(it->first.axis_value) / 127.0f;
+                it->second = true;
+            }
+        }
+    }
+    Gr2Port::PhotoTilt::SetStick(tilt[0], tilt[1]);
+}
+
 void ActivateOutputsFromInputs() {
 
     // todo find a better solution
@@ -1540,6 +1586,7 @@ void ActivateOutputsFromInputs() {
         ApplyMouseInputBlockers();
         ProcessTouchpadSwipeCombo();
         ProcessPhotoCombos();
+        ProcessPhotoTurn();
 
         // Iterate over all inputs, and update their respecive outputs accordingly
         for (auto& it : connections) {

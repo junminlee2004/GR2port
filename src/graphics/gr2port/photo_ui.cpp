@@ -33,13 +33,24 @@ constexpr Hooks::Entry CameraFrame{0x11aa4a0, 6, Hooks::FramePrologue};
 constexpr u64 CameraFilter = 0x3628;
 
 // void FUN_011ba250(list): the control list's frame, which hands each of its slots the row the
-// slot asks for.
+// slot asks for. FUN_011bad80, the list's tick each frame, calls it while a slot asks for another
+// row than it shows.
 constexpr Hooks::Entry ListFrame{0x11ba250, 6, Hooks::FramePrologue};
-// The rows the list's slots ask for, a pointer or null for each. Slots 6 to 13 run down the left
-// column; slot 11 holds the Filter Effect row and slot 12, the one below it, is empty.
+constexpr Hooks::Entry ListTick{0x11bad80, 6, Hooks::FramePrologueR14};
+// The rows the list's slots ask for, a pointer or null for each. Slots 6 to 12 run down the left
+// column a row apart, and slot 13 lies at its foot, where the Collection row shows. Slot 11 holds
+// the Filter Effect row; slot 10 above it and slot 12 below it are empty.
 constexpr u64 SlotRows = 0x80;
 constexpr u32 FilterSlot = 11;
-constexpr u32 RowSlot = 12;
+constexpr u32 HideSlot = 12;
+constexpr u32 RotateSlot = 10;
+// The list's slots, a pointer to each. A slot holds its state, 3 and more once its clip loaded
+// and hangs from the slot's place, the clip, and the row the clip shows.
+constexpr u64 ListSlots = 0x140;
+constexpr u64 SlotState = 0x0c;
+constexpr u64 SlotClip = 0x20;
+constexpr u64 SlotRow = 0x28;
+constexpr s32 SlotLoaded = 3;
 
 // A row of the control list, as the game's own rows are.
 struct ListRow {
@@ -58,18 +69,26 @@ struct ListRow {
 };
 static_assert(sizeof(ListRow) == 0x28);
 
-// The game's L3 icon, which no small icon of its own comes with. None of the game's texts and rows
-// shows it, so the button prompts draw Hide UI's buttons, L3 + R2, or its key in it.
+// The game's L3 and SHARE icons, which no small icons of their own come with. None of the game's
+// texts and rows shows them, so the button prompts draw Hide UI's buttons, L3 + R2, or its key in
+// the first, and Rotate Camera's button with the right stick, or its key, in the second.
 constexpr char HideIcon[] = "photomode_key_19";
-constexpr char RowKey[] = "gr2port_photo_hide";
-// The game's text whose record gives the row's text its style: Put Away Camera's, in the same
+constexpr char RotateIcon[] = "photomode_key_23";
+// The game's text whose record gives the rows' texts their style: Put Away Camera's, in the same
 // column.
 constexpr char ModelKey[] = "ui_camera_guide_06";
-constexpr char English[] = "Hide UI";
-// The game's number of L3, the first button of Hide UI.
+// The game's number of L3, the first button of Hide UI and the button of Rotate Camera.
 constexpr s32 L3Number = 8;
 
-constexpr ListRow HideRow{L3Number, -1, -1, -1, RowKey, HideIcon, HideIcon};
+// The rows GR2port adds, Hide UI and Rotate Camera, the slot each one takes and its English text.
+// Rotate Camera's row shows one row below Hide UI's, where the list has no slot: its clip hangs
+// from a place of its own there.
+constexpr std::array<ListRow, 2> Rows{{
+    {L3Number, -1, -1, -1, "gr2port_photo_hide", HideIcon, HideIcon},
+    {L3Number, -1, -1, -1, "gr2port_photo_rotate", RotateIcon, RotateIcon},
+}};
+constexpr std::array<u32, Rows.size()> RowSlots{HideSlot, RotateSlot};
+constexpr std::array<const char*, Rows.size()> English{"Hide UI", "Rotate Camera"};
 
 // void FUN_0171aa10(window): the gesture window's frame on the game's main thread, each frame,
 // which adds the window's draw items for the draw thread to run.
@@ -90,7 +109,7 @@ std::atomic<VAddr> g_base{0};
 std::atomic<VAddr> g_camera{0};
 std::atomic<bool> g_hidden{false};
 std::mutex g_record_mutex;
-std::vector<u8> g_record;
+std::array<std::vector<u8>, Rows.size()> g_records;
 GestureDrawFunction g_gesture_draw = nullptr;
 // The draw items of the gesture window's last frame in each pool.
 struct ItemRange {
@@ -98,19 +117,61 @@ struct ItemRange {
     std::atomic<VAddr> end{0};
 };
 std::array<ItemRange, ItemPoolCount> g_gesture_items;
+// The place Rotate Camera's row hangs from.
+MenuKit::Node g_rotate_place{};
 
-// Before the list's frame: asks for the Hide UI row below the Filter Effect row while there is
-// one, and takes the row out once there is none.
-void PS4_SYSV_ABI OnListFrame(u32, const Hooks::Registers* registers, u64) {
-    const VAddr slots = registers->rdi + SlotRows;
-    const auto* filter = MenuKit::Read<const ListRow*>(slots + FilterSlot * sizeof(VAddr));
-    const auto* row = MenuKit::Read<const ListRow*>(slots + RowSlot * sizeof(VAddr));
-    const bool wanted = filter != nullptr && filter->header == 0;
-    if (wanted && row == nullptr) {
-        MenuKit::Write(slots + RowSlot * sizeof(VAddr), &HideRow);
-    } else if (!wanted && row == &HideRow) {
-        MenuKit::Write<const ListRow*>(slots + RowSlot * sizeof(VAddr), nullptr);
+// The loaded clip of the list's slot, or 0; with row, only while the slot shows that row.
+VAddr SlotClipOf(VAddr list, u32 slot, const ListRow* row = nullptr) {
+    const VAddr object =
+        MenuKit::Read<VAddr>(MenuKit::Read<VAddr>(list + ListSlots) + slot * sizeof(VAddr));
+    if (object == 0 || MenuKit::Read<s32>(object + SlotState) < SlotLoaded ||
+        (row != nullptr && MenuKit::Read<const ListRow*>(object + SlotRow) != row)) {
+        return 0;
     }
+    return MenuKit::Read<VAddr>(object + SlotClip);
+}
+
+// Hangs Rotate Camera's row one row below Hide UI's: from Hide UI's place, moved by the step from
+// the Filter Effect row's place to it. The places move as the list slides in and out.
+void PlaceRotateRow(VAddr list) {
+    const VAddr rotate = SlotClipOf(list, RotateSlot, &Rows[1]);
+    const VAddr hide = SlotClipOf(list, HideSlot, &Rows[0]);
+    const VAddr filter = SlotClipOf(list, FilterSlot);
+    if (rotate == 0 || hide == 0 || filter == 0) {
+        return;
+    }
+    const auto* const above = MenuKit::Read<const MenuKit::Node*>(filter + MenuKit::ClipParent);
+    const auto* const place = MenuKit::Read<const MenuKit::Node*>(hide + MenuKit::ClipParent);
+    if (above == nullptr || place == nullptr) {
+        return;
+    }
+    g_rotate_place = *place;
+    for (size_t axis = 12; axis < 15; ++axis) {
+        g_rotate_place.world[axis] += place->world[axis] - above->world[axis];
+    }
+    MenuKit::Write<const MenuKit::Node*>(rotate + MenuKit::ClipParent, &g_rotate_place);
+}
+
+// Before the list's frame: asks for the added rows while there is a Filter Effect row, and takes
+// them out once there is none.
+void PS4_SYSV_ABI OnListFrame(u32, const Hooks::Registers* registers, u64) {
+    const VAddr list = registers->rdi;
+    const VAddr slots = list + SlotRows;
+    const auto* filter = MenuKit::Read<const ListRow*>(slots + FilterSlot * sizeof(VAddr));
+    const bool wanted = filter != nullptr && filter->header == 0;
+    for (u32 i = 0; i < Rows.size(); ++i) {
+        const VAddr slot = slots + RowSlots[i] * sizeof(VAddr);
+        const auto* row = MenuKit::Read<const ListRow*>(slot);
+        if (wanted && row == nullptr) {
+            MenuKit::Write(slot, &Rows[i]);
+        } else if (!wanted && row == &Rows[i]) {
+            MenuKit::Write<const ListRow*>(slot, nullptr);
+        }
+    }
+}
+
+void PS4_SYSV_ABI OnListTick(u32, const Hooks::Registers* registers, u64) {
+    PlaceRotateRow(registers->rdi);
 }
 
 void PS4_SYSV_ABI OnCameraFrame(u32, const Hooks::Registers* registers, u64) {
@@ -180,7 +241,8 @@ void OnPadRead() {
 }
 
 bool AddRow(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
-    if (!Hooks::Hooked(Hooks::ObserveEntry(module_base, ListFrame, c, capacity, &OnListFrame, 0))) {
+    if (!Hooks::Hooked(Hooks::ObserveEntry(module_base, ListFrame, c, capacity, &OnListFrame, 0)) ||
+        !Hooks::Hooked(Hooks::ObserveEntry(module_base, ListTick, c, capacity, &OnListTick, 0))) {
         LOG_ERROR(Render_Vulkan, "GR2port: the photo mode's control list is not the expected code");
         return false;
     }
@@ -209,18 +271,21 @@ bool RouteItems(VAddr module_base, Xbyak::CodeGenerator& c, size_t capacity) {
 }
 
 u64 FindText(u64 texts, const char* key, GraphicsMenu::FindTextFunction find) {
-    if (std::strcmp(key, RowKey) != 0) {
+    const auto row = std::ranges::find_if(
+        Rows, [key](const ListRow& listed) { return std::strcmp(key, listed.key) == 0; });
+    if (row == Rows.end()) {
         return Core::Recompiled::Call(find, texts, key);
     }
     std::scoped_lock lock{g_record_mutex};
-    if (g_record.empty()) {
+    std::vector<u8>& record = g_records[row - Rows.begin()];
+    if (record.empty()) {
         const u64 model = Core::Recompiled::Call(find, texts, ModelKey);
         if (model == 0) {
             return 0;
         }
-        g_record = MenuKit::MakeRecord(model, MenuKit::Shown(English));
+        record = MenuKit::MakeRecord(model, MenuKit::Shown(English[row - Rows.begin()]));
     }
-    return reinterpret_cast<u64>(g_record.data());
+    return reinterpret_cast<u64>(record.data());
 }
 
 bool Hidden() {

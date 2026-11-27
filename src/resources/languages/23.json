@@ -342,6 +342,9 @@
     "HUD Crosshair": "HUD: zaměřovač",
     "Left Trigger Deadzone": "Mrtvá zóna levé spouště",
     "Right Trigger Deadzone": "Mrtvá zóna pravé spouště",
-    "Min Deadzone (def:1 max:126)": "Min. mrtvá zóna (výchozí 1, max. 126)"
+    "Min Deadzone (def:1 max:126)": "Min. mrtvá zóna (výchozí 1, max. 126)",
+    "Rotate Camera": "Otočit kameru",
+    "Rotate Camera (Photo Mode)": "Otočit kameru (fotorežim)",
+    "L3 + right stick": "L3 + pravá páčka"
   }
 }

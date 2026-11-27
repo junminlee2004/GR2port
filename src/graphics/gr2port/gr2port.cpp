@@ -45,6 +45,7 @@
 #include "graphics/gr2port/movies.h"
 #include "graphics/gr2port/part_hits.h"
 #include "graphics/gr2port/particle_capture.h"
+#include "graphics/gr2port/photo_tilt.h"
 #include "graphics/gr2port/photo_ui.h"
 #include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/player_control.h"
@@ -213,6 +214,7 @@ void Install(VAddr module_base) {
     ScreenShake::Install(module_base, c, StubAreaSize);
     SpecialCameras::Install(module_base, c, StubAreaSize);
     LowEnergyAlert::Install(module_base, c, StubAreaSize);
+    PhotoTilt::Install(module_base, c, StubAreaSize);
     if (GamePatches::FitsUi()) {
         MarkerFit::Install(module_base, c, StubAreaSize);
     }

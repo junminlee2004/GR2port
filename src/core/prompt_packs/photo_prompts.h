@@ -13,11 +13,12 @@
 #include "common/types.h"
 #include "input/pad_bindings.h"
 
-// The photo mode's prompts of Hide UI, Open Collection and Open Picture Roll, which follow their
-// pad bindings (Input::PadBindings::PhotoFunctions). Each pad layout's pack draws the default
-// bindings, L3 with R2, L1 and R1, into the photo mode's icons 19, 21 and 22: the two buttons'
-// icons at one scale, joined by a plus. Another binding is drawn there the same way from the
-// layout's own icons of its buttons, a back paddle as a shoulder key with the paddle's name.
+// The photo mode's prompts of Hide UI, Open Collection, Open Picture Roll and Rotate Camera, which
+// follow their pad bindings (Input::PadBindings::PhotoFunctions). Each pad layout's pack draws the
+// default bindings of the first three, L3 with R2, L1 and R1, into the photo mode's icons 19, 21
+// and 22: the two buttons' icons at one scale, joined by a plus. Another binding is drawn there the
+// same way from the layout's own icons of its buttons, a back paddle as a shoulder key with the
+// paddle's name. Rotate Camera's button is drawn joined to the right stick's icon, into icon 23.
 namespace PromptPacks::Photo {
 
 /// The members of the photo mode's icons that Compose reads and draws.

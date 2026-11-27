@@ -346,6 +346,9 @@
     "Min Deadzone (def:1 max:126)": "Минимум (по умолч. 1, макс. 126)",
     "Special Attack Camera Sensitivity": "Чувствительность камеры (особая атака)",
     "Panther Mode Camera Sensitivity": "Чувствительность камеры (режим пантеры)",
+    "Rotate Camera": "Поворот камеры",
+    "Rotate Camera (Photo Mode)": "Поворот камеры (фоторежим)",
+    "L3 + right stick": "L3 + правый джойстик",
     "Low Energy Alert": "Сигнал низкой энергии"
   }
 }

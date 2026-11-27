@@ -346,6 +346,9 @@
     "Min Deadzone (def:1 max:126)": "최소 데드존(기본:1 최대:126)",
     "Special Attack Camera Sensitivity": "필살기 카메라 감도",
     "Panther Mode Camera Sensitivity": "팬서 모드 카메라 감도",
+    "Rotate Camera": "카메라 회전",
+    "Rotate Camera (Photo Mode)": "카메라 회전(사진 모드)",
+    "L3 + right stick": "L3 + 오른쪽 스틱",
     "Low Energy Alert": "에너지 부족 경고음"
   }
 }

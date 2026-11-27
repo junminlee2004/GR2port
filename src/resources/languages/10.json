@@ -346,6 +346,9 @@
     "Min Deadzone (def:1 max:126)": "最小死區（預設：1 最大：126）",
     "Special Attack Camera Sensitivity": "必殺技攝影機靈敏度",
     "Panther Mode Camera Sensitivity": "黑豹模式攝影機靈敏度",
+    "Rotate Camera": "旋轉攝影機",
+    "Rotate Camera (Photo Mode)": "旋轉攝影機（拍照模式）",
+    "L3 + right stick": "L3 + 右操作桿",
     "Low Energy Alert": "能量不足警示音"
   }
 }

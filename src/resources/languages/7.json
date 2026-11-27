@@ -153,6 +153,9 @@
     "Right Trigger Deadzone": "Zona morta do gatilho direito",
     "Min Deadzone (def:1 max:126)": "Zona morta mín. (predef.:1 máx.:126)",
     "Special Attack Camera Sensitivity": "Sensibilidade da câmara (Ataque especial)",
-    "Panther Mode Camera Sensitivity": "Sensibilidade da câmara (Modo de pantera)"
+    "Panther Mode Camera Sensitivity": "Sensibilidade da câmara (Modo de pantera)",
+    "Rotate Camera": "Rodar câmara",
+    "Rotate Camera (Photo Mode)": "Rodar câmara (Modo câmara)",
+    "L3 + right stick": "L3 + manípulo dir."
   }
 }

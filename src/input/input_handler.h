@@ -72,6 +72,7 @@
 #define GR2_HIDE_UI 0x08000004
 #define GR2_COLLECTION 0x08000005
 #define GR2_PICTURE_ROLL 0x08000006
+#define GR2_ROTATE_CAMERA 0x08000007
 
 #define HOTKEY_FULLSCREEN 0xf0000001
 #define HOTKEY_PAUSE 0xf0000002
@@ -178,6 +179,7 @@ const std::map<std::string, u32> string_to_cbutton_map = {
     {"gr2_hide_ui", GR2_HIDE_UI},
     {"gr2_collection", GR2_COLLECTION},
     {"gr2_picture_roll", GR2_PICTURE_ROLL},
+    {"gr2_rotate_camera", GR2_ROTATE_CAMERA},
 
     // this is only for input
     {"back", SDL_GAMEPAD_BUTTON_BACK},
@@ -581,7 +583,7 @@ public:
 
 class ControllerAllOutputs {
 public:
-    static constexpr u64 output_count = 55;
+    static constexpr u64 output_count = 56;
     std::array<ControllerOutput, output_count> data = {
         // Important: these have to be the first, or else they will update in the wrong order
         ControllerOutput(LEFTJOYSTICK_HALFMODE),
@@ -627,6 +629,7 @@ public:
         ControllerOutput(GR2_HIDE_UI),
         ControllerOutput(GR2_COLLECTION),
         ControllerOutput(GR2_PICTURE_ROLL),
+        ControllerOutput(GR2_ROTATE_CAMERA),
 
         // Axis mappings
         // ControllerOutput(SDL_GAMEPAD_BUTTON_INVALID, SDL_GAMEPAD_AXIS_LEFTX, false),

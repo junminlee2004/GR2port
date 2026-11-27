@@ -806,8 +806,11 @@ void ChangePhotoBinding(HWND window, Editor& editor, const std::string& photo,
         ShowStatus(window, Tr(L"No button was pressed; {0} keeps its button.", {label}));
         return;
     }
-    if (!Input::PadBindings::IsPhotoBinding(inputs)) {
-        ShowStatus(window, Tr(L"{0} takes two buttons held together or a back paddle.", {label}));
+    if (!Input::PadBindings::IsPhotoBinding(photo, inputs)) {
+        ShowStatus(window,
+                   Input::PadBindings::IsHeldAlone(photo)
+                       ? Tr(L"{0} takes one button.", {label})
+                       : Tr(L"{0} takes two buttons held together or a back paddle.", {label}));
         return;
     }
     std::wstring status =

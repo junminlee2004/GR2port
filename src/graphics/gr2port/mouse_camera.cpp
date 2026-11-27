@@ -11,6 +11,7 @@
 
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/mouse_camera.h"
+#include "graphics/gr2port/photo_tilt.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/stick_tilt.h"
 
@@ -205,9 +206,10 @@ void TurnBlendStart(const Vector& frame_up, float yaw, float pitch) {
 // Turns the orientation quaternion at address by the mouse's movement since the last call, in the
 // space of frame: yaw before the orientation, pitch after it. Returns whether the mouse moved.
 // While the game ignores the stick, the movement is dropped, as the stick's would be. While a comic
-// page shows, the camera leaves the mouse to the right stick, which tilts the page.
+// page shows, the camera leaves the mouse to the right stick, which tilts the page, and while
+// Rotate Camera's key is held in photo mode, to the photo camera's roll and tilt.
 bool TurnByMouse(VAddr orientation, const Quaternion& frame, const Speeds& speeds, bool takes) {
-    if (StickTilt::ComicPageShown()) {
+    if (StickTilt::ComicPageShown() || PhotoTilt::TakesMouse()) {
         return false;
     }
     const auto [dx, dy] = Input::MouseLook::Take();

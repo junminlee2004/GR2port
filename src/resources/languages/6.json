@@ -346,6 +346,9 @@
     "Min Deadzone (def:1 max:126)": "Min. dode zone (standaard 1, max. 126)",
     "Special Attack Camera Sensitivity": "Gevoeligheid camera (speciale aanval)",
     "Panther Mode Camera Sensitivity": "Gevoeligheid camera (Pantermodus)",
+    "Rotate Camera": "Camera draaien",
+    "Rotate Camera (Photo Mode)": "Camera draaien (fotomodus)",
+    "L3 + right stick": "L3 + rechterjoystick",
     "Low Energy Alert": "Waarschuwing lage energie"
   }
 }

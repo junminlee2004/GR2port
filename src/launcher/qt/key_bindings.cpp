@@ -753,9 +753,11 @@ void ChangePhotoBinding(Editor& editor, const std::string& photo, const QString&
             Tr("No button was pressed; {0} keeps its button.", {label.toStdString()}));
         return;
     }
-    if (!Input::PadBindings::IsPhotoBinding(inputs)) {
-        editor.status->setText(
-            Tr("{0} takes two buttons held together or a back paddle.", {label.toStdString()}));
+    if (!Input::PadBindings::IsPhotoBinding(photo, inputs)) {
+        editor.status->setText(Input::PadBindings::IsHeldAlone(photo)
+                                   ? Tr("{0} takes one button.", {label.toStdString()})
+                                   : Tr("{0} takes two buttons held together or a back paddle.",
+                                        {label.toStdString()}));
         return;
     }
     QString status =

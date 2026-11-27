@@ -14,22 +14,25 @@ namespace PromptPacks::Photo {
 namespace {
 
 // A photo function, the binding the packs draw for it, and its icons: the control list's, and a
-// small one where it has one.
+// small one where it has one. Rotate Camera's button is held with the right stick, so its icon
+// joins the two; no pack draws it. It takes the SHARE icon, which the game shows nowhere.
 struct Function {
     std::string_view name;
     std::string_view drawn;
     std::string_view icon;
     std::string_view small_icon;
+    std::string_view with;
 };
-constexpr std::array<Function, 3> Functions{{
-    {"gr2_hide_ui_pad", "l3,r2", "gcd/photomode_key_19.gnf", ""},
-    {"gr2_collection_pad", "l3,l1", "gcd/photomode_key_21.gnf", "gcd/photomode_key_21_b.gnf"},
-    {"gr2_picture_roll_pad", "l3,r1", "gcd/photomode_key_22.gnf", "gcd/photomode_key_22_b.gnf"},
+constexpr std::array<Function, 4> Functions{{
+    {"gr2_hide_ui_pad", "l3,r2", "gcd/photomode_key_19.gnf", "", ""},
+    {"gr2_collection_pad", "l3,l1", "gcd/photomode_key_21.gnf", "gcd/photomode_key_21_b.gnf", ""},
+    {"gr2_picture_roll_pad", "l3,r1", "gcd/photomode_key_22.gnf", "gcd/photomode_key_22_b.gnf", ""},
+    {"gr2_rotate_camera_pad", "", "gcd/photomode_key_23.gnf", "", "rstick"},
 }};
 
-// The photo mode's icon of each pad button, by the input config's name. L3 has none of its own:
-// the packs' Hide UI icon begins with it.
-constexpr std::array<std::pair<std::string_view, std::string_view>, 15> ButtonIcons{{
+// The photo mode's icon of each pad button, by the input config's name, and of the right stick.
+// L3 has none of its own: the packs' Hide UI icon begins with it.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 16> ButtonIcons{{
     {"circle", "gcd/photomode_key_01.gnf"},
     {"cross", "gcd/photomode_key_02.gnf"},
     {"square", "gcd/photomode_key_03.gnf"},
@@ -45,6 +48,7 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 15> ButtonIc
     {"back", "gcd/photomode_key_13.gnf"},
     {"options", "gcd/photomode_key_18.gnf"},
     {"r3", "gcd/photomode_key_20.gnf"},
+    {"rstick", "gcd/photomode_key_17.gnf"},
 }};
 
 // Every pack's Hide UI icon: L3 in columns 18 to 61, the plus in 63 to 78 and R2 to column 125,
@@ -322,6 +326,9 @@ std::optional<Image> BindingIcon(std::string_view layout, std::string_view bindi
 // a binding of another button replaces them.
 bool Differs(std::string_view layout, const Function& function,
              const Input::PadBindings::Map& photo) {
+    if (!function.with.empty()) {
+        return true;
+    }
     const auto bound = photo.find(function.name);
     const std::string_view binding = bound != photo.end() ? bound->second : function.drawn;
     if (layout == "playstation" && function.name != Functions[0].name) {
@@ -372,7 +379,10 @@ std::map<std::string, std::vector<u8>> Compose(std::string_view layout,
             continue;
         }
         const auto bound = photo.find(function.name);
-        const std::string_view binding = bound != photo.end() ? bound->second : function.drawn;
+        std::string binding{bound != photo.end() ? bound->second : function.drawn};
+        if (!binding.empty() && !function.with.empty()) {
+            binding += "," + std::string(function.with);
+        }
         const auto icon = BindingIcon(layout, binding, read, shoulder_key, joined, 128, 128);
         if (!icon) {
             continue;

@@ -346,6 +346,9 @@
     "Min Deadzone (def:1 max:126)": "最小デッドゾーン(既定:1 最大:126)",
     "Special Attack Camera Sensitivity": "必殺技中のカメラ操作感度",
     "Panther Mode Camera Sensitivity": "フェリン中のカメラ操作感度",
+    "Rotate Camera": "カメラを回転",
+    "Rotate Camera (Photo Mode)": "カメラを回転(フォトモード)",
+    "L3 + right stick": "L3 + 右スティック",
     "Low Energy Alert": "エネルギー低下アラート"
   }
 }

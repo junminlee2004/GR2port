@@ -525,7 +525,7 @@
    "archive": "Gravite2_Chunk0.psarc",
    "member": "gcd/photomode_key_23.gnf",
    "index": null,
-   "button": "SHARE",
+   "button": "rotate_camera",
    "center": [
     97.0,
     67.0
