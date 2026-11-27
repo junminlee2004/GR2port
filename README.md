@@ -61,7 +61,7 @@ Generally, a GPU with **Vulkan 1.3** support is required. For NVIDIA GPUs, a GPU
 
 > [!NOTE]
 > Upscaling is NOT considered for these fps targets but may be used to optionally improve fps further.
-> Currently, Windows and Linux are supported. MacOS release is planned.
+> Currently, Windows, Linux, and macOS are supported.
 
 **Included Features for Gravity Rush 2**
 - Support for 2 GB VRAM GPUs
