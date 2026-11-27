@@ -3,7 +3,7 @@
 
 option(ENABLE_GR2_FSR3 "Build the Gravity Rush 2 FSR 3.1 and FSR 4 upscaler module" ON)
 
-if (ENABLE_GR2_FSR3 AND NOT APPLE)
+if (ENABLE_GR2_FSR3)
     set(GR2_FSR3_DIR ${CMAKE_CURRENT_LIST_DIR})
     set(GR2_FFX_ROOT ${PROJECT_SOURCE_DIR}/third_party/fsr-vulkan)
     set(GR2_FFX_SDK ${GR2_FFX_ROOT}/upstream/ffx-1.1.4/sdk)
@@ -239,7 +239,6 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
     # vk_trampolines.cpp defines the Vulkan commands that the FidelityFX libraries and the FSR 4
     # provider call.
     target_sources(gr2port PRIVATE
-        ${GR2_FSR3_DIR}/dlss_ngx.cpp
         ${GR2_FSR3_DIR}/dlss_ngx.h
         ${GR2_FSR3_DIR}/fsr4_assets.cpp
         ${GR2_FSR3_DIR}/fsr4_assets.h
@@ -249,14 +248,19 @@ if (ENABLE_GR2_FSR3 AND NOT APPLE)
         ${GR2_FSR3_DIR}/vk_trampolines.h
         ${GR2_FSR3_DIR}/xess_vulkan.h)
     # The NGX headers and NGX's static library of the DLSS SDK 310.9.16, which loads the driver's NGX
-    # core; the DLSS library loads at run time from the dlss folder of the user folder.
-    set(GR2_DLSS_ROOT ${PROJECT_SOURCE_DIR}/third_party/dlss)
-    target_include_directories(gr2port PRIVATE ${GR2_DLSS_ROOT}/include)
-    if (WIN32)
-        target_link_libraries(gr2port PRIVATE ${GR2_DLSS_ROOT}/lib/Windows_x86_64/nvsdk_ngx_d.lib)
-    else()
-        target_link_libraries(gr2port PRIVATE
-            ${GR2_DLSS_ROOT}/lib/Linux_x86_64/libnvsdk_ngx.a ${CMAKE_DL_LIBS})
+    # core; the DLSS library loads at run time from the dlss folder of the user folder. NVIDIA
+    # ships NGX for Windows and Linux on x86-64: on macOS dlss_ngx.h's empty functions stand in.
+    if (NOT APPLE)
+        target_sources(gr2port PRIVATE ${GR2_FSR3_DIR}/dlss_ngx.cpp)
+        set(GR2_DLSS_ROOT ${PROJECT_SOURCE_DIR}/third_party/dlss)
+        target_include_directories(gr2port PRIVATE ${GR2_DLSS_ROOT}/include)
+        if (WIN32)
+            target_link_libraries(gr2port PRIVATE
+                ${GR2_DLSS_ROOT}/lib/Windows_x86_64/nvsdk_ngx_d.lib)
+        else()
+            target_link_libraries(gr2port PRIVATE
+                ${GR2_DLSS_ROOT}/lib/Linux_x86_64/libnvsdk_ngx.a ${CMAKE_DL_LIBS})
+        endif()
     endif()
     # XeSS's MIT headers; libxess.dll loads at run time from the xess folder of the user folder.
     if (WIN32)

@@ -48,7 +48,7 @@ struct DlssEvaluateInfo {
     bool reset{};
 };
 
-#if defined(ENABLE_GR2_FSR3)
+#if defined(ENABLE_GR2_FSR3) && !defined(__APPLE__)
 
 /// Main thread, before the guest address space is reserved: for a Gravity Rush game with DLSS on,
 /// starts CUDA, which NGX needs, with the free space below 512 GiB held, so the space CUDA reserves
