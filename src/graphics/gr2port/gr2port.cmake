@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 target_sources(gr2port PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/camera_menu.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/camera_menu.h
     ${CMAKE_CURRENT_LIST_DIR}/camera_reach.cpp
     ${CMAKE_CURRENT_LIST_DIR}/camera_reach.h
     ${CMAKE_CURRENT_LIST_DIR}/capture.cpp
@@ -65,6 +63,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/look.h
     ${CMAKE_CURRENT_LIST_DIR}/loading_tip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/loading_tip.h
+    ${CMAKE_CURRENT_LIST_DIR}/low_energy_alert.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/low_energy_alert.h
     ${CMAKE_CURRENT_LIST_DIR}/low_latency.cpp
     ${CMAKE_CURRENT_LIST_DIR}/low_latency.h
     ${CMAKE_CURRENT_LIST_DIR}/memory.cpp
@@ -81,6 +81,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/movies.h
     ${CMAKE_CURRENT_LIST_DIR}/overlays.cpp
     ${CMAKE_CURRENT_LIST_DIR}/overlays.h
+    ${CMAKE_CURRENT_LIST_DIR}/page_sliders.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/page_sliders.h
     ${CMAKE_CURRENT_LIST_DIR}/part_hits.cpp
     ${CMAKE_CURRENT_LIST_DIR}/part_hits.h
     ${CMAKE_CURRENT_LIST_DIR}/particle_capture.cpp

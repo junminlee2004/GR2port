@@ -345,6 +345,7 @@
     "Right Trigger Deadzone": "Totzone des rechten Triggers",
     "Min Deadzone (def:1 max:126)": "Min. Totzone (Standard: 1, Max.: 126)",
     "Special Attack Camera Sensitivity": "Kameraempfindlichkeit (Spezialangriff)",
-    "Panther Mode Camera Sensitivity": "Kameraempfindlichkeit (Panthermodus)"
+    "Panther Mode Camera Sensitivity": "Kameraempfindlichkeit (Panthermodus)",
+    "Low Energy Alert": "Warnton bei wenig Energie"
   }
 }

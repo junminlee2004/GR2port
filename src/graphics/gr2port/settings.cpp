@@ -192,6 +192,8 @@ void ReadGame(const json& section, Game& game) {
     }
     game.dlc_entitlements = ReadBool(section, "dlc_entitlements", game.dlc_entitlements);
     game.screenshot_popup = ReadBool(section, "screenshot_popup", game.screenshot_popup);
+    game.low_energy_alert =
+        std::min<u32>(ReadU32(section, "low_energy_alert_volume", game.low_energy_alert), 100);
     if (const auto extras = section.find("extras");
         extras != section.end() && extras->is_object()) {
         for (const auto& [name, on] : extras->items()) {
@@ -285,6 +287,7 @@ json ToJson(const Values& values) {
         {"render_size", game.render_size},
         {"dlc_entitlements", game.dlc_entitlements},
         {"screenshot_popup", game.screenshot_popup},
+        {"low_energy_alert_volume", game.low_energy_alert},
         {"extras", std::move(extras)},
         {"mouse_foot_horizontal", values.mouse.foot_horizontal},
         {"mouse_foot_vertical", values.mouse.foot_vertical},

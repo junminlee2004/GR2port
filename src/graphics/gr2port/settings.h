@@ -61,6 +61,9 @@ struct Game {
     bool halloween_items{true};
     /// If screenshot_popup is true, a screenshot shows a notice with its picture and its path.
     bool screenshot_popup{true};
+    /// The volume of the alert that sounds while Kat's gravity energy is low, as the Sound page's
+    /// slider holds it: 0 is silent, 50 the game's own, 100 twice the game's.
+    u32 low_energy_alert{50};
     /// Extras the player turned on or off, by patch name; the others keep the patch file's flag.
     std::map<std::string, bool> extras;
 };

@@ -345,6 +345,7 @@
     "Right Trigger Deadzone": "오른쪽 트리거 데드존",
     "Min Deadzone (def:1 max:126)": "최소 데드존(기본:1 최대:126)",
     "Special Attack Camera Sensitivity": "필살기 카메라 감도",
-    "Panther Mode Camera Sensitivity": "팬서 모드 카메라 감도"
+    "Panther Mode Camera Sensitivity": "팬서 모드 카메라 감도",
+    "Low Energy Alert": "에너지 부족 경고음"
   }
 }

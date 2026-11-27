@@ -345,6 +345,7 @@
     "Right Trigger Deadzone": "Мертвая зона правого триггера",
     "Min Deadzone (def:1 max:126)": "Минимум (по умолч. 1, макс. 126)",
     "Special Attack Camera Sensitivity": "Чувствительность камеры (особая атака)",
-    "Panther Mode Camera Sensitivity": "Чувствительность камеры (режим пантеры)"
+    "Panther Mode Camera Sensitivity": "Чувствительность камеры (режим пантеры)",
+    "Low Energy Alert": "Сигнал низкой энергии"
   }
 }

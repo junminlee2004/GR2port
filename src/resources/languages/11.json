@@ -345,6 +345,7 @@
     "Right Trigger Deadzone": "右扳机死区",
     "Min Deadzone (def:1 max:126)": "最小死区（默认：1 最大：126）",
     "Special Attack Camera Sensitivity": "终极技镜头灵敏度",
-    "Panther Mode Camera Sensitivity": "黑豹模式镜头灵敏度"
+    "Panther Mode Camera Sensitivity": "黑豹模式镜头灵敏度",
+    "Low Energy Alert": "能量不足提示音"
   }
 }

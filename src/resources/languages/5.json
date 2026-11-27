@@ -345,6 +345,7 @@
     "Right Trigger Deadzone": "Zona morta grilletto destro",
     "Min Deadzone (def:1 max:126)": "Zona morta min. (pred.: 1, max.: 126)",
     "Special Attack Camera Sensitivity": "Sensibilità visuale (Attacco speciale)",
-    "Panther Mode Camera Sensitivity": "Sensibilità visuale (modalità pantera)"
+    "Panther Mode Camera Sensitivity": "Sensibilità visuale (modalità pantera)",
+    "Low Energy Alert": "Avviso energia bassa"
   }
 }

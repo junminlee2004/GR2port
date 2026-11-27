@@ -36,6 +36,7 @@
 #include "graphics/gr2port/hud_parts.h"
 #include "graphics/gr2port/layout_clock.h"
 #include "graphics/gr2port/loading_tip.h"
+#include "graphics/gr2port/low_energy_alert.h"
 #include "graphics/gr2port/marker_fit.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/mob_float.h"
@@ -211,6 +212,7 @@ void Install(VAddr module_base) {
     FieldOfView::Install(module_base, c, StubAreaSize);
     ScreenShake::Install(module_base, c, StubAreaSize);
     SpecialCameras::Install(module_base, c, StubAreaSize);
+    LowEnergyAlert::Install(module_base, c, StubAreaSize);
     if (GamePatches::FitsUi()) {
         MarkerFit::Install(module_base, c, StubAreaSize);
     }
