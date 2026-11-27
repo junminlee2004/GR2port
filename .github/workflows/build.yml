@@ -168,9 +168,70 @@ jobs:
         path: ${{github.workspace}}/Gravity Rush 2™.AppImage
         retention-days: 7
 
+  macos-sdl:
+    runs-on: macos-26
+    needs: get-info
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        submodules: recursive
+
+    - name: Setup latest Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest
+
+    # KosmicKrisp's build needs Meson, LLVM and the SPIR-V tools, and the launcher needs Qt.
+    - name: Install dependencies
+      run: |
+        brew install cmake meson ninja pkgconf llvm spirv-tools spirv-llvm-translator qtbase
+        pip3 install --break-system-packages mako packaging pyyaml
+
+    - name: Cache CMake Configuration
+      uses: actions/cache@v5
+      env:
+          cache-name: ${{ runner.os }}-sdl-cache-cmake-configuration
+      with:
+          path: |
+            ${{github.workspace}}/build
+          key: ${{ env.cache-name }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
+          restore-keys: |
+            ${{ env.cache-name }}-
+
+    - name: Cache CMake Build
+      uses: hendrikmuhs/ccache-action@v1.2.21
+      env:
+          cache-name: ${{ runner.os }}-sdl-cache-cmake-build
+      with:
+        append-timestamp: false
+        key: ${{ env.cache-name }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
+
+    - name: Print CPU Info
+      run: sysctl hw machdep.cpu
+
+    # An Apple silicon Mac runs the game in recompiled mode alone.
+    - name: Configure CMake
+      run: cmake --fresh -G Ninja -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_PREFIX_PATH="$(brew --prefix qtbase)" -DENABLE_RECOMPILED_MODE=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel $(sysctl -n hw.ncpu)
+
+    # An artifact keeps neither the links inside Qt's frameworks nor the files' modes: a tar does.
+    - name: Run app packaging script
+      run: |
+        ./.github/workflows/scripts/macos-app-sdl.sh
+        tar -cf gr2port-macos.tar "Gravity Rush 2™.app"
+
+    - name: Upload macOS SDL artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: gr2port-macos-sdl-${{ needs.get-info.outputs.date }}-${{ needs.get-info.outputs.shorthash }}
+        path: ${{github.workspace}}/gr2port-macos.tar
+        retention-days: 7
+
   pre-release:
     if: github.ref == 'refs/heads/main' && github.repository == 'junminlee2004/GR2port'
-    needs: [get-info, windows-sdl, linux-sdl]
+    needs: [get-info, windows-sdl, linux-sdl, macos-sdl]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -188,33 +249,41 @@ jobs:
         path: ./artifacts
 
     # Each zip holds the executable, the readme and a userdata folder with FSR 4's and DLSS's files;
-    # the Windows zip also has XeSS's. GitHub puts a dot for each space of an asset's file name, so
-    # the file names carry the dots and the labels the release page shows carry the spaces.
+    # the Windows zip also has XeSS's, and the macOS zip, the app, has no DLSS. GitHub puts a dot
+    # for each space of an asset's file name, so the file names carry the dots and the labels the
+    # release page shows carry the spaces. The zips keep the app's links as links.
     - name: Make the zips
       run: |
         chmod a+x ./artifacts/gr2port-linux-sdl-*/*.AppImage
         for dir in ./artifacts/gr2port-*-sdl-*/; do
           case "$dir" in
             *-win64-*) system=Windows ;;
+            *-macos-*) system=macOS ;;
             *) system=Linux ;;
           esac
+          if [ "$system" = macOS ]; then
+            tar -xf "$dir/gr2port-macos.tar" -C "$dir"
+            rm "$dir/gr2port-macos.tar"
+          fi
           mkdir -p "$dir/userdata/fsr4_lite"
           tar -xJf third_party/upscaler-files/fsr4_lite.tar.xz -C "$dir/userdata/fsr4_lite"
-          mkdir -p "$dir/userdata/dlss"
-          tar -xJf "third_party/upscaler-files/dlss-${system,,}.tar.xz" -C "$dir/userdata/dlss"
-          cp third_party/dlss/LICENSE.txt "$dir/userdata/dlss/LICENSE-DLSS.txt"
+          if [ "$system" != macOS ]; then
+            mkdir -p "$dir/userdata/dlss"
+            tar -xJf "third_party/upscaler-files/dlss-${system,,}.tar.xz" -C "$dir/userdata/dlss"
+            cp third_party/dlss/LICENSE.txt "$dir/userdata/dlss/LICENSE-DLSS.txt"
+          fi
           if [ "$system" = Windows ]; then
             mkdir -p "$dir/userdata/xess"
             tar -xJf third_party/upscaler-files/xess.tar.xz -C "$dir/userdata/xess"
           fi
           cp src/dist/README.txt "$dir"
-          (cd "$dir" && zip -r "$GITHUB_WORKSPACE/GR2port.build.${FULLHASH:0:8}.$system.zip" .)
+          (cd "$dir" && zip -ry "$GITHUB_WORKSPACE/GR2port.build.${FULLHASH:0:8}.$system.zip" .)
         done
 
     - name: Create Pre-Release on GitHub
       run: |
         assets=()
-        for system in Windows Linux; do
+        for system in Windows Linux macOS; do
           assets+=("GR2port.build.${FULLHASH:0:8}.$system.zip#GR2port build ${FULLHASH:0:8} $system.zip")
         done
         if gh release view "$TAG" > /dev/null 2>&1; then
