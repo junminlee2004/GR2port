@@ -26,6 +26,7 @@
 #include "graphics/gr2port/effect_emitter.h"
 #include "graphics/gr2port/frame_stats.h"
 #include "graphics/gr2port/hooks.h"
+#include "graphics/gr2port/low_latency.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/particle_capture.h"
 #include "graphics/gr2port/scene.h"
@@ -812,6 +813,37 @@ struct KnownPalette {
 constexpr u32 KnownPaletteBits = 10;
 alignas(64) std::array<KnownPalette, 1u << KnownPaletteBits> g_known_palettes{};
 
+// A Character list draw in the renderer's clip history: its mesh (a deformed instance's vertex
+// buffer, or else the shape) and part (the first index), where its origin is in the world, and the
+// first of its vertices in the history. If unmatched is true, no unit of the last frame had its
+// mesh and part. For TakeSwappedClips, it also keeps its draw's Character, its skin's bones, the
+// game's palette and the packet's copy of it, and its world-view-projection matrix.
+struct ClipUnit {
+    VAddr mesh;
+    u32 part;
+    u32 history;
+    std::array<float, 3> position;
+    bool taken;
+    bool unmatched;
+    u32 character;
+    u32 bones;
+    VAddr palette;
+    u64 palette_address;
+    Matrix world_view_projection;
+};
+// The units of the frame g_clip_frame at g_clip_side, and of the frame before it, sorted by mesh
+// and part, at the other side.
+std::array<std::array<ClipUnit, Scene::MaxCharacters>, 2> g_clip_units;
+std::array<u32, 2> g_clip_unit_count{};
+u32 g_clip_side = 0;
+u64 g_clip_frame = 0;
+// The history's vertices the frame's units take.
+u32 g_clip_vertices = 0;
+
+bool ByMesh(const ClipUnit& a, const ClipUnit& b) {
+    return std::pair{a.mesh, a.part} < std::pair{b.mesh, b.part};
+}
+
 // The frame's commands, which reach the packet in one go. Written item by item, they would leave
 // half-full write-combined lines in several places for the reads between items to evict.
 alignas(64) std::array<std::array<Scene::Command, 2 * Scene::MaxDraws>,
@@ -980,6 +1012,54 @@ public:
         header.capture_parts_ns[static_cast<u32>(part)] = static_cast<u32>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(now - part_start).count());
         part_start = now;
+    }
+
+    // A skinned Character list draw that found no unit of its mesh and part in the last frame, as
+    // when the game swaps a face for another of the character's shapes, takes over from the last
+    // frame's unit with its part and bones that no draw took, nearest to where it is: the shapes a
+    // character swaps between share their palettes' bones. The packet's palette rows take that
+    // unit's world-view-projection matrix and then its palette, which the game's ring of palettes
+    // still holds, and the draw's Character points at them from the draw's own palette with
+    // ClipSwap. Runs once the frame's Character list is written.
+    void TakeSwappedClips() {
+        if (g_clip_frame != frame) {
+            return;
+        }
+        const u32 last = g_clip_side ^ 1;
+        for (u32 i = 0; i < g_clip_unit_count[g_clip_side]; i++) {
+            const ClipUnit& unit = g_clip_units[g_clip_side][i];
+            if (!unit.unmatched || unit.bones == 0) {
+                continue;
+            }
+            ClipUnit* nearest = nullptr;
+            float nearest_distance = std::numeric_limits<float>::infinity();
+            for (u32 j = 0; j < g_clip_unit_count[last]; j++) {
+                ClipUnit& other = g_clip_units[last][j];
+                float distance = 0.0f;
+                for (u32 k = 0; k < 3; k++) {
+                    distance += (other.position[k] - unit.position[k]) *
+                                (other.position[k] - unit.position[k]);
+                }
+                if (!other.taken && other.part == unit.part && other.bones == unit.bones &&
+                    distance < nearest_distance) {
+                    nearest = &other;
+                    nearest_distance = distance;
+                }
+            }
+            const u32 rows = static_cast<u32>(MatrixBytes / 16) + unit.bones * 3;
+            if (nearest == nullptr || header.palette_rows + rows > Scene::MaxPaletteRows) {
+                continue;
+            }
+            nearest->taken = true;
+            u8* const at = palettes + u64{header.palette_rows} * 16;
+            std::memcpy(at, nearest->world_view_projection.data(), MatrixBytes);
+            std::memcpy(at + MatrixBytes, reinterpret_cast<const void*>(nearest->palette),
+                        unit.bones * BoneBytes);
+            const u64 address = palettes_address + u64{header.palette_rows} * 16;
+            header.palette_rows += rows;
+            characters[unit.character].last_clip_history =
+                Scene::ClipSwap | static_cast<u32>((address - unit.palette_address) / 16);
+        }
     }
 
     // Writes the frame's commands to the packet.
@@ -1193,7 +1273,12 @@ public:
             return;
         }
         if (category.character) {
-            material_index = AddCharacter(item, constants, material, category.glow);
+            const VAddr mesh_key =
+                vertex_buffer != shape + ShapeVertexBuffer ? vertex_buffer : shape;
+            const std::pair<u32, u32> clip =
+                category.glow ? std::pair{Scene::NoClipHistory, Scene::NoClipHistory}
+                              : ClipHistory(mesh_key, first, *mesh, skin, constants, material);
+            material_index = AddCharacter(item, constants, material, category.glow, clip);
         }
         if (category.interior) {
             material_index = AddInterior(item, material);
@@ -2920,9 +3005,86 @@ private:
         return ++header.materials;
     }
 
+    // A Character list draw's place in the renderer's clip history, which keeps each vertex's clip
+    // position for a frame to measure the characters' own motion, and its place in the last
+    // frame's: the draw takes its mesh's vertices in the frame's half of the history, and finds
+    // itself in the last frame by its mesh and part, nearest to where it is. The draw's origin is
+    // the vertex constants' world-view origin under the view inverse that starts the pixel
+    // constants. A skinned draw not found there can take over from another shape of its character
+    // (TakeSwappedClips).
+    std::pair<u32, u32> ClipHistory(VAddr mesh_key, u32 part, const Meshes::Mesh& mesh,
+                                    const Skin& skin, VAddr vertex_constants,
+                                    VAddr pixel_constants) {
+        if (g_clip_frame != frame) {
+            g_clip_side ^= 1;
+            const u32 last = g_clip_side ^ 1;
+            // Only the frame just before is the last frame.
+            if (g_clip_frame + 1 != frame) {
+                g_clip_unit_count[last] = 0;
+            }
+            std::sort(g_clip_units[last].begin(),
+                      g_clip_units[last].begin() + g_clip_unit_count[last], ByMesh);
+            g_clip_unit_count[g_clip_side] = 0;
+            g_clip_vertices = 0;
+            g_clip_frame = frame;
+        }
+        const auto world_view = Load<Matrix>(vertex_constants);
+        const auto view_inverse = Load<Matrix>(pixel_constants);
+        std::array<float, 3> position;
+        for (u32 j = 0; j < 3; j++) {
+            position[j] = world_view[12] * view_inverse[j] + world_view[13] * view_inverse[4 + j] +
+                          world_view[14] * view_inverse[8 + j] + view_inverse[12 + j];
+        }
+        const u32 last = g_clip_side ^ 1;
+        const auto begin = g_clip_units[last].begin();
+        const auto [first, past] =
+            std::equal_range(begin, begin + g_clip_unit_count[last],
+                             ClipUnit{.mesh = mesh_key, .part = part}, ByMesh);
+        ClipUnit* nearest = nullptr;
+        float nearest_distance = std::numeric_limits<float>::infinity();
+        for (auto unit = first; unit != past; unit++) {
+            float distance = 0.0f;
+            for (u32 j = 0; j < 3; j++) {
+                distance += (unit->position[j] - position[j]) * (unit->position[j] - position[j]);
+            }
+            if (!unit->taken && distance < nearest_distance) {
+                nearest = &*unit;
+                nearest_distance = distance;
+            }
+        }
+        u32 last_history = Scene::NoClipHistory;
+        if (nearest != nullptr) {
+            nearest->taken = true;
+            last_history = nearest->history;
+        }
+        // A draw past the history's room keeps none. The frame's units are at most its Character
+        // records.
+        const u32 vertices = mesh.vertex_bytes / mesh.stride;
+        if (vertices > Scene::ClipHistoryVertices - g_clip_vertices) {
+            return {Scene::NoClipHistory, last_history};
+        }
+        const u32 history = g_clip_vertices;
+        g_clip_vertices += vertices;
+        g_clip_units[g_clip_side][g_clip_unit_count[g_clip_side]++] = {
+            .mesh = mesh_key,
+            .part = part,
+            .history = history,
+            .position = position,
+            .unmatched = nearest == nullptr,
+            .character = header.characters,
+            .bones = skin.bones,
+            .palette = skin.source,
+            .palette_address = skin.palette,
+            .world_view_projection = Load<Matrix>(vertex_constants + MatrixBytes),
+        };
+        return {history, last_history};
+    }
+
     // Writes a G2_CH_Main item's constants to the packet and returns their index plus 1; a glow
-    // item's blend constant too.
-    u32 AddCharacter(VAddr item, VAddr vertex_constants, VAddr pixel_constants, bool glow) {
+    // item's blend constant too. clip is the draw's place in the clip history and in the last
+    // frame's (ClipHistory).
+    u32 AddCharacter(VAddr item, VAddr vertex_constants, VAddr pixel_constants, bool glow,
+                     std::pair<u32, u32> clip) {
         const auto handle = [item](u64 field) { return Textures::Get(Load<VAddr>(item + field)); };
         // The fields are written in order: the packet is write-combined.
         Scene::Character& out = characters[header.characters];
@@ -2937,6 +3099,8 @@ private:
         out.reflection = handle(CharacterReflection);
         out.detail = handle(CharacterDetail);
         out.glow = glow ? LinearGlow(Load<float>(item + CharacterGlow)) : 1.0f;
+        out.clip_history = clip.first;
+        out.last_clip_history = clip.second;
         return ++header.characters;
     }
 
@@ -4006,6 +4170,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
         g_skipped_frame = true;
         return;
     }
+    LowLatency::Draws(frame);
     g_known_frame = static_cast<u32>(frame);
     if (g_known_frame == 0) {
         // The low word came round: the entries of 2^32 frames ago go.
@@ -4167,6 +4332,7 @@ void OnFrame(VAddr frame_graph, VAddr view) {
     add_category(VisionCategory);
     add_category(VisionGlowCategory);
     add_category(CharacterCategory);
+    writer.TakeSwappedClips();
     add_category(CharacterGlowCategory);
     add_category(SelfTranslucentCategory);
     add_category(InteriorCategory);
@@ -4240,6 +4406,7 @@ void OnFrameEnd() {
             Catcher::Test::Game(frame);
         }
         g_pending = {.packet = packet, .frame = frame};
+        LowLatency::Draws(frame);
         g_pending.header.frame = frame;
         g_pending.header.game_time = AdvanceGameTime();
         g_pending.header.ui.only = 1;

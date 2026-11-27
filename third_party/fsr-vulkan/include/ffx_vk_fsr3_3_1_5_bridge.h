@@ -257,6 +257,11 @@ typedef struct FfxVkFsr3_3_1_6FrameGenerationCreateInfo {
 typedef struct FfxVkFsr3_3_1_6FrameGenerationPrepareInfo {
     VkCommandBuffer commandBuffer;
     FfxVkFsr3_3_1_6FrameGenerationImage color;
+    /* Optional colorFormat image at the display extent: color before the UI
+     * was drawn. When image is set, optical flow measures it and frame
+     * interpolation moves it, then blends color over the interpolated frame
+     * wherever the two differ, as the public provider's HUDLessColor does. */
+    FfxVkFsr3_3_1_6FrameGenerationImage hudlessColor;
     FfxVkFsr3_3_1_6FrameGenerationImage depth;
     FfxVkFsr3_3_1_6FrameGenerationImage motionVectors;
     uint32_t renderWidth;

@@ -105,6 +105,16 @@ enum class Upscaler : u32 {
     Xess,
 };
 
+/// How the game's frames keep their latency low. Each starts its frame at the vblank before the
+/// game reads the pad; Reflex and Anti-Lag 2 add their drivers' sleep there, and Universal delays
+/// the start by the time the last frames waited for the game's draw thread.
+enum class LowLatency : u32 {
+    Off,
+    Reflex,
+    AntiLag2,
+    Universal,
+};
+
 /// The upscaler's ratio of output to scene size: Native 1, Quality 1.5, Balanced 1.7, Performance
 /// 2, Ultra Performance 3.
 enum class UpscaleQuality : u32 {
@@ -204,6 +214,13 @@ struct Graphics {
     /// How strongly the upscaled picture is sharpened, in percent, an UpscaleSharpeningLevels
     /// entry. 0 leaves the upscaler's picture as it is. Presets leave it.
     u32 upscale_sharpening{0};
+    /// If frame_generation is true, FSR 3.1 makes a frame between each two of the game's, which
+    /// the window shows half a frame before the later one where the screen refreshes at least
+    /// twice for each of the game's frames. The renderer reads it when it starts. Presets leave it.
+    bool frame_generation{false};
+    /// How the game keeps its latency low; Reflex and Anti-Lag 2 fall back to Universal where the
+    /// GPU lacks them. Presets leave it.
+    LowLatency low_latency{LowLatency::Off};
     /// Whether the game draws its gravity meter with the special meter beside it, its health bar,
     /// and its crosshair and target markers. HudParts takes them. Presets leave them.
     bool hud_gravity_meter{true};

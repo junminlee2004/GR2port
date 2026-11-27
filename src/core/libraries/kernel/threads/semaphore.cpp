@@ -17,6 +17,7 @@
 #include "core/libraries/kernel/threads/pthread.h"
 #include "core/libraries/kernel/time.h"
 #include "core/libraries/libs.h"
+#include "graphics/gr2port/low_latency.h"
 
 namespace Libraries::Kernel {
 
@@ -330,7 +331,11 @@ s32 PS4_SYSV_ABI sceKernelWaitSema(OrbisKernelSema sem, s32 needCount, u32* pTim
     if (!orbis_sems.IsAllocated(sem)) {
         return ORBIS_KERNEL_ERROR_ESRCH;
     }
-    return orbis_sems[sem].Wait(true, needCount, pTimeout);
+    // GR2port: the game's main thread waits for its draw thread on one of them.
+    Gr2Port::LowLatency::BeforeWait(sem.index);
+    const s32 result = orbis_sems[sem].Wait(true, needCount, pTimeout);
+    Gr2Port::LowLatency::AfterWait(sem.index);
+    return result;
 }
 
 s32 PS4_SYSV_ABI sceKernelSignalSema(OrbisKernelSema sem, s32 signalCount) {

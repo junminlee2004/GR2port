@@ -12,6 +12,7 @@
 #include "core/libraries/videoout/videoout_error.h"
 #include "imgui/renderer/imgui_core.h"
 
+#include "graphics/gr2port/low_latency.h"
 #include "graphics/gr2port/presenter.h"
 #include "graphics/gr2port/vblank.h"
 
@@ -364,7 +365,16 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
             } else {
                 Flip(request);
                 FRAME_END;
+                // GR2port: with low latency on, the game's frames wait for the vblank before
+                // their input instead of at their flips.
+                if (Gr2Port::LowLatency::FlipsAll()) {
+                    while (const auto next = receive_request()) {
+                        Flip(next);
+                        FRAME_END;
+                    }
+                }
             }
+            Gr2Port::LowLatency::OnFlipVblank();
         }
 
         {

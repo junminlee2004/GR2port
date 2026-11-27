@@ -309,6 +309,7 @@ struct FfxVkFsr3_3_1_6FrameGenerationContext {
     VkImage preparedDepthImage = VK_NULL_HANDLE;
     VkImage preparedMotionVectorImage = VK_NULL_HANDLE;
     FfxApiResource color{};
+    FfxApiResource hudless{};
     OwnedSharedImage opticalFlowVector{};
     OwnedSharedImage opticalFlowScd{};
     OwnedSharedImage dilatedDepth{};
@@ -460,9 +461,15 @@ ffxVkFsr3_3_1_6FrameGenerationContextRecordPrepare(
         info->transferFunction > FFX_VK_FSR3_3_1_6_FRAMEGEN_TRANSFER_SCRGB ||
         !valid_image(info->color, context->colorFormat,
                      context->displayWidth, context->displayHeight, false) ||
+        (info->hudlessColor.image != VK_NULL_HANDLE &&
+         !valid_image(info->hudlessColor, context->colorFormat,
+                      context->displayWidth, context->displayHeight, false)) ||
         !valid_image(info->depth, VK_FORMAT_R32_SFLOAT, info->renderWidth, info->renderHeight, false) ||
         !valid_motion_image(info->motionVectors, info->renderWidth, info->renderHeight))
         return FFX_VK_FSR3_3_1_6_FRAMEGEN_ERROR_INVALID_ARGUMENT;
+    /* The constant buffers and descriptor sets staged from here on belong to this
+     * frame, and RetireFrame frees them once it completes. */
+    ffxVkFsr3_3_1_5BridgeBeginFrame(context->bridge, info->frameId);
     if (!context->initialized) {
         const OwnedSharedImage shared[] = {
             context->opticalFlowVector, context->opticalFlowScd, context->dilatedDepth,
@@ -477,16 +484,26 @@ ffxVkFsr3_3_1_6FrameGenerationContextRecordPrepare(
     const FfxVkFsr3_3_1_5Resource color = import_frame_image(context->bridge, info->color, false);
     const FfxVkFsr3_3_1_5Resource depth = import_frame_image(context->bridge, info->depth, false);
     const FfxVkFsr3_3_1_5Resource motion = import_frame_image(context->bridge, info->motionVectors, false);
+    const bool hasHudless = info->hudlessColor.image != VK_NULL_HANDLE;
+    const FfxVkFsr3_3_1_5Resource hudless =
+        hasHudless ? import_frame_image(context->bridge, info->hudlessColor, false) :
+                     FfxVkFsr3_3_1_5Resource{};
     context->color = ffxVkFsr3_3_1_5BridgeResolveResource(context->bridge, color);
+    context->hudless = hasHudless ?
+        ffxVkFsr3_3_1_5BridgeResolveResource(context->bridge, hudless) : FfxApiResource{};
     const FfxApiResource depthResource = ffxVkFsr3_3_1_5BridgeResolveResource(context->bridge, depth);
     const FfxApiResource motionResource = ffxVkFsr3_3_1_5BridgeResolveResource(context->bridge, motion);
-    if (!color.resource || !depthResource.resource || !motionResource.resource) {
+    if (!color.resource || !depthResource.resource || !motionResource.resource ||
+        (hasHudless && !context->hudless.resource)) {
         ffxVkFsr3_3_1_5BridgeReleaseImportedImage(context->bridge, color);
         ffxVkFsr3_3_1_5BridgeReleaseImportedImage(context->bridge, depth);
         ffxVkFsr3_3_1_5BridgeReleaseImportedImage(context->bridge, motion);
+        ffxVkFsr3_3_1_5BridgeReleaseImportedImage(context->bridge, hudless);
         return FFX_VK_FSR3_3_1_6_FRAMEGEN_ERROR_OUT_OF_MEMORY;
     }
     context->pendingImports = {color, depth, motion};
+    if (hasHudless)
+        context->pendingImports.push_back(hudless);
     /* From this point a scheduler error may follow partially recorded Vulkan
      * commands.  Retain every imported view until the caller retires the
      * submitted/abandoned command buffer after its fence, rather than freeing
@@ -500,7 +517,8 @@ ffxVkFsr3_3_1_6FrameGenerationContextRecordPrepare(
     context->preparedMotionVectorImage = info->motionVectors.image;
     FfxOpticalflowDispatchDescription flow{};
     flow.commandList = reinterpret_cast<FfxCommandList>(info->commandBuffer);
-    flow.color = context->color;
+    /* The public provider measures the flow on the HUD-less color when it has one. */
+    flow.color = context->hudless.resource ? context->hudless : context->color;
     flow.opticalFlowVector = context->opticalFlowVector.resource;
     flow.opticalFlowSCD = context->opticalFlowScd.resource;
     flow.reset = info->reset == VK_TRUE;
@@ -605,6 +623,7 @@ ffxVkFsr3_3_1_6FrameGenerationContextRecordDispatch(
     dispatch.displaySize = {info->displayWidth, info->displayHeight};
     dispatch.renderSize = {context->renderWidth, context->renderHeight};
     dispatch.currentBackBuffer = context->color;
+    dispatch.currentBackBuffer_HUDLess = context->hudless;
     dispatch.output = outputResource;
     dispatch.interpolationRect = {static_cast<int32_t>(info->interpolationX),
                                   static_cast<int32_t>(info->interpolationY),
@@ -643,6 +662,7 @@ ffxVkFsr3_3_1_6FrameGenerationContextRecordDispatch(
         return result_from_ffx(result);
     context->retainedFrames.push_back({context->frameId, std::move(context->pendingImports)});
     context->color = {};
+    context->hudless = {};
     context->prepared = false;
     context->dispatched = false;
     context->renderWidth = 0u;
@@ -661,6 +681,7 @@ ffxVkFsr3_3_1_6FrameGenerationContextRetireFrame(
             ffxVkFsr3_3_1_5BridgeReleaseImportedImage(context->bridge, resource);
         context->pendingImports.clear();
         context->color = {};
+        context->hudless = {};
         context->prepared = false;
         context->dispatched = false;
         context->renderWidth = 0u;
@@ -676,6 +697,7 @@ ffxVkFsr3_3_1_6FrameGenerationContextRetireFrame(
             ++retained;
         }
     }
+    ffxVkFsr3_3_1_5BridgeRetireFrame(context->bridge, completedFrameId);
     return FFX_VK_FSR3_3_1_6_FRAMEGEN_OK;
 }
 

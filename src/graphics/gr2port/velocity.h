@@ -26,9 +26,22 @@ void Record(vk::CommandBuffer cmd, bool drawn, u64 packet_address);
 
 vk::ImageView View();
 
-/// The upscaler's motion, R16G16 like View's but with characters moving with the camera, in the
-/// general layout after Record.
+/// The upscaler's and frame generation's motion, R16G16 like View's but with characters moving
+/// with the camera where CharacterMotion does not measure them, in the general layout after Record.
 vk::Image MotionImage();
 vk::ImageView MotionView();
+
+/// With an upscaler or frame generation, on a GPU whose vertex shaders may write storage buffers,
+/// the characters' depth pass measures the Character list's own motion for MotionImage.
+bool CharacterMotion();
+/// The image of that motion, in CharacterMotionFormat at the scene's size, which the pass clears to
+/// UnmeasuredMotion and leaves in the shader read-only layout for Record.
+inline constexpr vk::Format CharacterMotionFormat = vk::Format::eR16G16Sfloat;
+inline constexpr float UnmeasuredMotion = 4096.0f;
+vk::Image CharacterMotionImage();
+vk::ImageView CharacterMotionView();
+/// The device address of the clip history's half for the packet frame, which keeps the
+/// Character list's clip positions for the next frame.
+u64 ClipHistory(u64 frame);
 
 } // namespace Gr2Port::Velocity

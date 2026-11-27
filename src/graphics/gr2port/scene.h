@@ -60,6 +60,8 @@ inline constexpr u32 MaxSpheres = 256;
 inline constexpr u32 MaxDecals = 1024;
 /// Character draws per packet, and their outlines.
 inline constexpr u32 MaxCharacters = 1024;
+/// The vertices whose clip positions each half of the renderer's clip history holds.
+inline constexpr u32 ClipHistoryVertices = 1u << 20;
 inline constexpr u32 MaxContours = 512;
 /// The spheres that shade the world's ambient light.
 inline constexpr u32 MaxOccluders = 64;
@@ -152,6 +154,9 @@ inline constexpr u32 ImGuiHandles = UiTargetHandles - MaxImGuiTextures;
 /// The texture handle of the copy of the picture that the photo filter's view reads: the one
 /// below the ImGui textures'.
 inline constexpr u32 UiCopyHandle = ImGuiHandles - 1;
+/// The texture handle of frame generation's picture, which the window's present draws: the one
+/// below the picture's copy.
+inline constexpr u32 GeneratedHandle = UiCopyHandle - 1;
 /// The game's primitive types of the screen drawing: triangle lists and strips.
 inline constexpr u32 UiPrimitiveList = 4;
 inline constexpr u32 UiPrimitiveStrip = 6;
@@ -761,9 +766,18 @@ struct Character {
     u32 detail;
     /// A glow draw's blend constant, linear, the same for red, green and blue; 1 for the others.
     float glow;
-    u32 padding[2];
+    /// A Character list draw's vertices in the renderer's clip history: where the frame keeps
+    /// their clip positions, and where the last frame kept them; NoClipHistory for none. A draw
+    /// that took over from another shape of its character has ClipSwap in last_clip_history.
+    u32 clip_history;
+    u32 last_clip_history;
 };
 static_assert(sizeof(Character) == 656);
+inline constexpr u32 NoClipHistory = ~0u;
+/// With this bit, the rest of last_clip_history counts the palette rows from the draw's palette to
+/// the last frame's world-view-projection matrix and palette of the shape it took over from, in
+/// the packet's palette rows in that order.
+inline constexpr u32 ClipSwap = 1u << 31;
 
 /// A character's outline: the game's G2_CH_Contour constants of the vertex, geometry and pixel
 /// programs, whose names are in shaders/scene.glsl, then its mesh. The elements are as in Draw.

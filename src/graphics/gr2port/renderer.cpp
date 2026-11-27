@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <thread>
@@ -37,11 +38,13 @@
 #include "graphics/gr2port/effects.h"
 #include "graphics/gr2port/enemies.h"
 #include "graphics/gr2port/fog.h"
+#include "graphics/gr2port/frame_generation.h"
 #include "graphics/gr2port/frame_stats.h"
 #include "graphics/gr2port/glass.h"
 #include "graphics/gr2port/hud_parts.h"
 #include "graphics/gr2port/imgui_relay.h"
 #include "graphics/gr2port/look.h"
+#include "graphics/gr2port/low_latency.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/motion_blur.h"
@@ -61,7 +64,10 @@
 #include "graphics/gr2port/shaders/character_catcher_frag.h"
 #include "graphics/gr2port/shaders/character_depth_catcher_frag.h"
 #include "graphics/gr2port/shaders/character_depth_frag.h"
+#include "graphics/gr2port/shaders/character_depth_motion_catcher_frag.h"
+#include "graphics/gr2port/shaders/character_depth_motion_frag.h"
 #include "graphics/gr2port/shaders/character_frag.h"
+#include "graphics/gr2port/shaders/character_motion_vert.h"
 #include "graphics/gr2port/shaders/character_vert.h"
 #include "graphics/gr2port/shaders/interior_frag.h"
 #include "graphics/gr2port/shaders/lambert_frag.h"
@@ -86,6 +92,20 @@ namespace Gr2Port::Renderer {
 namespace {
 
 constexpr u32 FramesInFlight = 2;
+
+// Waits for fence. The catcher's wait comes back each quarter second: a wait the driver still
+// answers is not a call that never returns.
+vk::Result WaitFence(const Device& d, vk::Fence fence) {
+    vk::Result answer = vk::Result::eTimeout;
+    while (answer == vk::Result::eTimeout) {
+        answer = d.device.waitForFences(fence, true, Catcher::On ? Catcher::WaitNs : UINT64_MAX,
+                                        d.dispatch);
+        if (answer == vk::Result::eTimeout && Catcher::On) {
+            Catcher::WaitAnswered();
+        }
+    }
+    return answer;
+}
 // GPU timestamps per frame: the start, after the uploads, after the deformers, after each cascade,
 // after the fog's cells, the surfaces, the lines, the occlusion, the light, the forward draws, the
 // fog's apply, the meter and the bloom, and the end.
@@ -133,6 +153,11 @@ struct CharacterPush {
     u64 point_lights;
     u64 light_grid;
     u32 glow_pass;
+    // The characters' motion pass: whether the last frame's clip history holds that frame's
+    // positions, and the device addresses of the frame's history and the last frame's.
+    u32 last_clip_valid;
+    u64 clip_history;
+    u64 last_clip_history;
 };
 
 struct Slot {
@@ -140,6 +165,8 @@ struct Slot {
     vk::CommandBuffer commands;
     vk::Fence done;
     vk::Semaphore acquired;
+    // The image of the frame's generated present.
+    vk::Semaphore acquired_generated;
     // The scene ring slot the frame reads.
     u32 scene = SceneRing::Slots;
     bool timed = false;
@@ -256,8 +283,10 @@ private:
     void Frame(const SceneRing::Packet& packet);
     void RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Header& header,
                      const SceneRing::Packet& packet, u64 offset, u64 game_frames, float game_step);
-    void Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
-                const Scene::Header& header);
+    void Record(Slot& slot, u32 index, std::optional<u32> generated,
+                const SceneRing::Packet& packet, const Scene::Header& header);
+    void RecordWindow(vk::CommandBuffer cmd, const Scene::Header& header, u32 index,
+                      bool generated);
     void ReadTimes(u32 slot_index);
     void LogScene(const Scene::Header& header, const SceneRing::Packet& packet);
     void LogShadows(const Scene::Header& header, const SceneRing::Packet& packet);
@@ -268,6 +297,8 @@ private:
                         const SceneRing::Packet& packet, u64 offset, vk::Extent2D extent,
                         bool glow_pass = false);
     void MeasureMotion(const SceneRing::Packet& packet);
+    void RecordCharacterMotion(vk::CommandBuffer cmd, const Scene::Header& header,
+                               const SceneRing::Packet& packet, u64 offset, vk::Extent2D extent);
     void RecordSnapshot(vk::CommandBuffer cmd, vk::Image image);
     void SaveSnapshot();
     void Report();
@@ -298,6 +329,8 @@ private:
     Image character_depth;
     Pipeline character_pipeline;
     Pipeline character_depth_pipeline;
+    // The Character list's depth with its motion (Velocity::CharacterMotion).
+    Pipeline character_motion_pipeline;
     Pipeline interior_pipeline;
     Pipeline interior_depth_pipeline;
     Pipeline lambert_pipeline;
@@ -314,6 +347,8 @@ private:
     // The camera of the last frame whose world was drawn, which the histories hold.
     Scene::Camera last_camera;
     bool camera_drawn = false;
+    // The packet frame whose Character list clip positions the clip history holds; 0 for none.
+    u64 kept_clip_frame = 0;
     // The game frame of the last packet recorded, and its time in 30 fps frames.
     u64 recorded_frame = 0;
     double recorded_time = 0.0;
@@ -364,6 +399,7 @@ bool Thread::Init() {
         slot.done =
             d.device.createFence({.flags = vk::FenceCreateFlagBits::eSignaled}, nullptr, dl).value;
         slot.acquired = d.device.createSemaphore({}, nullptr, dl).value;
+        slot.acquired_generated = d.device.createSemaphore({}, nullptr, dl).value;
     }
     if (d.timestamp_period != 0.0) {
         const vk::QueryPoolCreateInfo info{
@@ -408,8 +444,14 @@ bool Thread::Init() {
                                       Placement::Upload);
     const GamePatches::Picture picture = GamePatches::ChosenPicture();
     first_extent = vk::Extent2D{picture.width, picture.height};
-    if (scene_ring.mapped == nullptr || !Upscaler::Start(d, *memory, first_extent) ||
-        !Meshes::Start(d, *memory) || !Textures::Start(d, *memory) || !Ui::Start(d, *memory) ||
+    if (scene_ring.mapped == nullptr || !Upscaler::Start(d, *memory, first_extent)) {
+        return false;
+    }
+    FrameGeneration::Start(d, *memory, Upscaler::RenderExtent(first_extent), first_extent);
+    swapchain->SetTwoAcquired(FrameGeneration::Made());
+    LowLatency::Start(d);
+    LowLatency::Choose(graphics.low_latency);
+    if (!Meshes::Start(d, *memory) || !Textures::Start(d, *memory) || !Ui::Start(d, *memory) ||
         !ImGuiRelay::Start(d, *memory) || !Shadows::Start(d, *memory) ||
         !Deformers::Start(d, *memory) || !Velocity::Start(d, *memory) ||
         !Look::Start(d, *memory, DepthFormat) ||
@@ -432,12 +474,14 @@ bool Thread::Init() {
                                  SelfTranslucent::SetLayout()};
     std::span<const u32> character_fragment{CHARACTER_FRAG};
     std::span<const u32> character_depth_fragment{CHARACTER_DEPTH_FRAG};
+    std::span<const u32> character_motion_fragment{CHARACTER_DEPTH_MOTION_FRAG};
     // The catcher's builds count the lanes the per-draw loop's turns do not reach.
     static_assert(sizeof(CharacterPush) <= Catcher::Counts::Offset);
     const u32 character_push = Catcher::Counts::PushBytes(sizeof(CharacterPush));
     if (Catcher::On) {
         character_fragment = CHARACTER_CATCHER_FRAG;
         character_depth_fragment = CHARACTER_DEPTH_CATCHER_FRAG;
+        character_motion_fragment = CHARACTER_DEPTH_MOTION_CATCHER_FRAG;
     }
     character_pipeline = CreateGraphicsPipeline(d, {
                                                        .vertex = CHARACTER_VERT,
@@ -459,6 +503,19 @@ bool Thread::Init() {
                                                              .push_constant_bytes = character_push,
                                                              .set_layouts = depth_set_layouts,
                                                          });
+    if (Velocity::CharacterMotion()) {
+        character_motion_pipeline =
+            CreateGraphicsPipeline(d, {
+                                          .vertex = CHARACTER_MOTION_VERT,
+                                          .fragment = character_motion_fragment,
+                                          .color = Velocity::CharacterMotionFormat,
+                                          .depth = DepthFormat,
+                                          .cull = vk::CullModeFlagBits::eBack,
+                                          .depth_test = true,
+                                          .push_constant_bytes = character_push,
+                                          .set_layouts = depth_set_layouts,
+                                      });
+    }
     interior_pipeline =
         CreateGraphicsPipeline(d, {
                                       .vertex = CHARACTER_VERT,
@@ -529,14 +586,15 @@ bool Thread::Init() {
                                       .push_constant_bytes = character_push,
                                       .set_layouts = set_layouts,
                                   });
-    for (const Pipeline* counting :
-         {&character_pipeline, &character_depth_pipeline, &character_glow_pipeline}) {
+    for (const Pipeline* counting : {&character_pipeline, &character_depth_pipeline,
+                                     &character_motion_pipeline, &character_glow_pipeline}) {
         Catcher::Counts::Counting(*counting, vk::ShaderStageFlagBits::eAllGraphics);
     }
     if (!character_pipeline.pipeline || !character_depth_pipeline.pipeline ||
         !interior_pipeline.pipeline || !interior_depth_pipeline.pipeline ||
         !lambert_pipeline.pipeline || !lambert_depth_pipeline.pipeline ||
-        !vision_pipeline.pipeline || !character_glow_pipeline.pipeline) {
+        !vision_pipeline.pipeline || !character_glow_pipeline.pipeline ||
+        (Velocity::CharacterMotion() && !character_motion_pipeline.pipeline)) {
         return false;
     }
     SceneRing::Attach(scene_ring.mapped, scene_ring.address);
@@ -611,6 +669,8 @@ void Thread::TakeSettings() {
         vsync = live.display.vsync;
         needs_swapchain = true;
     }
+    // Reflex's swapchains are made for it.
+    needs_swapchain = LowLatency::Choose(now.low_latency) || needs_swapchain;
     graphics = now;
     LOG_INFO(Render_Vulkan, "GR2port: the renderer took the graphics settings");
 }
@@ -640,6 +700,7 @@ bool Thread::ResizeScene(vk::Extent2D output) {
         return false;
     }
     Upscaler::SetInputs(depth.image, depth.view, Velocity::MotionImage(), Velocity::MotionView());
+    FrameGeneration::Resize(extent, output, depth.view);
     if (!Look::Resize(extent, output, Ui::TargetFormat, depth.view) ||
         !ShadowTrace::Resize(extent, depth.view) ||
         !MotionBlur::Resize(extent, Velocity::View(), depth.view, character_depth.view,
@@ -708,6 +769,9 @@ void Thread::DrawCharacters(vk::CommandBuffer cmd, Scene::DrawList list, const P
         .point_lights = packet.address + Scene::PointLightsOffset,
         .light_grid = PointLights::GridAddress(),
         .glow_pass = glow_pass ? 1u : 0u,
+        .last_clip_valid = kept_clip_frame != 0 && kept_clip_frame + 1 == packet.frame ? 1u : 0u,
+        .clip_history = Velocity::ClipHistory(packet.frame),
+        .last_clip_history = Velocity::ClipHistory(packet.frame - 1),
     };
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.layout, 0, sets, {}, dl);
@@ -966,6 +1030,59 @@ void Thread::MeasureMotion(const SceneRing::Packet& packet) {
     camera_drawn = true;
 }
 
+// The Character list's depth over the other characters', with each pixel's own motion for the
+// upscaler and frame generation: the vertices keep their clip positions in the packet frame's half
+// of the clip history and read the last frame's from the other half.
+void Thread::RecordCharacterMotion(vk::CommandBuffer cmd, const Scene::Header& header,
+                                   const SceneRing::Packet& packet, u64 offset,
+                                   vk::Extent2D extent) {
+    const auto& dl = d.dispatch;
+    constexpr auto Compute = vk::PipelineStageFlagBits2::eComputeShader;
+    constexpr auto Vertex = vk::PipelineStageFlagBits2::eVertexShader;
+    constexpr auto Output = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+    // The last frame's velocity sampled the image, and the last frames' vertices wrote the halves.
+    ImageBarrier(d, cmd, Velocity::CharacterMotionImage(), vk::ImageLayout::eUndefined,
+                 vk::ImageLayout::eColorAttachmentOptimal, Compute, vk::AccessFlagBits2::eNone,
+                 Output, vk::AccessFlagBits2::eColorAttachmentWrite);
+    const vk::MemoryBarrier2 history{
+        .srcStageMask = Vertex,
+        .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
+        .dstStageMask = Vertex,
+        .dstAccessMask =
+            vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite,
+    };
+    cmd.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &history}, dl);
+    const vk::RenderingAttachmentInfo motion{
+        .imageView = Velocity::CharacterMotionView(),
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eClear,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+        .clearValue = {.color = {.float32 = std::array{Velocity::UnmeasuredMotion,
+                                                       Velocity::UnmeasuredMotion, 0.0f, 0.0f}}},
+    };
+    const vk::RenderingAttachmentInfo depth{
+        .imageView = character_depth.view,
+        .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eLoad,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+    };
+    cmd.beginRendering({.renderArea = {{0, 0}, extent},
+                        .layerCount = 1,
+                        .colorAttachmentCount = 1,
+                        .pColorAttachments = &motion,
+                        .pDepthAttachment = &depth},
+                       dl);
+    const std::array depth_sets{Textures::Set()};
+    DrawCharacters(cmd, Scene::DrawList::Character, character_motion_pipeline, depth_sets, header,
+                   packet, offset, extent);
+    cmd.endRendering(dl);
+    ImageBarrier(d, cmd, Velocity::CharacterMotionImage(), vk::ImageLayout::eColorAttachmentOptimal,
+                 vk::ImageLayout::eShaderReadOnlyOptimal, Output,
+                 vk::AccessFlagBits2::eColorAttachmentWrite, Compute,
+                 vk::AccessFlagBits2::eShaderSampledRead);
+    kept_clip_frame = packet.frame;
+}
+
 // The world's passes, from the deformers to the antialias, which leave the picture the composite
 // reads.
 void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Header& header,
@@ -1094,11 +1211,21 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
         // The screens' depth takes the interiors' pipeline: the same vertex program and state.
         DrawCharacters(cmd, Scene::DrawList::Vision, interior_depth_pipeline, depth_sets, header,
                        packet, offset, extent);
-        DrawCharacters(cmd, Scene::DrawList::Character, character_depth_pipeline, depth_sets,
-                       header, packet, offset, extent);
+        // With its motion measured, the Character list draws last, in a pass of its own.
+        if (!Velocity::CharacterMotion()) {
+            DrawCharacters(cmd, Scene::DrawList::Character, character_depth_pipeline, depth_sets,
+                           header, packet, offset, extent);
+        }
         DrawCharacters(cmd, Scene::DrawList::Interior, interior_depth_pipeline, depth_sets, header,
                        packet, offset, extent);
         cmd.endRendering(dl);
+        if (Velocity::CharacterMotion()) {
+            ImageBarrier(d, cmd, character_depth.image,
+                         vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                         vk::ImageLayout::eDepthStencilAttachmentOptimal, depth_tests, depth_writes,
+                         depth_tests, depth_writes, vk::ImageAspectFlagBits::eDepth);
+            RecordCharacterMotion(cmd, header, packet, offset, extent);
+        }
         ImageBarrier(d, cmd, character_depth.image, vk::ImageLayout::eDepthStencilAttachmentOptimal,
                      vk::ImageLayout::eDepthStencilReadOnlyOptimal, depth_tests, depth_writes,
                      vk::PipelineStageFlagBits2::eComputeShader,
@@ -1352,8 +1479,37 @@ void Thread::RecordWorld(vk::CommandBuffer cmd, u32 slot_index, const Scene::Hea
     PassTimes::Mark(cmd, PassTimes::Pass::Antialias);
 }
 
-void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
-                    const Scene::Header& header) {
+// Draws the frame's back buffer, or frame generation's picture if generated is true, and the
+// overlay into swapchain image index, which is then in the colour attachment layout.
+void Thread::RecordWindow(vk::CommandBuffer cmd, const Scene::Header& header, u32 index,
+                          bool generated) {
+    const auto& dl = d.dispatch;
+    ImageBarrier(d, cmd, swapchain->Image(index), vk::ImageLayout::eUndefined,
+                 vk::ImageLayout::eColorAttachmentOptimal,
+                 vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eNone,
+                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                 vk::AccessFlagBits2::eColorAttachmentWrite);
+    // Black around a back buffer of another shape than the window.
+    const vk::RenderingAttachmentInfo picture{
+        .imageView = swapchain->View(index),
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eClear,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+        .clearValue = {.color = vk::ClearColorValue{.float32 = std::array<float, 4>{0, 0, 0, 1}}},
+    };
+    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Present);
+    cmd.beginRendering({.renderArea = {{0, 0}, swapchain->Extent()},
+                        .layerCount = 1,
+                        .colorAttachmentCount = 1,
+                        .pColorAttachments = &picture},
+                       dl);
+    Ui::RecordPresent(cmd, header, swapchain->Extent(), generated);
+    ImGuiRelay::Record(cmd, swapchain->Extent());
+    cmd.endRendering(dl);
+}
+
+void Thread::Record(Slot& slot, u32 index, std::optional<u32> generated,
+                    const SceneRing::Packet& packet, const Scene::Header& header) {
     const vk::CommandBuffer cmd = slot.commands;
     const auto& dl = d.dispatch;
     const u32 slot_index = static_cast<u32>(&slot - slots.data());
@@ -1396,6 +1552,10 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
         if (world.width != 0) {
             Look::RecordComposite(cmd, packet.address, world, Ui::WorldGain() ? hdr_peak : 0.0f);
             Ui::EndWorld(cmd);
+            // Frame generation moves the world without the screen drawing.
+            if (generated && header.ui.world == header.ui.picture) {
+                FrameGeneration::CopyHudless(cmd, Ui::TargetImage(header.ui.picture), world);
+            }
         }
         PassTimes::Mark(cmd, PassTimes::Pass::Composite);
     } else if (timestamps) {
@@ -1412,29 +1572,22 @@ void Thread::Record(Slot& slot, u32 index, const SceneRing::Packet& packet,
     ImGuiRelay::Update(cmd, frame, frame - FramesInFlight);
     PassTimes::Mark(cmd, PassTimes::Pass::Ui);
 
+    // The generated present shows the frame between the last one and this one, or this one again
+    // where frame generation has none.
+    if (generated) {
+        DeviceLost::Mark(d, cmd, DeviceLost::Pass::FrameGeneration);
+        const bool made = FrameGeneration::Record(
+            cmd, frame, frame - FramesInFlight, depth.image, Velocity::MotionImage(),
+            Ui::TargetImage(header.ui.picture), Ui::TargetExtent(header.ui.picture));
+        RecordWindow(cmd, header, *generated, made);
+        ImageBarrier(d, cmd, swapchain->Image(*generated), vk::ImageLayout::eColorAttachmentOptimal,
+                     vk::ImageLayout::ePresentSrcKHR,
+                     vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                     vk::AccessFlagBits2::eColorAttachmentWrite, vk::PipelineStageFlagBits2::eNone,
+                     vk::AccessFlagBits2::eNone);
+    }
     const vk::Image image = swapchain->Image(index);
-    ImageBarrier(d, cmd, image, vk::ImageLayout::eUndefined,
-                 vk::ImageLayout::eColorAttachmentOptimal,
-                 vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eNone,
-                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                 vk::AccessFlagBits2::eColorAttachmentWrite);
-    // Black around a back buffer of another shape than the window.
-    const vk::RenderingAttachmentInfo picture{
-        .imageView = swapchain->View(index),
-        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-        .loadOp = vk::AttachmentLoadOp::eClear,
-        .storeOp = vk::AttachmentStoreOp::eStore,
-        .clearValue = {.color = vk::ClearColorValue{.float32 = std::array<float, 4>{0, 0, 0, 1}}},
-    };
-    DeviceLost::Mark(d, cmd, DeviceLost::Pass::Present);
-    cmd.beginRendering({.renderArea = {{0, 0}, swapchain->Extent()},
-                        .layerCount = 1,
-                        .colorAttachmentCount = 1,
-                        .pColorAttachments = &picture},
-                       dl);
-    Ui::RecordPresent(cmd, header, swapchain->Extent());
-    ImGuiRelay::Record(cmd, swapchain->Extent());
-    cmd.endRendering(dl);
+    RecordWindow(cmd, header, index, false);
     if (snapshot_wanted) {
         snapshot_wanted = false;
         if (header.ui.only == 0) {
@@ -1575,17 +1728,7 @@ void Thread::Frame(const SceneRing::Packet& packet) {
         Catcher::Enter(Catcher::Call::Wait);
     }
     const auto wait_start = std::chrono::steady_clock::now();
-    // The catcher's wait comes back each quarter second: a wait the driver still answers is not
-    // a call that never returns.
-    vk::Result answer = vk::Result::eTimeout;
-    while (answer == vk::Result::eTimeout) {
-        answer =
-            d.device.waitForFences(slot.done, true, Catcher::On ? Catcher::WaitNs : UINT64_MAX, dl);
-        if (answer == vk::Result::eTimeout && Catcher::On) {
-            Catcher::WaitAnswered();
-        }
-    }
-    DeviceLost::Check(d, answer, "the wait for an earlier frame");
+    DeviceLost::Check(d, WaitFence(d, slot.done), "the wait for an earlier frame");
     const auto wait_end = std::chrono::steady_clock::now();
     if (Catcher::On) {
         Catcher::Enter(Catcher::Call::Record);
@@ -1604,41 +1747,81 @@ void Thread::Frame(const SceneRing::Packet& packet) {
     }
 
     u32 index = 0;
+    // A frame with a generated present acquires that image too, which the window shows first.
+    std::optional<u32> generated;
+    const bool generating = FrameGeneration::Presents(swapchain->Hdr()) && swapchain->TakesTwo();
     if (Catcher::On) {
         Catcher::Enter(Catcher::Call::Acquire);
     }
     const auto acquire_start = std::chrono::steady_clock::now();
-    const bool acquired = swapchain->Acquire(slot.acquired, index);
+    bool acquired = true;
+    if (generating) {
+        u32 first = 0;
+        acquired = swapchain->Acquire(slot.acquired_generated, first);
+        if (acquired) {
+            generated = first;
+        }
+    }
+    acquired = acquired && swapchain->Acquire(slot.acquired, index);
     const auto acquire_end = std::chrono::steady_clock::now();
     if (Catcher::On) {
         Catcher::Enter(Catcher::Call::Record);
     }
     if (!acquired) {
+        if (generated) {
+            // The first image's acquire signals its semaphore, which the next acquire with it
+            // needs unsignalled.
+            const vk::SemaphoreSubmitInfo pending{
+                .semaphore = slot.acquired_generated,
+                .stageMask = vk::PipelineStageFlagBits2::eAllCommands,
+            };
+            (void)d.queue.submit2(
+                vk::SubmitInfo2{.waitSemaphoreInfoCount = 1, .pWaitSemaphoreInfos = &pending},
+                nullptr, dl);
+        }
         needs_swapchain = true;
         SceneRing::Release(packet.slot);
         return;
     }
     (void)d.device.resetFences(slot.done, dl);
     (void)d.device.resetCommandPool(slot.pool, {}, dl);
-    Record(slot, index, packet, header);
+    Record(slot, index, generated, packet, header);
     slot.scene = packet.slot;
 
-    const vk::SemaphoreSubmitInfo wait{
-        .semaphore = slot.acquired,
-        .stageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+    const std::array waits{
+        vk::SemaphoreSubmitInfo{
+            .semaphore = slot.acquired,
+            .stageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        },
+        vk::SemaphoreSubmitInfo{
+            .semaphore = slot.acquired_generated,
+            .stageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        },
     };
-    const vk::SemaphoreSubmitInfo signal{
-        .semaphore = swapchain->Rendered(index),
-        .stageMask = vk::PipelineStageFlagBits2::eAllCommands,
+    const std::array signals{
+        vk::SemaphoreSubmitInfo{
+            .semaphore = swapchain->Rendered(index),
+            .stageMask = vk::PipelineStageFlagBits2::eAllCommands,
+        },
+        vk::SemaphoreSubmitInfo{
+            .semaphore = swapchain->Rendered(generated.value_or(index)),
+            .stageMask = vk::PipelineStageFlagBits2::eAllCommands,
+        },
     };
+    const u32 images = generated ? 2u : 1u;
     const vk::CommandBufferSubmitInfo commands{.commandBuffer = slot.commands};
+    // Reflex names the frame's submit and its first present by the frame's low latency number.
+    const u64 low_latency = LowLatency::FrameOf(packet.frame);
+    const bool reflex = low_latency != 0 && LowLatency::Mode() == Settings::LowLatency::Reflex;
+    const vk::LatencySubmissionPresentIdNV latency{.presentID = low_latency};
     const vk::SubmitInfo2 submit{
-        .waitSemaphoreInfoCount = 1,
-        .pWaitSemaphoreInfos = &wait,
+        .pNext = reflex ? &latency : nullptr,
+        .waitSemaphoreInfoCount = images,
+        .pWaitSemaphoreInfos = waits.data(),
         .commandBufferInfoCount = 1,
         .pCommandBufferInfos = &commands,
-        .signalSemaphoreInfoCount = 1,
-        .pSignalSemaphoreInfos = &signal,
+        .signalSemaphoreInfoCount = images,
+        .pSignalSemaphoreInfos = signals.data(),
     };
     if (Catcher::On) {
         Catcher::Enter(Catcher::Call::Submit);
@@ -1652,6 +1835,7 @@ void Thread::Frame(const SceneRing::Packet& packet) {
         return;
     }
     DeviceLost::Submitted();
+    LowLatency::Submitted(low_latency);
     caught.submitted = true;
     if (Catcher::On) {
         Catcher::Enter(Catcher::Call::Present);
@@ -1669,8 +1853,35 @@ void Thread::Frame(const SceneRing::Packet& packet) {
         std::chrono::duration_cast<std::chrono::microseconds>(presenting - last_present).count());
     last_present = presenting;
     stats.frames++;
-    if (!swapchain->Present(index)) {
+    // The generated frame shows half a frame before the frame's own. With VSync the screen gives
+    // each present a refresh of its own. Without it each image shows when it is presented, so the
+    // generated one waits until the GPU has made it.
+    if (generated) {
+        auto shown = presenting;
+        if (swapchain->Immediate()) {
+            if (Catcher::On) {
+                Catcher::Enter(Catcher::Call::Wait);
+            }
+            DeviceLost::Check(d, WaitFence(d, slot.done), "the wait for the generated frame");
+            if (Catcher::On) {
+                Catcher::Enter(Catcher::Call::Present);
+            }
+            shown = std::chrono::steady_clock::now();
+        }
+        LowLatency::BeforePresent(low_latency);
+        if (!swapchain->Present(*generated, reflex ? low_latency : 0)) {
+            needs_swapchain = true;
+        }
+        LowLatency::AfterPresent(low_latency);
+        FrameGeneration::WaitHalfFrame(shown);
+    } else {
+        LowLatency::BeforePresent(low_latency);
+    }
+    if (!swapchain->Present(index, !generated && reflex ? low_latency : 0)) {
         needs_swapchain = true;
+    }
+    if (!generated) {
+        LowLatency::AfterPresent(low_latency);
     }
 }
 
@@ -1882,6 +2093,9 @@ void Thread::Report() {
     };
     log_gaps("game frames", stats.game_gaps);
     log_gaps("presents", stats.present_gaps);
+    if (const std::string low_latency = LowLatency::Report(seconds); !low_latency.empty()) {
+        LOG_INFO(Render_Vulkan, "GR2port low latency: {}", low_latency);
+    }
     stats = {.game_frames = game_frames, .skipped = skipped, .start = now};
     published = {.time = now, .game_frames = game_frames};
     snapshot_wanted = true;
@@ -1978,6 +2192,7 @@ Settings::Values Live(const Settings::Values& started, const Settings::Values& w
     to.texture_streaming_mb = from.texture_streaming_mb;
     to.field_of_view = from.field_of_view;
     to.screen_shake = from.screen_shake;
+    to.low_latency = from.low_latency;
     to.upscale_sharpening = from.upscale_sharpening;
     to.hud_gravity_meter = from.hud_gravity_meter;
     to.hud_health_bar = from.hud_health_bar;

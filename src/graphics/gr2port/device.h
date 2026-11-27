@@ -30,6 +30,8 @@ struct Device {
     bool tessellation_shaders = false;
     /// Storage images may have formats such as R8 (shaderStorageImageExtendedFormats).
     bool storage_extended_formats = false;
+    /// Vertex shaders may write storage buffers (vertexPipelineStoresAndAtomics).
+    bool vertex_stores = false;
     /// A lost device reports the last checkpoints (VK_NV_device_diagnostic_checkpoints).
     bool checkpoints = false;
     /// A lost device reports the fault (VK_EXT_device_fault).
@@ -46,6 +48,11 @@ struct Device {
     bool dynamic_blend = false;
     /// Swapchains take the HDR metadata of their content (VK_EXT_hdr_metadata).
     bool hdr_metadata = false;
+    /// NVIDIA Reflex's sleep and markers (VK_NV_low_latency2), with the ids of presents that its
+    /// markers name (VK_KHR_present_id) and the timeline semaphore its sleep signals.
+    bool low_latency2 = false;
+    /// AMD Anti-Lag 2 (VK_AMD_anti_lag), from the driver or from Mesa's layer.
+    bool anti_lag = false;
     /// Every pipeline is made through this cache, which a file keeps between runs.
     vk::PipelineCache pipeline_cache;
 };

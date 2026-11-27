@@ -158,6 +158,8 @@ bool g_camera_seen = false;
 float g_frame_ms = FirstFrameMs;
 Clock::time_point g_last_frame{};
 bool g_reset = true;
+// The frame's camera cut or came after a gap.
+bool g_cut = false;
 u64 g_frame_id = 0;
 u64 g_renderer_frame = 0;
 u32 g_frames_in_flight = 1;
@@ -182,6 +184,8 @@ Image g_input_depth;
 vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR g_derivatives{};
 vk::PhysicalDeviceCooperativeVectorFeaturesNV g_cooperative_vector{};
 std::vector<const char*> g_device_extensions;
+// The device takes derivatives in compute shaders, as FSR 4 and FSR 3.1.6's frame generation do.
+bool g_compute_derivatives = false;
 Gr2Fsr3::Fsr4DeviceFeatures g_fsr4_features{};
 // Whether the device runs cooperative vectors of signed bytes, as the FSR4_MAIN_1080 modules do.
 bool g_fsr4_cooperative_vectors = false;
@@ -918,6 +922,7 @@ void ReadCamera(const u8* packet) {
     if (g_camera_seen && (translation > CutTranslation || degrees > CutRotationDegrees ||
                           std::abs(fov - g_camera.fov) > CutFov)) {
         g_reset = true;
+        g_cut = true;
     }
     g_camera = {.near_plane = near_plane, .far_plane = far_plane, .fov = fov};
     g_camera_seen = true;
@@ -1111,8 +1116,9 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
                   vk::PhysicalDeviceFeatures2& features, vk::PhysicalDeviceVulkan11Features& vk11,
                   vk::PhysicalDeviceVulkan12Features& vk12,
                   vk::PhysicalDeviceVulkan13Features& vk13) {
-    const Settings::Upscaler chosen = Settings::Get().graphics.upscaler;
-    if (chosen == Settings::Upscaler::Off) {
+    const Settings::Graphics graphics = Settings::Get().graphics;
+    const Settings::Upscaler chosen = graphics.upscaler;
+    if (chosen == Settings::Upscaler::Off && !graphics.frame_generation) {
         return;
     }
     const auto supported =
@@ -1123,6 +1129,42 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
     // FSR 3.1's accumulate shaders and FSR 4's write storage images declared without a format.
     features.features.shaderStorageImageWriteWithoutFormat =
         core.shaderStorageImageWriteWithoutFormat;
+    // FSR 3.1's frame generation writes and reads them.
+    if (graphics.frame_generation) {
+        features.features.shaderStorageImageReadWithoutFormat =
+            core.shaderStorageImageReadWithoutFormat;
+    }
+    const auto [result, extensions] = gpu.enumerateDeviceExtensionProperties(nullptr, dispatch);
+    const bool has_derivatives =
+        result == vk::Result::eSuccess &&
+        std::ranges::any_of(extensions, [](const vk::ExtensionProperties& extension) {
+            return std::string_view{extension.extensionName.data()} ==
+                   VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME;
+        });
+    // The create info points at these until the device is made.
+    g_device_extensions.assign(info.ppEnabledExtensionNames,
+                               info.ppEnabledExtensionNames + info.enabledExtensionCount);
+    // FSR 3.1.6's frame generation and FSR 4 Lite take derivatives in compute shaders.
+    bool derivatives = false;
+    if (has_derivatives && (graphics.frame_generation || chosen == Settings::Upscaler::Fsr4)) {
+        const auto queried =
+            gpu.getFeatures2<vk::PhysicalDeviceFeatures2,
+                             vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR>(dispatch)
+                .get<vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR>();
+        derivatives = queried.computeDerivativeGroupLinear == VK_TRUE;
+        if (derivatives) {
+            g_derivatives = vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR{
+                .pNext = features.pNext,
+                .computeDerivativeGroupQuads = queried.computeDerivativeGroupQuads,
+                .computeDerivativeGroupLinear = VK_TRUE,
+            };
+            features.pNext = &g_derivatives;
+            g_device_extensions.push_back(VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME);
+        }
+    }
+    g_compute_derivatives = derivatives;
+    info.enabledExtensionCount = static_cast<u32>(g_device_extensions.size());
+    info.ppEnabledExtensionNames = g_device_extensions.data();
     if (chosen == Settings::Upscaler::Dlss) {
         Gr2Fsr3::ExtendDeviceForDlss(instance, gpu, info, dispatch);
         return;
@@ -1152,39 +1194,12 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
         supported.get<vk::PhysicalDeviceVulkan13Features>().shaderIntegerDotProduct;
     vk13.subgroupSizeControl =
         supported.get<vk::PhysicalDeviceVulkan13Features>().subgroupSizeControl;
-    const auto [result, extensions] = gpu.enumerateDeviceExtensionProperties(nullptr, dispatch);
-    const bool has_derivatives =
-        result == vk::Result::eSuccess &&
-        std::ranges::any_of(extensions, [](const vk::ExtensionProperties& extension) {
-            return std::string_view{extension.extensionName.data()} ==
-                   VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME;
-        });
     const bool has_cooperative_vectors =
         result == vk::Result::eSuccess &&
         std::ranges::any_of(extensions, [](const vk::ExtensionProperties& extension) {
             return std::string_view{extension.extensionName.data()} ==
                    VK_NV_COOPERATIVE_VECTOR_EXTENSION_NAME;
         });
-    // The create info points at these until the device is made.
-    g_device_extensions.assign(info.ppEnabledExtensionNames,
-                               info.ppEnabledExtensionNames + info.enabledExtensionCount);
-    bool derivatives = false;
-    if (has_derivatives) {
-        const auto queried =
-            gpu.getFeatures2<vk::PhysicalDeviceFeatures2,
-                             vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR>(dispatch)
-                .get<vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR>();
-        derivatives = queried.computeDerivativeGroupLinear == VK_TRUE;
-        if (derivatives) {
-            g_derivatives = vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR{
-                .pNext = features.pNext,
-                .computeDerivativeGroupQuads = queried.computeDerivativeGroupQuads,
-                .computeDerivativeGroupLinear = VK_TRUE,
-            };
-            features.pNext = &g_derivatives;
-            g_device_extensions.push_back(VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME);
-        }
-    }
     // Cooperative vector modules use the Vulkan memory model.
     g_fsr4_cooperative_vectors = false;
     if (has_cooperative_vectors && supported12.vulkanMemoryModel == VK_TRUE) {
@@ -1238,6 +1253,10 @@ void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
         .derivative_group_quads =
             derivatives && g_derivatives.computeDerivativeGroupQuads == VK_TRUE,
     };
+}
+
+bool ComputeDerivatives() {
+    return g_compute_derivatives;
 }
 
 void OnDeviceCreated(Device& device) {
@@ -1437,24 +1456,37 @@ void SetFrame(u64 frame, u32 frames_in_flight) {
 }
 
 void BeginFrame(const u8* packet) {
-    if (!Active()) {
-        g_jitter = {};
-        return;
-    }
+    // Frame generation reads the camera and the time without an upscaler too.
     const Clock::time_point now = Clock::now();
+    g_cut = false;
     if (g_last_frame != Clock::time_point{}) {
         const auto gap = now - g_last_frame;
-        g_reset = g_reset || gap > ResetGap;
+        g_cut = gap > ResetGap;
+        g_reset = g_reset || g_cut;
         g_frame_ms = std::min(std::chrono::duration<float, std::milli>(gap).count(), MaxFrameMs);
     }
     g_last_frame = now;
     ReadCamera(packet);
+    if (!Active()) {
+        g_jitter = {};
+        return;
+    }
     g_phase = (g_phase + 1) % g_phase_count;
     g_jitter = {Halton(g_phase + 1, 2) - 0.5f, Halton(g_phase + 1, 3) - 0.5f};
 }
 
 Offset Jitter() {
     return g_jitter;
+}
+
+View FrameView() {
+    return {
+        .near_plane = g_camera.near_plane,
+        .far_plane = g_camera.far_plane,
+        .fov = g_camera.fov,
+        .frame_ms = g_frame_ms,
+        .cut = g_cut,
+    };
 }
 
 vk::Viewport SceneViewport(vk::Extent2D extent, bool jittered) {

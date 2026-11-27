@@ -5,6 +5,7 @@
 
 #include "common/logging/log.h"
 #include "graphics/gr2port/device_lost.h"
+#include "graphics/gr2port/low_latency.h"
 #include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/swapchain.h"
 #include "graphics/gr2port/vblank.h"
@@ -73,11 +74,19 @@ bool Swapchain::Create(u32 width, u32 height) {
     } else if (vsync == Settings::VSync::TripleBuffered) {
         image_count = std::max(caps.minImageCount, 3u);
     }
+    // An application may hold as many images at once as the swapchain has beyond the least.
+    if (two_wanted) {
+        image_count = std::max(image_count, caps.minImageCount + 2);
+    }
     if (caps.maxImageCount != 0) {
         image_count = std::min(image_count, caps.maxImageCount);
     }
     const vk::SwapchainKHR old = swapchain;
+    // Reflex's markers and sleep name a swapchain made for them.
+    LowLatency::SwapchainGone();
+    vk::SwapchainLatencyCreateInfoNV latency{.latencyModeEnable = true};
     const vk::SwapchainCreateInfoKHR info{
+        .pNext = LowLatency::ReflexSwapchain() ? &latency : nullptr,
         .surface = d.surface,
         .minImageCount = image_count,
         .imageFormat = surface_format.format,
@@ -103,8 +112,10 @@ bool Swapchain::Create(u32 width, u32 height) {
         return false;
     }
     swapchain = created;
+    LowLatency::SwapchainMade(swapchain);
     format = surface_format.format;
     hdr = surface_format.colorSpace == vk::ColorSpaceKHR::eHdr10St2084EXT;
+    immediate = info.presentMode == vk::PresentModeKHR::eImmediate;
     if (hdr && d.hdr_metadata) {
         const Settings::Display display = Settings::Get().display;
         const vk::HdrMetadataEXT metadata{
@@ -119,6 +130,7 @@ bool Swapchain::Create(u32 width, u32 height) {
         d.device.setHdrMetadataEXT(swapchain, metadata, dl);
     }
     images = d.device.getSwapchainImagesKHR(swapchain, dl).value;
+    takes_two = two_wanted && images.size() >= caps.minImageCount + 2;
     for (const vk::Image image : images) {
         const vk::ImageViewCreateInfo view_info{
             .image = image,
@@ -162,8 +174,10 @@ bool Swapchain::Acquire(vk::Semaphore acquired, u32& index) {
     return true;
 }
 
-bool Swapchain::Present(u32 index) {
+bool Swapchain::Present(u32 index, u64 id) {
+    const vk::PresentIdKHR present_id{.swapchainCount = 1, .pPresentIds = &id};
     const vk::PresentInfoKHR info{
+        .pNext = id != 0 ? &present_id : nullptr,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &rendered[index],
         .swapchainCount = 1,

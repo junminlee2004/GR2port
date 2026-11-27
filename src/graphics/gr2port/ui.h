@@ -50,6 +50,9 @@ bool WorldGain();
 /// A target's size, 0 by 0 when the renderer has no image for it.
 vk::Extent2D TargetExtent(u32 target);
 
+/// A target's image, null when the renderer has none for it.
+vk::Image TargetImage(u32 target);
+
 /// After Record: copies a target's pixels to buffer, rows of 4 bytes per pixel in RGBA order.
 void CopyTarget(vk::CommandBuffer cmd, u32 target, vk::Buffer buffer);
 
@@ -59,7 +62,9 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
             vk::Buffer buffer, u64 offset);
 
 /// Inside the window's rendering: draws the frame's back buffer at its own shape, centred in
-/// extent.
-void RecordPresent(vk::CommandBuffer cmd, const Scene::Header& header, vk::Extent2D extent);
+/// extent. If generated is true, it draws frame generation's picture of the back buffer's size in
+/// its place.
+void RecordPresent(vk::CommandBuffer cmd, const Scene::Header& header, vk::Extent2D extent,
+                   bool generated = false);
 
 } // namespace Gr2Port::Ui

@@ -3,6 +3,7 @@
 
 #include <array>
 
+#include "graphics/gr2port/frame_generation.h"
 #include "graphics/gr2port/memory.h"
 #include "graphics/gr2port/pipeline.h"
 #include "graphics/gr2port/scene.h"
@@ -26,9 +27,16 @@ vk::DescriptorPool g_pool;
 vk::DescriptorSet g_set;
 Pipeline g_pipeline;
 Image g_image;
-// The upscaler's motion, at the scene's size with an upscaler and one pixel without.
+// The upscaler's and frame generation's motion, at the scene's size with either and one pixel
+// without.
 Image g_motion;
 bool g_upscaler_motion = false;
+// The Character list's measured motion, and both halves of the clip history.
+bool g_character_motion = false;
+Image g_character_motion_image;
+Buffer g_clip_history;
+// x, y and w of a clip position.
+constexpr u64 ClipBytes = 3 * sizeof(float);
 
 } // namespace
 
@@ -45,17 +53,19 @@ bool Start(const Device& device, Memory& memory) {
         .addressModeW = vk::SamplerAddressMode::eClampToEdge,
     };
     g_sampler = device.device.createSampler(sampler_info, nullptr, dl).value;
-    const std::array<vk::DescriptorSetLayoutBinding, 4> bindings{{
+    const std::array<vk::DescriptorSetLayoutBinding, 5> bindings{{
         {0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute,
          &g_sampler},
         {1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute,
          &g_sampler},
         {2, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},
         {3, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},
+        {4, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute,
+         &g_sampler},
     }};
     g_layout = CreateSetLayout(device, bindings);
     const std::array<vk::DescriptorPoolSize, 2> sizes{{
-        {vk::DescriptorType::eCombinedImageSampler, 2},
+        {vk::DescriptorType::eCombinedImageSampler, 3},
         {vk::DescriptorType::eStorageImage, 2},
     }};
     g_pool = device.device
@@ -74,15 +84,26 @@ bool Start(const Device& device, Memory& memory) {
     }
     g_set = sets[0];
     const std::array set_layouts{g_layout};
-    g_upscaler_motion = Upscaler::Active();
-    const vk::Bool32 upscaler_motion = g_upscaler_motion;
-    const vk::SpecializationMapEntry entry{
-        .constantID = 0, .offset = 0, .size = sizeof(vk::Bool32)};
+    g_upscaler_motion = Upscaler::Active() || FrameGeneration::Made();
+    g_character_motion = g_upscaler_motion && device.vertex_stores;
+    if (g_character_motion) {
+        g_clip_history =
+            memory.CreateBuffer(2 * u64{Scene::ClipHistoryVertices} * ClipBytes,
+                                vk::BufferUsageFlagBits::eStorageBuffer, Placement::Device);
+        if (!g_clip_history.buffer) {
+            return false;
+        }
+    }
+    const std::array<vk::Bool32, 2> constants{g_upscaler_motion, g_character_motion};
+    const std::array<vk::SpecializationMapEntry, 2> entries{{
+        {.constantID = 0, .offset = 0, .size = sizeof(vk::Bool32)},
+        {.constantID = 1, .offset = sizeof(vk::Bool32), .size = sizeof(vk::Bool32)},
+    }};
     const vk::SpecializationInfo specialization{
-        .mapEntryCount = 1,
-        .pMapEntries = &entry,
-        .dataSize = sizeof(upscaler_motion),
-        .pData = &upscaler_motion,
+        .mapEntryCount = static_cast<u32>(entries.size()),
+        .pMapEntries = entries.data(),
+        .dataSize = sizeof(constants),
+        .pData = constants.data(),
     };
     g_pipeline =
         CreateComputePipeline(device, VELOCITY_COMP, sizeof(u64), set_layouts, &specialization);
@@ -102,7 +123,12 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_de
                               vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
                                   vk::ImageUsageFlagBits::eTransferDst,
                               vk::ImageAspectFlagBits::eColor);
-    if (!g_image.image || !g_motion.image) {
+    g_memory->Destroy(g_character_motion_image);
+    g_character_motion_image = g_memory->CreateImage(
+        CharacterMotionFormat, g_character_motion ? extent : vk::Extent2D{1, 1},
+        vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+        vk::ImageAspectFlagBits::eColor);
+    if (!g_image.image || !g_motion.image || !g_character_motion_image.image) {
         return false;
     }
     constexpr auto ReadOnly = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
@@ -113,7 +139,10 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_de
                                               .imageLayout = vk::ImageLayout::eGeneral};
     const vk::DescriptorImageInfo motion_info{.imageView = g_motion.view,
                                               .imageLayout = vk::ImageLayout::eGeneral};
-    const std::array<vk::WriteDescriptorSet, 4> writes{{
+    const vk::DescriptorImageInfo character_motion_info{
+        .imageView = g_character_motion_image.view,
+        .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+    const std::array<vk::WriteDescriptorSet, 5> writes{{
         {
             .dstSet = g_set,
             .dstBinding = 0,
@@ -141,6 +170,13 @@ bool Resize(vk::Extent2D extent, vk::ImageView depth, vk::ImageView character_de
             .descriptorCount = 1,
             .descriptorType = vk::DescriptorType::eStorageImage,
             .pImageInfo = &motion_info,
+        },
+        {
+            .dstSet = g_set,
+            .dstBinding = 4,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+            .pImageInfo = &character_motion_info,
         },
     }};
     g_device->device.updateDescriptorSets(writes, {}, g_device->dispatch);
@@ -171,6 +207,12 @@ void Record(vk::CommandBuffer cmd, bool drawn, u64 packet_address) {
                      Compute, vk::AccessFlagBits2::eNone, Compute,
                      vk::AccessFlagBits2::eShaderStorageWrite);
     }
+    // The program names the measured motion's image either way.
+    if (!g_character_motion) {
+        ImageBarrier(*g_device, cmd, g_character_motion_image.image, vk::ImageLayout::eUndefined,
+                     vk::ImageLayout::eShaderReadOnlyOptimal, Compute, vk::AccessFlagBits2::eNone,
+                     Compute, Read);
+    }
     const u64 light = packet_address + Scene::LightOffset;
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, g_pipeline.pipeline, dl);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g_pipeline.layout, 0, g_set, {}, dl);
@@ -194,6 +236,22 @@ vk::Image MotionImage() {
 
 vk::ImageView MotionView() {
     return g_motion.view;
+}
+
+bool CharacterMotion() {
+    return g_character_motion;
+}
+
+vk::Image CharacterMotionImage() {
+    return g_character_motion_image.image;
+}
+
+vk::ImageView CharacterMotionView() {
+    return g_character_motion_image.view;
+}
+
+u64 ClipHistory(u64 frame) {
+    return g_clip_history.address + (frame & 1) * u64{Scene::ClipHistoryVertices} * ClipBytes;
 }
 
 } // namespace Gr2Port::Velocity

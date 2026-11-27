@@ -101,6 +101,23 @@ GR2_FSR3_TRAMPOLINE VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer(VkCommandBuffer c
 }
 static_assert(std::is_same_v<decltype(&vkCmdCopyBuffer), PFN_vkCmdCopyBuffer>);
 
+GR2_FSR3_TRAMPOLINE VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(
+    VkCommandBuffer command_buffer, VkBuffer src_buffer, VkImage dst_image,
+    VkImageLayout dst_image_layout, uint32_t region_count, const VkBufferImageCopy* regions) {
+    Dispatcher().vkCmdCopyBufferToImage(command_buffer, src_buffer, dst_image, dst_image_layout,
+                                        region_count, regions);
+}
+static_assert(std::is_same_v<decltype(&vkCmdCopyBufferToImage), PFN_vkCmdCopyBufferToImage>);
+
+GR2_FSR3_TRAMPOLINE VKAPI_ATTR void VKAPI_CALL
+vkCmdCopyImage(VkCommandBuffer command_buffer, VkImage src_image, VkImageLayout src_image_layout,
+               VkImage dst_image, VkImageLayout dst_image_layout, uint32_t region_count,
+               const VkImageCopy* regions) {
+    Dispatcher().vkCmdCopyImage(command_buffer, src_image, src_image_layout, dst_image,
+                                dst_image_layout, region_count, regions);
+}
+static_assert(std::is_same_v<decltype(&vkCmdCopyImage), PFN_vkCmdCopyImage>);
+
 GR2_FSR3_TRAMPOLINE VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer command_buffer,
                                                              uint32_t group_count_x,
                                                              uint32_t group_count_y,
@@ -261,6 +278,12 @@ vkEnumerateDeviceExtensionProperties(VkPhysicalDevice physical_device, const cha
 }
 static_assert(std::is_same_v<decltype(&vkEnumerateDeviceExtensionProperties),
                              PFN_vkEnumerateDeviceExtensionProperties>);
+
+GR2_FSR3_TRAMPOLINE VKAPI_ATTR VkResult VKAPI_CALL vkFlushMappedMemoryRanges(
+    VkDevice device, uint32_t memory_range_count, const VkMappedMemoryRange* memory_ranges) {
+    return Dispatcher().vkFlushMappedMemoryRanges(device, memory_range_count, memory_ranges);
+}
+static_assert(std::is_same_v<decltype(&vkFlushMappedMemoryRanges), PFN_vkFlushMappedMemoryRanges>);
 
 GR2_FSR3_TRAMPOLINE VKAPI_ATTR void VKAPI_CALL
 vkFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks* allocator) {

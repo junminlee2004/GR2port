@@ -17,6 +17,9 @@ namespace Gr2Port::Vblank {
 /// Main thread: the refresh rate of the monitor the window is on, in Hz, or 0 when unknown.
 void SetRefreshRate(double rate);
 
+/// Any thread: the refresh rate SetRefreshRate stored.
+double RefreshRate();
+
 /// Render thread: whether the swapchain's presents wait for the monitor's refresh.
 void SetSynced(bool synced);
 

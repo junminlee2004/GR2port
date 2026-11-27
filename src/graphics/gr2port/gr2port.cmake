@@ -65,6 +65,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/look.h
     ${CMAKE_CURRENT_LIST_DIR}/loading_tip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/loading_tip.h
+    ${CMAKE_CURRENT_LIST_DIR}/low_latency.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/low_latency.h
     ${CMAKE_CURRENT_LIST_DIR}/memory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/memory.h
     ${CMAKE_CURRENT_LIST_DIR}/menu_kit.cpp
@@ -111,6 +113,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/marker_fit.h
     ${CMAKE_CURRENT_LIST_DIR}/scripted_moves.cpp
     ${CMAKE_CURRENT_LIST_DIR}/scripted_moves.h
+    ${CMAKE_CURRENT_LIST_DIR}/frame_generation.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/frame_generation.h
     ${CMAKE_CURRENT_LIST_DIR}/frame_windows.cpp
     ${CMAKE_CURRENT_LIST_DIR}/frame_windows.h
     ${CMAKE_CURRENT_LIST_DIR}/hair_flutter.cpp
@@ -237,6 +241,9 @@ gr2port_add_shader(self_translucent.frag self_translucent_frag)
 gr2port_add_shader(character.vert character_vert)
 gr2port_add_shader(character.frag character_frag)
 gr2port_add_shader(character_depth.frag character_depth_frag)
+# The Character list's depth with its motion, for the upscalers and frame generation.
+gr2port_add_shader(character.vert character_motion_vert -DCHARACTER_MOTION)
+gr2port_add_shader(character_depth.frag character_depth_motion_frag -DCHARACTER_MOTION)
 gr2port_add_shader(interior.frag interior_frag)
 gr2port_add_shader(lambert.vert lambert_vert)
 gr2port_add_shader(lambert.frag lambert_frag)
@@ -275,6 +282,8 @@ gr2port_add_shader(world_alpha.frag world_alpha_frag)
 # they reach.
 gr2port_add_shader(character.frag character_catcher_frag -DCATCHER)
 gr2port_add_shader(character_depth.frag character_depth_catcher_frag -DCATCHER)
+gr2port_add_shader(character_depth.frag character_depth_motion_catcher_frag -DCHARACTER_MOTION
+                   -DCATCHER)
 gr2port_add_shader(world.frag world_catcher_frag -DCATCHER)
 gr2port_add_shader(world_alpha.frag world_alpha_catcher_frag -DCATCHER)
 gr2port_add_shader(gpu_emitter_spawn.comp gpu_emitter_spawn_catcher_comp -DCATCHER)
@@ -285,6 +294,7 @@ gr2port_add_shader(glass.frag glass_frag)
 gr2port_add_shader(world_lines.comp world_lines_comp)
 gr2port_add_shader(occlusion.comp occlusion_comp)
 gr2port_add_shader(velocity.comp velocity_comp)
+gr2port_add_shader(frame_generation_depth.comp frame_generation_depth_comp)
 gr2port_add_shader(occlusion_depth.comp occlusion_depth_comp)
 gr2port_add_shader(deferred.frag deferred_frag)
 gr2port_add_shader(shadow.vert shadow_vert)

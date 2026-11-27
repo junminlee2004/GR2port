@@ -12,9 +12,13 @@ layout(set = 0, binding = 0) uniform sampler2D scene_depth;
 layout(set = 0, binding = 1) uniform sampler2D character_depth;
 layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D velocity;
 layout(set = 0, binding = 3, rg16f) uniform writeonly image2D upscaler_motion;
+layout(set = 0, binding = 4) uniform sampler2D character_motion;
 
-// With an upscaler, its own motion image, where characters move with the camera too.
+// With an upscaler, its own motion image, where unmeasured characters move with the camera too.
 layout(constant_id = 0) const bool UpscalerMotion = false;
+// The upscaler's motion takes the Character list's own motion that the characters' depth pass
+// measured.
+layout(constant_id = 1) const bool CharacterMotion = false;
 
 layout(push_constant) uniform Constants {
     Light light;
@@ -46,7 +50,10 @@ void main() {
     if (character > depth) {
         imageStore(velocity, pixel, vec4(0.0));
         if (UpscalerMotion) {
-            const vec2 motion = CameraMotion(pixel, size, character);
+            const vec2 measured = CharacterMotion ? texelFetch(character_motion, pixel, 0).xy
+                                                  : vec2(UnmeasuredMotion);
+            const vec2 motion =
+                measured.x < MaxMotion ? measured : CameraMotion(pixel, size, character);
             imageStore(upscaler_motion, pixel, vec4(motion, 0.0, 0.0));
         }
         return;

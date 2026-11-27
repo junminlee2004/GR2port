@@ -41,7 +41,7 @@ constexpr std::array<const char*, static_cast<u32>(Pass::Count)> PassNames{
     "effects in front", "fog apply",    "particles",
     "effects top-most", "meter",        "bloom",
     "antialias",        "composite",    "ui",
-    "present",
+    "frame generation", "present",
 };
 
 // A marker holds the frame above the pass.

@@ -183,9 +183,9 @@ struct Texture {
 // slot, written under g_mutex and read without it.
 constexpr u32 AddressSlots = Capacity * 2;
 constexpr u32 AddressProbes = 16;
-// Textures of a T# alone take handles below the picture's copy, the ImGui textures' and the
-// targets', which Start keeps out of use.
-constexpr u32 FirstReserved = Scene::UiCopyHandle;
+// Textures of a T# alone take handles below frame generation's picture, the picture's copy, the
+// ImGui textures' and the targets', which Start keeps out of use.
+constexpr u32 FirstReserved = Scene::GeneratedHandle;
 static_assert(Scene::UiTargetHandles + Scene::MaxUiTargets == Capacity);
 static_assert(Scene::ImGuiHandles + Scene::MaxImGuiTextures == Scene::UiTargetHandles);
 

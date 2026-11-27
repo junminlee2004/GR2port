@@ -69,6 +69,13 @@ constexpr std::pair<Upscaler, std::string_view> UpscalerNames[] = {
     {Upscaler::Dlss, "dlss"}, {Upscaler::Xess, "xess"},
 };
 
+constexpr std::pair<LowLatency, std::string_view> LowLatencyNames[] = {
+    {LowLatency::Off, "off"},
+    {LowLatency::Reflex, "reflex"},
+    {LowLatency::AntiLag2, "anti_lag_2"},
+    {LowLatency::Universal, "universal"},
+};
+
 constexpr std::pair<UpscaleQuality, std::string_view> UpscaleQualityNames[] = {
     {UpscaleQuality::Native, "native"},
     {UpscaleQuality::Quality, "quality"},
@@ -161,6 +168,8 @@ void ReadGraphics(const json& section, Graphics& graphics) {
     graphics.upscaler = ReadName(section, "upscaler", graphics.upscaler, UpscalerNames);
     graphics.upscale_quality =
         ReadName(section, "upscale_quality", graphics.upscale_quality, UpscaleQualityNames);
+    graphics.frame_generation = ReadBool(section, "frame_generation", graphics.frame_generation);
+    graphics.low_latency = ReadName(section, "low_latency", graphics.low_latency, LowLatencyNames);
     graphics.texture_streaming_mb =
         ReadU32(section, "texture_streaming_mb", graphics.texture_streaming_mb);
     graphics.pass_times = ReadBool(section, "pass_times", graphics.pass_times);
@@ -309,6 +318,8 @@ json ToJson(const Values& values) {
         {"upscaler", NameOf(values.graphics.upscaler, UpscalerNames)},
         {"upscale_quality", NameOf(values.graphics.upscale_quality, UpscaleQualityNames)},
         {"upscale_sharpening", values.graphics.upscale_sharpening},
+        {"frame_generation", values.graphics.frame_generation},
+        {"low_latency", NameOf(values.graphics.low_latency, LowLatencyNames)},
         {"hud_gravity_meter", values.graphics.hud_gravity_meter},
         {"hud_health_bar", values.graphics.hud_health_bar},
         {"hud_crosshair", values.graphics.hud_crosshair},

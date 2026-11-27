@@ -699,6 +699,10 @@ vk::Extent2D TargetExtent(u32 target) {
                                                               : vk::Extent2D{};
 }
 
+vk::Image TargetImage(u32 target) {
+    return target < g_images.size() ? g_images[target].image : vk::Image{};
+}
+
 void CopyTarget(vk::CommandBuffer cmd, u32 target, vk::Buffer buffer) {
     TargetBarrier(cmd, target, vk::ImageLayout::eShaderReadOnlyOptimal,
                   vk::ImageLayout::eTransferSrcOptimal,
@@ -833,12 +837,14 @@ void Record(vk::CommandBuffer cmd, const Scene::Header& header, const u8* packet
     }
 }
 
-void RecordPresent(vk::CommandBuffer cmd, const Scene::Header& header, vk::Extent2D extent) {
+void RecordPresent(vk::CommandBuffer cmd, const Scene::Header& header, vk::Extent2D extent,
+                   bool generated) {
     const auto& dl = g_device->dispatch;
     if (!HasImage(header, header.ui.picture) || extent.width == 0 || extent.height == 0) {
         return;
     }
-    const u32 picture = Scene::UiTargetHandles + header.ui.picture;
+    const u32 picture =
+        generated ? Scene::GeneratedHandle : Scene::UiTargetHandles + header.ui.picture;
     // The back buffer keeps its shape, centred in the window.
     const vk::Extent2D source = g_images[header.ui.picture].extent;
     const float scale =

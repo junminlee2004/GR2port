@@ -31,6 +31,10 @@ void SetRefreshRate(double rate) {
     g_refresh_rate.store(rate, std::memory_order_relaxed);
 }
 
+double RefreshRate() {
+    return g_refresh_rate.load(std::memory_order_relaxed);
+}
+
 void SetSynced(bool synced) {
     g_synced.store(synced, std::memory_order_relaxed);
 }

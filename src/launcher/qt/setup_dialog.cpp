@@ -296,8 +296,9 @@ struct Pad {
 };
 
 // The Display tab's rows, 28 pixels apart below the check boxes, then the upscaler's sharpening,
-// the language, the volume, the audio backend, the HDR rows, the GPU Crash Catcher check box in
-// line with a row and the audio device rows. The page scrolls down to DisplayPageBottom.
+// frame generation, low latency, the language, the volume, the audio backend, the HDR rows, the
+// GPU Crash Catcher check box in line with a row and the audio device rows. The page scrolls down
+// to DisplayPageBottom.
 constexpr int MonitorTop = 140;
 constexpr int ResolutionTop = 168;
 constexpr int RefreshTop = 196;
@@ -308,16 +309,18 @@ constexpr int RenderSizeTop = 308;
 constexpr int UpscalerTop = 336;
 constexpr int UpscaleQualityTop = 364;
 constexpr int UpscaleSharpeningTop = 392;
-constexpr int LanguageTop = 440;
-constexpr int VolumeTop = 468;
-constexpr int AudioBackendTop = 516;
-constexpr int HdrTop = 544;
-constexpr int HdrPeakTop = 572;
-constexpr int HdrWhiteTop = 600;
-constexpr int CrashCatcherTop = 630;
-constexpr int AudioDeviceTop = 656;
-constexpr int PadSpeakerDeviceTop = 684;
-constexpr int DisplayPageBottom = 722;
+constexpr int FrameGenerationTop = 440;
+constexpr int LowLatencyTop = 468;
+constexpr int LanguageTop = 496;
+constexpr int VolumeTop = 524;
+constexpr int AudioBackendTop = 572;
+constexpr int HdrTop = 600;
+constexpr int HdrPeakTop = 628;
+constexpr int HdrWhiteTop = 656;
+constexpr int CrashCatcherTop = 686;
+constexpr int AudioDeviceTop = 712;
+constexpr int PadSpeakerDeviceTop = 740;
+constexpr int DisplayPageBottom = 778;
 
 // In the order of Settings::VSync.
 constexpr std::array<std::string_view, 3> VSyncNames{"Off", "Double Buffered", "Triple Buffered"};
@@ -325,6 +328,9 @@ constexpr std::array<std::string_view, 3> VSyncNames{"Off", "Double Buffered", "
 constexpr std::array<std::string_view, 4> UpscalerChoices{"Off", "FSR 3.1", "FSR 4", "DLSS"};
 constexpr std::array<std::string_view, 5> UpscaleQualityChoices{"Native AA", "Quality", "Balanced",
                                                                 "Performance", "Ultra Performance"};
+// In the order of Settings::LowLatency.
+constexpr std::array<std::string_view, 4> LowLatencyChoices{"Off", "NVIDIA Reflex",
+                                                            "AMD Anti-Lag 2", "Universal"};
 
 // The Graphics tab: the preset across the top, each pass's choice in two columns of rows 26
 // pixels apart, then the note. The page scrolls to the note's end, down to GraphicsPageBottom.
@@ -479,6 +485,8 @@ struct Dialog {
     QComboBox* render_size = nullptr;
     QComboBox* upscaler = nullptr;
     QComboBox* upscale_quality = nullptr;
+    QComboBox* frame_generation = nullptr;
+    QComboBox* low_latency = nullptr;
     QComboBox* language = nullptr;
     QSlider* upscale_sharpening = nullptr;
     QSlider* volume = nullptr;
@@ -1030,7 +1038,7 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
 }
 
 // The field of view, the screen shake, the HUD's parts, the upscaler, its quality and its
-// sharpening, which presets leave.
+// sharpening, frame generation and low latency, which presets leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.field_of_view->setCurrentIndex(
         IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
@@ -1047,6 +1055,8 @@ void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.upscale_quality->setCurrentIndex(static_cast<int>(graphics.upscale_quality));
     dialog.upscale_sharpening->setValue(
         static_cast<int>(graphics.upscale_sharpening / Settings::UpscaleSharpeningStep));
+    dialog.frame_generation->setCurrentIndex(graphics.frame_generation ? 0 : 1);
+    dialog.low_latency->setCurrentIndex(static_cast<int>(graphics.low_latency));
 }
 
 // The passes as shown, with the preset they and the Display tab's sizes match.
@@ -1088,6 +1098,11 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     }
     graphics.upscale_sharpening =
         static_cast<u32>(dialog.upscale_sharpening->value()) * Settings::UpscaleSharpeningStep;
+    graphics.frame_generation = dialog.frame_generation->currentIndex() == 0;
+    const int low_latency = dialog.low_latency->currentIndex();
+    if (low_latency >= 0 && low_latency < static_cast<int>(LowLatencyChoices.size())) {
+        graphics.low_latency = static_cast<Settings::LowLatency>(low_latency);
+    }
     const int texture_streaming = dialog.texture_streaming_list->currentIndex();
     if (texture_streaming >= 0 &&
         texture_streaming < static_cast<int>(dialog.texture_streaming.size())) {
@@ -1444,6 +1459,8 @@ void BuildDisplay(Dialog& dialog, QWidget* page) {
         dialog, page, "Upscaler Sharpening", LabelLeft, ComboLeft + ComboWidth,
         UpscaleSharpeningTop, 0, static_cast<int>(Settings::UpscaleSharpeningLevels.size()) - 1,
         "%", static_cast<int>(Settings::UpscaleSharpeningStep));
+    dialog.frame_generation = MakeRow(dialog, page, "Frame Generation", FrameGenerationTop);
+    dialog.low_latency = MakeRow(dialog, page, "Low Latency", LowLatencyTop);
     dialog.language = MakeRow(dialog, page, "Language", LanguageTop);
     dialog.volume = MakeSlider(dialog, page, "Volume", LabelLeft, ComboLeft + ComboWidth, VolumeTop,
                                0, MaxVolume, "%");
@@ -2090,6 +2107,12 @@ void Build(Dialog& dialog) {
     }
     for (const std::string_view name : UpscaleQualityChoices) {
         AddText(dialog, dialog.upscale_quality, name);
+    }
+    for (const std::string_view name : SwitchChoices) {
+        AddText(dialog, dialog.frame_generation, name);
+    }
+    for (const std::string_view name : LowLatencyChoices) {
+        AddText(dialog, dialog.low_latency, name);
     }
     // Each language is named in itself, whatever the language in use.
     for (const int language : Language::Listed()) {

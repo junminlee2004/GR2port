@@ -25,6 +25,13 @@ layout(push_constant) uniform Constants {
 
 layout(location = 3) in vec2 texcoord;
 layout(location = 7) flat in uint draw_index;
+#ifdef CHARACTER_MOTION
+layout(location = 8) in vec3 current_clip;
+layout(location = 9) in vec3 last_clip;
+// The pixel's place in the last frame's clip space less its place in this frame's. A place behind
+// the last frame's camera, or a motion past MaxMotion, is unmeasured.
+layout(location = 0) out vec2 motion;
+#endif
 
 vec4 Sample(uint handle, vec2 uv) {
     return texture(sampler2D(textures[nonuniformEXT(handle & TextureSlotMask)], texture_sampler),
@@ -52,6 +59,12 @@ void Shade(uint draw) {
     if (punch.y < fract(fract(abs(123456792.0 / seed)) * abs(seed))) {
         discard;
     }
+#ifdef CHARACTER_MOTION
+    const vec2 moved = last_clip.xy / last_clip.z - current_clip.xy / current_clip.z;
+    motion = last_clip.z > 0.0 && all(lessThan(abs(moved), vec2(MaxMotion)))
+                 ? moved
+                 : vec2(UnmeasuredMotion);
+#endif
 }
 
 // A wave can hold the pixels of several draws. It shades one draw's pixels at a time, so the draw's

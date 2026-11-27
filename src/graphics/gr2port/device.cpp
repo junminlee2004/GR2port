@@ -19,6 +19,7 @@
 #include "graphics/gr2port/device.h"
 #include "graphics/gr2port/graphics_menu.h"
 #include "graphics/gr2port/pipeline.h"
+#include "graphics/gr2port/settings.h"
 #include "graphics/gr2port/upscaler.h"
 
 namespace Gr2Port {
@@ -121,19 +122,24 @@ std::string Missing(const Device& d, vk::PhysicalDevice gpu) {
     return missing;
 }
 
-// The validation layer checks the renderer's own instance only in runs that set
-// GR2PORT_VALIDATION, and only when the loader finds it.
-bool HasValidation(const Device& d) {
-    if (std::getenv("GR2PORT_VALIDATION") == nullptr) {
-        return false;
-    }
+// Mesa's layer gives drivers without AMD Anti-Lag 2 the extension, and does nothing until the
+// renderer turns Anti-Lag 2 on. The loader leaves it out unless asked for it.
+constexpr const char* AntiLagLayer = "VK_LAYER_MESA_anti_lag";
+
+bool HasLayer(const Device& d, const char* name) {
     const auto [result, layers] = vk::enumerateInstanceLayerProperties(d.dispatch);
     if (result != vk::Result::eSuccess) {
         return false;
     }
-    return std::ranges::any_of(layers, [](const vk::LayerProperties& layer) {
-        return std::strcmp(layer.layerName, ValidationLayer) == 0;
+    return std::ranges::any_of(layers, [name](const vk::LayerProperties& layer) {
+        return std::strcmp(layer.layerName, name) == 0;
     });
+}
+
+// The validation layer checks the renderer's own instance only in runs that set
+// GR2PORT_VALIDATION, and only when the loader finds it.
+bool HasValidation(const Device& d) {
+    return std::getenv("GR2PORT_VALIDATION") != nullptr && HasLayer(d, ValidationLayer);
 }
 
 bool CreateInstance(Device& d) {
@@ -169,10 +175,18 @@ bool CreateInstance(Device& d) {
         .apiVersion = ApiVersion,
     };
     const bool validation = HasValidation(d);
+    std::vector<const char*> layers;
+    if (validation) {
+        layers.push_back(ValidationLayer);
+    }
+    const bool anti_lag_layer = HasLayer(d, AntiLagLayer);
+    if (anti_lag_layer) {
+        layers.push_back(AntiLagLayer);
+    }
     const vk::InstanceCreateInfo info{
         .pApplicationInfo = &application,
-        .enabledLayerCount = validation ? 1u : 0u,
-        .ppEnabledLayerNames = &ValidationLayer,
+        .enabledLayerCount = static_cast<u32>(layers.size()),
+        .ppEnabledLayerNames = layers.data(),
         .enabledExtensionCount = static_cast<u32>(extensions.size()),
         .ppEnabledExtensionNames = extensions.data(),
     };
@@ -185,6 +199,9 @@ bool CreateInstance(Device& d) {
     d.dispatch.init(instance);
     if (validation) {
         LOG_INFO(Render_Vulkan, "GR2port: the validation layer checks the renderer");
+    }
+    if (anti_lag_layer) {
+        LOG_INFO(Render_Vulkan, "GR2port: Mesa's Anti-Lag 2 layer is loaded");
     }
     if (Catcher::On) {
         Catcher::LogInstance(d);
@@ -290,9 +307,11 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     d.geometry_shaders = supported.geometryShader != VK_FALSE;
     d.tessellation_shaders = supported.tessellationShader != VK_FALSE;
     d.storage_extended_formats = supported.shaderStorageImageExtendedFormats != VK_FALSE;
+    d.vertex_stores = supported.vertexPipelineStoresAndAtomics != VK_FALSE;
     features.features.geometryShader = d.geometry_shaders;
     features.features.tessellationShader = d.tessellation_shaders;
     features.features.shaderStorageImageExtendedFormats = d.storage_extended_formats;
+    features.features.vertexPipelineStoresAndAtomics = d.vertex_stores;
     const std::array<float, 2> priorities{1.0f, 1.0f};
     // The catcher asks a stuck GPU for a small job through a second queue, when there is one.
     const bool probe =
@@ -311,6 +330,10 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         .extendedDynamicState3ColorBlendEnable = true,
         .extendedDynamicState3ColorBlendEquation = true,
     };
+    vk::PhysicalDevicePresentIdFeaturesKHR present_id_features{.presentId = true};
+    vk::PhysicalDeviceAntiLagFeaturesAMD anti_lag_features{.antiLag = true};
+    bool low_latency2 = false;
+    bool present_id = false;
     for (const vk::ExtensionProperties& extension : available) {
         const std::string_view name{extension.extensionName.data()};
         if (name == VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) {
@@ -348,7 +371,38 @@ bool CreateDevice(SDL_Window* window, Device& d) {
             if (d.dynamic_blend) {
                 extensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
             }
+        } else if (name == VK_NV_LOW_LATENCY_2_EXTENSION_NAME) {
+            low_latency2 = true;
+        } else if (name == VK_KHR_PRESENT_ID_EXTENSION_NAME) {
+            present_id = true;
+        } else if (name == VK_AMD_ANTI_LAG_EXTENSION_NAME) {
+            vk::PhysicalDeviceAntiLagFeaturesAMD supported;
+            vk::PhysicalDeviceFeatures2 query{.pNext = &supported};
+            d.gpu.getFeatures2(&query, d.dispatch);
+            d.anti_lag = supported.antiLag != VK_FALSE;
+            if (d.anti_lag) {
+                extensions.push_back(VK_AMD_ANTI_LAG_EXTENSION_NAME);
+            }
         }
+    }
+    if (low_latency2 && present_id) {
+        vk::PhysicalDevicePresentIdFeaturesKHR supported_id;
+        vk::PhysicalDeviceVulkan12Features supported12{.pNext = &supported_id};
+        vk::PhysicalDeviceFeatures2 query{.pNext = &supported12};
+        d.gpu.getFeatures2(&query, d.dispatch);
+        d.low_latency2 =
+            supported_id.presentId != VK_FALSE && supported12.timelineSemaphore != VK_FALSE;
+    }
+    if (d.low_latency2) {
+        extensions.push_back(VK_NV_LOW_LATENCY_2_EXTENSION_NAME);
+        extensions.push_back(VK_KHR_PRESENT_ID_EXTENSION_NAME);
+        features12.timelineSemaphore = true;
+        present_id_features.pNext = features.pNext;
+        features.pNext = &present_id_features;
+    }
+    if (d.anti_lag) {
+        anti_lag_features.pNext = features.pNext;
+        features.pNext = &anti_lag_features;
     }
     if (d.dynamic_blend) {
         blend_features.pNext = features.pNext;
@@ -415,9 +469,10 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     d.driver_id = driver.driverID;
     LOG_INFO(Render_Vulkan,
              "GR2port: renderer device {} (queue family {}), checkpoints {}, fault information {}, "
-             "dynamic blend {}, driver {} {}",
+             "dynamic blend {}, Reflex {}, Anti-Lag 2 {}, driver {} {}",
              properties.deviceName.data(), d.queue_family, d.checkpoints, d.device_fault,
-             d.dynamic_blend, driver.driverName.data(), driver.driverInfo.data());
+             d.dynamic_blend, d.low_latency2, d.anti_lag, driver.driverName.data(),
+             driver.driverInfo.data());
     GraphicsMenu::SetGpuVendor(properties.vendorID);
     if (Catcher::On) {
         Catcher::LogDevice(d);

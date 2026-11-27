@@ -30,12 +30,16 @@ void ExtendInstance(std::vector<const char*>& extensions, u32 api_version,
                     const vk::detail::DispatchLoaderDynamic& dispatch);
 
 /// Right before the device is made from info: enables the features and extensions the chosen
-/// upscaler needs that gpu supports. features chains vk11, vk12 and vk13.
+/// upscaler and frame generation need that gpu supports. features chains vk11, vk12 and vk13.
 void ExtendDevice(vk::Instance instance, vk::PhysicalDevice gpu,
                   const vk::detail::DispatchLoaderDynamic& dispatch, vk::DeviceCreateInfo& info,
                   vk::PhysicalDeviceFeatures2& features, vk::PhysicalDeviceVulkan11Features& vk11,
                   vk::PhysicalDeviceVulkan12Features& vk12,
                   vk::PhysicalDeviceVulkan13Features& vk13);
+
+/// Whether ExtendDevice enabled derivatives in compute shaders, which FSR 4 Lite and FSR 3.1.6's
+/// frame generation take.
+bool ComputeDerivatives();
 
 /// Right after the device and its dispatch are made: with DLSS chosen, starts NGX on the device.
 void OnDeviceCreated(Device& device);
@@ -81,6 +85,17 @@ void BeginFrame(const u8* packet);
 
 /// The jitter of the frame's scene draws; zero without an upscaler.
 Offset Jitter();
+
+/// The camera's terms and the time since the last frame that BeginFrame took, with or without an
+/// upscaler. cut is set when the camera cut or the frames had a gap.
+struct View {
+    float near_plane;
+    float far_plane;
+    float fov;
+    float frame_ms;
+    bool cut;
+};
+View FrameView();
 
 /// A viewport of the scene at extent, y at the bottom and height negative, moved by the frame's
 /// jitter when jittered is set.

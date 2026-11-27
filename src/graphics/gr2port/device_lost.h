@@ -55,6 +55,7 @@ enum class Pass : u32 {
     Antialias,
     Composite,
     Ui,
+    FrameGeneration,
     Present,
     Count,
 };

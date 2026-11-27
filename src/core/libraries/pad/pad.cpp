@@ -10,6 +10,7 @@
 #include "core/libraries/pad/pad_errors.h"
 #include "core/user_settings.h"
 #include "graphics/gr2port/catcher_note.h"
+#include "graphics/gr2port/low_latency.h"
 #include "graphics/gr2port/photo_ui.h"
 #include "graphics/gr2port/screenshot.h"
 #include "imgui/renderer/imgui_core.h"
@@ -438,6 +439,8 @@ int ProcessStates(OrbisPadData* pData, const Input::State* states, s32 num) {
 
 int PS4_SYSV_ABI scePadRead(s32 handle, OrbisPadData* pData, s32 num) {
     LOG_TRACE(Lib_Pad, "called");
+    // GR2port: with low latency on, the game's frame starts here, before its input.
+    Gr2Port::LowLatency::BeforeInput();
     if (pData == nullptr || num < 1 || num > ORBIS_PAD_MAX_DATA_NUM) {
         return ORBIS_PAD_ERROR_INVALID_ARG;
     }

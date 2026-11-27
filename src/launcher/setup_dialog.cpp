@@ -105,6 +105,10 @@ enum Control : int {
     IdUpscaleSharpeningLabel,
     IdUpscaleSharpening,
     IdUpscaleSharpeningValue,
+    IdFrameGenerationLabel,
+    IdFrameGeneration,
+    IdLowLatencyLabel,
+    IdLowLatency,
     IdLanguageLabel,
     IdLanguage,
     IdVolumeLabel,
@@ -514,9 +518,10 @@ struct Row {
     int top;
 };
 
-// Rows RowStep pixels apart below the check boxes, then the upscaler's sharpening, the language,
-// the volume, the audio backend, the HDR rows, the GPU Crash Catcher check box in line with a row
-// and the audio device rows. The page scrolls down to DisplayPageBottom.
+// Rows RowStep pixels apart below the check boxes, then the upscaler's sharpening, frame
+// generation, low latency, the language, the volume, the audio backend, the HDR rows, the GPU Crash
+// Catcher check box in line with a row and the audio device rows. The page scrolls down to
+// DisplayPageBottom.
 constexpr int RowStep = 28;
 constexpr std::array Rows{
     Row{IdMonitorLabel, IdMonitor, L"Monitor", 140},
@@ -530,20 +535,23 @@ constexpr std::array Rows{
     Row{IdUpscaleQualityLabel, IdUpscaleQuality, L"Upscaler Quality", 364},
 };
 constexpr int UpscaleSharpeningTop = 392;
-constexpr Row LanguageRow{IdLanguageLabel, IdLanguage, L"Language", 440};
-constexpr int VolumeTop = 468;
-constexpr Row AudioBackendRow{IdAudioBackendLabel, IdAudioBackend, L"Audio Backend", 516};
+constexpr Row FrameGenerationRow{IdFrameGenerationLabel, IdFrameGeneration, L"Frame Generation",
+                                 440};
+constexpr Row LowLatencyRow{IdLowLatencyLabel, IdLowLatency, L"Low Latency", 468};
+constexpr Row LanguageRow{IdLanguageLabel, IdLanguage, L"Language", 496};
+constexpr int VolumeTop = 524;
+constexpr Row AudioBackendRow{IdAudioBackendLabel, IdAudioBackend, L"Audio Backend", 572};
 constexpr std::array HdrRows{
-    Row{IdHdrLabel, IdHdr, L"HDR", 544},
-    Row{IdHdrPeakLabel, IdHdrPeak, L"HDR Peak Brightness", 572},
-    Row{IdHdrWhiteLabel, IdHdrWhite, L"HDR Paper White", 600},
+    Row{IdHdrLabel, IdHdr, L"HDR", 600},
+    Row{IdHdrPeakLabel, IdHdrPeak, L"HDR Peak Brightness", 628},
+    Row{IdHdrWhiteLabel, IdHdrWhite, L"HDR Paper White", 656},
 };
-constexpr int CrashCatcherTop = 630;
+constexpr int CrashCatcherTop = 686;
 constexpr std::array AudioRows{
-    Row{IdAudioDeviceLabel, IdAudioDevice, L"Audio Device", 656},
-    Row{IdPadSpeakerDeviceLabel, IdPadSpeakerDevice, L"DS4 Speaker Device", 684},
+    Row{IdAudioDeviceLabel, IdAudioDevice, L"Audio Device", 712},
+    Row{IdPadSpeakerDeviceLabel, IdPadSpeakerDevice, L"DS4 Speaker Device", 740},
 };
-constexpr int DisplayPageBottom = 722;
+constexpr int DisplayPageBottom = 778;
 
 // In the order of Settings::VSync.
 constexpr std::array VSyncNames{L"Off", L"Double Buffered", L"Triple Buffered"};
@@ -552,6 +560,9 @@ constexpr std::array<const wchar_t*, 5> UpscalerChoices{L"Off", L"FSR 3.1", L"FS
                                                         L"XeSS"};
 constexpr std::array<const wchar_t*, 5> UpscaleQualityChoices{L"Native AA", L"Quality", L"Balanced",
                                                               L"Performance", L"Ultra Performance"};
+// In the order of Settings::LowLatency.
+constexpr std::array<const wchar_t*, 4> LowLatencyChoices{L"Off", L"NVIDIA Reflex",
+                                                          L"AMD Anti-Lag 2", L"Universal"};
 
 // The Graphics tab: the preset across the top, each pass's choice in two columns of rows 26
 // pixels apart, then the note. The page scrolls to the note's end, down to GraphicsPageBottom.
@@ -1573,7 +1584,7 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
 }
 
 // The field of view, the screen shake, the HUD's parts, the upscaler, its quality and its
-// sharpening, which presets leave.
+// sharpening, frame generation and low latency, which presets leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     Select(Item(dialog, IdFieldOfView),
            IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
@@ -1590,6 +1601,8 @@ void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
                  graphics.upscale_sharpening / Settings::UpscaleSharpeningStep);
     SetWindowTextW(Item(dialog, IdUpscaleSharpeningValue),
                    Percent(graphics.upscale_sharpening).c_str());
+    Select(Item(dialog, IdFrameGeneration), graphics.frame_generation ? 0 : 1);
+    Select(Item(dialog, IdLowLatency), static_cast<int>(graphics.low_latency));
 }
 
 // The passes as shown, with the preset they and the Display tab's sizes match.
@@ -1635,6 +1648,11 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     graphics.upscale_sharpening =
         static_cast<u32>(SendMessageW(Item(dialog, IdUpscaleSharpening), TBM_GETPOS, 0, 0)) *
         Settings::UpscaleSharpeningStep;
+    graphics.frame_generation = Selected(Item(dialog, IdFrameGeneration)) == 0;
+    const int low_latency = Selected(Item(dialog, IdLowLatency));
+    if (low_latency >= 0 && low_latency < static_cast<int>(LowLatencyChoices.size())) {
+        graphics.low_latency = static_cast<Settings::LowLatency>(low_latency);
+    }
     const int texture_streaming = Selected(Item(dialog, IdTextureStreaming));
     if (texture_streaming >= 0 &&
         texture_streaming < static_cast<int>(dialog.texture_streaming.size())) {
@@ -2028,6 +2046,8 @@ void Build(HWND window, Dialog& dialog) {
     add_slider(L"Upscaler Sharpening", IdUpscaleSharpeningLabel, IdUpscaleSharpening,
                IdUpscaleSharpeningValue, UpscaleSharpeningTop,
                static_cast<int>(Settings::UpscaleSharpeningLevels.size()) - 1);
+    add_row(FrameGenerationRow);
+    add_row(LowLatencyRow);
     add_row(LanguageRow);
     add_slider(L"Volume", IdVolumeLabel, IdVolume, IdVolumeValue, VolumeTop, MaxVolume);
     add_row(AudioBackendRow);
@@ -2474,6 +2494,12 @@ void Build(HWND window, Dialog& dialog) {
     }
     for (const wchar_t* name : UpscaleQualityChoices) {
         AddText(Item(dialog, IdUpscaleQuality), name);
+    }
+    for (const wchar_t* name : SwitchChoices) {
+        AddText(Item(dialog, IdFrameGeneration), name);
+    }
+    for (const wchar_t* name : LowLatencyChoices) {
+        AddText(Item(dialog, IdLowLatency), name);
     }
     // Each language is named in itself, whatever the language in use.
     for (const int language : Language::Listed()) {

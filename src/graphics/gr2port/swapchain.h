@@ -22,12 +22,28 @@ public:
     /// Acquires the next image, signalling acquired; false when the swapchain needs creating.
     bool Acquire(vk::Semaphore acquired, u32& index);
 
-    /// Presents image index after its rendered semaphore; false when the swapchain needs
-    /// creating.
-    bool Present(u32 index);
+    /// Presents image index after its rendered semaphore, with present id where it is not 0;
+    /// false when the swapchain needs creating.
+    bool Present(u32 index, u64 id = 0);
     /// If hdr is true, Create makes an HDR10 swapchain where the surface offers one.
     void SetHdr(bool hdr) {
         hdr_wanted = hdr;
+    }
+
+    /// If two is true, Create makes room for two images acquired at once, as frame generation's
+    /// two presents a frame take.
+    void SetTwoAcquired(bool two) {
+        two_wanted = two;
+    }
+
+    /// Two images can be acquired at once.
+    bool TakesTwo() const {
+        return takes_two;
+    }
+
+    /// Without VSync: each image shows as soon as it is presented.
+    bool Immediate() const {
+        return immediate;
     }
     /// The images take HDR10: ST 2084 of BT.2020 light.
     bool Hdr() const {
@@ -58,6 +74,9 @@ private:
     vk::Format format = vk::Format::eUndefined;
     bool hdr_wanted = false;
     bool hdr = false;
+    bool two_wanted = false;
+    bool takes_two = false;
+    bool immediate = false;
     vk::Extent2D extent;
     std::vector<vk::Image> images;
     std::vector<vk::ImageView> views;

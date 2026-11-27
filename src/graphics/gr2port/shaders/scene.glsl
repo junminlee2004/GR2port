@@ -231,6 +231,8 @@ struct Character {
     uint reflection;
     uint detail;
     float glow;
+    uint clip_history;
+    uint last_clip_history;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Characters {
@@ -238,6 +240,15 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Ch
 };
 
 const uint CharacterBytes = 656u;
+// A Character list draw without a place in the clip history.
+const uint NoClipHistory = 0xffffffffu;
+// Scene::ClipSwap: a last clip history that counts the palette rows from the draw's palette to the
+// last frame's world-view-projection matrix and palette of the shape it took over from.
+const uint ClipSwap = 0x80000000u;
+// The characters' depth pass's motion: a pixel that no Character list draw measured holds
+// UnmeasuredMotion, a measured one less than MaxMotion each way.
+const float MaxMotion = 1024.0;
+const float UnmeasuredMotion = 4096.0;
 // Scene::MaxCharacters and Scene::MaxGlassMaterials: the entries the packet's tables hold.
 const uint MaxCharacters = 1024u;
 const uint MaxGlassMaterials = 1024u;
