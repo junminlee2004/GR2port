@@ -41,9 +41,11 @@ option(ENABLE_UPDATER "Enables the options to updater" ON)
 option(ENABLE_TESTS "Build unit tests (requires GTest)" OFF)
 option(ENABLE_SYSTEM_LIBRARIES "Enable building against system libraries" OFF)
 # Recompiled mode: the game runs from the C recompiled from its executable, and a CPU runtime
-# library executes every other guest instruction. CPU_RUNTIME_DIR is a checkout of that library.
+# library executes every other guest instruction. CPU_RUNTIME_DIR is a checkout of that library,
+# by default GR2port's copy in third_party/cpu-runtime.
 option(ENABLE_RECOMPILED_MODE "Build recompiled mode (needs CPU_RUNTIME_DIR)" OFF)
-set(CPU_RUNTIME_DIR "" CACHE PATH "The CPU runtime library's checkout, for recompiled mode")
+set(CPU_RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cpu-runtime" CACHE PATH
+    "The CPU runtime library's checkout, for recompiled mode")
 
 # First, determine whether to use CMAKE_OSX_ARCHITECTURES or CMAKE_SYSTEM_PROCESSOR.
 if (APPLE AND CMAKE_OSX_ARCHITECTURES)
