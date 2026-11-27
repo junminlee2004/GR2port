@@ -302,6 +302,8 @@ struct Preset {
     /// The shadow draw distance the preset also sets, a ShadowDistanceLevels entry, or none to
     /// leave it.
     std::optional<u32> shadow_distance;
+    /// The object draw distance the preset also sets, a DetailLevels entry, or none to leave it.
+    std::optional<u32> object_distance;
 };
 
 /// From the cheapest to the finest; PS4 Original is the game's own.
@@ -399,7 +401,8 @@ inline constexpr std::array Presets{
            .near_environment_detail = DetailLevels.front(),
            .character_detail = DetailLevels.front(),
            .texture_streaming_mb = 0,
-           .shadow_distance = ShadowDistanceLevels.back()},
+           .shadow_distance = ShadowDistanceLevels.back(),
+           .object_distance = DetailLevels.front()},
 };
 
 /// The preset's passes, with its key.

@@ -419,7 +419,8 @@ std::string_view MatchPreset(const Game& game, const Graphics& graphics) {
         const bool same_streaming = !preset.texture_streaming_mb ||
                                     *preset.texture_streaming_mb == graphics.texture_streaming_mb;
         const bool same_distance =
-            !preset.shadow_distance || *preset.shadow_distance == graphics.shadow_distance;
+            (!preset.shadow_distance || *preset.shadow_distance == graphics.shadow_distance) &&
+            (!preset.object_distance || *preset.object_distance == graphics.object_distance);
         if (same_passes && same_size && same_streaming && same_distance) {
             return preset.key;
         }

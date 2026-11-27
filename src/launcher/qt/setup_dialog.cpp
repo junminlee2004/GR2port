@@ -1157,6 +1157,10 @@ void ApplyPreset(const Dialog& dialog, int index) {
         dialog.shadow_distance->setCurrentIndex(
             IndexOf(Settings::ShadowDistanceLevels, *preset.shadow_distance, OwnShadowDistance));
     }
+    if (preset.object_distance) {
+        dialog.object_distance->setCurrentIndex(
+            IndexOf(Settings::DetailLevels, *preset.object_distance, OwnDetail));
+    }
 }
 
 // A size in MB as GB with at most one decimal.
@@ -2198,7 +2202,8 @@ void Build(Dialog& dialog) {
                                    dialog.near_detail,
                                    dialog.character_detail,
                                    dialog.distortion,
-                                   dialog.shadow_distance}) {
+                                   dialog.shadow_distance,
+                                   dialog.object_distance}) {
         QObject::connect(combo, &QComboBox::activated, window, [&dialog] { ShowPreset(dialog); });
     }
     QObject::connect(defaults, &QPushButton::clicked, window, [&dialog] { SetDefaults(dialog); });

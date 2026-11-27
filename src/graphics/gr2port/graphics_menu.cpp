@@ -300,14 +300,14 @@ int IndexOf(const std::array<Value, Count>& levels, Value level, int fallback) {
 }
 
 // As the launcher's preset: its passes and detail, the shape, size, texture budget and shadow
-// draw distance it sets, and no VSync for a handheld. The field of view, the screen shake, the
-// object draw distance, the upscaler, frame generation and low latency stay.
+// and object draw distances it sets, and no VSync for a handheld. The field of view, the screen
+// shake, the upscaler, frame generation and low latency stay.
 void ApplyPreset(Values& values, const Settings::Preset& preset) {
     Settings::Graphics graphics = Settings::FromPreset(preset);
     graphics.field_of_view = values.graphics.field_of_view;
     graphics.screen_shake = values.graphics.screen_shake;
     graphics.shadow_distance = preset.shadow_distance.value_or(values.graphics.shadow_distance);
-    graphics.object_distance = values.graphics.object_distance;
+    graphics.object_distance = preset.object_distance.value_or(values.graphics.object_distance);
     graphics.upscaler = values.graphics.upscaler;
     graphics.upscale_quality = values.graphics.upscale_quality;
     graphics.upscale_sharpening = values.graphics.upscale_sharpening;

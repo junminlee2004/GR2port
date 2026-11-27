@@ -1710,6 +1710,10 @@ void ApplyPreset(const Dialog& dialog, int index) {
         Select(Item(dialog, IdShadowDistance),
                IndexOf(Settings::ShadowDistanceLevels, *preset.shadow_distance, OwnShadowDistance));
     }
+    if (preset.object_distance) {
+        Select(Item(dialog, IdObjectDistance),
+               IndexOf(Settings::DetailLevels, *preset.object_distance, OwnDetail));
+    }
 }
 
 struct VideoCard {
@@ -2598,6 +2602,7 @@ void Command(HWND window, Dialog& dialog, int id, int code) {
     case IdCharacterDetail:
     case IdDistortion:
     case IdShadowDistance:
+    case IdObjectDistance:
     case IdAspect:
     case IdRenderSize:
     case IdTextureStreaming:
