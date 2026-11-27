@@ -22,15 +22,11 @@
 #include "graphics/gr2port/shaders/occlusion_depth_comp.h"
 #include "graphics/gr2port/shaders/world_alpha_catcher_frag.h"
 #include "graphics/gr2port/shaders/world_alpha_frag.h"
-#include "graphics/gr2port/shaders/world_alpha_reconverging_catcher_frag.h"
-#include "graphics/gr2port/shaders/world_alpha_reconverging_frag.h"
 #include "graphics/gr2port/shaders/world_catcher_frag.h"
 #include "graphics/gr2port/shaders/world_decal_frag.h"
 #include "graphics/gr2port/shaders/world_decal_vert.h"
 #include "graphics/gr2port/shaders/world_frag.h"
 #include "graphics/gr2port/shaders/world_lines_comp.h"
-#include "graphics/gr2port/shaders/world_reconverging_catcher_frag.h"
-#include "graphics/gr2port/shaders/world_reconverging_frag.h"
 #include "graphics/gr2port/shaders/world_vert.h"
 #include "graphics/gr2port/shadow_trace.h"
 #include "graphics/gr2port/shadows.h"
@@ -351,19 +347,10 @@ bool Start(const Device& device, Memory& memory, vk::Format depth_format, vk::Fo
     }
     constexpr auto Back = vk::CullModeFlagBits::eBack;
     constexpr auto None = vk::CullModeFlagBits::eNone;
-    // A driver with VK_KHR_shader_maximal_reconvergence gets the builds that keep the lanes of
-    // the per-draw loop's turns apart.
     std::span<const u32> opaque{WORLD_FRAG};
     std::span<const u32> tested{WORLD_ALPHA_FRAG};
-    if (device.maximal_reconvergence) {
-        opaque = WORLD_RECONVERGING_FRAG;
-        tested = WORLD_ALPHA_RECONVERGING_FRAG;
-    }
     // The catcher's builds count the lanes the per-draw loop's turns do not reach.
-    if (Catcher::On && device.maximal_reconvergence) {
-        opaque = WORLD_RECONVERGING_CATCHER_FRAG;
-        tested = WORLD_ALPHA_RECONVERGING_CATCHER_FRAG;
-    } else if (Catcher::On) {
+    if (Catcher::On) {
         opaque = WORLD_CATCHER_FRAG;
         tested = WORLD_ALPHA_CATCHER_FRAG;
     }

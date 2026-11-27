@@ -311,9 +311,6 @@ bool CreateDevice(SDL_Window* window, Device& d) {
         .extendedDynamicState3ColorBlendEnable = true,
         .extendedDynamicState3ColorBlendEquation = true,
     };
-    vk::PhysicalDeviceShaderMaximalReconvergenceFeaturesKHR reconvergence_features{
-        .shaderMaximalReconvergence = true,
-    };
     for (const vk::ExtensionProperties& extension : available) {
         const std::string_view name{extension.extensionName.data()};
         if (name == VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) {
@@ -351,23 +348,11 @@ bool CreateDevice(SDL_Window* window, Device& d) {
             if (d.dynamic_blend) {
                 extensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
             }
-        } else if (name == VK_KHR_SHADER_MAXIMAL_RECONVERGENCE_EXTENSION_NAME) {
-            vk::PhysicalDeviceShaderMaximalReconvergenceFeaturesKHR supported;
-            vk::PhysicalDeviceFeatures2 query{.pNext = &supported};
-            d.gpu.getFeatures2(&query, d.dispatch);
-            d.maximal_reconvergence = supported.shaderMaximalReconvergence != VK_FALSE;
-            if (d.maximal_reconvergence) {
-                extensions.push_back(VK_KHR_SHADER_MAXIMAL_RECONVERGENCE_EXTENSION_NAME);
-            }
         }
     }
     if (d.dynamic_blend) {
         blend_features.pNext = features.pNext;
         features.pNext = &blend_features;
-    }
-    if (d.maximal_reconvergence) {
-        reconvergence_features.pNext = features.pNext;
-        features.pNext = &reconvergence_features;
     }
     if (d.device_fault) {
         d.fault_binary = Catcher::On && fault_features.deviceFaultVendorBinary != VK_FALSE;
@@ -430,10 +415,9 @@ bool CreateDevice(SDL_Window* window, Device& d) {
     d.driver_id = driver.driverID;
     LOG_INFO(Render_Vulkan,
              "GR2port: renderer device {} (queue family {}), checkpoints {}, fault information {}, "
-             "dynamic blend {}, maximal reconvergence {}, driver {} {}",
+             "dynamic blend {}, driver {} {}",
              properties.deviceName.data(), d.queue_family, d.checkpoints, d.device_fault,
-             d.dynamic_blend, d.maximal_reconvergence, driver.driverName.data(),
-             driver.driverInfo.data());
+             d.dynamic_blend, driver.driverName.data(), driver.driverInfo.data());
     GraphicsMenu::SetGpuVendor(properties.vendorID);
     if (Catcher::On) {
         Catcher::LogDevice(d);
