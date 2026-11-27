@@ -61,6 +61,8 @@ Generally, a GPU with **Vulkan 1.3** support is required. For NVIDIA GPUs, a GPU
 - Native mouse input (controls camera)
 - Fully bindable gamepad and keyboard bindings and button prompts
 - in game sliders for special attack and panther mode controller sensitivity
+- more customizable audio volume sliders
+- photo mode camera roll and tilt support
 - Fully customizable graphics presets
 - graphics settings to hide HUD, gravity meter, and crosshair
 - In-game exit to desktop button below return to title
@@ -82,6 +84,8 @@ Generally, a GPU with **Vulkan 1.3** support is required. For NVIDIA GPUs, a GPU
 - All GR2fork patches
 - GR2fork Halloween items
 - FSR 3.1 + FSR 4.1 + DLSS support (Windows + Linux) + XeSS support (Windows Only)
+- FSR 3.1 Frame Generation
+- NVIDIA Reflex Low Latency + AMD Antilag 2 + generic device agnostic low latency mode
 - Keyboard, XBOX, NINTENDO and STEAM (Steam Deck, Steam Controller) button prompts for GR2
 - Auto update checker on launcher startup
 - f12 to screenshot
