@@ -17,8 +17,11 @@
 
 #ifdef __APPLE__
 #include <CoreFoundation/CFBundle.h>
+#include <crt_externs.h>
 #include <dlfcn.h>
+#include <mach-o/dyld.h>
 #include <sys/param.h>
+#include <unistd.h>
 #endif
 
 #ifdef _WIN32
@@ -108,7 +111,16 @@ fs::path GetExecutableFile() {
         path.resize(path.size() * 2);
     }
 #elif defined(__APPLE__)
-    return {};
+    u32 size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::string path(size, '\0');
+    if (_NSGetExecutablePath(path.data(), &size) != 0) {
+        return {};
+    }
+    path.resize(std::strlen(path.c_str()));
+    std::error_code ec;
+    const fs::path file = fs::canonical(path, ec);
+    return ec ? fs::path{path} : file;
 #else
     // An AppImage runs from a read-only mount, so the AppImage counts.
     if (const char* const appimage = std::getenv("APPIMAGE")) {
@@ -341,6 +353,16 @@ bool RestartExecutable() {
     for (size_t at = std::strlen(line.c_str()) + 1; at < line.size();
          at += std::strlen(&line[at]) + 1) {
         arguments.push_back(&line[at]);
+    }
+    arguments.push_back(nullptr);
+    execv(executable.c_str(), arguments.data());
+    return false;
+#elif defined(__APPLE__)
+    // This run's arguments after the first, which names the program.
+    std::string executable = GetExecutableFile().string();
+    std::vector<char*> arguments{executable.data()};
+    for (int i = 1; i < *_NSGetArgc(); ++i) {
+        arguments.push_back((*_NSGetArgv())[i]);
     }
     arguments.push_back(nullptr);
     execv(executable.c_str(), arguments.data());

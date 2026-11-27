@@ -439,6 +439,11 @@ auto InApplication(Show&& show) {
     // Qt takes the desktop's locale. The game keeps the one it started in.
     const std::string locale = std::setlocale(LC_ALL, nullptr);
     decltype(show()) shown{};
+#ifdef __APPLE__
+    // Qt names the Command key Control on macOS unless told; the game's input names it as SDL
+    // does, the Windows key, and Control as Control.
+    QCoreApplication::setAttribute(Qt::AA_MacDontSwapCtrlAndMeta);
+#endif
     {
         int argc = 1;
         char name[] = "Gravity Rush 2";

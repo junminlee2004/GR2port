@@ -40,6 +40,7 @@
 #include "launcher/launcher.h"
 #elif defined(__APPLE__)
 #include <sys/sysctl.h>
+#include "launcher/launcher.h"
 #elif defined(__linux__)
 #include "launcher/launcher.h"
 #endif
@@ -65,6 +66,16 @@ int main(int argc, char* argv[]) {
             i--;
         }
     }
+
+#ifdef __APPLE__
+    // In a build folder the driver's manifest is beside the executable, where the Vulkan loader
+    // looks only when told, for the launcher's list of GPUs and for the renderer. An app bundle
+    // keeps it in its resources, where the loader looks by itself.
+    const std::filesystem::path beside = Common::FS::GetExecutableFile().parent_path();
+    if (std::filesystem::exists(beside / "kosmickrisp_mesa_icd.json")) {
+        setenv("VK_DRIVER_FILES", beside.string().c_str(), 1);
+    }
+#endif
 
 #if defined(__APPLE__) && defined(ARCH_X86_64)
     // KosmicKrisp only supports Apple Silicon. Check that we are not running on an Intel Mac.
@@ -231,9 +242,24 @@ int main(int argc, char* argv[]) {
     }
     PromptPacks::InstallBundled();
 
-#if defined(_WIN32) || defined(__linux__)
+#if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
     if (!noLauncher && !IPC::Instance().IsEnabled() && !Gr2Port::Launcher::Run()) {
         return 0;
+    }
+#endif
+
+#ifndef ARCH_X86_64
+    // Only an x86-64 CPU runs the game's own code. Any other runs it in recompiled mode, from the
+    // libraries made from the player's game, which no release holds.
+    if (!Core::Recompiled::Enabled() ||
+        !std::filesystem::exists(EmulatorSettings.GetRecompiledLibrary())) {
+        const char* const text =
+            "This build runs Gravity Rush 2 from recompiled libraries made from your own copy of "
+            "the game, and none are set up. Set recompiled_library in the Debug section of "
+            "userdata/config.json to the file librecomp.so, with the other libraries beside it.";
+        LOG_CRITICAL(Loader, "GR2port: {}", text);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Gravity Rush 2", text, nullptr);
+        return 1;
     }
 #endif
 

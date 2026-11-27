@@ -47,8 +47,8 @@ if (WIN32)
             "language='*'")
         target_link_options(gr2port PRIVATE /ENTRY:mainCRTStartup "${GR2PORT_COMMON_CONTROLS}")
     endif()
-elseif (UNIX AND NOT APPLE)
-    # The same launcher with Qt's widgets. Its classes need no moc.
+elseif (UNIX)
+    # The same launcher with Qt's widgets, on Linux and macOS. Its classes need no moc.
     find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)
     target_sources(gr2port PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/audio_devices.cpp

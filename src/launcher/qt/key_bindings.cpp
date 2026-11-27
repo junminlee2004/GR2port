@@ -62,11 +62,19 @@ constexpr Sint16 TriggerPressed = 16384;
 constexpr std::array<std::string_view, Game::TypeCount> TypeNames{"Type A", "Type B", "Type C",
                                                                   "Type D", "Type E"};
 
+#ifdef __APPLE__
+// macOS's virtual key codes, which Qt reports as a key's native virtual key there.
+constexpr quint32 RightShiftSymbol = 0x3c;
+constexpr quint32 RightControlSymbol = 0x3e;
+constexpr quint32 RightAltSymbol = 0x3d;
+constexpr quint32 RightSuperSymbol = 0x36;
+#else
 // X11 key symbols, which Qt reports as a key's native virtual key under X11 and Wayland.
 constexpr quint32 RightShiftSymbol = 0xffe2;
 constexpr quint32 RightControlSymbol = 0xffe4;
 constexpr quint32 RightAltSymbol = 0xffea;
 constexpr quint32 RightSuperSymbol = 0xffec;
+#endif
 
 // --------------------------------------------------------------------------------- key names
 

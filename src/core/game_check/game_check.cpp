@@ -25,7 +25,7 @@
 #include "core/game_check/game_check.h"
 #include "core/language/language.h"
 #include "core/loader/elf.h"
-#if defined(_WIN32) || defined(__linux__)
+#if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
 #include "launcher/launcher.h"
 #endif
 #ifdef _WIN32
@@ -325,7 +325,7 @@ std::string NotViable(const std::filesystem::path& root) {
 // Tells the player that no game is found. Where the launcher has the dialog for it, the player
 // can choose the folder that holds the game instead, and that folder is returned.
 std::optional<std::filesystem::path> AskFolder(const std::string& text) {
-#if defined(_WIN32) || defined(__linux__)
+#if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
     LOG_ERROR(Loader, "GR2port: {}", text);
     return Launcher::AskGameFolder(text);
 #else
