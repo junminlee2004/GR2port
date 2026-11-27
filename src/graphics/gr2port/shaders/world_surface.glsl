@@ -302,13 +302,15 @@ void Shade(uint draw) {
 }
 
 // A wave can hold the pixels of several draws. It shades one draw's pixels at a time, so the draw's
-// constants and textures load once for the wave, into scalar registers.
+// constants and textures load once for the wave, into scalar registers. It takes at most one turn a
+// lane, whatever the driver makes of the turns: a lane no turn reached shades its own draw.
 void main() MAXIMALLY_RECONVERGES {
-    for (;;) {
+    for (uint turn = 0u; turn < gl_SubgroupSize; turn++) {
         const uint draw = subgroupBroadcastFirst(draw_index);
         if (draw == draw_index) {
             Shade(draw);
-            break;
+            return;
         }
     }
+    Shade(draw_index);
 }

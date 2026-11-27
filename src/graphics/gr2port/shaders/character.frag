@@ -4,6 +4,7 @@
 #version 460
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_GOOGLE_include_directive : require
+#extension GL_KHR_shader_subgroup_basic : require
 #extension GL_KHR_shader_subgroup_ballot : require
 
 #include "reconvergence.glsl"
@@ -349,13 +350,15 @@ void Shade(uint draw) {
 }
 
 // A wave can hold the pixels of several draws. It shades one draw's pixels at a time, so the draw's
-// constants and textures load once for the wave, into scalar registers.
+// constants and textures load once for the wave, into scalar registers. It takes at most one turn a
+// lane, whatever the driver makes of the turns: a lane no turn reached shades its own draw.
 void main() MAXIMALLY_RECONVERGES {
-    for (;;) {
+    for (uint turn = 0u; turn < gl_SubgroupSize; turn++) {
         const uint draw = subgroupBroadcastFirst(draw_index);
         if (draw == draw_index) {
             Shade(draw);
-            break;
+            return;
         }
     }
+    Shade(draw_index);
 }
