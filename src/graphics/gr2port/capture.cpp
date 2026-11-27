@@ -23,9 +23,9 @@
 #include "graphics/gr2port/catcher_note.h"
 #include "graphics/gr2port/catcher_test.h"
 #include "graphics/gr2port/deformers.h"
+#include "graphics/gr2port/effect_emitter.h"
 #include "graphics/gr2port/frame_stats.h"
 #include "graphics/gr2port/hooks.h"
-#include "graphics/gr2port/light_owner.h"
 #include "graphics/gr2port/meshes.h"
 #include "graphics/gr2port/particle_capture.h"
 #include "graphics/gr2port/scene.h"
@@ -3954,7 +3954,7 @@ void LogFrameRate(std::chrono::steady_clock::time_point now, bool capturing) {
              "GR2port {}",
              rate, std::chrono::duration<double, std::milli>(g_rate_longest).count(),
              g_rate_long_gaps, capturing ? "on" : "off");
-    LightOwner::Report();
+    EffectEmitter::Report();
     if (!capturing) {
         FrameStats::Publish({.game_fps = rate});
     }
