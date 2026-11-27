@@ -279,7 +279,7 @@ s32 PS4_SYSV_ABI GetAvatarUrl(u8* future, const u8* request, bool async) {
         return ORBIS_NP_ERROR_INVALID_ARGUMENT;
     }
     const auto alloc = reinterpret_cast<Alloc>((*reinterpret_cast<void***>(allocator))[0]);
-    char* text = static_cast<char*>(alloc(allocator, url.size() + 1));
+    char* text = static_cast<char*>(Core::Recompiled::Call(alloc, allocator, url.size() + 1));
     if (!text) {
         return ORBIS_NP_ERROR_INVALID_ARGUMENT;
     }
