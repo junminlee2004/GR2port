@@ -33,7 +33,8 @@ bool ScreenDoorShut(float threshold) {
 // 14 steps along the direction by how far the surface turns from the eye, then the intersection of
 // the last two steps' lines.
 vec2 Parallax(uint handle, vec2 start, vec2 direction, float facing) {
-    const int steps = int(14.0 - 6.0 * facing);
+    // A broken normal's facing still takes at most the 20 steps of -1.
+    const int steps = clamp(int(14.0 - 6.0 * facing), 0, 20);
     const float step_size = 1.0 / float(steps);
     const vec2 dx = dFdx(start);
     const vec2 dy = dFdy(start);

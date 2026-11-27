@@ -34,7 +34,8 @@ void main() {
     // the taps step along the map's direction; below 1 every tap reads the pixel's own place.
     const vec4 blur = MaterialCurve(material, MaterialBlurCurve, curve_offset, attr4.w,
                                     MaterialVector(material, MaterialBlur));
-    const uint taps = blur.x < uintBitsToFloat(0x34000000u) ? 10u : GameUint(blur.x);
+    // At most 64 taps: a count past them comes from a broken record.
+    const uint taps = blur.x < uintBitsToFloat(0x34000000u) ? 10u : min(GameUint(blur.x), 64u);
     const vec2 map_direction = DistortionDirection(DistortionMap(draw, attr2.xy));
     const vec2 direction = blur.y >= 1.0 ? map_direction : vec2(0.0);
     const vec2 inverse_size =

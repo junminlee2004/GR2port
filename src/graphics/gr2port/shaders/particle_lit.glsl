@@ -124,7 +124,8 @@ vec3 PointLightColor(PointLight light, vec2 shift) {
 vec3 SpritePointLights(LightConstants light, uint first, vec3 view_position, vec3 n, vec3 row0,
                        vec3 row1, vec3 row2, vec3 diffuse, vec2 shift) {
     const uint count = floatBitsToUint(light.words[12]);
-    for (uint k = 0u; k < count; k++) {
+    // A cell holds 48 entries, the last after its lights ~0.
+    for (uint k = 0u; k < min(count, 48u); k++) {
         const uint index = CellLight(first, k);
         if (index == 0xffffffffu) {
             break;
@@ -150,7 +151,8 @@ vec3 SpritePointLights(LightConstants light, uint first, vec3 view_position, vec
 vec3 ModelPointLights(LightConstants light, uint first, vec3 view_position, vec3 n, vec3 diffuse,
                       vec2 shift) {
     const uint count = floatBitsToUint(light.words[12]);
-    for (uint k = 0u; k < count; k++) {
+    // A cell holds 48 entries, the last after its lights ~0.
+    for (uint k = 0u; k < min(count, 48u); k++) {
         const uint index = CellLight(first, k);
         if (index == 0xffffffffu) {
             break;

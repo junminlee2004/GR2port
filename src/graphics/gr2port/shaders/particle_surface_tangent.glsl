@@ -45,7 +45,8 @@ vec2 ParallaxPlace(ParticleMaterial material, vec2 place, vec2 view, float norma
     // the place.
     const vec2 dx = (place + dFdxCoarse(place)) - place;
     const vec2 dy = (place + dFdyCoarse(place)) - place;
-    const int steps = GameInt(-6.0 * normal_z + 14.0);
+    // A broken normal's z still takes at most the 20 steps of -1.
+    const int steps = clamp(GameInt(-6.0 * normal_z + 14.0), 0, 20);
     const float step = 1.0 / float(steps);
     const vec2 step_offset = step * view;
     const uint handle = material.maps[NormalMap];
