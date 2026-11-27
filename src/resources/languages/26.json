@@ -345,6 +345,7 @@
     "Min Deadzone (def:1 max:126)": "Zonă moartă min. (impl.:1 max.:126)",
     "Rotate Camera": "Rotește camera",
     "Rotate Camera (Photo Mode)": "Rotește camera (modul foto)",
-    "L3 + right stick": "L3 + maneta dreaptă"
+    "L3 + right stick": "L3 + maneta dreaptă",
+    "Object Draw Distance": "Distanța obiectelor"
   }
 }

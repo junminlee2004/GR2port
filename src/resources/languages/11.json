@@ -349,6 +349,7 @@
     "Rotate Camera": "旋转镜头",
     "Rotate Camera (Photo Mode)": "旋转镜头（照片模式）",
     "L3 + right stick": "L3 + 右摇杆",
-    "Low Energy Alert": "能量不足提示音"
+    "Low Energy Alert": "能量不足提示音",
+    "Object Draw Distance": "物体距离"
   }
 }

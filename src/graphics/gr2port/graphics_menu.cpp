@@ -301,12 +301,13 @@ int IndexOf(const std::array<Value, Count>& levels, Value level, int fallback) {
 
 // As the launcher's preset: its passes and detail, the shape, size, texture budget and shadow
 // draw distance it sets, and no VSync for a handheld. The field of view, the screen shake, the
-// upscaler, frame generation and low latency stay.
+// object draw distance, the upscaler, frame generation and low latency stay.
 void ApplyPreset(Values& values, const Settings::Preset& preset) {
     Settings::Graphics graphics = Settings::FromPreset(preset);
     graphics.field_of_view = values.graphics.field_of_view;
     graphics.screen_shake = values.graphics.screen_shake;
     graphics.shadow_distance = preset.shadow_distance.value_or(values.graphics.shadow_distance);
+    graphics.object_distance = values.graphics.object_distance;
     graphics.upscaler = values.graphics.upscaler;
     graphics.upscale_quality = values.graphics.upscale_quality;
     graphics.upscale_sharpening = values.graphics.upscale_sharpening;
@@ -404,7 +405,7 @@ constexpr std::array<Quality, 3> OcclusionQualities{Quality::Original, Quality::
 constexpr std::array<Quality, 3> BlurQualities{Quality::Original, Quality::Low, Quality::Off};
 constexpr std::array<u32, 5> AnisotropyLevels{0, 2, 4, 8, 16};
 
-const std::array<Setting, 36> Table{{
+const std::array<Setting, 37> Table{{
     {"Preset",
      [](const Values&) {
          Names names;
@@ -567,6 +568,13 @@ const std::array<Setting, 36> Table{{
      },
      [](Values& values, int choice) {
          values.graphics.far_environment_detail = Settings::FarDetailLevels[choice];
+     }},
+    {"Object Draw Distance", &DetailNames,
+     [](const Values& values) {
+         return IndexOf(Settings::DetailLevels, values.graphics.object_distance, 3);
+     },
+     [](Values& values, int choice) {
+         values.graphics.object_distance = Settings::DetailLevels[choice];
      }},
     {"Upscaler",
      [](const Values&) {

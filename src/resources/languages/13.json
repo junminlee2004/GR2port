@@ -345,6 +345,7 @@
     "Min Deadzone (def:1 max:126)": "Minsta dödzon (standard: 1, max: 126)",
     "Rotate Camera": "Rotera kameran",
     "Rotate Camera (Photo Mode)": "Rotera kameran (fotoläge)",
-    "L3 + right stick": "L3 + höger spak"
+    "L3 + right stick": "L3 + höger spak",
+    "Object Draw Distance": "Objektavstånd"
   }
 }

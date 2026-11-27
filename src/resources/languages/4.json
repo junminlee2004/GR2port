@@ -349,6 +349,7 @@
     "Rotate Camera": "Kamera drehen",
     "Rotate Camera (Photo Mode)": "Kamera drehen (Fotomodus)",
     "L3 + right stick": "L3 + rechter Stick",
-    "Low Energy Alert": "Warnton bei wenig Energie"
+    "Low Energy Alert": "Warnton bei wenig Energie",
+    "Object Draw Distance": "Objektreichweite"
   }
 }

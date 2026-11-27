@@ -345,6 +345,7 @@
     "Min Deadzone (def:1 max:126)": "Min. holtzóna (alap:1 max:126)",
     "Rotate Camera": "Kamera forgatása",
     "Rotate Camera (Photo Mode)": "Kamera forgatása (fotó mód)",
-    "L3 + right stick": "L3 + jobb kar"
+    "L3 + right stick": "L3 + jobb kar",
+    "Object Draw Distance": "Tárgytávolság"
   }
 }

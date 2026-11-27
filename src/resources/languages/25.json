@@ -345,6 +345,7 @@
     "Min Deadzone (def:1 max:126)": "Ελάχ. νεκρή ζώνη (προεπ.:1 μέγ.:126)",
     "Rotate Camera": "Περιστροφή κάμερας",
     "Rotate Camera (Photo Mode)": "Περιστροφή κάμερας (φωτογραφία)",
-    "L3 + right stick": "L3 + δεξιός μοχλός"
+    "L3 + right stick": "L3 + δεξιός μοχλός",
+    "Object Draw Distance": "Απόσταση αντικειμένων"
   }
 }

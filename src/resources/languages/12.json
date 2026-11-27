@@ -345,6 +345,7 @@
     "Min Deadzone (def:1 max:126)": "Min. kuollut alue (oletus:1 maks.:126)",
     "Rotate Camera": "Kierrä kameraa",
     "Rotate Camera (Photo Mode)": "Kierrä kameraa (valokuvatila)",
-    "L3 + right stick": "L3 + oikea sauva"
+    "L3 + right stick": "L3 + oikea sauva",
+    "Object Draw Distance": "Esineiden etäisyys"
   }
 }

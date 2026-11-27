@@ -345,6 +345,7 @@
     "Min Deadzone (def:1 max:126)": "‫أدنى منطقة ميتة (افتراضي:1 أقصى:126)‬",
     "Rotate Camera": "‫تدوير الكاميرا‬",
     "Rotate Camera (Photo Mode)": "‫تدوير الكاميرا (وضع التصوير)‬",
-    "L3 + right stick": "‫L3 + العصا اليمنى‬"
+    "L3 + right stick": "‫L3 + العصا اليمنى‬",
+    "Object Draw Distance": "‫مسافة الأجسام‬"
   }
 }

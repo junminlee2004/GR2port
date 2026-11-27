@@ -349,6 +349,7 @@
     "Rotate Camera": "カメラを回転",
     "Rotate Camera (Photo Mode)": "カメラを回転(フォトモード)",
     "L3 + right stick": "L3 + 右スティック",
-    "Low Energy Alert": "エネルギー低下アラート"
+    "Low Energy Alert": "エネルギー低下アラート",
+    "Object Draw Distance": "オブジェクト描画距離"
   }
 }

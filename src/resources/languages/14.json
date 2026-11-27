@@ -345,6 +345,7 @@
     "Min Deadzone (def:1 max:126)": "Mindste dødzone (standard 1, maks. 126)",
     "Rotate Camera": "Roter kameraet",
     "Rotate Camera (Photo Mode)": "Roter kameraet (fototilstand)",
-    "L3 + right stick": "L3 + højre pind"
+    "L3 + right stick": "L3 + højre pind",
+    "Object Draw Distance": "Objektafstand"
   }
 }

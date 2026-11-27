@@ -345,6 +345,7 @@
     "Min Deadzone (def:1 max:126)": "Мінімум (типово 1, макс. 126)",
     "Rotate Camera": "Обертання камери",
     "Rotate Camera (Photo Mode)": "Обертання камери (фоторежим)",
-    "L3 + right stick": "L3 + правий джойстик"
+    "L3 + right stick": "L3 + правий джойстик",
+    "Object Draw Distance": "Дальність об'єктів"
   }
 }

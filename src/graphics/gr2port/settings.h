@@ -205,6 +205,12 @@ struct Graphics {
     /// game's own level of detail distances by them.
     u32 near_environment_detail{100};
     u32 character_detail{100};
+    /// How far from the eye the game draws an object, in percent of the game's distance, a
+    /// DetailLevels entry. The game drops a model once it is farther than 120 times the radius of
+    /// its box, small props first: GamePatches scales that distance. Above 100 the game's frame
+    /// holds more items: GamePatches gives the game room for them, and the renderer its packets.
+    /// It takes effect at the next start. Presets leave it.
+    u32 object_distance{100};
     /// The gameplay cameras' field of view in percent of the game's own angle, a
     /// FieldOfViewLevels entry. Presets leave it.
     u32 field_of_view{100};
@@ -248,9 +254,10 @@ constexpr bool FinestDetail(const Graphics& graphics) {
 }
 
 /// Whether the game's frame may hold more items than at its own settings: a level of detail
-/// setting at its finest, or shadows that reach farther than the game's.
+/// setting at its finest, or shadows or objects that reach farther than the game's.
 constexpr bool MoreItems(const Graphics& graphics) {
-    return FinestDetail(graphics) || graphics.shadow_distance > 100;
+    return FinestDetail(graphics) || graphics.shadow_distance > 100 ||
+           graphics.object_distance > 100;
 }
 
 /// An integrated GPU's share of installed RAM when texture streaming takes the budget itself: the

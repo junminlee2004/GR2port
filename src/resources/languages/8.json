@@ -349,6 +349,7 @@
     "Rotate Camera": "Поворот камеры",
     "Rotate Camera (Photo Mode)": "Поворот камеры (фоторежим)",
     "L3 + right stick": "L3 + правый джойстик",
-    "Low Energy Alert": "Сигнал низкой энергии"
+    "Low Energy Alert": "Сигнал низкой энергии",
+    "Object Draw Distance": "Дальность объектов"
   }
 }

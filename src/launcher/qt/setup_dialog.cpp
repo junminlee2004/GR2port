@@ -521,6 +521,7 @@ struct Dialog {
     QComboBox* distortion = nullptr;
     QComboBox* screen_shake = nullptr;
     QComboBox* shadow_distance = nullptr;
+    QComboBox* object_distance = nullptr;
     QComboBox* hud_gravity_meter = nullptr;
     QComboBox* hud_health_bar = nullptr;
     QComboBox* hud_crosshair = nullptr;
@@ -1037,8 +1038,8 @@ void ShowGraphics(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.distortion->setCurrentIndex(graphics.distortion ? 0 : 1);
 }
 
-// The field of view, the screen shake, the HUD's parts, the upscaler, its quality and its
-// sharpening, frame generation and low latency, which presets leave.
+// The field of view, the screen shake, the object draw distance, the HUD's parts, the upscaler,
+// its quality and its sharpening, frame generation and low latency, which presets leave.
 void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
     dialog.field_of_view->setCurrentIndex(
         IndexOf(Settings::FieldOfViewLevels, graphics.field_of_view, OwnFieldOfView));
@@ -1046,6 +1047,8 @@ void ShowUpscaler(const Dialog& dialog, const Settings::Graphics& graphics) {
         IndexOf(Settings::ScreenShakeLevels, graphics.screen_shake, OwnScreenShake));
     dialog.shadow_distance->setCurrentIndex(
         IndexOf(Settings::ShadowDistanceLevels, graphics.shadow_distance, OwnShadowDistance));
+    dialog.object_distance->setCurrentIndex(
+        IndexOf(Settings::DetailLevels, graphics.object_distance, OwnDetail));
     dialog.hud_gravity_meter->setCurrentIndex(graphics.hud_gravity_meter ? 0 : 1);
     dialog.hud_health_bar->setCurrentIndex(graphics.hud_health_bar ? 0 : 1);
     dialog.hud_crosshair->setCurrentIndex(graphics.hud_crosshair ? 0 : 1);
@@ -1085,6 +1088,7 @@ Settings::Graphics ReadGraphics(const Dialog& dialog) {
     ReadChoice(dialog.field_of_view, Settings::FieldOfViewLevels, graphics.field_of_view);
     ReadChoice(dialog.screen_shake, Settings::ScreenShakeLevels, graphics.screen_shake);
     ReadChoice(dialog.shadow_distance, Settings::ShadowDistanceLevels, graphics.shadow_distance);
+    ReadChoice(dialog.object_distance, Settings::DetailLevels, graphics.object_distance);
     graphics.hud_gravity_meter = dialog.hud_gravity_meter->currentIndex() != 1;
     graphics.hud_health_bar = dialog.hud_health_bar->currentIndex() != 1;
     graphics.hud_crosshair = dialog.hud_crosshair->currentIndex() != 1;
@@ -1514,6 +1518,7 @@ void BuildGraphics(Dialog& dialog, QWidget* page) {
     dialog.distortion = row("Distortion", LeftColumn, 8, SwitchChoices);
     dialog.screen_shake = row("Screen Shake", LeftColumn, 9, ScreenShakeChoices);
     dialog.shadow_distance = row("Shadow Draw Distance", LeftColumn, 10, ShadowDistanceChoices);
+    dialog.object_distance = row("Object Draw Distance", LeftColumn, 11, DetailChoices);
     dialog.outlines = row("Outlines", RightColumn, 0, SwitchChoices);
     dialog.decals = row("Decals", RightColumn, 1, SwitchChoices);
     dialog.glass_refraction = row("Glass Refraction", RightColumn, 2, SwitchChoices);

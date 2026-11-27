@@ -110,6 +110,13 @@ constexpr std::string_view ThreeStoresSkipped = "0f1f8400000000000f1f84000000000
 // 100 may fill.
 constexpr u32 AreaHeapMegabytesPerPercent = 5;
 
+// A model with far culling on fades out of the frame once its centre is farther from the eye than
+// FarCullRadii times the radius of its box, small props first: a chair at about 70 m, a bench at
+// about 140 m. The game compares the squares, and this float of the executable is the square of
+// FarCullRadii.
+constexpr u64 FarCullSquare = 0x018c567c;
+constexpr float FarCullRadii = 120.0f;
+
 // Queues a patch of the bytes, as hexadecimal digits, at address.
 void QueueBytes(u64 address, std::string bytes) {
     MemoryPatcher::AddPatchToQueue({
@@ -143,6 +150,15 @@ void QueueDetail(u64 row, std::span<const float> distances, u32 percent) {
         bytes += FloatBytes(distance * static_cast<float>(percent) / 100.0f);
     }
     QueueBytes(row, std::move(bytes));
+}
+
+// Queues the patch that writes the far culling distance at percent of the game's; 100 keeps it.
+void QueueObjectDistance(u32 percent) {
+    if (percent == 100) {
+        return;
+    }
+    const float radii = FarCullRadii * static_cast<float>(percent) / 100.0f;
+    QueueBytes(FarCullSquare, FloatBytes(radii * radii));
 }
 
 // Above 100 percent, queues the patches that grow the areas' margins to percent of the file's, so
@@ -458,6 +474,7 @@ void ApplySettings() {
     QueueVideoHeap(heap_growth);
     QueueDetail(WorldDetailRow, WorldDetail, graphics.near_environment_detail);
     QueueDetail(CharacterDetailRow, CharacterDetail, graphics.character_detail);
+    QueueObjectDistance(graphics.object_distance);
     if (Settings::MoreItems(graphics)) {
         QueueFramePools();
     }
