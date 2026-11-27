@@ -34,6 +34,7 @@
 #include "graphics/gr2port/hooks.h"
 #include "graphics/gr2port/hud_parts.h"
 #include "graphics/gr2port/layout_clock.h"
+#include "graphics/gr2port/light_owner.h"
 #include "graphics/gr2port/loading_tip.h"
 #include "graphics/gr2port/marker_fit.h"
 #include "graphics/gr2port/meshes.h"
@@ -193,6 +194,7 @@ void Install(VAddr module_base) {
     WaterSplashes::Install(module_base, c, StubAreaSize);
     SmokeAndDust::Install(module_base, c, StubAreaSize);
     ShadowDistance::Install(module_base, c, StubAreaSize);
+    LightOwner::Install(module_base, c, StubAreaSize);
     FloatSpin::Install(module_base, c, StubAreaSize);
     // At the game's own 30 fps the motions, the hits and the comics keep the stock code.
     if (Settings::Get().game.frame_rate > 30) {

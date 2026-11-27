@@ -149,6 +149,8 @@ target_sources(gr2port PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/self_translucent.h
     ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
     ${CMAKE_CURRENT_LIST_DIR}/settings.h
+    ${CMAKE_CURRENT_LIST_DIR}/light_owner.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/light_owner.h
     ${CMAKE_CURRENT_LIST_DIR}/shadow_distance.cpp
     ${CMAKE_CURRENT_LIST_DIR}/shadow_distance.h
     ${CMAKE_CURRENT_LIST_DIR}/shadow_trace.cpp
