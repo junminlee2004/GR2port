@@ -40,6 +40,7 @@
 #include "core/prompt_packs/pad_prompts.h"
 #include "core/prompt_packs/photo_prompts.h"
 #include "core/prompt_packs/prompt_packs.h"
+#include "core/recompiled/recompiled.h"
 #include "input/input_handler.h"
 #include "input/selected_pad.h"
 
@@ -711,7 +712,12 @@ void RevertCodePatches(const Pack& pack) {
     for (const CodePatch& patch : pack.code) {
         u8* code = CodeAddress(patch);
         if (code != nullptr && std::memcmp(code, patch.patched.data(), patch.patched.size()) == 0) {
+            // Recompiled mode: recompiled C that does not read these bytes as it runs leaves
+            // their functions to the runtime, so the bytes put back take effect.
+            const VAddr address = reinterpret_cast<VAddr>(code);
+            Core::Recompiled::CheckWrite(address, patch.orig.size());
             std::memcpy(code, patch.orig.data(), patch.orig.size());
+            Core::Recompiled::Invalidate(address, patch.orig.size());
         } else {
             LOG_ERROR(Loader, "Prompt packs: the code at {:#x} changed, the {} pack leaves it",
                       patch.address, pack.name);
