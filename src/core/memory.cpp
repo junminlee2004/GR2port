@@ -667,6 +667,14 @@ s32 MemoryManager::MapMemory(void** out_addr, VAddr virtual_addr, u64 size, Memo
                   total_flexible_size - flexible_usage, size);
         return ORBIS_KERNEL_ERROR_EINVAL;
     }
+#if defined(__APPLE__) && defined(ARCH_ARM64)
+    // An address below the layout's offset is one of the PS4's own, which the game's code holds
+    // as a constant (its two heaps at 0x400000000 and 0x500000000). The mapping goes to the
+    // guest's address of it, which the caller gets back in out_addr.
+    if (virtual_addr != 0 && virtual_addr < LayoutOffset) {
+        virtual_addr += LayoutOffset;
+    }
+#endif
     std::scoped_lock lk{unmap_mutex};
 
     PhysHandle dmem_area;

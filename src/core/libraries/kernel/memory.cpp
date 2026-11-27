@@ -381,7 +381,7 @@ s32 PS4_SYSV_ABI sceKernelMapNamedSystemFlexibleMemory(void** addr_in_out, u64 l
     }
 
     if (in_addr == 0) {
-        in_addr = 0x880000000;
+        in_addr = Core::LayoutOffset + 0x880000000;
     }
     const auto mem_prot = static_cast<Core::MemoryProt>(prot);
     auto* memory = Core::Memory::Instance();
@@ -941,7 +941,7 @@ s32 PS4_SYSV_ABI posix_msync(void* addr, u64 len, s32 flags) {
 }
 
 static constexpr s32 MAX_PRT_APERTURES = 3;
-static constexpr VAddr PRT_AREA_START_ADDR = 0x1000000000;
+static constexpr VAddr PRT_AREA_START_ADDR = Core::LayoutOffset + 0x1000000000;
 static constexpr u64 PRT_AREA_SIZE = 0xec00000000;
 static std::array<std::pair<VAddr, u64>, MAX_PRT_APERTURES> PrtApertures{};
 

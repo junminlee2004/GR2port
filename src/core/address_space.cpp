@@ -28,6 +28,12 @@
 #include <sys/mman.h>
 #endif
 
+#if defined(__APPLE__) && defined(ARCH_ARM64)
+#include <mach/mach.h>
+#include <mach/mach_error.h>
+#include <mach/mach_vm.h>
+#endif
+
 #if defined(__APPLE__) && defined(ARCH_X86_64)
 // Reserve space for the system address space using a zerofill section.
 asm(".zerofill SYSTEM_MANAGED,SYSTEM_MANAGED,__SYSTEM_MANAGED,0x7FFBFC000");
@@ -38,17 +44,17 @@ asm(".zerofill USER_AREA,USER_AREA,__USER_AREA,0x5F9000000000");
 namespace Core {
 
 // Constants used for mapping address space.
-constexpr VAddr SYSTEM_MANAGED_MIN = 0x400000ULL;
-constexpr VAddr SYSTEM_MANAGED_MAX = 0x7FFFFBFFFULL;
-constexpr VAddr SYSTEM_RESERVED_MIN = 0x7FFFFC000ULL;
+constexpr VAddr SYSTEM_MANAGED_MIN = LayoutOffset + 0x400000ULL;
+constexpr VAddr SYSTEM_MANAGED_MAX = LayoutOffset + 0x7FFFFBFFFULL;
+constexpr VAddr SYSTEM_RESERVED_MIN = LayoutOffset + 0x7FFFFC000ULL;
 #if defined(__APPLE__) && defined(ARCH_X86_64)
 // Commpage ranges from 0xFC0000000 - 0xFFFFFFFFF, so decrease the system reserved maximum.
 constexpr VAddr SYSTEM_RESERVED_MAX = 0xFBFFFFFFFULL;
 // GPU-reserved memory ranges from 0x1000000000 - 0x6FFFFFFFFF, so increase the user minimum.
 constexpr VAddr USER_MIN = 0x7000000000ULL;
 #else
-constexpr VAddr SYSTEM_RESERVED_MAX = 0xFFFFFFFFFULL;
-constexpr VAddr USER_MIN = 0x1000000000ULL;
+constexpr VAddr SYSTEM_RESERVED_MAX = LayoutOffset + 0xFFFFFFFFFULL;
+constexpr VAddr USER_MIN = LayoutOffset + 0x1000000000ULL;
 #endif
 #if defined(__linux__)
 // Linux maps the GR2port executable around here, so limit the user maximum
@@ -56,6 +62,9 @@ constexpr VAddr USER_MAX = 0x54FFFFFFFFFFULL;
 #elif defined(__FreeBSD__)
 // FreeBSD address space is extremely volatile, keep this lower for safety.
 constexpr VAddr USER_MAX = 0xFFFFFFFFFFFULL;
+#elif defined(__APPLE__) && defined(ARCH_ARM64)
+// The raised layout ends at 1 TiB, where the PS4's own addresses end.
+constexpr VAddr USER_MAX = 0xFFFFFFFFFFULL;
 #else
 constexpr VAddr USER_MAX = 0x5FFFFFFFFFFFULL;
 #endif
@@ -742,6 +751,20 @@ struct AddressSpace::Impl {
             }
         }
         system_managed_base = virtual_base;
+        system_reserved_base = reinterpret_cast<u8*>(SYSTEM_RESERVED_MIN);
+        user_base = reinterpret_cast<u8*>(USER_MIN);
+#elif defined(__APPLE__) && defined(ARCH_ARM64)
+        // The raised layout's place, as one range. A fixed Mach allocation fails where the host
+        // has a mapping already, which mmap's MAP_FIXED would replace.
+        mach_vm_address_t reserved = SYSTEM_MANAGED_MIN;
+        const kern_return_t status =
+            mach_vm_allocate(mach_task_self(), &reserved, virtual_size, VM_FLAGS_FIXED);
+        if (status != KERN_SUCCESS) {
+            LOG_CRITICAL(Kernel_Vmm, "The guest's addresses from {:#x}, {:#x} bytes, are taken: {}",
+                         SYSTEM_MANAGED_MIN, virtual_size, mach_error_string(status));
+            throw std::bad_alloc{};
+        }
+        system_managed_base = reinterpret_cast<u8*>(SYSTEM_MANAGED_MIN);
         system_reserved_base = reinterpret_cast<u8*>(SYSTEM_RESERVED_MIN);
         user_base = reinterpret_cast<u8*>(USER_MIN);
 #else

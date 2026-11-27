@@ -150,7 +150,7 @@ void Linker::Execute(const std::vector<std::string>& args) {
         s32 result = Libraries::Kernel::sceKernelAllocateDirectMemory(
             0, Libraries::Kernel::sceKernelGetDirectMemorySize(), 0x10000, 0x10000, 3, &phys_addr);
         if (result == 0) {
-            void* addr{reinterpret_cast<void*>(0xfe0000000)};
+            void* addr{reinterpret_cast<void*>(LayoutOffset + 0xfe0000000)};
             result = Libraries::Kernel::sceKernelMapNamedDirectMemory(
                 &addr, 0x10000, 0x13, 0, phys_addr, 0x10000, "SceGnmDriver");
         }
@@ -486,7 +486,7 @@ void* Linker::AllocateTlsForThread(bool is_primary) {
     // If sceKernelMapNamedFlexibleMemory is being called from libkernel and addr = 0
     // it automatically places mappings in system reserved area instead of managed.
     // Since the system reserved area already has a mapping in it, this address is slightly higher.
-    static constexpr VAddr KernelAllocBase = 0x881000000ULL;
+    static constexpr VAddr KernelAllocBase = LayoutOffset + 0x881000000ULL;
 
     // The kernel module has a few different paths for TLS allocation.
     // For SDK < 1.7 it allocates both main and secondary thread blocks using libc mspace/malloc.

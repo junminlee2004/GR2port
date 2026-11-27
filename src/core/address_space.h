@@ -13,6 +13,16 @@
 
 namespace Core {
 
+/// How far above the PS4's own addresses the guest's address space lies. A native arm64 process
+/// on macOS maps nothing below 4 GiB, and the shared region holds 0x180000000-0x7000000000, so
+/// the PS4's layout sits 512 GiB higher there. Guest memory stays identity-mapped: an address of
+/// the PS4 plus this offset is the guest's address and the host's.
+#if defined(__APPLE__) && defined(ARCH_ARM64)
+inline constexpr VAddr LayoutOffset = 0x8000000000ULL;
+#else
+inline constexpr VAddr LayoutOffset = 0;
+#endif
+
 enum class MemoryPermission : u32 {
     None = 0,
     Read = 1 << 0,
