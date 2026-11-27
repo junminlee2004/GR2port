@@ -540,6 +540,9 @@ void main() {
                 const float gain_u = CurveU(columns.z);
                 gain = 0u;
                 last_along = 0u;
+                // All parents' spawns together stop at the pool's size: the counts come from data,
+                // and a parent's count times the parents' could reach the pool's size squared.
+                uint spawned = 0u;
                 for (uint k = 0u; k < min(parent_ring, ParticleCount); k++) {
                     const uint base = first + k * per;
                     const uint source = k + parent_first;
@@ -645,7 +648,8 @@ void main() {
                         const vec4 place_range = high - low;
                         const vec3 velocity_range = velocity_top - velocity_bottom;
                         const float to_increment = 1.0 / increment;
-                        for (float i = 0.0; i < spawns && i < float(ParticleCount); i = 1.0 + i) {
+                        for (float i = 0.0; i < spawns && spawned < ParticleCount;
+                             i = 1.0 + i, spawned++) {
                             const uint next_cursor = GameModulo(cursor + 1u, per_rest);
                             float along = 0.0;
                             if (mode != 2u) {
