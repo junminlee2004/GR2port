@@ -6,6 +6,9 @@
 #include <atomic>
 #include <bit>
 #include <cstdint>
+#include <mutex>
+#include <string>
+#include <vector>
 #include <SDL3/SDL_events.h>
 #include <imgui.h>
 
@@ -41,6 +44,22 @@ static std::mutex change_layers_mutex{};
 
 static ImGuiID dock_id;
 static std::atomic<std::uint32_t> force_gamepad_input_capture_count{0};
+
+// ImGui's context is not thread-safe: the window thread queues its events here, and the present
+// thread gives them to ImGui as its frame starts. A text event's text lives in SDL's memory only
+// until the next event, so it is copied.
+struct QueuedEvent {
+    SDL_Event event;
+    std::string text;
+};
+static std::mutex queued_events_mutex;
+static std::vector<QueuedEvent> queued_events;
+static std::vector<QueuedEvent> taken_events;
+
+// What ImGui wanted at the end of its last frame, which ProcessEvent decides by.
+static std::atomic<bool> wants_mouse{false};
+static std::atomic<bool> wants_keyboard{false};
+static std::atomic<bool> wants_pad{false};
 
 namespace ImGui {
 
@@ -153,16 +172,24 @@ void Shutdown() {
 
 bool ProcessEvent(SDL_Event* event) {
     SDL_Event relayed;
-    Sdl::ProcessEvent(Gr2Port::ImGuiRelay::ForImGui(event, relayed));
+    const SDL_Event* const mapped = Gr2Port::ImGuiRelay::ForImGui(event, relayed);
+    {
+        std::scoped_lock lock{queued_events_mutex};
+        // ImGui takes the last position of moves that follow each other.
+        if (mapped->type == SDL_EVENT_MOUSE_MOTION && !queued_events.empty() &&
+            queued_events.back().event.type == SDL_EVENT_MOUSE_MOTION) {
+            queued_events.back().event = *mapped;
+        } else {
+            const bool text = mapped->type == SDL_EVENT_TEXT_INPUT && mapped->text.text != nullptr;
+            queued_events.push_back({*mapped, text ? mapped->text.text : ""});
+        }
+    }
     switch (event->type) {
     // Don't block release/up events
     case SDL_EVENT_MOUSE_MOTION:
     case SDL_EVENT_MOUSE_WHEEL:
-    case SDL_EVENT_MOUSE_BUTTON_DOWN: {
-        const auto& io = GetIO();
-        return io.WantCaptureMouse && io.Ctx->NavWindow != nullptr &&
-               (io.Ctx->NavWindow->Flags & ImGuiWindowFlags_NoNav) == 0;
-    }
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        return wants_mouse.load(std::memory_order_relaxed);
     case SDL_EVENT_TEXT_INPUT:
     case SDL_EVENT_KEY_DOWN: {
         if (IsGamepadInputCaptured()) {
@@ -171,9 +198,7 @@ bool ProcessEvent(SDL_Event* event) {
             // virtual controller state.
             return false;
         }
-        const auto& io = GetIO();
-        return io.WantCaptureKeyboard && io.Ctx->NavWindow != nullptr &&
-               io.Ctx->NavWindow->ID != dock_id;
+        return wants_keyboard.load(std::memory_order_relaxed);
     }
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
     case SDL_EVENT_GAMEPAD_BUTTON_UP:
@@ -187,8 +212,7 @@ bool ProcessEvent(SDL_Event* event) {
             // controller state keep updating; game-side pad reads are blocked in libScePad.
             return false;
         }
-        const auto& io = GetIO();
-        return io.NavActive && io.Ctx->NavWindow != nullptr && io.Ctx->NavWindow->ID != dock_id;
+        return wants_pad.load(std::memory_order_relaxed);
     }
     default:
         return false;
@@ -209,6 +233,18 @@ ImGuiID NewFrame(bool is_reusing_frame) {
             change_layers.pop_front();
         }
     }
+
+    {
+        std::scoped_lock lock{queued_events_mutex};
+        taken_events.swap(queued_events);
+    }
+    for (QueuedEvent& queued : taken_events) {
+        if (queued.event.type == SDL_EVENT_TEXT_INPUT) {
+            queued.event.text.text = queued.text.c_str();
+        }
+        Sdl::ProcessEvent(&queued.event);
+    }
+    taken_events.clear();
 
     Sdl::NewFrame(is_reusing_frame);
     ImGui::NewFrame();
@@ -232,6 +268,16 @@ void Render() {
     ImGui::Render();
     TextureManager::Submit();
     Gr2Port::ImGuiRelay::Capture(*GetDrawData());
+
+    const ImGuiIO& io = GetIO();
+    const ImGuiWindow* const nav = io.Ctx->NavWindow;
+    wants_mouse.store(io.WantCaptureMouse && nav != nullptr &&
+                          (nav->Flags & ImGuiWindowFlags_NoNav) == 0,
+                      std::memory_order_relaxed);
+    wants_keyboard.store(io.WantCaptureKeyboard && nav != nullptr && nav->ID != dock_id,
+                         std::memory_order_relaxed);
+    wants_pad.store(io.NavActive && nav != nullptr && nav->ID != dock_id,
+                    std::memory_order_relaxed);
 }
 
 bool MustKeepDrawing() {

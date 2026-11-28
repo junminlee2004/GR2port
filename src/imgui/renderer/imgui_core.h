@@ -20,6 +20,8 @@ void Initialize(const Frontend::WindowSDL& window);
 
 void Shutdown();
 
+/// The window thread's events: queues the event for ImGui's next frame and says whether ImGui
+/// takes it, by what ImGui wanted at the end of its last frame.
 bool ProcessEvent(SDL_Event* event);
 
 void AcquireGamepadInputCapture();
