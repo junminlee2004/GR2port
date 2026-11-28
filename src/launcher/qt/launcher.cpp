@@ -39,6 +39,7 @@
 #include "launcher/launcher.h"
 #include "launcher/qt/art.h"
 #include "launcher/qt/pad_navigation.h"
+#include "launcher/qt/recompile.h"
 #include "launcher/qt/setup_dialog.h"
 #include "launcher/qt/style.h"
 #include "launcher/qt/text.h"
@@ -500,6 +501,10 @@ std::optional<std::filesystem::path> AskGameFolder(const std::string& text) {
     });
     return folder.isEmpty() ? std::nullopt
                             : std::optional{std::filesystem::path{folder.toStdString()}};
+}
+
+bool Recompile(const Core::Recompiled::Build::Job& job) {
+    return InApplication([&job] { return RecompileWindow(job); });
 }
 
 bool Run() {

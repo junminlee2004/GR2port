@@ -4,7 +4,7 @@
 4. Place both folders or the combined folder (update folder contents copied into base game folder) RIGHT NEXT TO Gravity Rush 2™.exe/AppImage/app.
 5. Double click on Gravity Rush 2™.exe/AppImage/app and play the game
 P.S. to add game to steam, just add the .exe/.AppImage as a non-steam game. To launch without the launcher, add -nolauncher in the launch options.
-P.S. on a Mac, macOS blocks the app the first time: open System Settings > Privacy & Security and click Open Anyway. The Mac build also needs recompiled libraries made from your own copy of the game, which this zip cannot hold: recompiled_library in the Debug section of userdata/config.json names them.
+P.S. on a Mac, macOS blocks the app the first time: open System Settings > Privacy & Security and click Open Anyway. On its first start the app recompiles the game from your dump for your Mac, which takes a few minutes and needs Apple's Command Line Tools (the app offers to install them); the result goes in the folder "recompiled" beside the app.
 
 Thanks for playing!
 Support me here! https://ko-fi.com/junminlee2004

@@ -23,6 +23,9 @@ inline constexpr VAddr LayoutOffset = 0x8000000000ULL;
 inline constexpr VAddr LayoutOffset = 0;
 #endif
 
+/// Where the executable loads: the PS4's address of it, 0x400000, in the guest's address space.
+inline constexpr VAddr ExecutableLoadBase = LayoutOffset + 0x400000;
+
 enum class MemoryPermission : u32 {
     None = 0,
     Read = 1 << 0,

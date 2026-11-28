@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 # Makes "Gravity Rush 2™.app" in the current folder from a macOS build: the executable with the
-# Vulkan loader and KosmicKrisp beside it, KosmicKrisp's manifest in the resources, the frameworks
-# and plugins of Qt that the launcher needs, and the icon. Usage: macos-app-sdl.sh [build folder],
-# by default $GITHUB_WORKSPACE/build.
+# Vulkan loader and KosmicKrisp beside it, KosmicKrisp's manifest and recompiled mode's generator
+# in the resources, the frameworks and plugins of Qt that the launcher needs, and the icon.
+# Usage: macos-app-sdl.sh [build folder], by default $GITHUB_WORKSPACE/build.
 
 set -e
 
@@ -45,6 +45,22 @@ mkdir -p "$icd"
 sed 's|"\./libvulkan_kosmickrisp\.dylib"|"../../../MacOS/libvulkan_kosmickrisp.dylib"|' \
 	"$build/kosmickrisp_mesa_icd.json" >"$icd/kosmickrisp_mesa_icd.json"
 grep -q '"../../../MacOS/libvulkan_kosmickrisp.dylib"' "$icd/kosmickrisp_mesa_icd.json"
+
+# The generator that makes recompiled mode's libraries from the player's game on the first start,
+# at the places it has in the tree, and digest.txt, a hash of all of it: libraries that another
+# generator made are made again.
+recompiler="$app/Contents/Resources/recompiler"
+zydis="$source/externals/zydis-4.1"
+mkdir -p "$recompiler/src/core/recompiled" "$recompiler/third_party" \
+	"$recompiler/externals/zydis-4.1/dependencies/zycore"
+cp "$source/src/core/recompiled/build-library.py" "$recompiler/src/core/recompiled/"
+cp -R "$source/src/core/recompiled/inputs" "$recompiler/src/core/recompiled/"
+cp -R "$source/third_party/recompiler" "$source/third_party/cpu-runtime" "$recompiler/third_party/"
+cp -R "$zydis/LICENSE" "$zydis/include" "$zydis/src" "$recompiler/externals/zydis-4.1/"
+cp -R "$zydis/dependencies/zycore/LICENSE" "$zydis/dependencies/zycore/include" \
+	"$zydis/dependencies/zycore/src" "$recompiler/externals/zydis-4.1/dependencies/zycore/"
+(cd "$recompiler" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 |
+	shasum -a 256 | cut -d ' ' -f 1) >"$recompiler/digest.txt"
 # Each library the bundle's code loads must be in the bundle or the system's. A library's own
 # name, which otool lists first, does not count.
 if find "$app" -type f -print0 | xargs -0 file | grep 'Mach-O' | cut -d: -f1 |

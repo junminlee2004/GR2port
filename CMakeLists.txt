@@ -1154,6 +1154,8 @@ if (ENABLE_RECOMPILED_MODE)
     target_link_libraries(cpu_runtime PRIVATE Zydis::Zydis ${CMAKE_DL_LIBS} m)
     target_link_libraries(gr2port PRIVATE cpu_runtime)
     target_compile_definitions(gr2port PRIVATE ENABLE_RECOMPILED_MODE)
+    # The libraries' build on the player's machine, which the app's generator makes.
+    target_sources(gr2port PRIVATE src/core/recompiled/build.cpp src/core/recompiled/build.h)
 endif()
 
 if (NOT ARCHITECTURE STREQUAL "x86_64")

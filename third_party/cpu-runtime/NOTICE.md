@@ -9,7 +9,9 @@ libraries and runs the x86-64 code their C does not cover.
 - GR2port's changes on top of that commit: the names (`bbcpu_` became `guest_cpu_`, and the
   library guest-cpu), a context API for fibers (`guest_cpu_context_create`, `_switch` and
   `_destroy`), SSE4.2's string compares (PCMPxSTRx) in the interpreter, host calls of an import
-  stub that run the function its slot holds, and the recompiled-mode work of `src/cpu/recomp.c`.
+  stub that run the function its slot holds, and the recompiled-mode work of `src/cpu/recomp.c`
+  (with a library of hook code for each layout of the host's stubs: `guest_cpu_recomp_hook_fits`
+  and `guest_cpu_recomp_dump_hook_code`).
 - Here: `src/cpu`, `src/recomp/rc.h`, the license, the readme and the documents. Not here: the
   build script, tests, tools and examples that the readme and the documents name.
 - It holds no game code, addresses or data.

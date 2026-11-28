@@ -69,6 +69,8 @@ elseif (UNIX)
         ${CMAKE_CURRENT_LIST_DIR}/qt/launcher.cpp
         ${CMAKE_CURRENT_LIST_DIR}/qt/pad_navigation.cpp
         ${CMAKE_CURRENT_LIST_DIR}/qt/pad_navigation.h
+        ${CMAKE_CURRENT_LIST_DIR}/qt/recompile.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/qt/recompile.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/setup_dialog.cpp
         ${CMAKE_CURRENT_LIST_DIR}/qt/setup_dialog.h
         ${CMAKE_CURRENT_LIST_DIR}/qt/style.cpp

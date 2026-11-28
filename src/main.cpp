@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -29,6 +28,9 @@
 #include "core/prompt_packs/prompt_packs.h"
 #include "core/recompiled/recompiled.h"
 #include "core/user_settings.h"
+#if defined(ENABLE_RECOMPILED_MODE) && !defined(ARCH_X86_64)
+#include "core/recompiled/build.h"
+#endif
 #include "graphics/gr2port/catcher.h"
 #include "graphics/gr2port/catcher_crash.h"
 #include "graphics/gr2port/catcher_outside.h"
@@ -56,16 +58,23 @@ int main(int argc, char* argv[]) {
 #endif
     Gr2Port::GameCheck::RememberStart(argc, argv);
 
-    // -nolauncher starts the game at once. CLI11 takes no long names after a single dash.
+    // -nolauncher starts the game at once. CLI11 takes no long names after a single dash. It goes
+    // from a copy of the arguments: a restart of the executable reads the process's own on macOS.
     [[maybe_unused]] bool noLauncher = false;
-    for (int i = 1; i < argc && std::string(argv[i]) != "--"; i++) {
-        if (std::string(argv[i]) == "-nolauncher") {
+    std::vector<char*> arguments(argv, argv + argc + 1);
+    for (int i = 1; i < argc && std::string(arguments[i]) != "--"; i++) {
+        if (std::string(arguments[i]) == "-nolauncher") {
             noLauncher = true;
-            std::copy(argv + i + 1, argv + argc, argv + i);
+            arguments.erase(arguments.begin() + i);
             argc--;
             i--;
         }
     }
+    argv = arguments.data();
+#if defined(ENABLE_RECOMPILED_MODE) && !defined(ARCH_X86_64)
+    // A start for the library of new hook code goes on to the game once it is built.
+    noLauncher = Core::Recompiled::Build::RestartedForHookCode() || noLauncher;
+#endif
 
 #ifdef __APPLE__
     // In a build folder the driver's manifest is beside the executable, where the Vulkan loader
@@ -242,6 +251,16 @@ int main(int argc, char* argv[]) {
     }
     PromptPacks::InstallBundled();
 
+#if defined(ENABLE_RECOMPILED_MODE) && !defined(ARCH_X86_64)
+    // The libraries of recompiled mode, made from the game on this machine before the launcher
+    // opens: the first time, for another generator and for new hook code.
+    if (const std::optional<Core::Recompiled::Build::Job> job = Core::Recompiled::Build::Needed()) {
+        if (!Gr2Port::Launcher::Recompile(*job)) {
+            return 0;
+        }
+    }
+#endif
+
 #if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
     if (!noLauncher && !IPC::Instance().IsEnabled() && !Gr2Port::Launcher::Run()) {
         return 0;
@@ -251,12 +270,13 @@ int main(int argc, char* argv[]) {
 #ifndef ARCH_X86_64
     // Only an x86-64 CPU runs the game's own code. Any other runs it in recompiled mode, from the
     // libraries made from the player's game, which no release holds.
-    if (!Core::Recompiled::Enabled() ||
-        !std::filesystem::exists(EmulatorSettings.GetRecompiledLibrary())) {
+    if (!Core::Recompiled::Enabled() || !std::filesystem::exists(Core::Recompiled::Library())) {
         const char* const text =
             "This build runs Gravity Rush 2 from recompiled libraries made from your own copy of "
-            "the game, and none are set up. Set recompiled_library in the Debug section of "
-            "userdata/config.json to the file librecomp.so, with the other libraries beside it.";
+            "the game, and none are set up. The app makes them itself, in the folder recompiled "
+            "beside it; a build without the app's generator needs recompiled_library in the Debug "
+            "section of userdata/config.json to name the file librecomp.so, with the other "
+            "libraries beside it.";
         LOG_CRITICAL(Loader, "GR2port: {}", text);
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Gravity Rush 2", text, nullptr);
         return 1;

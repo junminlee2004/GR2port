@@ -90,8 +90,15 @@ void guest_cpu_recomp_drop(uint64_t address, size_t size);
 void guest_cpu_recomp_hook_code(uint64_t start, size_t size);
 /* After the hook code is written and before guest code runs it: loads the library of its
  * recompiled C at `path`, when that file exists, whose functions then run in place of the code
- * they were written from wherever the hook code holds it. */
+ * they were written from wherever the hook code holds it. Each call adds a library: one for each
+ * hook code that settings of the program give. */
 void guest_cpu_recomp_load_hook_code(const char *path);
+/* After the libraries of the hook code load: whether one of them is this hook code, made from a
+ * dump of the same code: each of its functions the code at its place, and one at each place the
+ * hook sites jump to. Otherwise some of the hook code can run in the interpreter. */
+int guest_cpu_recomp_hook_fits(void);
+/* Writes the hook code as GUEST_RECOMP_HOOK_DUMP=prefix does, for recompile --hook-code. */
+void guest_cpu_recomp_dump_hook_code(const char *prefix);
 /* Like guest_cpu_call on a new guest stack [stack, stack + size) (thread entry, game entry). */
 uint64_t guest_cpu_call_on_stack(uintptr_t fn, int count, const uint64_t *args, void *stack,
                              size_t size);

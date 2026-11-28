@@ -700,9 +700,13 @@ static int in_hook_code(uint64_t address) {
  * address. What differs from run to run and with the place of the code (RcFunction.live: host
  * addresses, distances to the game's code, the data between the instructions) is read as it
  * runs, and a function is the code wherever the hook code holds its other bytes
- * (guest_cpu_recomp_hook_hash). hook_fns: each address of the hook code looked up so far, with the
- * function that is the code there or hook_none; a slot for every two bytes of hook code or more. */
-static const RcFunction *hook_functions;
+ * (guest_cpu_recomp_hook_hash). Settings of the program can change its hook code, so there can be
+ * a library for each: hook_libraries holds the functions of each loaded, with how many are the
+ * code at their places, and guest_cpu_recomp_hook_count counts them all. hook_fns: each address of the hook code looked up
+ * so far, with the function that is the code there or hook_none; a slot for every two bytes of
+ * hook code or more. */
+static struct { const RcFunction *functions; size_t count, in_place; } *hook_libraries;
+static size_t hook_library_count;
 int guest_cpu_recomp_hook_count;
 static struct { uint64_t address; RcFn fn; } *hook_fns;
 static uint64_t hook_fn_mask;
@@ -728,12 +732,13 @@ static RcFn hook_match(uint64_t address) {
     uint64_t end = 0;
     for (int i = 0; i < hook_code_count; ++i)
         if (address >= hook_code[i].start && address < hook_code[i].end) end = hook_code[i].end;
-    for (int i = 0; i < guest_cpu_recomp_hook_count; ++i) {
-        const RcFunction *f = &hook_functions[i];
-        if (address + f->size <= end &&
-            guest_cpu_recomp_hook_hash(address, f->offset, f->size, (const uint64_t *)f->live, f->live_count) == f->hash)
-            return f->fn;
-    }
+    for (size_t l = 0; l < hook_library_count; ++l)
+        for (size_t i = 0; i < hook_libraries[l].count; ++i) {
+            const RcFunction *f = &hook_libraries[l].functions[i];
+            if (address + f->size <= end &&
+                guest_cpu_recomp_hook_hash(address, f->offset, f->size, (const uint64_t *)f->live, f->live_count) == f->hash)
+                return f->fn;
+        }
     return hook_none;
 }
 
@@ -1319,10 +1324,35 @@ void guest_cpu_recomp_load_module(const char *path, uint64_t image_base, const c
     load_library(path, image_base, name);
 }
 
-/* GUEST_RECOMP_HOOK_DUMP=PREFIX: the hook code as the program wrote it, for recompile --hook-code:
- * its bytes in PREFIX.bin, and in PREFIX.txt its address, then the offsets in it that the jumps
- * and calls of the hook sites lead to (the fields the functions in use read as they run that hold
- * a jmp rel32 or a call rel32). */
+/* The offsets in the hook code that the jumps and calls of the hook sites lead to (the fields the
+ * functions in use read as they run that hold a jmp rel32 or a call rel32): each(offset, data) for
+ * each. Returns how many. */
+static size_t hook_places(void (*each)(uint64_t offset, void *data), void *data) {
+    const uint64_t start = hook_code[0].start, end = hook_code[0].end;
+    size_t places = 0;
+    for (size_t k = 0; k < loaded_count; ++k) {
+        const RcFunction *v = loaded[k].version;
+        for (uint32_t i = 0; v && i < v->live_count; ++i) {
+            const uint64_t at = loaded_base + v->live[i].offset;
+            int32_t rel;
+            if (v->live[i].size < 5 || (*(const uint8_t *)(uintptr_t)at | 1) != 0xe9) continue;
+            memcpy(&rel, (const void *)(uintptr_t)(at + 1), 4);
+            const uint64_t target = at + 5 + (uint64_t)(int64_t)rel;
+            if (target < start || target >= end) continue;
+            each(target - start, data);
+            ++places;
+        }
+    }
+    return places;
+}
+
+static void write_place(uint64_t offset, void *file) {
+    fprintf((FILE *)file, "%#llx\n", (unsigned long long)offset);
+}
+
+/* GUEST_RECOMP_HOOK_DUMP=PREFIX, or guest_cpu_recomp_dump_hook_code: the hook code as the program
+ * wrote it, for recompile --hook-code: its bytes in PREFIX.bin, and in PREFIX.txt its address,
+ * then the places the hook sites jump to (hook_places). */
 static void dump_hook_code(const char *prefix) {
     const uint64_t start = hook_code[0].start, end = hook_code[0].end;
     char path[1024];
@@ -1340,29 +1370,47 @@ static void dump_hook_code(const char *prefix) {
         abort();
     }
     fprintf(f, "%#llx\n", (unsigned long long)start);
-    size_t entries = 0;
-    for (size_t k = 0; k < loaded_count; ++k) {
-        const RcFunction *v = loaded[k].version;
-        for (uint32_t i = 0; v && i < v->live_count; ++i) {
-            const uint64_t at = loaded_base + v->live[i].offset;
-            int32_t rel;
-            if (v->live[i].size < 5 || (*(const uint8_t *)(uintptr_t)at | 1) != 0xe9) continue;
-            memcpy(&rel, (const void *)(uintptr_t)(at + 1), 4);
-            const uint64_t target = at + 5 + (uint64_t)(int64_t)rel;
-            if (target < start || target >= end) continue;
-            fprintf(f, "%#llx\n", (unsigned long long)(target - start));
-            ++entries;
-        }
-    }
+    const size_t entries = hook_places(write_place, f);
     fclose(f);
     printf("Recompiled: hook code written to %s.bin, the %zu places hook sites jump to in it to %s.txt\n", prefix, entries,
            prefix);
 }
 
+void guest_cpu_recomp_dump_hook_code(const char *prefix) {
+    if (table && hook_code_count == 1) dump_hook_code(prefix);
+}
+
+static void count_place(uint64_t offset, void *data) {
+    (void)offset;
+    (void)data;
+}
+
+/* For guest_cpu_recomp_hook_fits: the places without a function of one library. */
+typedef struct { const RcFunction *functions; size_t count, missing; } HookFit;
+static void check_place(uint64_t offset, void *data) {
+    HookFit *fit = data;
+    size_t i = 0;
+    while (i < fit->count && fit->functions[i].offset != offset) ++i;
+    fit->missing += i == fit->count;
+}
+
+int guest_cpu_recomp_hook_fits(void) {
+    if (!table || hook_code_count != 1 || !hook_places(count_place, NULL)) return 1;
+    for (size_t l = 0; l < hook_library_count; ++l) {
+        if (hook_libraries[l].in_place != hook_libraries[l].count) continue;
+        HookFit fit = {hook_libraries[l].functions, hook_libraries[l].count, 0};
+        hook_places(check_place, &fit);
+        if (!fit.missing) return 1;
+    }
+    return 0;
+}
+
 void guest_cpu_recomp_load_hook_code(const char *path) {
     if (!table || hook_code_count != 1) return;
+    static int dumped;
     const char *dump = getenv("GUEST_RECOMP_HOOK_DUMP");
-    if (dump && *dump) dump_hook_code(dump);
+    if (dump && *dump && !dumped) dump_hook_code(dump);
+    dumped = 1;
     if (access(path, R_OK) != 0) return;
     void *library = dlopen(path, RTLD_NOW | RTLD_LOCAL);
     const RcInit init = library ? (RcInit)dlsym(library, GUEST_RECOMP_INIT) : NULL;
@@ -1372,13 +1420,19 @@ void guest_cpu_recomp_load_hook_code(const char *path) {
     }
     const uint64_t start = hook_code[0].start, end = hook_code[0].end;
     size_t count = 0;
-    hook_functions = init(library_api(start), &count);
-    int bits = 4;
-    while ((UINT64_C(1) << bits) < 2 * (end - start)) ++bits;
-    hook_fns = calloc(UINT64_C(1) << bits, sizeof(*hook_fns));
-    if (!hook_fns) abort();
-    hook_fn_mask = (UINT64_C(1) << bits) - 1;
-    hook_fn_shift = 64 - bits;
+    const RcFunction *const hook_functions = init(library_api(start), &count);
+    hook_libraries = realloc(hook_libraries, (hook_library_count + 1) * sizeof(*hook_libraries));
+    if (!hook_libraries) abort();
+    hook_libraries[hook_library_count].functions = hook_functions;
+    hook_libraries[hook_library_count].count = count;
+    if (!hook_fns) {
+        int bits = 4;
+        while ((UINT64_C(1) << bits) < 2 * (end - start)) ++bits;
+        hook_fns = calloc(UINT64_C(1) << bits, sizeof(*hook_fns));
+        if (!hook_fns) abort();
+        hook_fn_mask = (UINT64_C(1) << bits) - 1;
+        hook_fn_shift = 64 - bits;
+    }
     /* How many are the code where the dump had them: all, when the program wrote the same hooks. */
     size_t in_place = 0;
     for (size_t i = 0; i < count; ++i) {
@@ -1387,6 +1441,7 @@ void guest_cpu_recomp_load_hook_code(const char *path) {
                     guest_cpu_recomp_hook_hash(start + f->offset, f->offset, f->size, (const uint64_t *)f->live,
                                                f->live_count) == f->hash;
     }
-    guest_cpu_recomp_hook_count = (int)count;
+    hook_libraries[hook_library_count++].in_place = in_place;
+    guest_cpu_recomp_hook_count += (int)count;
     printf("Recompiled: hook code: %zu functions, %zu of them the code at their places (%s)\n", count, in_place, path);
 }

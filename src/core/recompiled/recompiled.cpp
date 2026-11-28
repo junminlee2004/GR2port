@@ -1,15 +1,19 @@
 // SPDX-FileCopyrightText: Copyright 2026 GR2port
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdlib>
 #include <filesystem>
 #include <mutex>
 #include <string>
+#include <vector>
 
+#include "common/arch.h"
 #include "common/assert.h"
 #include "common/logging/log.h"
+#include "common/path_util.h"
 #include "core/emulator_settings.h"
 #include "core/memory.h"
 #include "core/recompiled/recompiled.h"
@@ -17,6 +21,7 @@
 
 #ifdef ENABLE_RECOMPILED_MODE
 #include <sys/mman.h>
+#include "core/recompiled/build.h"
 
 // The runtime's interface holds its API only where HAVE_GUEST_CPU is set; Linux hosts set it.
 #define HAVE_GUEST_CPU 1
@@ -54,6 +59,8 @@ namespace Core::Recompiled {
 namespace {
 
 bool g_enabled = false;
+// The executable's library, which the others are beside.
+std::string g_library;
 
 #ifdef ENABLE_RECOMPILED_MODE
 // The code the host writes for guest code to run: the entry's stack setup and aerolib's stubs.
@@ -153,10 +160,17 @@ _RecompiledFiberStart:
 
 void Configure() {
 #ifdef ENABLE_RECOMPILED_MODE
-    const std::string library = EmulatorSettings.GetRecompiledLibrary();
+    std::string library = EmulatorSettings.GetRecompiledLibrary();
+#ifndef ARCH_X86_64
+    // Without the setting, the libraries made from the game on this machine (build.h).
+    if (library.empty()) {
+        library = Common::FS::PathToUTF8String(Build::Folder() / "librecomp.so");
+    }
+#endif
     if (library.empty()) {
         return;
     }
+    g_library = library;
     // The runtime loads the library this names.
     setenv("GUEST_RECOMP_LIB", library.c_str(), 1);
     void* arena = mmap(nullptr, GuestCodeArenaSize, PROT_READ | PROT_WRITE,
@@ -171,6 +185,10 @@ void Configure() {
 
 bool Enabled() {
     return g_enabled;
+}
+
+const std::string& Library() {
+    return g_library;
 }
 
 #ifdef ENABLE_RECOMPILED_MODE
@@ -210,9 +228,30 @@ void AddHookCode(VAddr start, u64 size) {
 }
 
 void LoadHookLibrary() {
-    const std::filesystem::path library =
-        std::filesystem::path{EmulatorSettings.GetRecompiledLibrary()}.parent_path() / "hooks.so";
-    guest_cpu_recomp_load_hook_code(library.string().c_str());
+    const std::filesystem::path folder = std::filesystem::path{g_library}.parent_path();
+    guest_cpu_recomp_load_hook_code((folder / "hooks.so").string().c_str());
+    // And a library for each hook code that settings give, which the builds on this machine make
+    // (build.h).
+    std::vector<std::filesystem::path> libraries;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator{folder / "hooks", ec}) {
+        if (entry.path().extension() == ".so") {
+            libraries.push_back(entry.path());
+        }
+    }
+    std::ranges::sort(libraries);
+    for (const std::filesystem::path& library : libraries) {
+        guest_cpu_recomp_load_hook_code(library.string().c_str());
+    }
+    if (guest_cpu_recomp_hook_fits() != 0) {
+        return;
+    }
+    LOG_WARNING(Core, "Recompiled mode: no library of the hook code was made from this hook code, "
+                      "and what none of them holds runs in the interpreter");
+    if (const std::optional<std::filesystem::path> dump = Build::HookDump()) {
+        guest_cpu_recomp_dump_hook_code(dump->string().c_str());
+        Build::RestartForHookCode();
+    }
 }
 
 static_assert(sizeof(HookCpu) == sizeof(GuestHookCpu) &&
@@ -245,8 +284,7 @@ void LoadLibrary(VAddr image_base) {
 
 void LoadModuleLibrary(const std::string& name, VAddr image_base) {
     const std::filesystem::path library =
-        std::filesystem::path{EmulatorSettings.GetRecompiledLibrary()}.parent_path() /
-        (name + ".so");
+        std::filesystem::path{g_library}.parent_path() / (name + ".so");
     guest_cpu_recomp_load_module(library.string().c_str(), image_base, name.c_str());
     LOG_INFO(Core, "Recompiled mode: {} loaded, {} functions run from the recompiled C", name,
              guest_cpu_recomp_functions());

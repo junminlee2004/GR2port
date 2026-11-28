@@ -16,11 +16,15 @@
 namespace Core::Recompiled {
 
 /// Reads the settings, before any thread runs. Recompiled mode is on when the build has it and
-/// recompiled_library names the recompiled C's library.
+/// recompiled_library names the recompiled C's library, or, on a host other than x86-64, when the
+/// setting is empty: then the libraries are the ones made on this machine (build.h).
 void Configure();
 
 /// Whether the game runs in recompiled mode.
 bool Enabled();
+
+/// In recompiled mode: the executable's library, which the others are beside.
+const std::string& Library();
 
 /// Recompiled mode: [start, start + size) holds guest code, which only the runtime executes.
 void AddGuestCode(VAddr start, u64 size);
@@ -46,8 +50,9 @@ void CheckWrite(VAddr address, u64 size);
 void AddHookCode(VAddr start, u64 size);
 
 /// Recompiled mode, after the hook code is written and before guest code runs it: loads the hook
-/// code's recompiled C, from hooks.so next to the executable's library, when that file exists.
-/// Hook code it does not hold runs in the runtime's interpreter.
+/// code's recompiled C, from hooks.so next to the executable's library and each library in the
+/// folder hooks there, when those files exist. Hook code they do not hold runs in the runtime's
+/// interpreter, unless this start can build its library, which it then starts again for.
 void LoadHookLibrary();
 
 /// The guest registers a hook of a recompiled function sees.

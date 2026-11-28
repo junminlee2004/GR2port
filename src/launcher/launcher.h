@@ -7,6 +7,10 @@
 #include <optional>
 #include <string>
 
+namespace Core::Recompiled::Build {
+struct Job;
+}
+
 // The window the executable opens with once the game checks pass: the game's splash with Play,
 // Options and Quit, in the style of Nixxes' launcher for Rise of the Tomb Raider. -nolauncher
 // skips it.
@@ -23,5 +27,10 @@ std::optional<std::filesystem::path> AskGameFolder(const std::string& text);
 
 /// Shows the launcher until the player picks Play or Quit, and returns whether it was Play.
 bool Run();
+
+/// Runs a build of recompiled mode's libraries behind a progress window, after Apple's Command
+/// Line Tools, which it needs, are there. Returns whether the libraries are in place; false when
+/// the player stops it or it fails, which the window tells.
+bool Recompile(const Core::Recompiled::Build::Job& job);
 
 } // namespace Gr2Port::Launcher
