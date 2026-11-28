@@ -41,6 +41,12 @@ SPDX-FileCopyrightText = ["2026 bbcpu contributors", "2026 GR2port"]
 SPDX-License-Identifier = "GPL-2.0-or-later"
 
 [[annotations]]
+path = "recompiler/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = ["2026 bloodborne-recomp contributors", "2026 GR2port"]
+SPDX-License-Identifier = "GPL-2.0-or-later"
+
+[[annotations]]
 path = "dlss/**"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2018-2025 NVIDIA CORPORATION"
