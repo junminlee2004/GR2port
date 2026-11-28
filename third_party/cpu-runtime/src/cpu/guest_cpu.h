@@ -1,4 +1,4 @@
-/* guest-cpu: runs a PS4 game's x86-64 code on an arm64 host (docs/ARCHITECTURE.md, docs/API.md). Guest memory is the
+/* guest-cpu: runs a PS4 game's x86-64 code on an arm64 host. Guest memory is the
  * host's (identity-mapped); a guest call or jump to an address outside the guest code ranges is a
  * call of a host function (SysV arguments bridged to the host ABI). */
 #ifndef GUEST_CPU_H
