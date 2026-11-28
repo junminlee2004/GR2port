@@ -12,7 +12,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 <b>
 
-GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC (for CPUs that don't suppport SSE4a, AVX2, BMI1, F16C, MOVBE, those instructions are patched AOT with equivalent instructions compatible for that CPU by using trampolines - this is NOT CPU emulation since the executable is still x86-64 and is executed natively on your x86-64 CPU on PC, and the overhead is incomparable to a JIT patcher, or completely emulating the PS4 CPU, or recompiling the game executable - the one exception is macOS, which requires statically recompiling the game's x86-64 executable to an arm64 library and a separate native runtime for running that recompiled library without relying on an interpreter. Only 5 functions out of 37,271 are translated via a JIT). 
+GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC (for CPUs that don't suppport SSE4a, AVX2, BMI1, F16C, MOVBE, those instructions are patched AOT with equivalent instructions compatible for that CPU by using trampolines - this is NOT CPU emulation since the executable is still x86-64 and is executed natively on your x86-64 CPU on PC, and the overhead is incomparable to a JIT patcher, or completely emulating the PS4 CPU, or recompiling the game executable - the one exception is macOS, which requires statically recompiling the game's x86-64 executable to an arm64 library and a separate native runtime for running that recompiled library without relying on an interpreter. Additionally, only 5 functions out of 37,271 are translated via a JIT). 
 
 <b>
 
