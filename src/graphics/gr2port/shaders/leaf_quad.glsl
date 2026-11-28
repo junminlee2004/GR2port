@@ -29,36 +29,41 @@ layout(location = 0) out vec4 surface;
 layout(location = 1) flat out uint leaf;
 #endif
 
+// A corner of the quad: end e of the segment, pushed out to side s.
+void EmitCorner(vec3 segment, int e, int s) {
+    vec4 clip = leaf_position[e];
+    clip.xy += (s == 0 ? -1.0 : 1.0) * leaf_side[e].xy;
+#ifdef SHADOW
+    Leaves leaves = scene_leaves;
+    // OpenGL depth, -w to w, to Vulkan depth, 0 to w.
+    clip.z = 0.5 * (clip.z + clip.w);
+    texcoord = vec2(float(s), leaf_along[e]);
+    texture_index = leaves.leaves[leaf_index[e]].texture;
+    alpha_reference = leaves.leaves[leaf_index[e]].alpha_reference;
+#else
+    const vec2 lean = normalize(cross(segment, leaf_side[e])).xy;
+    // OpenGL depth, -w near to w far, to reverse depth, 1 near to 0 far.
+    clip.z = 0.5 * (clip.w - clip.z);
+    surface = vec4(lean, float(s), leaf_along[e]);
+    leaf = leaf_index[e];
+#endif
+    gl_Position = clip;
+    EmitVertex();
+}
+
 // The game's leaf geometry programs: a quad across the segment, each end pushed out to either
 // side by the leaf's width in clip space, u across it and v from the tip. The colour pass leans
 // each end's normal along the cross of the segment and the width.
+//
+// The four corners are written out, not looped over: Mesa's varying optimizer before
+// nir_opt_varyings' fixes f367f74ba61 and b53192bc131 (2026-11-17) takes an output that one
+// store in a loop writes as the same for all of a geometry shader's vertices, and makes u flat
+// (KosmicKrisp: every leaf sampled at its texture's transparent edges).
 void main() {
-#ifdef SHADOW
-    Leaves leaves = scene_leaves;
-#endif
     const vec3 segment = leaf_position[1].xyz - leaf_position[0].xyz;
-    for (int e = 0; e < 2; e++) {
-#ifndef SHADOW
-        const vec2 lean = normalize(cross(segment, leaf_side[e])).xy;
-#endif
-        for (int s = 0; s < 2; s++) {
-            vec4 clip = leaf_position[e];
-            clip.xy += (s == 0 ? -1.0 : 1.0) * leaf_side[e].xy;
-#ifdef SHADOW
-            // OpenGL depth, -w to w, to Vulkan depth, 0 to w.
-            clip.z = 0.5 * (clip.z + clip.w);
-            texcoord = vec2(float(s), leaf_along[e]);
-            texture_index = leaves.leaves[leaf_index[e]].texture;
-            alpha_reference = leaves.leaves[leaf_index[e]].alpha_reference;
-#else
-            // OpenGL depth, -w near to w far, to reverse depth, 1 near to 0 far.
-            clip.z = 0.5 * (clip.w - clip.z);
-            surface = vec4(lean, float(s), leaf_along[e]);
-            leaf = leaf_index[e];
-#endif
-            gl_Position = clip;
-            EmitVertex();
-        }
-    }
+    EmitCorner(segment, 0, 0);
+    EmitCorner(segment, 0, 1);
+    EmitCorner(segment, 1, 0);
+    EmitCorner(segment, 1, 1);
     EndPrimitive();
 }
