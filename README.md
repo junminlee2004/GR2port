@@ -12,7 +12,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 <b>
 
-GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC (for CPUs that don't suppport SSE4a, AVX2, BMI1, F16C, MOVBE, those instructions are patched AOT with equivalent instructions compatible for that CPU by using trampolines - this is NOT CPU emulation since the executable is still x86-64 and is executed natively on your x86-64 CPU on PC, and the overhead is incomparable to a JIT patcher, or completely emulating the PS4 CPU, or recompiling the game executable - the one exception is macOS, which requires statically recompiling the game's x86-64 executable to an arm64 library and a separate native runtime for running that recompiled library with very little reliance on an interpreter). 
+GR2port executes the x86-64 instructions in the Gravity Rush 2 game executable natively on PC (for CPUs that don't suppport SSE4a, AVX2, BMI1, F16C, MOVBE, those instructions are patched AOT with equivalent instructions compatible for that CPU by using trampolines - this is NOT CPU emulation since the executable is still x86-64 and is executed natively on your x86-64 CPU on PC, and the overhead is incomparable to a JIT patcher, or completely emulating the PS4 CPU, or recompiling the game executable - the one exception is macOS, which requires statically recompiling the game's x86-64 executable to an arm64 library and a separate native runtime for running that recompiled library without relying on an interpreter. Only 5 functions out of 37,271 are translated via a JIT). 
 
 <b>
 
@@ -180,6 +180,6 @@ If you want to contribute, please feel free to do so by reporting issues or subm
 # Special Thanks
 
 - [**ShadPS4**](https://github.com/shadps4-emu/shadps4): An open source PS4 emulator written in C++. ShadPS4 along with my fork, GR2fork, provided the basic structure for this codebase, tooling necessary for research and development, and served as reference for this project's native execution of x64 code of PS4 binaries and graphical output.
-- [**bloodborne-recomp**](https://github.com/bloodborne-native/bloodborne-recomp): A static recompiler for Bloodborne. For macOS, the static recompiler was used to read GR2's x86-64 executable and write its functions out as C, which a compiler turns into a native library the game loads. 
-- [**bbcpu**](https://github.com/bloodborne-native/bbcpu): A custom runtime was developed from bbcpu to run the recompiled library natively on macOS with very little dependence on an interpreter (only 5 functions out of 37,271).
+- [**bloodborne-recomp**](https://github.com/bloodborne-native/bloodborne-recomp): A static recompiler for Bloodborne. For macOS, the static recompiler was used to read GR2's x86-64 executable and modules and write its functions out as C, which a compiler turns into a native library the game loads. 
+- [**bbcpu**](https://github.com/bloodborne-native/bbcpu): A custom runtime was developed from bbcpu to run the recompiled library natively on macOS without relying on an interpreter (0 interpreted instructions). Very few functions that GR2port rewrites while the game runs run through a JIT (only 5 functions out of 37,271).
 
